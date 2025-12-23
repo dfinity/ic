@@ -180,6 +180,29 @@ def compare_hashes(local_hash_value: str, remote_hash_value: str, os_type: str) 
         )
         return True
 
+def compare_measurements(local_measurements: str, remote_measurements: str) -> bool:
+    """
+    Compares the local measurements against the remote to verify reproducibility.
+    """
+    local_measurements = json.loads(local_measurements)
+    remote_measurements = json.loads(remote_measurements)
+    if local_measurements != remote_measurements:
+        logger.error(
+            f"Error! The measurements from the remote does not match the ones we just built for guest-os.\n"
+            f"Local:   {local_measurements}\n"
+            f"Remote:  {remote_measurements}"
+        )
+        return False
+    else:
+        logger.info(f"Verification successful for guest-os!")
+        logger.info(
+            f"The measurements for guest-os from the artifact built locally and "
+            f"the one fetched from remote match:\n"
+            f"\tLocal = {local_measurements}\n"
+            f"\tRemote = {remote_measurements}\n"
+        )
+        return True
+
 
 def compute_sha256(file_path: Path) -> str:
     """Computes the SHA-256 hash of a file."""
@@ -374,6 +397,7 @@ class ReproducibilityVerifier:
         self.git_hash = ""
         self.proposal_package_urls: list[str] = []
         self.proposal_package_sha256_hex = ""
+        self.guest_launch_measurements = None
 
         self.keep_temp = keep_temp
 
@@ -383,9 +407,11 @@ class ReproducibilityVerifier:
                 raise RuntimeError(f"Refusing to clean manually specified base cache directory {base_cache_dir}")
             self.base_cache_dir = base_cache_dir
         else:
-            self.base_cache_dir = base_cache_dir or Path(os.path.expanduser("~/.cache/repro-check"))
-            if clean_base_cache_dir and base_cache_dir.is_dir():
-                shutil.rmtree(base_cache_dir)
+            self.base_cache_dir = Path(os.path.expanduser("~/.cache/repro-check"))
+
+            if clean_base_cache_dir and self.base_cache_dir.is_dir():
+                shutil.rmtree(self.base_cache_dir)
+
         self.cache_for_this_hash: Path = Path()
 
         self.download_executor = concurrent.futures.ThreadPoolExecutor(max_workers=9)
@@ -463,7 +489,7 @@ class ReproducibilityVerifier:
         logger.info("Checking and installing needed dependencies.")
         for d in deps:
             if shutil.which(d) is None:
-                logger.info(f"Installing missing package: {d}")
+                logger.info(f"Installing missing package: '{d}' (Will prompt for password if needed.)")
                 try:
                     subprocess.run(["sudo", "apt-get", "install", "-y", d], check=True)
                 except subprocess.CalledProcessError:
@@ -544,10 +570,10 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     # Core logic restructured to start downloads early
     # --------------------------------------------------------------------------
-    def process_proposal(self) -> tuple[str | None, str | None]:
+    def process_proposal(self) -> tuple[str | None, str | None, str | None]:
         """If a proposal ID is provided, fetch the proposal data and set internal state."""
         if not self.proposal_id:
-            return (None, None)
+            return (None, None, None)
         proposal_url = f"https://ic-api.internetcomputer.org/api/v3/proposals/{self.proposal_id}"
         logger.debug(f"Fetching proposal {proposal_url}")
         try:
@@ -564,13 +590,20 @@ class ReproducibilityVerifier:
         self.proposal_package_urls = proposal_data["payload"]["release_package_urls"]
         self.proposal_package_sha256_hex = proposal_data["payload"]["release_package_sha256_hex"]
 
+        # NOTE: We convert the "human" hex format from the dashboard API to the
+        # byte format that is actually used in the proposal directly.
+        proposal_launch_measurements = proposal_data["payload"]["guest_launch_measurements"]
+        for measurement in proposal_launch_measurements["guest_launch_measurements"]:
+            measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
+        self.proposal_launch_measurements = proposal_launch_measurements
+
         prop_str = json.dumps(proposal_data)
         if "replica_version_to_elect" in prop_str:
             self.git_hash = proposal_data["payload"]["replica_version_to_elect"]
-            return (self.proposal_package_sha256_hex, None)
+            return (self.proposal_package_sha256_hex, self.proposal_launch_measurements, None)
         elif "hostos_version_to_elect" in prop_str:
             self.git_hash = proposal_data["payload"]["hostos_version_to_elect"]
-            return (None, self.proposal_package_sha256_hex)
+            return (None, None, self.proposal_package_sha256_hex)
         else:
             err = f"Proposal #{self.proposal_id} is missing replica_version_to_elect or hostos_version_to_elect"
             raise VerificationError(err)
@@ -616,6 +649,15 @@ class ReproducibilityVerifier:
                     self.start_download(sums_url, local_sums_path, os_type),
                 ]
             )
+            if os_type == "guest-os":
+                measurements_url = f"https://{cdn_domain}/ic/{self.git_hash}/{path_component}/{subdir_name}/launch-measurements.json"
+                local_measurements_path = subdir / "launch-measurements.json"
+                downloads.extend(
+                    [
+                        self.start_download(measurements_url, local_measurements_path, os_type),
+                    ]
+                )
+
         return downloads
 
     def start_proposal_download_if_needed(self, storage: Dirs) -> list[Download]:
@@ -663,6 +705,8 @@ class ReproducibilityVerifier:
     # --------------------------------------------------------------------------
     def verify_proposal_artifacts(self, downloads: list[Download] = []) -> None:
         """Verifies proposal artifact SHA-256 if a proposal is specified."""
+        if not self.proposal_id:
+            return
         for completed_download in concurrent.futures.as_completed(downloads):
             proposal_target = completed_download.result()
             actual_hash = compute_sha256(proposal_target)
@@ -692,6 +736,21 @@ class ReproducibilityVerifier:
         if len(set(final_hashes)) != 1:
             raise VerificationError(f"The sources for {os_type} do not all match! {final_hashes}")
         return final_hashes[0]
+
+    def get_cdn_measurements(self, storage: Dirs) -> str:
+        """Gets the artifact measurements from all specified CDNs for a given OS type."""
+        artifact = "launch-measuremetns.json"
+
+        final_measurements = []
+        for cdn_domain in self.cdn_domains:
+            subdir = storage.cdn_out / cdn_domain / "guest-os"
+            local_measurements_path = subdir / "launch-measurements.json"
+            local_measurements = local_measurements_path .read_text(encoding="utf-8")
+            final_measurements.append(local_measurements)
+
+        if len(set(final_measurements)) != 1:
+            raise VerificationError(f"The sources for guest-os do not all match! {final_measurements}")
+        return final_measurements[0]
 
     def compare_proposal_vs_cdn(
         self,
@@ -726,6 +785,28 @@ class ReproducibilityVerifier:
                 )
             else:
                 logger.info("The HostOS sha256sum from the proposal and remote match.")
+
+    def compare_proposal_measurements_vs_cdn(
+        self,
+        storage: Dirs,
+        proposal_measurements: str | None,
+        guest_os_downloads: list[Download],
+    ) -> None:
+        """Compares the proposal’s measurements against the CDN-stored measurements if a proposal is specified."""
+        if not self.proposal_id:
+            return
+        [f.result() for f in concurrent.futures.as_completed(guest_os_downloads)]
+        cdn_measurements = self.get_cdn_measurements(storage)
+
+        cdn_measurements = json.loads(cdn_measurements)
+        if cdn_measurements != proposal_measurements:
+            raise VerificationError(
+                "The measurements from the proposal do not match the ones from the CDN storage for GuestOS.\n"
+                f"Proposal measurements: {proposal_measurements}\n"
+                f"CDN measurements:      {cdn_measurements}"
+            )
+        else:
+            logger.info("The GuestOS measurements from the proposal and remote match.")
 
     def clone_and_checkout_repo(self, ic_clone_path: Path) -> None:
         """Clones and checks out the IC repository at the desired commit."""
@@ -809,6 +890,7 @@ class ReproducibilityVerifier:
 
         if self.verify_guestos:
             move_artifact("guestos/update/update-img.tar.zst")
+            move_artifact("guestos/update/launch-measurements.json")
         if self.verify_hostos:
             move_artifact("hostos/update/update-img.tar.zst")
         if self.verify_setupos:
@@ -833,6 +915,11 @@ class ReproducibilityVerifier:
             local_hash = compute_sha256(local_path)
             cdn_hash = self.compare_cdn_hash("guest-os", storage)
             compare_hashes(local_hash, cdn_hash, "GuestOS")
+
+            local_path = storage.dev_out / "guestos" / "update" / "launch-measurements.json"
+            local_measurements = local_path.read_text(encoding="utf-8")
+            cdn_measurements = self.get_cdn_measurements(storage)
+            compare_measurements(local_measurements, cdn_measurements)
 
         if host_os_downloads:
             [f.result() for f in concurrent.futures.as_completed(host_os_downloads)]
@@ -863,7 +950,7 @@ class ReproducibilityVerifier:
         start_time = time.time()
 
         with self.storage(self.keep_temp) as dirs:
-            guest_os_hash, host_os_hash = self.process_proposal()
+            guest_os_hash, guest_os_measurements, host_os_hash = self.process_proposal()
             self.decide_git_hash()
             self.init_cache()
 
@@ -880,6 +967,7 @@ class ReproducibilityVerifier:
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
             self.compare_proposal_vs_cdn(dirs, guest_os_hash, guest_os_downloads, host_os_hash, host_os_downloads)
+            self.compare_proposal_measurements_vs_cdn(dirs, guest_os_measurements, guest_os_downloads)
             self.compare_with_local_build(dirs, build, guest_os_downloads, host_os_downloads, setup_os_downloads, recovery_downloads)
 
         elapsed = time.time() - start_time
