@@ -17,7 +17,6 @@ ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

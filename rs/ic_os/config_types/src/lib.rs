@@ -227,7 +227,7 @@ pub struct GuestOSDevSettings {
 /// GuestOS recovery configuration used in the event of a manual recovery.
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct RecoveryConfig {
-    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    /// The hash prefix of the recovery artifacts to be used in the event of a manual recovery.
     pub recovery_hash: String,
 }
 
