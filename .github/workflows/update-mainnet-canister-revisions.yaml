@@ -64,7 +64,7 @@ jobs:
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry_run' || '' }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           set -eEuxo pipefail
 
