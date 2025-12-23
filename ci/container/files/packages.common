@@ -48,6 +48,11 @@ fish
 node-json5
 
 # IC-OS
+ # Linked in by IC-OS binaries for managing encrypted disks.
+libcryptsetup-dev
+ # Linked in by IC-OS binaries for creating mapped devices.
+libdevmapper-dev
+libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
