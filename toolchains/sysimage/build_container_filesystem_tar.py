@@ -64,8 +64,7 @@ def build_container(
     cmd = "podman "
     cmd += "build "
     cmd += f"-t {image_tag} "
-    cmd += f"{build_arg_strings_joined} "
-    cmd += "--no-cache "
+    cmd += f"{build_arg_strings_joined}"
 
     if base_image_override:
         load_base_image_tar_file(base_image_override.image_file)
@@ -104,7 +103,6 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     invoke.run(
         f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )
-    invoke.run("sync")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -214,7 +212,6 @@ def main():
 
     def cleanup():
         invoke.run(f"podman rm -f {image_tag}_container")
-        invoke.run(f"podman rm -f {image_tag}")
 
     atexit.register(lambda: cleanup())
     signal.signal(signal.SIGTERM, lambda: cleanup())
