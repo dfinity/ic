@@ -4,16 +4,14 @@ build-essential
 git
 git-lfs
 gnupg
-node-json5
 uuid-dev
 zsh
-fish
-clang
 iproute2
 shellcheck
 xxd
 vim
 retry
+zip
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -22,15 +20,12 @@ libboost-dev
 
 # GitHub CI
 sudo
-gosu
 jq
 rclone
 time
-qemu-system-x86
-
-# Test
-rsync
-lcov
+podman # rosetta-release.yml
+rsync # container-base-images.yml
+lcov # used for bazel coverage
 
 # RUST
 gcc
@@ -46,6 +41,11 @@ protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
+
+# Other code dependencies
+clang
+fish
+node-json5
 
 # IC-OS
 fdisk
@@ -70,7 +70,9 @@ lsb-release
 lvm2
 mtools
 nasm # to build OVMF
-python-is-python3
-python3
-python3-pip
 zstd
+qemu-system-x86 # used for guestos
+
+# Unknown
+containernetworking-plugins
+buildah

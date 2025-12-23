@@ -118,7 +118,7 @@ where
 pub struct DepositFlowEnd<S> {
     setup: S,
     account: Account,
-    balance_before: u64,
+    balance_before: u128,
     deposit_utxos: BTreeSet<Utxo>,
     result: Result<Vec<UtxoStatus>, UpdateBalanceError>,
 }
@@ -151,8 +151,8 @@ where
 
         let total_minted_amount = minted_status
             .iter()
-            .map(|(_utxo, (_block_index, minted_amount))| minted_amount)
-            .sum::<u64>();
+            .map(|(_utxo, (_block_index, minted_amount))| *minted_amount as u128)
+            .sum::<u128>();
 
         let known_utxos: BTreeSet<_> = self
             .setup
