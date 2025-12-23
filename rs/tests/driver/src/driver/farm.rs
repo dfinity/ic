@@ -454,7 +454,9 @@ impl GroupSpec {
         // use sensible defaults if unset.
         let mut runtime_args_map = parse_farm_metadata_env();
         let user = runtime_args_map.remove("USER").unwrap_or("CI".to_string());
-        let job_schedule = runtime_args_map.remove("JOB_NAME").unwrap_or("manual".to_string());
+        let job_schedule = runtime_args_map
+            .remove("JOB_NAME")
+            .unwrap_or("manual".to_string());
         let metadata = GroupMetadata {
             user,
             job_schedule,
