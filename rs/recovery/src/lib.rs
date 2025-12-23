@@ -483,7 +483,7 @@ impl Recovery {
                 let measurements_json =
                     std::fs::read(&path).map_err(|e| RecoveryError::file_error(&path, e))?;
                 serde_json::from_slice::<GuestLaunchMeasurements>(&measurements_json)
-                    .map_err(|e| RecoveryError::parsing_error(e))
+                    .map_err(RecoveryError::parsing_error)
             })
             .transpose()?;
 
