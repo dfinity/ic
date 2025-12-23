@@ -50,6 +50,7 @@ node-json5
 # IC-OS
 dosfstools # provides mkfs.vfat
 faketime
+fdisk
 iasl # to build OVMF
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
