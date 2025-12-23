@@ -435,7 +435,7 @@ message CanisterStateBits {
   bytes certified_data = 20;
   uint64 interrupted_during_execution = 21;
   types.v1.NominalCycles consumed_cycles = 22;
-  uint64 instructions_executed= 57;
+  uint64 instructions_executed = 57;
   uint64 ingress_messages_executed = 58;
   uint64 xnet_messages_executed = 59;
   uint64 intranet_messages_executed = 60;

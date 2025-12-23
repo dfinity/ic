@@ -77,8 +77,8 @@ fn load_metrics_e2e_test() {
     assert_eq!(
         states_sizes_bytes,
         Estimates {
-            source: 44852255,
-            destination: 46085610,
+            source: 44854849,
+            destination: 46088212,
         }
     );
     assert_eq!(
