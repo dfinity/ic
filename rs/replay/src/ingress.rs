@@ -43,6 +43,11 @@ use std::{convert::TryFrom, str::FromStr, time::Duration};
 use strum::IntoEnumIterator;
 use time::OffsetDateTime;
 
+// This is the buffer time added to the expiry time of added ingress messages to make sure those
+// messages do not expire too early, in particular in case the original expiry time was chosen to be
+// the current time.
+const INGRESS_EXPIRY_BUFFER_SECS: u64 = 180;
+
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,
     pub print: Option<fn(Vec<u8>)>,
@@ -92,7 +97,7 @@ fn make_signed_ingress(
         .with_arg(payload)
         .expire_at(
             OffsetDateTime::from_unix_timestamp_nanos(
-                (expiry + Duration::from_secs(180))
+                (expiry + Duration::from_secs(INGRESS_EXPIRY_BUFFER_SECS))
                     .as_nanos_since_unix_epoch()
                     .into(),
             )
