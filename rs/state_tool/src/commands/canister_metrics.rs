@@ -33,7 +33,7 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     )
     .map_err(|err| format!("Failed to load the checkpoint: {err:?}"))?;
 
-    let mut output_file = std::fs::File::create(&output_path)
+    let mut output_file = std::fs::File::create(output_path)
         .map_err(|err| format!("Failed to create the output file: {err}"))?;
     // Write the header.
     writeln!(
