@@ -9,6 +9,9 @@ package(default_visibility = [
 rust_binary(
     name = "build_filesystem",
     srcs = glob(["src/**/*.rs"]),
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
     version = "0.1.0",
     deps = [
         # Keep sorted.
@@ -18,9 +21,6 @@ rust_binary(
         "@crate_index//:selinux",
         "@crate_index//:tar",
         "@crate_index//:tempfile",
-    ],
-    target_compatible_with = [
-        "@platforms//os:linux",
     ],
 )
 
@@ -51,6 +51,6 @@ filegroup(
         ":build_filesystem_test",
         "@e2fsprogs//:mke2fs",
     ],
-    visibility = ["//rs/tests/node:__subpackages__"],
     tags = ["manual"],
+    visibility = ["//rs/tests/node:__subpackages__"],
 )
