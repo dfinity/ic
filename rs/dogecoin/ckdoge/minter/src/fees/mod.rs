@@ -34,7 +34,7 @@ impl DogecoinFeeEstimator {
 
     pub fn from_state(state: &ic_ckbtc_minter::state::CkBtcMinterState) -> Self {
         Self::new(
-            Network::from(state.btc_network),
+            Network::try_from(state.btc_network).expect("BUG: unsupported network"),
             state.retrieve_btc_min_amount,
         )
     }
@@ -53,7 +53,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 
         match &self.network {
-            Network::Mainnet | Network::Testnet => {
+            Network::Mainnet => {
                 if fee_percentiles.len() < 100 {
                     return None;
                 }
@@ -91,7 +91,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
 
     fn fee_based_minimum_withdrawal_amount(&self, median_fee: u64) -> u64 {
         match self.network {
-            Network::Mainnet | Network::Testnet => {
+            Network::Mainnet => {
                 //in Koinu
                 const PER_REQUEST_RBF_BOUND: u64 = 374_000;
                 // in Bytes

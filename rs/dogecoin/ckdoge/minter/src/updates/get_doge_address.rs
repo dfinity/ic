@@ -18,7 +18,8 @@ pub async fn get_doge_address(
     );
     ic_ckbtc_minter::updates::get_btc_address::init_ecdsa_public_key().await;
     read_state(|s| {
-        account_to_p2pkh_address_from_state(s, &account).display(&Network::from(s.btc_network))
+        account_to_p2pkh_address_from_state(s, &account)
+            .display(&Network::try_from(s.btc_network).expect("BUG: unsupported network"))
     })
 }
 
