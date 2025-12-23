@@ -1586,7 +1586,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
@@ -1626,7 +1626,7 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
                     let (result, instructions_used) = self.take_canister_snapshot(
-                        *msg.sender(),
+                        msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
@@ -2502,7 +2502,7 @@ impl ExecutionEnvironment {
     /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
     fn take_canister_snapshot(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         state: &mut ReplicatedState,
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
@@ -2526,11 +2526,13 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
+        let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
-            sender,
+            origin,
             &mut canister,
             replace_snapshot,
+            uninstall_code,
             state,
             round_limits,
             &resource_saturation,
@@ -2539,7 +2541,16 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Ok((response, rejects, instructions_used)) => {
+                crate::util::process_responses(
+                    rejects,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    self.canister_not_found_error(),
+                );
+                (Ok(response.encode()), instructions_used)
+            }
             Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
@@ -3269,7 +3280,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },

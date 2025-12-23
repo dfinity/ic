@@ -6,9 +6,6 @@ rust_library(
     name = "device",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_device",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -18,8 +15,9 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:devicemapper",
         "@crate_index//:gpt",
-        "@crate_index//:loopdev-3",
+        "@crate_index//:loopdev_3",
         "@crate_index//:nix",
+        "@crate_index//:rand",
         "@crate_index//:sys-mount",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",

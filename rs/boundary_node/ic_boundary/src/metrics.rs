@@ -60,6 +60,7 @@ const SUBNET_ID_UNKNOWN: &str = "unknown";
 
 pub(crate) const MAX_LOGGING_METHOD_NAME_LENGTH: usize = 50;
 
+/// Stores the serialized metrics for a faster scraping
 pub struct MetricsCache {
     buffer: Vec<u8>,
 }
@@ -73,9 +74,10 @@ impl MetricsCache {
     }
 }
 
-// Iterates over given metric families and removes metrics that have
-// node_id+subnet_id labels and where the corresponding nodes are
-// not present in the registry snapshot
+/// Iterates over given metric families and removes metrics that have
+/// node_id+subnet_id labels and where the corresponding nodes are
+/// no longer present in the given registry snapshot.
+/// This helps to keep the metrics clean of obsolete nodes.
 fn remove_stale_metrics(
     snapshot: Arc<RegistrySnapshot>,
     mut mfs: Vec<MetricFamily>,
@@ -109,7 +111,7 @@ fn remove_stale_metrics(
                         .map(|x| x.subnet_id.to_string() == subnet_id)
                         .unwrap_or(false),
 
-                    // If there's only subnet_id label - check if this subnet exists
+                    // If there's only subnet_id label - check if this subnet exists.
                     // TODO create a hashmap of subnets in snapshot for faster lookup, currently complexity is O(n)
                     // but since we have very few subnets currently (<40) probably it's Ok
                     (None, Some(subnet_id)) => {
@@ -132,6 +134,7 @@ fn remove_stale_metrics(
     mfs
 }
 
+/// Snapshots & encodes the metrics for the handler to export
 pub struct MetricsRunner {
     metrics_cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
@@ -147,7 +150,6 @@ pub struct MetricsRunner {
     health: Arc<dyn Health>,
 }
 
-// Snapshots & encodes the metrics for the handler to export
 impl MetricsRunner {
     pub fn new(
         metrics_cache: Arc<RwLock<MetricsCache>>,
@@ -441,7 +443,7 @@ pub async fn metrics_middleware_status(
     response
 }
 
-// middleware to log and measure proxied canister and subnet requests
+/// Middleware to log and measure proxied requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
@@ -701,7 +703,7 @@ pub struct MetricsHandlerArgs {
     pub cache: Arc<RwLock<MetricsCache>>,
 }
 
-// Axum handler for /metrics endpoint
+/// Axum handler for /metrics endpoint
 pub async fn metrics_handler(
     State(MetricsHandlerArgs { cache }): State<MetricsHandlerArgs>,
 ) -> impl IntoResponse {

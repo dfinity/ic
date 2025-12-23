@@ -433,6 +433,8 @@ fn lazy_wasms() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7129,7 +7131,7 @@ fn can_create_and_delete_canister_snapshot() {
 
         let (_height, mut state) = state_manager.take_tip();
 
-        state.delete_snapshot(snapshot_id);
+        state.canister_snapshots.remove(snapshot_id);
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -7456,6 +7458,8 @@ fn restore_heap_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7528,6 +7532,8 @@ fn restore_stable_memory_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7600,6 +7606,8 @@ fn restore_binary_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();
@@ -7670,6 +7678,8 @@ fn restore_chunk_store_from_snapshot() {
         .take_canister_snapshot(TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         })
         .unwrap()
         .snapshot_id();

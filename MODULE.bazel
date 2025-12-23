@@ -21,13 +21,17 @@ bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = Tr
 # CC dependencies (for C libs like miracl-core, etc)
 bazel_dep(name = "rules_cc", version = "0.2.8")
 bazel_dep(name = "platforms", version = "1.0.0")
-bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
+bazel_dep(name = "hermetic_cc_toolchain", version = "4.0.1")
 archive_override(
     module_name = "hermetic_cc_toolchain",
-    integrity = "sha256-kHdFv5FVX3foI0wLlTNx5srFunFdHPEv9kFJbdG86dE=",
+    integrity = "sha256-ziFGNqyR/zQFkoqxcOdCAbAYnhNxXXObBfUjxO9LGoM=",
     patch_strip = 1,
-    patches = ["//bazel:hermetic_cc_toolchain.patch"],
-    urls = ["https://github.com/uber/hermetic_cc_toolchain/releases/download/v3.1.1/hermetic_cc_toolchain-v3.1.1.tar.gz"],
+    patches = [
+        "//bazel:hermetic_cc_toolchain_strip.patch",
+        "//bazel:hermetic_cc_toolchain_cache_dir.patch",
+    ],
+    strip_prefix = "hermetic_cc_toolchain-32c6f9ec9e0b3aebfa92950e7019f1275390bda1",
+    urls = ["https://github.com/uber/hermetic_cc_toolchain/archive/32c6f9ec9e0b3aebfa92950e7019f1275390bda1.tar.gz"],
 )
 
 # configure/make dependencies
@@ -55,6 +59,10 @@ archive_override(
 # Misc tools
 
 bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
+
+# Rust
+
+include("//bazel:rust.MODULE.bazel")
 
 # Python dependencies
 
@@ -817,6 +825,72 @@ http_file(
     url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
 )
 
+# pebble & pebble dns server for Boundary Nodes ACME tests
+
+http_archive(
+    name = "pebble-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "39e07d63dc776521f2ffe0584e5f4f081c984ac02742c882b430891d89f0c866",
+    strip_prefix = "pebble-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "9b9625651f8ce47706235179503fec149f8f38bce2b2554efe8c0f2a021f877c",
+    strip_prefix = "pebble-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "0e70f2537353f61cbf06aa54740bf7f7bb5f963ba00e909f23af5f85bc13fd1a",
+    strip_prefix = "pebble-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble.bazel",
+    sha256 = "34595d915bbc2fc827affb3f58593034824df57e95353b031c8d5185724485ce",
+    strip_prefix = "pebble-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-linux-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "1bc5a6cfa062d9756e98d67825daf67f61dd655bcb6025efca2138fe836c9bbc",
+    strip_prefix = "pebble-challtestsrv-darwin-arm64/darwin/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-darwin",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "3d1343b1bbe892145fd2da70be36e67b149e482fbff897e109b8053f4f790f40",
+    strip_prefix = "pebble-challtestsrv-darwin-amd64/darwin/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-aarch64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "99a276aac8ceac121859b799708218e6dc57d7ca1dc1b8b5b586246b3c4160e6",
+    strip_prefix = "pebble-challtestsrv-linux-arm64/linux/arm64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-arm64.tar.gz",
+)
+
+http_archive(
+    name = "pebble-challtestsrv-x86_64-linux",
+    build_file = "@//third_party:BUILD.pebble-challtestsrv.bazel",
+    sha256 = "a817449d1f05ae58bcb7bf073b4cebe5d31512f859ba4b83951bd825d28d2114",
+    strip_prefix = "pebble-challtestsrv-linux-amd64/linux/amd64",
+    url = "https://github.com/letsencrypt/pebble/releases/download/v2.8.0/pebble-challtestsrv-linux-amd64.tar.gz",
+)
+
 ## shfmt, for formatting bash code
 
 http_file(
@@ -959,7 +1033,7 @@ toolchains = use_extension("@hermetic_cc_toolchain//toolchain:ext.bzl", "toolcha
 
 # The use_hermetic_cc setting is added to each toolchain to allow us to opt out
 # in favor of system toolchains, when needed.
-toolchains.extra_settings(settings = ["//bazel:use_hermetic_cc"])
+toolchains.extra_target_settings(settings = ["//bazel:use_hermetic_cc"])
 use_repo(toolchains, "zig_sdk")
 
 register_toolchains(

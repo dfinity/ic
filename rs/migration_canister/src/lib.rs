@@ -10,17 +10,19 @@ use std::{borrow::Cow, fmt::Display, time::Duration};
 use strum_macros::Display;
 
 use crate::{
-    canister_state::{events::num_successes_in_past_24_h, num_active_requests},
+    canister_state::{limiter::num_successes_in_past_24_h, requests::num_requests},
+    controller_recovery::ControllerRecoveryState,
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
-        process_controllers_changed, process_renamed, process_routing_table,
-        process_source_deleted, process_stopped, process_updated,
+        process_controllers_changed, process_migrated_canister_deleted, process_renamed,
+        process_routing_table, process_stopped, process_updated,
     },
 };
 
 pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
 
 mod canister_state;
+mod controller_recovery;
 mod external_interfaces;
 mod migration_canister;
 mod privileged;
@@ -66,69 +68,62 @@ pub enum ValidationError {
     NotController {
         canister: Principal,
     },
-    SourceNotStopped(Reserved),
-    SourceNotReady(Reserved),
-    TargetNotStopped(Reserved),
-    TargetHasSnapshots(Reserved),
-    SourceInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,
     },
 }
 
+#[derive(Clone, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct CanisterMigrationArgs {
+    pub migrated_canister: Principal,
+    pub replaced_canister: Principal,
+}
+
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Request {
-    source: Principal,
-    source_subnet: Principal,
-    source_original_controllers: Vec<Principal>,
-    target: Principal,
-    target_subnet: Principal,
-    target_original_controllers: Vec<Principal>,
+    migrated_canister: Principal,
+    migrated_canister_subnet: Principal,
+    migrated_canister_original_controllers: Vec<Principal>,
+    replaced_canister: Principal,
+    replaced_canister_subnet: Principal,
+    replaced_canister_original_controllers: Vec<Principal>,
     caller: Principal,
 }
 
 impl Request {
     pub fn new(
-        source: Principal,
-        source_subnet: Principal,
-        source_original_controllers: Vec<Principal>,
-        target: Principal,
-        target_subnet: Principal,
-        target_original_controllers: Vec<Principal>,
+        migrated_canister: Principal,
+        migrated_canister_subnet: Principal,
+        migrated_canister_original_controllers: Vec<Principal>,
+        replaced_canister: Principal,
+        replaced_canister_subnet: Principal,
+        replaced_canister_original_controllers: Vec<Principal>,
         caller: Principal,
     ) -> Self {
         Self {
-            source,
-            source_subnet,
-            source_original_controllers,
-            target,
-            target_subnet,
-            target_original_controllers,
+            migrated_canister,
+            migrated_canister_subnet,
+            migrated_canister_original_controllers,
+            replaced_canister,
+            replaced_canister_subnet,
+            replaced_canister_original_controllers,
             caller,
         }
     }
     fn affects_canister(&self, src_id: Principal, tgt_id: Principal) -> Option<Principal> {
-        if self.source == src_id || self.target == src_id {
+        if self.migrated_canister == src_id || self.replaced_canister == src_id {
             return Some(src_id);
         }
-        if self.source == tgt_id || self.target == tgt_id {
+        if self.migrated_canister == tgt_id || self.replaced_canister == tgt_id {
             return Some(tgt_id);
         }
         None
-    }
-
-    /// Dummy value to serve as a bound in composite bounds.
-    pub fn low_bound() -> Self {
-        Self {
-            source: Principal::management_canister(),
-            source_subnet: Principal::management_canister(),
-            source_original_controllers: vec![],
-            target: Principal::management_canister(),
-            target_subnet: Principal::management_canister(),
-            target_original_controllers: vec![],
-            caller: Principal::management_canister(),
-        }
     }
 }
 
@@ -136,17 +131,63 @@ impl Display for Request {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Request {{ source: {}, source_subnet: {}, target: {}, target_subnet: {}, caller: {}, source_original_controllers: [",
-            self.source, self.source_subnet, self.target, self.target_subnet, self.caller
+            "Request {{ migrated_canister: {}, migrated_canister_subnet: {}, replaced_canister: {}, replaced_canister_subnet: {}, caller: {}, migrated_canister_original_controllers: [",
+            self.migrated_canister,
+            self.migrated_canister_subnet,
+            self.replaced_canister,
+            self.replaced_canister_subnet,
+            self.caller
         )?;
-        for x in self.source_original_controllers.iter() {
+        for x in self.migrated_canister_original_controllers.iter() {
             write!(f, "{}, ", x)?;
         }
-        write!(f, "], target_original_controllers: [",)?;
-        for x in self.target_original_controllers.iter() {
+        write!(f, "], replaced_canister_original_controllers: [",)?;
+        for x in self.replaced_canister_original_controllers.iter() {
             write!(f, "{}, ", x)?;
         }
         write!(f, "] }}")
+    }
+}
+
+impl From<&Request> for CanisterMigrationArgs {
+    fn from(request: &Request) -> Self {
+        Self {
+            migrated_canister: request.migrated_canister,
+            replaced_canister: request.replaced_canister,
+        }
+    }
+}
+
+/// Represents the recovery state of a `Request` in `RequestState::Failed`,
+/// i.e., whether controllers of migrated and replaced canisters must still be restored.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryState {
+    pub restore_migrated_canister_controllers: ControllerRecoveryState,
+    pub restore_replaced_canister_controllers: ControllerRecoveryState,
+}
+
+impl Default for RecoveryState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RecoveryState {
+    pub fn new() -> Self {
+        Self {
+            restore_migrated_canister_controllers: ControllerRecoveryState::NoProgress,
+            restore_replaced_canister_controllers: ControllerRecoveryState::NoProgress,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(
+            self.restore_migrated_canister_controllers,
+            ControllerRecoveryState::Done
+        ) && matches!(
+            self.restore_replaced_canister_controllers,
+            ControllerRecoveryState::Done
+        )
     }
 }
 
@@ -166,12 +207,12 @@ impl Display for Request {
 pub enum RequestState {
     /// Request was validated successfully.
     /// * Called registry `get_subnet_for_canister` to determine:
-    ///     * Existence of source and target.
-    ///     * Subnet of source and target.
+    ///     * Existence of migrated and replaced canisters.
+    ///     * Subnet of migrated and replaced canisters.
     /// * Called mgmt `canister_status` to determine:
-    ///     * We are controller of source and target.
-    ///     * The original controllers of source and target.
-    ///     * If the target has sufficient cycles above the freezing threshold.
+    ///     * We are controller of migrated and replaced canisters.
+    ///     * The original controllers of migrated and replaced canisters.
+    ///     * If the replaced canister has sufficient cycles above the freezing threshold.
     #[strum(to_string = "RequestState::Accepted {{ request: {request} }}")]
     Accepted { request: Request },
 
@@ -183,14 +224,14 @@ pub enum RequestState {
     ControllersChanged { request: Request },
 
     /// * Called mgmt `canister_status` to determine:
-    ///     * Source and target are stopped.
-    ///     * Source is ready for migration.
-    ///     * Target has no snapshots.
-    ///     * Target has sufficient cycles above the freezing threshold.
-    ///     * Source canister version is not absurdly high.
-    /// * Called mgmt `canister_info` to determine the history length of source.
+    ///     * Migrated and replaced canisters are stopped.
+    ///     * Migrated canister is ready for migration.
+    ///     * Replaced canister has no snapshots.
+    ///     * Replaced canister has sufficient cycles above the freezing threshold.
+    ///     * Migrated canister version is not absurdly high.
+    /// * Called mgmt `canister_info` to determine the history length of migrated canister.
     ///
-    /// Record the canister version and history length of source and the current time.
+    /// Record the canister version and history length of migrated canister and the current time.
     #[strum(
         to_string = "RequestState::StoppedAndReady {{ request: {request}, stopped_since: {stopped_since}, canister_version: {canister_version}, canister_history_total_num: {canister_history_total_num} }}"
     )]
@@ -203,9 +244,9 @@ pub enum RequestState {
 
     /// Called mgmt `rename_canister`. Subsequent mgmt calls have to use the explicit subnet ID, not `aaaaa-aa`.
     #[strum(
-        to_string = "RequestState::RenamedTarget {{ request: {request}, stopped_since: {stopped_since} }}"
+        to_string = "RequestState::RenamedReplacedCanister {{ request: {request}, stopped_since: {stopped_since} }}"
     )]
-    RenamedTarget {
+    RenamedReplacedCanister {
         request: Request,
         stopped_since: u64,
     },
@@ -234,16 +275,16 @@ pub enum RequestState {
 
     /// Called mgmt `delete_canister`.
     #[strum(
-        to_string = "RequestState::SourceDeleted {{ request: {request}, stopped_since: {stopped_since} }}"
+        to_string = "RequestState::MigratedCanisterDeleted {{ request: {request}, stopped_since: {stopped_since} }}"
     )]
-    SourceDeleted {
+    MigratedCanisterDeleted {
         request: Request,
         stopped_since: u64,
     },
 
-    /// Five minutes have passed since `stopped_since` such that any messages to the
-    /// source subnet have expired by now.
-    /// Restored the controllers of the target canister (now addressed with source's id).
+    /// Six minutes have passed since `stopped_since` such that any messages to the
+    /// migrated canister subnet have expired by now.
+    /// Restored the controllers of the replaced canister (now addressed with migrated canister's id).
     ///
     /// This state transitions to a success event without any additional work.
     ///
@@ -255,7 +296,11 @@ pub enum RequestState {
     /// We stay in this state until the controllers have been restored and then
     /// transition to a `Failed` state in the `HISTORY`.
     #[strum(to_string = "RequestState::Failed {{ request: {request}, reason: {reason} }}")]
-    Failed { request: Request, reason: String },
+    Failed {
+        request: Request,
+        recovery_state: RecoveryState,
+        reason: String,
+    },
 }
 
 impl RequestState {
@@ -264,10 +309,10 @@ impl RequestState {
             RequestState::Accepted { request }
             | RequestState::ControllersChanged { request }
             | RequestState::StoppedAndReady { request, .. }
-            | RequestState::RenamedTarget { request, .. }
+            | RequestState::RenamedReplacedCanister { request, .. }
             | RequestState::UpdatedRoutingTable { request, .. }
             | RequestState::RoutingTableChangeAccepted { request, .. }
-            | RequestState::SourceDeleted { request, .. }
+            | RequestState::MigratedCanisterDeleted { request, .. }
             | RequestState::RestoredControllers { request }
             | RequestState::Failed { request, .. } => request,
         }
@@ -278,10 +323,10 @@ impl RequestState {
             RequestState::Accepted { .. } => "Accepted",
             RequestState::ControllersChanged { .. } => "ControllersChanged",
             RequestState::StoppedAndReady { .. } => "StoppedAndReady",
-            RequestState::RenamedTarget { .. } => "RenamedTarget",
+            RequestState::RenamedReplacedCanister { .. } => "RenamedReplacedCanister",
             RequestState::UpdatedRoutingTable { .. } => "UpdatedRoutingTable",
             RequestState::RoutingTableChangeAccepted { .. } => "RoutingTableChangeAccepted",
-            RequestState::SourceDeleted { .. } => "SourceDeleted",
+            RequestState::MigratedCanisterDeleted { .. } => "MigratedCanisterDeleted",
             RequestState::RestoredControllers { .. } => "RestoredControllers",
             RequestState::Failed { .. } => "Failed",
         }
@@ -316,6 +361,28 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Event {{ time: {}, event: {} }}", self.time, self.event)
     }
+}
+
+impl From<&Event> for CanisterMigrationArgs {
+    fn from(x: &Event) -> Self {
+        x.event.request().into()
+    }
+}
+
+impl Storable for CanisterMigrationArgs {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(to_vec(&self).expect("Canister migration argument serialization failed"))
+    }
+
+    fn into_bytes(self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        from_slice(&bytes).expect("Canister migration argument deserialization failed")
+    }
+
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for Request {
@@ -414,8 +481,8 @@ pub fn start_timers() {
     });
     set_timer_interval(interval, async || {
         process_all_by_predicate(
-            "renamed_target",
-            |r| matches!(r, RequestState::RenamedTarget { .. }),
+            "renamed_replaced_canister",
+            |r| matches!(r, RequestState::RenamedReplacedCanister { .. }),
             process_renamed,
         )
         .await
@@ -438,9 +505,9 @@ pub fn start_timers() {
     });
     set_timer_interval(interval, async || {
         process_all_by_predicate(
-            "source_deleted",
-            |r| matches!(r, RequestState::SourceDeleted { .. }),
-            process_source_deleted,
+            "migrated_canister_deleted",
+            |r| matches!(r, RequestState::MigratedCanisterDeleted { .. }),
+            process_migrated_canister_deleted,
         )
         .await
     });
@@ -455,7 +522,7 @@ pub fn start_timers() {
 /// Within a sliding 24h window, we don't want to exceed some maximum of migrations.
 /// Therefore, we add currently active requests and successes in the past 24 hours.
 pub fn rate_limited() -> bool {
-    num_active_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
+    num_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
 }
 
 #[allow(dead_code)]

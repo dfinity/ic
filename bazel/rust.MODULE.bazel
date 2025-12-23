@@ -1,0 +1,2149 @@
+# Rust dependencies
+# Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
+# to regenerate Cargo Bazel lockfiles.
+
+bazel_dep(name = "rules_rust", version = "0.67.0")
+archive_override(
+    module_name = "rules_rust",
+    integrity = "sha256-3Ch+PsqAsp1cyV4mHK4nPu3xr0oAqWrpN+I0U02tskw=",
+    patch_strip = 1,
+    patches = [
+        "//bazel:rules_rust_strip_level.patch",
+        "//bazel:rules_rust_package_alias.patch",
+        "//bazel:rules_rust_rust_test.patch",
+    ],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
+)
+
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2024",
+    versions = ["1.90.0"],
+)
+
+# Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
+ICRC_1_REV = "26a80d777e079644cd69e883e18dad1a201f5b1a"
+
+BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+
+# Rust crates.
+# Build any crate with `@crate_index//:mycrate`
+# Use particular version with `@crate_index//:mycrate-3.14.16`
+
+crate.spec(
+    package = "actix-rt",
+    version = "^2.10.0",
+)
+crate.spec(
+    package = "actix-web",
+    version = "^4.9.0",
+)
+crate.spec(
+    package = "actix-web-prom",
+    version = "0.9.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "idna",
+    ],
+    package = "addr",
+    version = "^0.15.6",
+)
+crate.spec(
+    features = [
+        "axum",
+        "axum-json",
+    ],
+    package = "aide",
+    version = "^0.14.2",
+)
+crate.spec(
+    package = "arbitrary",
+    version = "^1.3.2",
+)
+crate.spec(
+    package = "arc-swap",
+    version = "^1.7.1",
+)
+crate.spec(
+    package = "anyhow",
+    version = "^1.0.93",
+)
+crate.spec(
+    package = "arrayvec",
+    version = "^0.7.4",
+)
+crate.spec(
+    features = [
+        "serde-json",
+    ],
+    package = "askama",
+    version = "^0.12.1",
+)
+crate.spec(
+    package = "assert-json-diff",
+    version = "^2.0.1",
+)
+crate.spec(
+    package = "assert_cmd",
+    version = "^2.0.16",
+)
+crate.spec(
+    package = "assert_matches",
+    version = "^1.5.0",
+)
+crate.spec(
+    package = "async-recursion",
+    version = "^1.0.5",
+)
+crate.spec(
+    package = "async-stream",
+    version = "^0.3.6",
+)
+crate.spec(
+    package = "async-trait",
+    version = "^0.1.89",
+)
+crate.spec(
+    features = ["ws"],
+    package = "axum",
+    version = "^0.8.4",
+)
+crate.spec(
+    features = ["typed-header"],
+    package = "axum-extra",
+    version = "^0.10.1",
+)
+crate.spec(
+    features = [
+        "tls-rustls-no-provider",
+    ],
+    package = "axum-server",
+    version = "^0.7.3",
+)
+crate.spec(
+    package = "backoff",
+    version = "^0.4.0",
+)
+crate.spec(
+    package = "backon",
+    version = "^0.4.1",
+)
+crate.spec(
+    package = "base32",
+    version = "^0.4.0",
+)
+crate.spec(
+    package = "base64",
+    version = "^0.13.1",
+)
+crate.spec(
+    package = "bech32",
+    version = "^0.9.0",
+)
+crate.spec(
+    package = "bincode",
+    version = "^1.3.3",
+)
+crate.spec(
+    default_features = False,
+    features = ["runtime"],
+    package = "bindgen",
+    version = "^0.65.1",
+)
+crate.spec(
+    features = [
+        "secp256k1",
+    ],
+    package = "bip32",
+    version = "^0.5.0",
+)
+crate.spec(
+    package = "bit-vec",
+    version = "^0.6.3",
+)
+crate.spec(
+    features = [
+        "default",
+        "rand",
+        "serde",
+    ],
+    package = "bitcoin-dogecoin",
+    version = "^0.32.5-doge.1",
+)
+crate.spec(
+    features = [
+        "default",
+        "rand",
+        "use-serde",
+    ],
+    package = "bitcoin",
+    package_alias = "bitcoin-0-28",
+    version = "^0.28.2",
+)
+crate.spec(
+    package = "bitflags",
+    version = "^1.2.1",
+)
+crate.spec(
+    package = "bs58",
+    version = "^0.5.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "alloc",
+        "experimental",
+        "groups",
+        "pairings",
+        "zeroize",
+    ],
+    package = "ic_bls12_381",
+    version = "0.10.1",
+)
+crate.spec(
+    git = "https://github.com/dfinity-lab/build-info",
+    package = "build-info",
+    rev = BUILD_INFO_REV,
+)
+crate.spec(
+    default_features = False,
+    git = "https://github.com/dfinity-lab/build-info",
+    package = "build-info-build",
+    rev = BUILD_INFO_REV,
+)
+crate.spec(
+    package = "by_address",
+    version = "^1.1.0",
+)
+crate.spec(
+    package = "byte-unit",
+    version = "^4.0.14",
+)
+crate.spec(
+    package = "byteorder",
+    version = "^1.3.4",
+)
+crate.spec(
+    package = "bytes",
+    version = "^1.9.0",
+)
+crate.spec(
+    default_features = False,
+    package = "cached",
+    version = "^0.49",
+)
+crate.spec(
+    package = "canbench",
+    version = "^0.4.0",
+)
+crate.spec(
+    package = "canbench-rs",
+    version = "^0.4.0",
+)
+crate.spec(
+    package = "candid",
+    version = "^0.10.20",
+)
+crate.spec(
+    package = "cargo_metadata",
+    version = "^0.14.2",
+)
+crate.spec(
+    package = "candid_parser",
+    version = "^0.1.2",
+)
+crate.spec(
+    package = "cc",
+    version = "=1.2.48",
+)
+crate.spec(
+    package = "cddl",
+    version = "^0.9.4",
+)
+crate.spec(
+    package = "cfg-if",
+    version = "^1.0.0",
+)
+crate.spec(
+    package = "chacha20poly1305",
+    version = "^0.10.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "alloc",
+        "clock",
+        "serde",
+    ],
+    package = "chrono",
+    version = "^0.4.42",
+)
+
+# Required because chrono uses canisters incompatible features
+crate.spec(
+    default_features = False,
+    features = [
+        "alloc",
+    ],
+    git = "https://github.com/chronotope/chrono.git",
+    package = "chrono",
+    package_alias = "chrono_canisters",
+    tag = "v0.4.41",
+)
+crate.spec(
+    package = "ciborium",
+    version = "^0.2.1",
+)
+crate.spec(
+    package = "cidr",
+    version = "^0.2.2",
+)
+crate.spec(
+    features = [
+        "derive",
+        "string",
+    ],
+    package = "clap",
+    version = "^4.5.20",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "rustls-tls",
+    ],
+    git = "https://github.com/dfinity/cloudflare-rs.git",
+    package = "cloudflare",
+    rev = "8b011d170d9d61eaad77bb9645371f6219285104",
+)
+crate.spec(
+    package = "colored",
+    version = "^2.0.0",
+)
+crate.spec(
+    features = [
+        "derive",
+    ],
+    package = "comparable",
+    version = "^0.5",
+)
+crate.spec(
+    package = "console",
+    version = "^0.11",
+)
+crate.spec(
+    package = "convert_case",
+    version = "^0.6.0",
+)
+crate.spec(
+    package = "crc32fast",
+    version = "^1.2.0",
+)
+crate.spec(
+    features = [
+        "html_reports",
+        "async_tokio",
+    ],
+    package = "criterion",
+    version = "^0.5.1",
+)
+crate.spec(
+    package = "crossbeam",
+    version = "^0.8.4",
+)
+crate.spec(
+    package = "crossbeam-channel",
+    version = "^0.5.15",
+)
+crate.spec(
+    package = "csv",
+    version = "^1.1",
+)
+crate.spec(
+    features = ["termination"],
+    package = "ctrlc",
+    version = "3.4.5",
+)
+crate.spec(
+    features = [
+        "group",
+        "precomputed-tables",
+    ],
+    package = "curve25519-dalek",
+    version = "^4.1.3",
+)
+crate.spec(
+    package = "cvt",
+    version = "^0.1.1",
+)
+crate.spec(
+    package = "darling",
+    version = "^0.20.11",
+)
+crate.spec(
+    package = "dashmap",
+    version = "^5.3.4",
+)
+crate.spec(
+    package = "derivative",
+    version = "^2.2",
+)
+crate.spec(
+    default_features = False,
+    features = ["derive"],
+    package = "der",
+    version = "0.7",
+)
+crate.spec(
+    package = "derive-new",
+    version = "^0.7.0",
+)
+crate.spec(
+    package = "devicemapper",
+    version = "0.34",
+)
+crate.spec(
+    package = "dfx-core",
+    version = "^0.1.4",
+)
+crate.spec(
+    package = "dyn-clone",
+    version = "^1.0.14",
+)
+crate.spec(
+    features = [
+        "std",
+        "zeroize",
+        "digest",
+        "batch",
+        "pkcs8",
+        "pem",
+        "hazmat",
+    ],
+    package = "ed25519-dalek",
+    version = "^2.2.0",
+)
+crate.spec(
+    package = "educe",
+    version = "^0.4",
+)
+crate.spec(
+    package = "env-file-reader",
+    version = "^0.3",
+)
+crate.spec(
+    package = "erased-serde",
+    version = "^0.3.11",
+)
+crate.spec(
+    features = ["print"],
+    package = "escargot",
+    version = "^0.5.7",
+)
+crate.spec(
+    package = "ethers-core",
+    version = "^2.0.7",
+)
+crate.spec(
+    features = ["serde"],
+    package = "ethnum",
+    version = "^1.3.2",
+)
+crate.spec(
+    package = "evm_rpc_client",
+    version = "^0.3.0",
+)
+crate.spec(
+    package = "evm_rpc_types",
+    version = "^3.1.0",
+)
+crate.spec(
+    package = "exec",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "eyre",
+    version = "^0.6.8",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "std",
+    ],
+    package = "ff",
+    version = "^0.12.0",
+)
+crate.spec(
+    package = "flate2",
+    version = "^1.0.31",
+)
+crate.spec(
+    package = "form_urlencoded",
+    version = "^1.0.0",
+)
+crate.spec(
+    package = "fqdn",
+    version = "0.3.11",
+)
+crate.spec(
+    package = "fs_extra",
+    version = "^1.2.0",
+)
+crate.spec(
+    package = "futures",
+    version = "^0.3.31",
+)
+crate.spec(
+    package = "futures-util",
+    version = "^0.3.31",
+)
+crate.spec(
+    package = "get_if_addrs",
+    version = "^0.5.3",
+)
+crate.spec(
+    features = [
+        "custom",
+    ],
+    package = "getrandom",
+    version = "^0.2",
+)
+crate.spec(
+    package = "gpt",
+    version = "4.1",
+)
+crate.spec(
+    package = "goldenfile",
+    version = "^1.8",
+)
+crate.spec(
+    package = "group",
+    version = "^0.13",
+)
+crate.spec(
+    package = "hashlink",
+    version = "^0.8.0",
+)
+crate.spec(
+    features = [
+        "serde",
+    ],
+    package = "hex",
+    version = "^0.4.3",
+)
+crate.spec(
+    package = "hex-literal",
+    version = "^0.4.1",
+)
+crate.spec(
+    package = "hkdf",
+    version = "^0.12",
+)
+crate.spec(
+    package = "http",
+    version = "^1.3.1",
+)
+crate.spec(
+    package = "http-body",
+    version = "^1.0.1",
+)
+crate.spec(
+    package = "http-body-util",
+    version = "^0.1.3",
+)
+crate.spec(
+    package = "hmac",
+    version = "^0.12",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "p384",
+        "alloc",
+    ],
+    package = "hpke",
+    version = "^0.12",
+)
+crate.spec(
+    package = "humantime",
+    version = "^2.2.0",
+)
+crate.spec(
+    package = "humantime-serde",
+    version = "^1.1.1",
+)
+crate.spec(
+    features = ["full"],
+    package = "hyper",
+    version = "^1.6.0",
+)
+crate.spec(
+    default_features = False,
+    package = "hyper-socks2",
+    version = "^0.9.1",
+)
+crate.spec(
+    features = ["full"],
+    package = "hyper-util",
+    version = "^0.1.12",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "http1",
+        "http2",
+        "native-tokio",
+        "ring",
+        "tls12",
+    ],
+    package = "hyper-rustls",
+    version = "^0.27.5",
+)
+crate.spec(
+    package = "ic0",
+    version = "^1.0.0",
+)
+crate.spec(
+    features = [
+        "pem",
+        "ring",
+    ],
+    package = "ic-agent",
+    version = "^0.40.1",
+)
+crate.spec(
+    features = [
+        "acme-alpn",
+    ],
+    package = "ic-bn-lib",
+    version = "0.1.7",
+)
+crate.spec(
+    package = "ic-bn-lib-common",
+    version = "0.1",
+)
+crate.spec(
+    package = "ic-btc-interface",
+    version = "^0.2.3",
+)
+crate.spec(
+    package = "ic-canister-log",
+    version = "^0.2.0",
+)
+crate.spec(
+    package = "ic-canister-runtime",
+    version = "^0.1.0",
+)
+crate.spec(
+    git = "https://github.com/dfinity/ic-canister-sig-creation.git",
+    package = "ic-canister-sig-creation",
+    rev = "c790e58434be9bf30e656b418c14f7862353a476",
+)
+crate.spec(
+    package = "ic-cbor",
+    version = "3.0.3",
+)
+crate.spec(
+    package = "ic-cdk",
+    version = "^0.19.0",
+)
+crate.spec(
+    package = "ic-cdk-executor",
+    version = "^2.0.0",
+)
+crate.spec(
+    package = "ic-cdk-timers",
+    version = "^1.0.0",
+)
+crate.spec(
+    package = "ic-certified-map",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "ic-certification",
+    version = "3.0.3",
+)
+crate.spec(
+    package = "ic-certificate-verification",
+    version = "3.0.3",
+)
+crate.spec(
+    package = "ic-doge-interface",
+    version = "^0.1.0",
+)
+crate.spec(
+    default_features = False,
+    git = "https://github.com/dfinity/ic-gateway",
+    package = "ic-gateway",
+    rev = "92ee522a4514584ccf6de487ba40d92063effd9a",
+)
+crate.spec(
+    package = "ic-http-certification",
+    version = "3.0.3",
+)
+crate.spec(
+    git = "https://github.com/dfinity/http-gateway",
+    package = "ic-http-gateway",
+    rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730",
+)
+crate.spec(
+    package = "ic-identity-hsm",
+    version = "^0.40.1",
+)
+crate.spec(
+    package = "ic-metrics-encoder",
+    version = "^1.1.1",
+)
+crate.spec(
+    package = "ic-management-canister-types",
+    version = "^0.5.0",
+)
+crate.spec(
+    default_features = False,
+    package = "ic_principal",
+    version = "^0.1.1",
+)
+crate.spec(
+    package = "ic-response-verification",
+    version = "3.0.3",
+)
+crate.spec(
+    package = "ic-sha3",
+    version = "^1.0.0",
+)
+crate.spec(
+    package = "ic-stable-structures",
+    version = "^0.6.8",
+)
+crate.spec(
+    package = "ic-stable-structures",
+    package_alias = "ic_stable_structures_next",
+    version = "^0.7.0",
+)
+crate.spec(
+    git = "https://github.com/dfinity/ICRC-1",
+    package = "icrc1-test-env",
+    rev = ICRC_1_REV,
+)
+crate.spec(
+    git = "https://github.com/dfinity/ICRC-1",
+    package = "icrc1-test-suite",
+    rev = ICRC_1_REV,
+)
+crate.spec(
+    package = "ic-test-state-machine-client",
+    version = "^3.0.0",
+)
+crate.spec(
+    package = "ic-transport-types",
+    version = "^0.40.1",
+)
+crate.spec(
+    features = ["raw"],
+    package = "ic-utils",
+    version = "^0.40.1",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "alloc",
+    ],
+    package = "ic-verify-bls-signature",
+    version = "^0.6.0",
+)
+crate.spec(
+    package = "ic-vetkeys",
+    version = "^0.6.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "exe",
+    ],
+    package = "ic-wasm",
+    version = "^0.8.4",
+)
+crate.spec(
+    package = "ic-xrc-types",
+    version = "^1.2.0",
+)
+crate.spec(
+    package = "idna",
+    version = "^1.0.2",
+)
+crate.spec(
+    package = "indexmap",
+    version = "^2.2.6",
+)
+crate.spec(
+    package = "indicatif",
+    version = "^0.17.3",
+)
+crate.spec(
+    package = "indoc",
+    version = "^1.0.9",
+)
+crate.spec(
+    package = "inferno",
+    version = "^0.12.0",
+)
+crate.spec(
+    package = "insta",
+    version = "^1.31.0",
+)
+crate.spec(
+    package = "instant-acme",
+    version = "^0.7.2",
+)
+crate.spec(
+    features = ["serde"],
+    package = "intmap",
+    version = "^1.1.0",
+)
+crate.spec(
+    features = ["serde"],
+    package = "ipnet",
+    version = "^2.10.1",
+)
+crate.spec(
+    package = "isocountry",
+    version = "^0.3.2",
+)
+crate.spec(
+    package = "itertools",
+    version = "^0.12.0",
+)
+crate.spec(
+    package = "jsonrpc",
+    version = "^0.18.0",
+)
+crate.spec(
+    package = "json-patch",
+    version = "^0.2.6",
+)
+crate.spec(
+    package = "json5",
+    version = "^0.4.1",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "arithmetic",
+        "ecdsa",
+        "pem",
+        "pkcs8",
+        "precomputed-tables",
+        "schnorr",
+        "std",
+    ],
+    package = "k256",
+    version = "^0.13.4",
+)
+crate.spec(
+    package = "lazy_static",
+    version = "^1.4.0",
+)
+crate.spec(
+    package = "leb128",
+    version = "^0.2.5",
+)
+crate.spec(
+    package = "libc",
+    version = "^0.2.158",
+)
+crate.spec(
+    features = [
+        "mutex",
+    ],
+    package = "libcryptsetup-rs",
+    version = "^0.13.2",
+)
+crate.spec(
+    package = "libflate",
+    version = "^2.1.0",
+)
+crate.spec(
+    default_features = False,
+    package = "libfuzzer-sys",
+    version = "^0.4.7",
+)
+crate.spec(
+    package = "libnss",
+    version = "^0.5.0",
+)
+crate.spec(
+    package = "little-loadshedder",
+    version = "^0.2.0",
+)
+crate.spec(
+    git = "https://github.com/dfinity-lab/lmdb-rs",
+    package = "lmdb-rkv",
+    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+)
+crate.spec(
+    default_features = False,
+    git = "https://github.com/dfinity-lab/lmdb-rs",
+    package = "lmdb-rkv-sys",
+    rev = "4d952c8f1dca79de855af892b444d7112567b58d",
+)
+crate.spec(
+    package = "local-ip-address",
+    version = "^0.5.6",
+)
+crate.spec(
+    package = "loopdev-3",
+    version = "0.5",
+)
+crate.spec(
+    default_features = False,
+    package = "lru",
+    version = "^0.7.8",
+)
+crate.spec(
+    package = "macaddr",
+    version = "^1.0",
+)
+crate.spec(
+    package = "memmap2",
+    version = "^0.9.5",
+)
+crate.spec(
+    package = "maplit",
+    version = "^1.0.2",
+)
+crate.spec(
+    package = "maxminddb",
+    version = "^0.24",
+)
+crate.spec(
+    package = "memchr",
+    version = "2.7",
+)
+crate.spec(
+    # When updating this, please make sure that the built
+    # binary exports metrics http_cache_* after one
+    # successful request to the proxy.  The OpenTelemetry
+    # package version pinned by this software must equal
+    # the OpenTelemetry version pinned by the
+    # axum-otel-metrics version pinned by this software,
+    # due to technical idiosyncrasies of the OpenTelemetry
+    # crate.  When these do not match, custom metrics are
+    # not exported.
+    default_features = False,
+    features = [
+        "rustls-tls-webpki-roots",
+    ],
+    git = "https://github.com/dfinity/metrics-proxy.git",
+    package = "metrics-proxy",
+    rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
+)
+crate.spec(
+    features = [
+        "alloc",
+        "derive",
+    ],
+    package = "minicbor",
+    version = "^0.19.1",
+)
+crate.spec(
+    package = "minicbor-derive",
+    version = "^0.13.0",
+)
+crate.spec(
+    package = "mockall",
+    version = "^0.13.1",
+)
+crate.spec(
+    package = "mockito",
+    version = "^1.6.1",
+)
+crate.spec(
+    features = [
+        "future",
+        "sync",
+    ],
+    package = "moka",
+    version = "^0.12.8",
+)
+crate.spec(
+    package = "more-asserts",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "nftables",
+    version = "^0.4.1",
+)
+crate.spec(
+    features = [
+        "ptrace",
+    ],
+    package = "nix",
+    version = "^0.24.3",
+)
+crate.spec(
+    package = "num-bigint",
+    version = "^0.4.6",
+)
+crate.spec(
+    features = ["prime"],
+    package = "num-bigint-dig",
+    version = "^0.8",
+)
+crate.spec(
+    package = "num-rational",
+    version = "^0.2.2",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "libm",
+    ],
+    package = "num-traits",
+    version = "^0.2.12",
+)
+crate.spec(
+    package = "num_cpus",
+    version = "^1.16.0",
+)
+crate.spec(
+    package = "object",
+    version = "^0.37.3",
+)
+crate.spec(
+    package = "once_cell",
+    version = "^1.8",
+)
+crate.spec(
+    package = "openssh-keys",
+    version = "^0.5.0",
+)
+crate.spec(
+    features = [
+        "metrics",
+        "trace",
+    ],
+    package = "opentelemetry",
+    version = "^0.27.0",
+)
+crate.spec(
+    features = [
+        "grpc-tonic",
+    ],
+    package = "opentelemetry-otlp",
+    version = "^0.27.0",
+)
+crate.spec(
+    features = [
+        "trace",
+        "rt-tokio",
+    ],
+    package = "opentelemetry_sdk",
+    version = "^0.27.1",
+)
+crate.spec(
+    package = "opentelemetry-prometheus",
+    version = "^0.13.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "arithmetic",
+        "ecdsa",
+        "pem",
+        "pkcs8",
+    ],
+    package = "p256",
+    version = "^0.13.2",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "ecdsa",
+        "pem",
+    ],
+    package = "p384",
+    version = "0.13",
+)
+crate.spec(
+    package = "pairing",
+    version = "^0.23",
+)
+crate.spec(
+    package = "parking_lot",
+    version = "^0.12.1",
+)
+crate.spec(
+    package = "paste",
+    version = "^1.0.15",
+)
+crate.spec(
+    package = "pcre2",
+    version = "^0.2.6",
+)
+crate.spec(
+    default_features = False,
+    features = ["std"],
+    package = "pem",
+    version = "^3",
+)
+crate.spec(
+    package = "pin-project-lite",
+    version = "^0.2",
+)
+crate.spec(
+    package = "ping",
+    version = "^0.5.0",
+)
+crate.spec(
+    package = "pkcs8",
+    version = "^0.10.2",
+)
+crate.spec(
+    package = "pkg-config",
+    version = "^0.3",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "criterion",
+        "flamegraph",
+        "prost-codec",
+    ],
+    package = "pprof",
+    version = "^0.14.0",
+)
+crate.spec(
+    package = "predicates",
+    version = "^3.1.2",
+)
+crate.spec(
+    package = "pretty-bytes",
+    version = "^0.2.2",
+)
+crate.spec(
+    package = "pretty_assertions",
+    version = "^1.4.0",
+)
+crate.spec(
+    features = [
+        "serde",
+    ],
+    package = "priority-queue",
+    version = "^1.3.1",
+)
+crate.spec(
+    package = "proc-macro2",
+    version = "^1.0.89",
+)
+crate.spec(
+    default_features = False,
+    package = "procfs",
+    version = "^0.9",
+)
+crate.spec(
+    features = [
+        "process",
+    ],
+    package = "prometheus",
+    version = "^0.13.4",
+)
+crate.spec(
+    package = "proptest",
+    version = "^1.5.0",
+)
+crate.spec(
+    package = "prometheus-parse",
+    version = "^0.2.4",
+)
+crate.spec(
+    package = "proptest-derive",
+    version = "^0.5.0",
+)
+
+# why are both needed?
+crate.spec(
+    package = "prost",
+    package_alias = "prost_0_12",
+    version = "^0.12.2",
+)
+crate.spec(
+    package = "prost",
+    version = "^0.13.3",
+)
+crate.spec(
+    package = "prost-build",
+    version = "^0.13.3",
+)
+crate.spec(
+    package = "protobuf",
+    version = "^2.28.0",
+)
+crate.spec(
+    package = "publicsuffix",
+    version = "^2.2.3",
+)
+crate.spec(
+    package = "quickcheck",
+    version = "^1.0.3",
+)
+crate.spec(
+    default_features = False,
+    package = "qrcode",
+    version = "0.14.1",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "ring",
+        "log",
+        "runtime-tokio",
+        "rustls",
+    ],
+    package = "quinn",
+    version = "^0.11.5",
+)
+crate.spec(
+    package = "quinn-udp",
+    version = "^0.5.5",
+)
+crate.spec(
+    package = "quote",
+    version = "^1.0.37",
+)
+crate.spec(
+    features = [
+        "small_rng",
+    ],
+    package = "rand",
+    version = "^0.8.5",
+)
+crate.spec(
+    package = "rand_chacha",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "rand_distr",
+    version = "^0.4",
+)
+crate.spec(
+    package = "rand_pcg",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "ratelimit",
+    version = "^0.9.1",
+)
+crate.spec(
+    package = "ratatui",
+    version = "^0.29",
+)
+crate.spec(
+    package = "rayon",
+    version = "^1.10.0",
+)
+crate.spec(
+    features = [
+        "zeroize",
+    ],
+    package = "rcgen",
+    version = "^0.13.1",
+)
+crate.spec(
+    package = "rgb",
+    version = "^0.8.37",
+)
+crate.spec(
+    package = "regex",
+    version = "^1.11.0",
+)
+crate.spec(
+    package = "regex-lite",
+    version = "^0.1.8",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "blocking",
+        "http2",
+        "json",
+        "multipart",
+        "rustls-tls",
+        "rustls-tls-native-roots",
+        "stream",
+    ],
+    package = "reqwest",
+    version = "^0.12.24",
+)
+crate.spec(
+    package = "rexpect",
+    version = "0.6",
+)
+crate.spec(
+    features = [
+        "std",
+    ],
+    package = "ring",
+    version = "^0.17.7",
+)
+crate.spec(
+    package = "ripemd",
+    version = "^0.1.1",
+)
+crate.spec(
+    package = "rlp",
+    version = "^0.5.2",
+)
+crate.spec(
+    default_features = False,
+    package = "rocksdb",
+    version = "^0.22.0",
+)
+crate.spec(
+    package = "rolling-file",
+    version = "^0.2.0",
+)
+crate.spec(
+    features = [
+        "sha2",
+        "getrandom",
+    ],
+    package = "rsa",
+    version = "^0.9.6",
+)
+crate.spec(
+    package = "rstest",
+    version = "^0.19.0",
+)
+crate.spec(
+    package = "rusb",
+    version = "0.9",
+)
+crate.spec(
+    features = ["bundled"],
+    package = "rusqlite",
+    version = "^0.28.0",
+)
+crate.spec(
+    package = "rust_decimal",
+    version = "^1.36.0",
+)
+crate.spec(
+    package = "rust_decimal_macros",
+    version = "^1.36.0",
+)
+crate.spec(
+    package = "rustc-demangle",
+    version = "^0.1.16",
+)
+crate.spec(
+    package = "rustc-hash",
+    version = "^1.1.0",
+)
+crate.spec(
+    package = "rust-ini",
+    version = "^0.21.1",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "ring",
+        "std",
+        "brotli",
+        "tls12",
+    ],
+    package = "rustls",
+    version = "^0.23.18",
+)
+crate.spec(
+    package = "rustls-pemfile",
+    version = "^2.1.2",
+)
+crate.spec(
+    package = "rustversion",
+    version = "^1.0",
+)
+crate.spec(
+    package = "rusty-fork",
+    version = "^0.3.0",
+)
+crate.spec(
+    features = [
+        "derive",
+    ],
+    package = "schemars",
+    version = "^0.8.21",
+)
+crate.spec(
+    package = "scoped_threadpool",
+    version = "^0.1.9",
+)
+crate.spec(
+    package = "scopeguard",
+    version = "^1.1.0",
+)
+crate.spec(
+    package = "scraper",
+    version = "^0.17.1",
+)
+crate.spec(
+    default_features = False,
+    package = "scrypt",
+    version = "^0.11.0",
+)
+crate.spec(
+    features = [
+        "global-context",
+        "rand-std",
+    ],
+    package = "secp256k1",
+    version = "^0.22",
+)
+crate.spec(
+    features = [
+        "serde",
+    ],
+    package = "semver",
+    version = "^1.0.9",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "derive",
+    ],
+    package = "serde",
+    version = "^1.0.203",
+)
+crate.spec(
+    package = "serde-bytes-repr",
+    version = "^0.1.5",
+)
+crate.spec(
+    package = "serde_bytes",
+    version = "^0.11.15",
+)
+crate.spec(
+    package = "serde_cbor",
+    version = "^0.11.2",
+)
+crate.spec(
+    package = "serde_json",
+    version = "^1.0.107",
+)
+crate.spec(
+    package = "serde_regex",
+    version = "^1.1.0",
+)
+crate.spec(
+    package = "serde_with",
+    version = "^1.14.0",
+)
+crate.spec(
+    package = "serde_yaml",
+    version = "^0.9.33",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "crypto_nossl",
+        "snp",
+    ],
+    package = "sev",
+    version = "7.1",
+)
+crate.spec(
+    package = "sha2",
+    version = "^0.10.9",
+)
+crate.spec(
+    package = "sha3",
+    version = "^0.10.8",
+)
+crate.spec(
+    package = "shell-escape",
+    version = "^0.1.5",
+)
+crate.spec(
+    features = [
+        "iterator",
+    ],
+    package = "signal-hook",
+    version = "^0.3.6",
+)
+crate.spec(
+    package = "signature",
+    version = "^2.2.0",
+)
+crate.spec(
+    package = "simple_asn1",
+    version = "^0.6.2",
+)
+crate.spec(
+    package = "simple_moving_average",
+    version = "^1.0.2",
+)
+crate.spec(
+    features = [
+        "max_level_trace",
+        "nested-values",
+        "release_max_level_trace",
+    ],
+    package = "slog",
+    version = "^2.7.0",
+)
+crate.spec(
+    features = [
+        "nested-values",
+    ],
+    package = "slog-async",
+    version = "^2.8.0",
+)
+crate.spec(
+    package = "slog-envlogger",
+    version = "^2.2.0",
+)
+crate.spec(
+    features = [
+        "nested-values",
+    ],
+    package = "slog-json",
+    version = "^2.6.1",
+)
+crate.spec(
+    package = "slog-scope",
+    version = "^4.4.0",
+)
+crate.spec(
+    package = "slog-term",
+    version = "^2.9.1",
+)
+crate.spec(
+    package = "slotmap",
+    version = "^1.0.7",
+)
+crate.spec(
+    features = [
+        "all",
+    ],
+    package = "socket2",
+    version = "^0.5.7",
+)
+crate.spec(
+    features = [
+        "tokio",
+    ],
+    package = "socks5-impl",
+    version = "0.6",
+)
+crate.spec(
+    package = "ssh2",
+    version = "0.9.4",
+)
+crate.spec(
+    package = "static_assertions",
+    version = "1.1.0",
+)
+crate.spec(
+    default_features = False,
+    package = "strum",
+    version = "^0.26.3",
+)
+crate.spec(
+    package = "strum_macros",
+    version = "^0.26.4",
+)
+crate.spec(
+    package = "stubborn-io",
+    version = "^0.3.2",
+)
+crate.spec(
+    package = "subtle",
+    version = "^2.6.1",
+)
+crate.spec(
+    features = [
+        "fold",
+        "full",
+    ],
+    package = "syn",
+    version = "^2.0.110",
+)
+crate.spec(
+    package = "syscalls",
+    version = "^0.6.18",
+)
+crate.spec(
+    package = "systemd",
+    version = "0.10",
+)
+crate.spec(
+    package = "sys-mount",
+    version = "3.0",
+)
+crate.spec(
+    package = "tabled",
+    version = "^0.20.0",
+)
+crate.spec(
+    package = "tar",
+    version = "^0.4.38",
+)
+crate.spec(
+    features = [
+        "full",
+    ],
+    package = "tarpc",
+    version = "^0.34",
+)
+crate.spec(
+    package = "tempfile",
+    version = "3.20",
+)
+crate.spec(
+    package = "tester",
+    version = "^0.7.0",
+)
+crate.spec(
+    package = "test-strategy",
+    version = "^0.3.1",
+)
+crate.spec(
+    package = "textplots",
+    version = "^0.8",
+)
+crate.spec(
+    package = "tui-textarea",
+    version = "^0.7",
+)
+crate.spec(
+    package = "thiserror",
+    version = "^2.0.3",
+)
+crate.spec(
+    package = "thousands",
+    version = "^0.2.0",
+)
+crate.spec(
+    package = "threadpool",
+    version = "^1.8.1",
+)
+crate.spec(
+    features = ["stats"],
+    package = "tikv-jemalloc-ctl",
+    version = "^0.6",
+)
+crate.spec(
+    package = "tikv-jemallocator",
+    version = "^0.6",
+)
+crate.spec(
+    package = "time",
+    version = "^0.3.36",
+)
+crate.spec(
+    features = ["full"],
+    package = "tokio",
+    version = "^1.42.0",
+)
+crate.spec(
+    package = "tokio-io-timeout",
+    version = "^1.2.0",
+)
+crate.spec(
+    package = "tokio-metrics",
+    version = "^0.4.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "ring",
+    ],
+    package = "tokio-rustls",
+    version = "^0.26.0",
+)
+crate.spec(
+    package = "tokio-stream",
+    version = "^0.1.17",
+)
+crate.spec(
+    features = [
+        "bincode",
+        "json",
+    ],
+    package = "tokio-serde",
+    version = "^0.8",
+)
+crate.spec(
+    package = "tokio-socks",
+    version = "^0.5.1",
+)
+crate.spec(
+    package = "tokio-test",
+    version = "^0.4.4",
+)
+crate.spec(
+    package = "tokio-tungstenite",
+    version = "^0.26.0",
+)
+crate.spec(
+    features = [
+        "codec",
+        "time",
+        "rt",
+    ],
+    package = "tokio-util",
+    version = "^0.7.13",
+)
+crate.spec(
+    package = "toml",
+    version = "^0.5.9",
+)
+crate.spec(
+    package = "tonic",
+    version = "^0.12.3",
+)
+crate.spec(
+    package = "tonic-build",
+    version = "^0.12.3",
+)
+crate.spec(
+    features = ["full"],
+    package = "tower",
+    version = "^0.5.2",
+)
+crate.spec(
+    features = [
+        "add-extension",
+        "cors",
+        "limit",
+        "trace",
+        "request-id",
+        "util",
+        "compression-full",
+        "tracing",
+    ],
+    package = "tower-http",
+    version = "^0.6.4",
+)
+crate.spec(
+    package = "tower_governor",
+    version = "^0.7.0",
+)
+crate.spec(
+    package = "tower-request-id",
+    version = "^0.3.0",
+)
+crate.spec(
+    package = "tower-test",
+    version = "^0.4.0",
+)
+crate.spec(
+    package = "tracing",
+    version = "^0.1.41",
+)
+crate.spec(
+    package = "tracing-appender",
+    version = "^0.2.3",
+)
+crate.spec(
+    package = "tracing-flame",
+    version = "^0.2.0",
+)
+crate.spec(
+    package = "tracing-opentelemetry",
+    version = "^0.28.0",
+)
+crate.spec(
+    package = "tracing-serde",
+    version = "^0.1.3",
+)
+crate.spec(
+    package = "tracing-slog",
+    version = "^0.2",
+)
+crate.spec(
+    features = [
+        "env-filter",
+        "fmt",
+        "json",
+        "time",
+    ],
+    package = "tracing-subscriber",
+    version = "^0.3.20",
+)
+crate.spec(
+    package = "trust-dns-resolver",
+    version = "^0.22.0",
+)
+crate.spec(
+    package = "turmoil",
+    version = "^0.6.4",
+)
+crate.spec(
+    features = [
+        "serde",
+    ],
+    package = "url",
+    version = "^2.5.3",
+)
+
+# DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
+# This breaks `wasm32-unknown-unknown` compatibility.
+# Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0
+crate.spec(
+    features = [
+        "v4",
+        "serde",
+    ],
+    package = "uuid",
+    version = "=1.12.1",
+)
+crate.spec(
+    package = "virt",
+    version = "0.4",
+)
+crate.spec(
+    package = "vsock",
+    version = "^0.4",
+)
+crate.spec(
+    package = "walkdir",
+    version = "^2.3.1",
+)
+crate.spec(
+    package = "walrus",
+    version = "^0.23.3",
+)
+crate.spec(
+    features = ["tls"],
+    package = "warp",
+    version = "^0.3.7",
+)
+crate.spec(
+    package = "wasm-bindgen",
+    version = "^0.2",
+)
+crate.spec(
+    features = [
+        "wasmparser",
+    ],
+    package = "wasm-encoder",
+    version = "^0.240.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "wasmparser",
+    ],
+    package = "wasm-smith",
+    version = "^0.240.0",
+)
+crate.spec(
+    package = "wasmparser",
+    version = "^0.240.0",
+)
+crate.spec(
+    package = "wasmprinter",
+    version = "^0.240.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "cranelift",
+        "gc",
+        "gc-null",
+        "parallel-compilation",
+        "runtime",
+    ],
+    package = "wasmtime",
+    version = "^39.0.1",
+)
+crate.spec(
+    package = "wast",
+    version = "^240.0.0",
+)
+crate.spec(
+    package = "wat",
+    version = "^1.240.0",
+)
+crate.spec(
+    package = "wee_alloc",
+    version = "^0.4.3",
+)
+crate.spec(
+    package = "which",
+    version = "^4.2.2",
+)
+crate.spec(
+    features = ["parallel"],
+    package = "wirm",
+    version = "2.1.0",
+)
+crate.spec(
+    package = "wsl",
+    version = "^0.1.0",
+)
+crate.spec(
+    default_features = False,
+    features = [
+        "ecdsa",
+        "eddsa",
+        "hkdf",
+        "mac",
+        "rsa_sig",
+    ],
+    package = "wycheproof",
+    version = "^0.6",
+)
+crate.spec(
+    features = [
+        "builder",
+        "hazmat",
+    ],
+    package = "x509-cert",
+    version = "^0.2.5",
+)
+crate.spec(
+    package = "x509-parser",
+    version = "^0.16.0",
+)
+crate.spec(
+    package = "yansi",
+    version = "^0.5.0",
+)
+crate.spec(
+    features = [
+        "zeroize_derive",
+    ],
+    package = "zeroize",
+    version = "^1.8.1",
+)
+crate.spec(
+    package = "zstd",
+    version = "^0.13.2",
+)
+
+# Crate annotations
+
+# These are rustc flags that can be used with the Rust nightly toolchain to build fuzz tests for libfuzzer.
+# NOTE: make sure this stays in sync with bazel/fuzz_testing.bzl
+DEFAULT_RUSTC_FLAGS = [
+    "-Cpasses=sancov-module",
+    "-Cllvm-args=-sanitizer-coverage-level=4",
+    "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+    "-Cllvm-args=-sanitizer-coverage-pc-table",
+    "-Cllvm-args=-sanitizer-coverage-trace-compares",
+    "-Cllvm-args=-sanitizer-coverage-stack-depth",
+    "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+    "-Ctarget-cpu=native",
+    "-Coverflow_checks",
+    "-Copt-level=3",
+    "-Clink-dead-code",
+    "-Cdebug-assertions",
+    "-Ccodegen-units=1",
+    "-Zextra-const-ub-checks",
+    "-Zstrict-init-checks",
+    # TODO(PSEC): Add configuration to enable only during profiling
+    # "-Cinstrument-coverage",
+]
+
+# NOTE: make sure this stays in sync with bazel/fuzz_testing.bzl
+DEFAULT_SANITIZERS = [
+    "-Zsanitizer=address",
+    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
+    "-Zexternal-clangrt",
+    "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+]
+
+# This flag will be used by third party crates and internal rust_libraries during fuzzing
+# NOTE: make sure this stays in sync with bazel/fuzz_testing.bzl
+DEFAULT_RUSTC_FLAGS_FOR_FUZZING = DEFAULT_RUSTC_FLAGS + DEFAULT_SANITIZERS
+
+crate.annotation_select(
+    crate = "bincode",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+    triples = ["@@//bazel:fuzzing_code_enabled"],
+)
+crate.annotation_select(
+    crate = "bitcoin-dogecoin",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+    triples = ["@@//bazel:fuzzing_code_enabled"],
+)
+crate.annotation_select(
+    crate = "candid",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+    triples = ["@@//bazel:fuzzing_code_enabled"],
+)
+crate.annotation(
+    build_script_data = [
+        "@@_main~_repo_rules~openssl//:gen_dir",
+    ],
+    build_script_env = {
+        "OPENSSL_NO_VENDOR": "1",
+        "OPENSSL_LIB_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/lib64",
+        "OPENSSL_INCLUDE_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/include",
+        "OPENSSL_STATIC": "1",
+    },
+    crate = "openssl-sys",
+)
+crate.annotation(
+    crate = "canbench",
+    gen_binaries = ["canbench"],
+)
+crate.annotation(
+    crate = "cc",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:cc_rs.patch"],
+)
+crate.annotation(
+    build_script_data = [
+        "@@_main~_repo_rules~openssl//:gen_dir",
+    ],
+    crate = "libssh2-sys",
+    # Patch for determinism issues
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:libssh2-sys.patch"],
+)
+crate.annotation(
+    crate = "libz-sys",
+    crate_features = ["static"],
+)
+crate.annotation(
+    crate = "curve25519-dalek",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+crate.annotation_select(
+    crate = "ic-stable-structures",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+    triples = ["@@//bazel:fuzzing_code_enabled"],
+)
+crate.annotation(
+    crate = "ic_bls12_381",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+crate.annotation(
+    crate = "k256",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+crate.annotation(
+    build_script_data = [
+        "@@_main~_repo_rules~lmdb//:liblmdb",
+        "@@_main~_repo_rules~lmdb//:lmdb.h",
+    ],
+    build_script_env = {
+        "LMDB_OVERRIDE": "$(location @@_main~_repo_rules~lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @@_main~_repo_rules~lmdb//:lmdb.h)",
+    },
+    crate = "lmdb-rkv-sys",
+    # patch our fork of the lmdb-rkv-sys to allow specifying the path
+    # to the built static archive
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:lmdb_rkv_sys.patch"],
+)
+crate.annotation(
+    crate = "p256",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+crate.annotation_select(
+    # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
+    build_script_data = ["@@_main~_repo_rules~jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @@_main~_repo_rules~jemalloc//:libjemalloc)"},
+    crate = "tikv-jemalloc-sys",
+    triples = ["x86_64-unknown-linux-gnu"],
+)
+crate.annotation_select(
+    crate = "wasmtime",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+    triples = ["@@//bazel:fuzzing_code_enabled"],
+)
+crate.annotation(
+    crate = "secp256k1-sys",
+    rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
+    # This specific version is used by ic-btc-kyt canister, which
+    # requires an extra cfg flag to avoid linking issues.
+    # Applying the same cfg to other versions of secp256k1-sys
+    # may break other programs or tests.
+    version = "0.10.0",
+)
+crate.annotation(
+    crate = "sha2",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+crate.annotation(
+    build_script_env = {
+        "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+    },
+    crate = "ring",
+)
+crate.annotation(
+    crate = "ic-wasm",
+    gen_binaries = ["ic-wasm"],
+)
+crate.annotation(
+    build_script_env = {
+        # Bazel executors assign only one core when executing
+        # the build script, making rocksdb compilation
+        # extremely slow. Bazel doesn't provide any way to
+        # override this settings so we cheat by starting more
+        # processes in parallel.
+        #
+        # See IDX-2406.
+        "NUM_JOBS": "8",
+    },
+    crate = "librocksdb-sys",
+)
+crate.annotation(
+    build_script_data = [
+        "@@protobuf~//:protoc",
+    ],
+    build_script_env = {
+        "PROTOC": "$(execpath @@protobuf~//:protoc)",
+    },
+    crate = "pprof",
+)
+crate.annotation(
+    build_script_env = {
+        "PROTOC_NO_VENDOR": "1",
+    },
+    crate = "prost-build",
+)
+crate.annotation(
+    crate = "metrics-proxy",
+    gen_binaries = ["metrics-proxy"],
+)
+crate.splicing_config(
+    resolver_version = "2",
+)
+crate.from_specs(
+    name = "crate_index",
+    cargo_lockfile = "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.json.lock",
+    supported_platform_triples =
+        [
+            "aarch64-apple-darwin",
+            "aarch64-unknown-linux-gnu",
+            "wasm32-unknown-unknown",
+            "x86_64-apple-darwin",
+            "x86_64-unknown-linux-gnu",
+        ],
+)
+use_repo(crate, "crate_index")
+
+####

@@ -225,7 +225,6 @@ pub fn assemble_setupos_config(
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        use_nns_public_key: false,
         nns_urls: nns_urls.to_vec(),
         use_node_operator_private_key,
         enable_trusted_execution_environment,
@@ -235,11 +234,7 @@ pub fn assemble_setupos_config(
 
     let setupos_settings = SetupOSSettings;
 
-    #[allow(deprecated)]
     let hostos_settings = HostOSSettings {
-        vm_memory: dev_vm_resources.memory,
-        vm_cpu: dev_vm_resources.cpu.clone(),
-        vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
         verbose,
         hostos_dev_settings: HostOSDevSettings {
             vm_memory: dev_vm_resources.memory,
