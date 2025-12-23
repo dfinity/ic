@@ -30,7 +30,7 @@ packages:
   - "e2fsprogs" # for mkfs.ext4 used in ICOS device tests
   - "gawk" # for build-bootstrap-config-image
   - "gzip" # for tar-ing up ic regsitry store in systests
-  - "libarchive-dev"
+  - "libarchive-dev" # for testing building filesystem images from tar (mkfs dependency)
   - "libcryptsetup-dev"
   - "libssl3t64"
   - "libunwind8"
