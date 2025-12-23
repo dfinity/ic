@@ -17,23 +17,23 @@ fn should_parse_valid_addresses() {
     assert_eq!(test_cases.len(), 50);
 
     for test_case in test_cases {
-        if !test_case.is_private_key() {
-            if let Some(network) = test_case.network() {
-                let parsed_address = DogecoinAddress::parse(test_case.base58_address(), &network)
-                    .unwrap_or_else(|e| {
-                        panic!("Failed to parse valid public key {test_case:?}: {e:?}")
-                    });
+        if !test_case.is_private_key()
+            && let Some(network) = test_case.network()
+        {
+            let parsed_address = DogecoinAddress::parse(test_case.base58_address(), &network)
+                .unwrap_or_else(|e| {
+                    panic!("Failed to parse valid public key {test_case:?}: {e:?}")
+                });
 
-                assert_eq!(parsed_address.as_bytes(), test_case.expected_bytes());
-                assert_matches!(
-                    (&parsed_address, test_case.expect_address_type()),
-                    (DogecoinAddress::P2pkh(_), AddressType::Pubkey)
-                        | (DogecoinAddress::P2sh(_), AddressType::Script)
-                );
+            assert_eq!(parsed_address.as_bytes(), test_case.expected_bytes());
+            assert_matches!(
+                (&parsed_address, test_case.expect_address_type()),
+                (DogecoinAddress::P2pkh(_), AddressType::Pubkey)
+                    | (DogecoinAddress::P2sh(_), AddressType::Script)
+            );
 
-                let rendered_parsed_address = parsed_address.display(&network);
-                assert_eq!(test_case.base58_address(), rendered_parsed_address);
-            }
+            let rendered_parsed_address = parsed_address.display(&network);
+            assert_eq!(test_case.base58_address(), rendered_parsed_address);
         }
     }
 }
