@@ -60,6 +60,7 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
+qemu-system-x86 # used for guestos
 zstd
 
 # Unknown
