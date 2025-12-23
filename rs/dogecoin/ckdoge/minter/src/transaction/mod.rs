@@ -109,10 +109,7 @@ impl DogecoinTransactionSigner {
             let script_sig = bitcoin::Script::builder()
                 .push_slice(sig_push_bytes)
                 .push_int(sighash_type.to_u32() as i64)
-                .push_key(
-                    &bitcoin::PublicKey::from_slice(&public_key)
-                        .expect("BUG: public key should be valid"),
-                )
+                .push_slice(public_key)
                 .into_script();
             script_sigs.push(script_sig);
         }
