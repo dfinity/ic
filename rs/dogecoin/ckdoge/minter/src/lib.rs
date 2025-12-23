@@ -176,11 +176,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
         address: &str,
         network: ic_ckbtc_minter::Network,
     ) -> Result<BitcoinAddress, std::string::String> {
-        let doge_network = match network {
-            ic_ckbtc_minter::Network::Mainnet => Network::Mainnet,
-            ic_ckbtc_minter::Network::Testnet => Network::Testnet,
-            ic_ckbtc_minter::Network::Regtest => Network::Regtest,
-        };
+        let doge_network = Network::try_from(network)?;
         let doge_address =
             DogecoinAddress::parse(address, &doge_network).map_err(|e| e.to_string())?;
 
@@ -195,7 +191,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
         updates::account_to_p2pkh_address_from_state(state, account)
-            .display(&Network::from(state.btc_network))
+            .display(&Network::try_from(state.btc_network).expect("BUG: unsupported network"))
     }
 
     fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress {
@@ -218,7 +214,8 @@ impl CanisterRuntime for DogeCanisterRuntime {
             subaccount: None,
         };
         let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
-        minter_address.display(&Network::from(state.btc_network))
+        minter_address
+            .display(&Network::try_from(state.btc_network).expect("BUG: unsupported network"))
     }
 
     async fn check_address(
@@ -308,7 +305,9 @@ mod dogecoin_canister {
     fn into_dogecoin_network(network: ic_cdk::bitcoin_canister::Network) -> Network {
         match network {
             ic_cdk::bitcoin_canister::Network::Mainnet => Network::Mainnet,
-            ic_cdk::bitcoin_canister::Network::Testnet => Network::Testnet,
+            ic_cdk::bitcoin_canister::Network::Testnet => {
+                panic!("Network {network:?} is not supported!")
+            }
             ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
         }
     }

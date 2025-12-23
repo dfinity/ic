@@ -18,28 +18,29 @@ fn should_parse_valid_addresses() {
 
     for test_case in test_cases {
         if !test_case.is_private_key() {
-            let parsed_address =
-                DogecoinAddress::parse(test_case.base58_address(), &test_case.network())
+            if let Some(network) = test_case.network() {
+                let parsed_address = DogecoinAddress::parse(test_case.base58_address(), &network)
                     .unwrap_or_else(|e| {
                         panic!("Failed to parse valid public key {test_case:?}: {e:?}")
                     });
 
-            assert_eq!(parsed_address.as_bytes(), test_case.expected_bytes());
-            assert_matches!(
-                (&parsed_address, test_case.expect_address_type()),
-                (DogecoinAddress::P2pkh(_), AddressType::Pubkey)
-                    | (DogecoinAddress::P2sh(_), AddressType::Script)
-            );
+                assert_eq!(parsed_address.as_bytes(), test_case.expected_bytes());
+                assert_matches!(
+                    (&parsed_address, test_case.expect_address_type()),
+                    (DogecoinAddress::P2pkh(_), AddressType::Pubkey)
+                        | (DogecoinAddress::P2sh(_), AddressType::Script)
+                );
 
-            let rendered_parsed_address = parsed_address.display(&test_case.network());
-            assert_eq!(test_case.base58_address(), rendered_parsed_address);
+                let rendered_parsed_address = parsed_address.display(&network);
+                assert_eq!(test_case.base58_address(), rendered_parsed_address);
+            }
         }
     }
 }
 
 #[test]
 fn should_fail_to_parse_invalid_addresses() {
-    const ALL_NETWORKS: [Network; 3] = [Network::Mainnet, Network::Testnet, Network::Regtest];
+    const ALL_NETWORKS: [Network; 2] = [Network::Mainnet, Network::Regtest];
 
     let test_cases: Vec<_> = test_vectors::<Vec<Vec<InvalidKey>>>(INVALID_BASE58_KEYS)
         .into_iter()
@@ -89,11 +90,11 @@ impl KeyPayload {
         self.2.is_privkey
     }
 
-    pub fn network(&self) -> Network {
+    pub fn network(&self) -> Option<Network> {
         if self.2.is_testnet {
-            return Network::Testnet;
+            return None;
         }
-        Network::Mainnet
+        Some(Network::Mainnet)
     }
 
     pub fn expect_address_type(&self) -> AddressType {
