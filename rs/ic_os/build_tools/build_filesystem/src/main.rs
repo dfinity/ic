@@ -121,12 +121,6 @@ fn main() -> Result<()> {
 /// Main build_filesystem logic that can be called programmatically
 pub(crate) fn build_filesystem(args: Args) -> Result<()> {
     let output_str = args.output.to_str().unwrap_or_default();
-    let valid_extensions = [".tar", ".tar.zst", ".tzst", ".img"];
-    ensure!(
-        valid_extensions.iter().any(|ext| output_str.ends_with(ext)),
-        "Output file must have one of the following extensions: {}",
-        valid_extensions.join(", ")
-    );
 
     if args.output_type == OutputType::Tar {
         let tar_extensions = [".tar", ".tar.zst", ".tzst"];
@@ -142,6 +136,13 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         ensure!(
             args.partition_size.is_none(),
             "Partition size is not allowed for tar output"
+        );
+    } else {
+        let extensions = [".img", ".img.zst"];
+        ensure!(
+            extensions.iter().any(|ext| output_str.ends_with(ext)),
+            "Output file for raw image must have one of the following extensions: {}",
+            extensions.join(", ")
         );
     }
 
@@ -160,16 +161,6 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         ensure!(input.exists(), "Input file does not exist: {input:?}");
     }
 
-    let needs_compression = if output_str.ends_with(".img") {
-        // Output raw image
-        false
-    } else if args.output_type == OutputType::Tar && output_str.ends_with(".tar") {
-        // Output built filesystem tar
-        false
-    } else {
-        true
-    };
-
     let file_contexts = args
         .file_contexts
         .map(|path| FileContexts::new(&path))
@@ -181,21 +172,20 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
         format!("^{s}$")
     }))?;
 
-    let _compressed_temp;
+    let needs_compression = output_str.ends_with(".zst") || output_str.ends_with(".tzst");
+    let _temp_path;
     // If compression is required, create a temporary file first, then compress it later
-    let output_path: &Path = if needs_compression {
-        // Create a temporary file and close it right away so it can be written by the image
-        // creation process.
-        _compressed_temp = NamedTempFile::new()?.into_temp_path();
-        _compressed_temp.as_ref()
+    let image_path: &Path = if needs_compression {
+        _temp_path = NamedTempFile::new()?.into_temp_path();
+        _temp_path.as_ref()
     } else {
         &args.output
     };
 
     let mut output_builder: Box<dyn FilesystemBuilder> = match args.output_type {
         OutputType::Tar => {
-            let output_file = File::create(output_path)
-                .with_context(|| format!("Failed to create output file {:?}", output_path))?;
+            let output_file = File::create(image_path)
+                .with_context(|| format!("Failed to create output file {:?}", image_path))?;
             let tar_builder = ::tar::Builder::new(BufWriter::new(output_file));
             Box::new(TarBuilder::new(tar_builder))
         }
@@ -204,7 +194,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for ext4")?;
             Box::new(Ext4Builder::new(
-                output_path,
+                image_path,
                 partition_size,
                 args.label,
                 args.mke2fs_path.clone(),
@@ -215,7 +205,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for vfat")?;
             Box::new(FatBuilder::new(
-                output_path,
+                image_path,
                 partition_size,
                 FatType::Vfat,
                 args.label,
@@ -226,7 +216,7 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
                 .partition_size
                 .context("Partition size is required for fat32")?;
             Box::new(FatBuilder::new(
-                output_path,
+                image_path,
                 partition_size,
                 FatType::Fat32,
                 args.label,
@@ -246,42 +236,14 @@ pub(crate) fn build_filesystem(args: Args) -> Result<()> {
     output_builder.finish()?;
 
     if needs_compression {
-        compress_output(&args.output, output_path, args.output_type)?;
+        let output = Command::new("zstd")
+            .args(["-T0", "--quiet", "--force", "-o"])
+            .arg(&args.output)
+            .arg(image_path)
+            .output()
+            .context("Failed to run zstd")?;
+        ensure!(output.status.success(), "compression failed: {output:?}");
     }
 
-    Ok(())
-}
-
-fn compress_output(
-    compressed_output_path: &PathBuf,
-    output_path: &Path,
-    output_type: OutputType,
-) -> Result<()> {
-    // If the output is a tar, we only need to compress it
-    let output = if output_type == OutputType::Tar {
-        Command::new("zstd")
-            .arg("-q")
-            .arg("--threads=0")
-            .arg(output_path)
-            .arg("-o")
-            .arg(compressed_output_path)
-            .output()
-            .context("Failed to execute zstd")?
-    } else {
-        // If the output is an image, we tar + compress it
-        Command::new("tar")
-            .arg("-caf")
-            .arg(compressed_output_path)
-            .arg("--sparse")
-            .arg("--transform")
-            .arg("s|.*|partition.img|")
-            .arg("-C")
-            .arg(output_path.parent().unwrap())
-            .arg(output_path.file_name().unwrap())
-            .output()
-            .context("Failed to execute tar")?
-    };
-
-    ensure!(output.status.success(), "compression failed: {output:?}");
     Ok(())
 }

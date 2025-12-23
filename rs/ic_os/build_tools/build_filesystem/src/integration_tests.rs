@@ -39,9 +39,7 @@ impl ImageFixtureBuilder {
     fn new(output_type: OutputType) -> Self {
         let output_extension = match output_type {
             OutputType::Tar => "tar",
-            OutputType::Ext4 => "img",
-            OutputType::Vfat => "img",
-            OutputType::Fat32 => "img",
+            _ => "img",
         };
         Self {
             output_type,
@@ -172,26 +170,21 @@ impl ImageFixture {
         }
     }
 
-    /// Extract partition.img from the tar file and mount it
-    fn mount_from_tar(&self) -> MountedImage {
-        let temp_dir = TempDir::new().unwrap();
-        let partition_img = temp_dir.path().join("partition.img");
+    /// Extract image from zst and mount it
+    fn mount_from_zst(&self) -> MountedImage {
+        let extracted_partition_img = NamedTempFile::new().unwrap().into_temp_path();
 
-        let output = Command::new("tar")
-            .arg("-xaf")
+        let output = Command::new("zstd")
+            .args(["--quiet", "--force", "-d"])
             .arg(self.path())
-            .arg("-C")
-            .arg(temp_dir.path())
+            .arg("-o")
+            .arg(&extracted_partition_img)
             .output()
             .unwrap();
 
-        assert!(output.status.success(), "tar extraction failed");
-        assert!(partition_img.exists(), "partition.img not found in tar");
+        assert!(output.status.success(), "zstd decompression failed");
 
-        let named_temp = tempfile::NamedTempFile::new().unwrap();
-        fs::copy(&partition_img, named_temp.path()).unwrap();
-
-        MountedImage::mount_loop_with_temp(named_temp, self.filesystem_type())
+        MountedImage::mount_loop_from_temp(extracted_partition_img, self.filesystem_type())
     }
 }
 
@@ -206,8 +199,8 @@ enum MountedImage {
     // A file that was extracted from a tar and then mounted using a loop device
     LoopMountedFromTemp {
         mount: Box<dyn ic_device::mount::MountedPartition>,
-        // We keep the extracted partition.img alive
-        _extracted_partition_img: tempfile::NamedTempFile,
+        // We keep the extracted and mounted disk image alive
+        _extracted_partition_img: TempPath,
     },
     // A tar file that was extracted to a temp directory
     ExtractedTar {
@@ -239,17 +232,12 @@ impl MountedImage {
     }
 
     /// Mount a filesystem image using a loop device, keeping the extracted partition image alive
-    fn mount_loop_with_temp(
-        extracted_partition_img: tempfile::NamedTempFile,
-        fs_type: FileSystem,
-    ) -> Self {
-        let image_path = extracted_partition_img.path();
-
+    fn mount_loop_from_temp(extracted_partition_img: TempPath, fs_type: FileSystem) -> Self {
         let mount = LoopDeviceMounter
             .mount_range(
-                image_path.to_path_buf(),
+                extracted_partition_img.to_path_buf(),
                 0,
-                fs::metadata(image_path).unwrap().len(),
+                fs::metadata(&extracted_partition_img).unwrap().len(),
                 MountOptions {
                     file_system: fs_type,
                 },
@@ -727,10 +715,10 @@ fn test_zst_compressed_images() {
         let mut builder = ImageFixture::builder(output_type)
             .partition_size("4M")
             .tar_content(simple_tar());
-        builder.output_extension = "tar.zst";
+        builder.output_extension = "img.zst";
 
         let image = builder.build();
-        let mounted = image.mount_from_tar();
+        let mounted = image.mount_from_zst();
 
         mounted.assert_file_content("file1.txt", "test content");
     }
