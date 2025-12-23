@@ -1,5 +1,5 @@
 {
-  "checksum": "971e5d282607108262108ca673f422f2836eabfcb73687aedd1d7aeade59afa4",
+  "checksum": "454ddad8a659e7b6bf159dd4dfbf7b005651629e3b25596d9db99a851ec80829",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7501,6 +7501,146 @@
         },
         "edition": "2021",
         "version": "0.71.1"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "prettyplease 0.2.15",
+              "target": "prettyplease"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
+    },
+    "bindgen 0.72.1": {
+      "name": "bindgen",
+      "version": "0.72.1",
+      "package_url": "https://github.com/rust-lang/rust-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bindgen/0.72.1/download",
+          "sha256": "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "logging",
+            "prettyplease",
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.72.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "itertools 0.13.0",
+              "target": "itertools"
+            },
+            {
+              "id": "log 0.4.28",
+              "target": "log"
+            },
+            {
+              "id": "prettyplease 0.2.15",
+              "target": "prettyplease"
+            },
+            {
+              "id": "proc-macro2 1.0.103",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.12.2",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 2.1.1",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            },
+            {
+              "id": "syn 2.0.110",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.72.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -22258,6 +22398,10 @@
               "target": "secp256k1"
             },
             {
+              "id": "selinux 0.5.3",
+              "target": "selinux"
+            },
+            {
               "id": "semver 1.0.27",
               "target": "semver"
             },
@@ -22644,6 +22788,10 @@
             {
               "id": "x509-parser 0.16.0",
               "target": "x509_parser"
+            },
+            {
+              "id": "xattr 1.6.1",
+              "target": "xattr"
             },
             {
               "id": "yansi 0.5.1",
@@ -72148,6 +72296,194 @@
       ],
       "license_file": null
     },
+    "selinux 0.5.3": {
+      "name": "selinux",
+      "version": "0.5.3",
+      "package_url": "https://codeberg.org/koutheir/selinux.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/selinux/0.5.3/download",
+          "sha256": "8f6af114a661557df02e60c25e5cb40779d295ec2e4ae0fd903fe414578b6191"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "selinux",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "selinux",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "errno 0.3.10",
+              "target": "errno"
+            },
+            {
+              "id": "libc 0.2.177",
+              "target": "libc"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "parking_lot 0.12.5",
+              "target": "parking_lot"
+            },
+            {
+              "id": "selinux-sys 0.6.15",
+              "target": "selinux_sys"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.5.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
+    "selinux-sys 0.6.15": {
+      "name": "selinux-sys",
+      "version": "0.6.15",
+      "package_url": "https://codeberg.org/koutheir/selinux-sys.git",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/selinux-sys/0.6.15/download",
+          "sha256": "debaba5832b4831ffe0ba9118b526c752c960f41c46c4ef197d9a15f5179d6fd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "selinux_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "selinux_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "selinux-sys 0.6.15",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "extra_deps": {
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "@@_main~_repo_rules~libselinux//:libselinux"
+            ]
+          }
+        },
+        "edition": "2024",
+        "version": "0.6.15"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data": {
+          "common": [],
+          "selects": {
+            "x86_64-unknown-linux-gnu": [
+              "@@_main~_repo_rules~libselinux//:libselinux"
+            ]
+          }
+        },
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.72.1",
+              "target": "bindgen"
+            },
+            {
+              "id": "cc 1.2.48",
+              "target": "cc"
+            },
+            {
+              "id": "dunce 1.0.5",
+              "target": "dunce"
+            },
+            {
+              "id": "walkdir 2.5.0",
+              "target": "walkdir"
+            }
+          ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {},
+          "selects": {
+            "x86_64-unknown-linux-gnu": {
+              "SELINUX_INCLUDE_DIR": "/usr/include",
+              "SELINUX_LIB_DIR": "/usr/lib/x86_64-linux-gnu"
+            }
+          }
+        },
+        "links": "selinux"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "semver 1.0.27": {
       "name": "semver",
       "version": "1.0.27",
@@ -97900,6 +98236,7 @@
     "scraper 0.17.1",
     "scrypt 0.11.0",
     "secp256k1 0.22.2",
+    "selinux 0.5.3",
     "semver 1.0.27",
     "serde 1.0.228",
     "serde-bytes-repr 0.1.5",
@@ -97999,6 +98336,7 @@
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
+    "xattr 1.6.1",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.2"
