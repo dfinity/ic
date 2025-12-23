@@ -18,18 +18,15 @@ const HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED: Height = Height::new(0);
 
 /// Loads the replicated state at the checkpoint and creates a csv file with all [`CanisterMetrics`]
 /// for each canister in the state.
-pub fn get(
-    checkpoint_dir: PathBuf,
-    subnet_type: SubnetType,
-    output_path: &Path,
-) -> Result<(), String> {
+pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     let replicated_state = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(
             checkpoint_dir,
             HEIGHT_IS_IRRELEVANT_BECAUSE_ITS_UNUSED,
         )
         .map_err(|err| format!("Failed to create CheckpointLayout: {err:?}"))?,
-        subnet_type,
+        // Note: for the purposes of this tool it shouldn't matter what we pass here.
+        SubnetType::Application,
         &CheckpointMetrics::new(&MetricsRegistry::new(), no_op_logger()),
         None,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),

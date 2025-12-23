@@ -180,10 +180,6 @@ enum Opt {
         /// Output path.
         #[clap(long)]
         output: PathBuf,
-
-        /// Type of the subnet.
-        #[clap(long, required = true)]
-        subnet_type: SubnetType,
     },
 }
 
@@ -297,11 +293,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
             migrated_ranges,
         ),
         Opt::ParseOverlay { path } => commands::parse_overlay::do_parse_overlay(path),
-        Opt::CanisterMetrics {
-            path,
-            output,
-            subnet_type,
-        } => commands::canister_metrics::get(path, subnet_type, &output),
+        Opt::CanisterMetrics { path, output } => commands::canister_metrics::get(path, &output),
     };
 
     if let Err(e) = result {

@@ -38,12 +38,8 @@ fn load_metrics_e2e_test() {
 
     // Use `state-tool` to extract the canister metrics from the replicated state.
     let load_samples_path = dir.path().join("load_samples.csv");
-    ic_state_tool::commands::canister_metrics::get(
-        checkpoint_dir,
-        state_machine.get_subnet_type(),
-        &load_samples_path,
-    )
-    .expect("Should compute canister metrics for a valid checkpoint");
+    ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_path)
+        .expect("Should compute canister metrics for a valid checkpoint");
 
     // TODO(CON-1569): use a tool for finding a good split, once it's in the `ic-public` repo.
     // For now we use a static set of ranges.
