@@ -672,9 +672,8 @@ crate.spec(
     version = "3.0.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/dogecoin-canister",
     package = "ic-doge-interface",
-    rev = "a5f89792a002b060e3f0174f1a87da9764f855f8",
+    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,
@@ -1868,10 +1867,6 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^39.0.1",
-)
-crate.spec(
-    package = "wasmtime-environ",
     version = "^39.0.1",
 )
 crate.spec(

@@ -67,6 +67,10 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # Upload build results to cache
         --remote_upload_local_results=true
 
+        # reduce from the default of 100 to avoid overloading the
+        # cache instance
+        --remote_max_connections=50
+
         --color=yes # Nice CI output
 
         # Write build events to the dedicated tempdir
