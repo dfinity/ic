@@ -35,9 +35,14 @@ jobs:
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup python3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Setup gh cli
         env:
