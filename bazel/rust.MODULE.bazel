@@ -171,9 +171,8 @@ crate.spec(
         "rand",
         "serde",
     ],
-    git = "https://github.com/dfinity/rust-dogecoin",
-    package = "bitcoin",
-    rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd",
+    package = "bitcoin-dogecoin",
+    version = "^0.32.5-doge.1",
 )
 crate.spec(
     features = [
@@ -672,9 +671,8 @@ crate.spec(
     version = "3.0.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/dogecoin-canister",
     package = "ic-doge-interface",
-    rev = "a5f89792a002b060e3f0174f1a87da9764f855f8",
+    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,
@@ -1867,10 +1865,6 @@ crate.spec(
     version = "^39.0.1",
 )
 crate.spec(
-    package = "wasmtime-environ",
-    version = "^39.0.1",
-)
-crate.spec(
     package = "wast",
     version = "^240.0.0",
 )
@@ -1977,7 +1971,7 @@ crate.annotation_select(
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
 crate.annotation_select(
-    crate = "bitcoin",
+    crate = "bitcoin-dogecoin",
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
