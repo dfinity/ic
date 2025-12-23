@@ -66,6 +66,8 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
+const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
+
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
@@ -241,6 +243,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_launch_measurements();
+    std::fs::write(
+        env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
+        serde_json::to_string(&guest_launch_measurements).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
     if !cfg.add_and_bless_upgrade_version {
         // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
         block_on(bless_replica_version(
@@ -347,6 +354,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: Some(upgrade_version.clone()),
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
+        upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),

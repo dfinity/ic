@@ -16,6 +16,7 @@ use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
 use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
+use ic_protobuf::registry::replica_version::v1::{GuestLaunchMeasurements, ReplicaVersionRecord};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
@@ -472,28 +473,42 @@ impl Recovery {
         upgrade_version: ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
+        guest_launch_measurements_path: Option<PathBuf>,
         add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let version_record = format!(
-            r#"{{ "release_package_sha256_hex": "{sha256}", "release_package_urls": ["{upgrade_url}"] }}"#
-        );
+        let guest_launch_measurements = guest_launch_measurements_path
+            .map(|path| {
+                let measurements_json =
+                    std::fs::read(&path).map_err(|e| RecoveryError::file_error(&path, e))?;
+                serde_json::from_slice::<GuestLaunchMeasurements>(&measurements_json)
+                    .map_err(|e| RecoveryError::parsing_error(e))
+            })
+            .transpose()?;
+
+        let version_record = ReplicaVersionRecord {
+            release_package_sha256_hex: sha256,
+            release_package_urls: vec![upgrade_url.to_string()],
+            guest_launch_measurements,
+        };
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
                 cmd: SubCommand::UpgradeSubnetToReplicaVersion(UpgradeSubnetToReplicaVersionCmd {
                     replica_version_id: upgrade_version.to_string(),
-                    replica_version_value: version_record.clone(),
+                    replica_version_record: version_record.clone(),
                     add_and_bless_replica_version,
                 }),
                 descr: format!(
-                    r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
+                    r#" upgrade-subnet-to-replica-version{} "{}" "{}""#,
                     if add_and_bless_replica_version {
                         " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
+                    upgrade_version,
+                    serde_json::to_string(&version_record).unwrap()
                 ),
             }),
             None,

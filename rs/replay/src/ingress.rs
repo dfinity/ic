@@ -305,9 +305,7 @@ pub(crate) fn cmd_upgrade_subnet_to_replica_version(
     context_time: Time,
 ) -> Result<Vec<SignedIngress>, String> {
     let replica_version_id = cmd.replica_version_id.clone();
-    let replica_version_record =
-        serde_json::from_str::<ReplicaVersionRecord>(&cmd.replica_version_value)
-            .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {err:?}"));
+    let replica_version_record = cmd.replica_version_record.clone();
 
     let mut msgs = Vec::new();
 
