@@ -3,7 +3,7 @@
 //  - One API BN
 //  - One HTTP gateway
 //
-// This is achieved by creating an initial NNS subnet and an unasigned node. We recover the initial
+// This is achieved by creating an initial NNS subnet and an unassigned node. We recover the initial
 // NNS on the unassigned node while also using the mainnet state, previously downloaded from the
 // backup pod.
 // We also add a test neuron who is followed by the mainnet neurons with large stake such that any
