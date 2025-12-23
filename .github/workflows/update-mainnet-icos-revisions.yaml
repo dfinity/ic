@@ -32,7 +32,7 @@ jobs:
       - name: Update mainnet ICOS versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          DRY_RUN: ${{ if github.event_name == 'pull_request' }} then 'dry_run' else '' end
+          DRY_RUN: ${{ github.event_name == 'pull_request' && 'dry_run' || '' }}
         run: |
           set -eEuxo pipefail
 
