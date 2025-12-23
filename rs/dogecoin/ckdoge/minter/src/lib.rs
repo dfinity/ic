@@ -9,6 +9,7 @@ pub mod event;
 pub mod fees;
 pub mod lifecycle;
 pub mod updates;
+pub mod transaction;
 
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;

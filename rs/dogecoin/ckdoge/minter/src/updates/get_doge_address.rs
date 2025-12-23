@@ -36,7 +36,7 @@ pub fn account_to_p2pkh_address_from_state(
 
 /// Returns the derivation path that should be used to sign a message from a
 /// specified account.
-fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
+pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     const SCHEMA_V1: u8 = 1;
     const PREFIX: [u8; 4] = *b"doge";
 
