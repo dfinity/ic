@@ -204,7 +204,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     let warning = Paragraph::new(vec![
         Line::styled("!! SECURITY WARNING !!", warning_header_style),
         Line::styled(
-            "Only proceed if the hashes exactly match those communicated",
+            "Only proceed if the calculated hashes exactly match those communicated",
             warning_text_style,
         ),
         Line::styled(
@@ -212,7 +212,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
             warning_text_style,
         ),
         Line::styled(
-            "Using a wrong hash can have critical security implications.",
+            "Proceeding with a wrong hash can have critical security implications.",
             warning_text_style,
         ),
     ]);
