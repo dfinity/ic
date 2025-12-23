@@ -97,18 +97,18 @@ impl DogecoinTransactionSigner {
                 runtime,
             )
             .await?;
-            let signature = ic_ckbtc_minter::signature::sec1_to_der(&sec1_signature);
+            let mut signature = ic_ckbtc_minter::signature::sec1_to_der(&sec1_signature);
             debug_assert_eq!(
                 Ok(()),
                 ic_ckbtc_minter::signature::validate_encoded_signature(&signature)
             );
+            signature.push(sighash_type as u8);
             let sig_push_bytes: &bitcoin::script::PushBytes = signature
                 .as_slice()
                 .try_into()
                 .expect("BUG: validity check ensures signature contains at most 73 bytes");
             let script_sig = bitcoin::Script::builder()
                 .push_slice(sig_push_bytes)
-                .push_int(sighash_type.to_u32() as i64)
                 .push_slice(public_key)
                 .into_script();
             script_sigs.push(script_sig);
