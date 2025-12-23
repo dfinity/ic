@@ -7690,6 +7690,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "bitcoin-dogecoin",
  "bs58 0.5.1",
  "candid",
  "candid_parser",
