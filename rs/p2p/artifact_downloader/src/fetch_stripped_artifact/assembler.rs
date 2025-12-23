@@ -371,6 +371,7 @@ pub(crate) enum AssemblyError {
 trait PayloadAssembler<ArtifactMessage> {
     type ArtifactId;
     type MissingArtifactId;
+    type Payload;
 
     /// Returns an iterator over stripped artifacts that are still missing.
     fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId>;
@@ -383,15 +384,16 @@ trait PayloadAssembler<ArtifactMessage> {
     ) -> Result<(), InsertionError>;
 
     /// Tries to reconstruct the part of the block corresponding to this payload assembler.
-    fn try_reconstruct_block(
+    fn try_reconstruct_payload(
         messages: Vec<(Self::MissingArtifactId, Option<ArtifactMessage>)>,
-        block: &mut pb::Block,
+        payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError>;
 }
 
 impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     type ArtifactId = SignedIngressId;
     type MissingArtifactId = SignedIngressId;
+    type Payload = Option<pb::IngressPayload>;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = SignedIngressId> {
         self.ingress_messages
@@ -421,9 +423,9 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
         }
     }
 
-    fn try_reconstruct_block(
+    fn try_reconstruct_payload(
         ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
-        block: &mut pb::Block,
+        payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let ingresses = ingress_messages
             .into_iter()
@@ -434,7 +436,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        block.ingress_payload = Some(pb::IngressPayload::from(IngressPayload::from(ingresses)));
+        *payload = Some(pb::IngressPayload::from(IngressPayload::from(ingresses)));
         Ok(())
     }
 }
@@ -442,6 +444,7 @@ impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
 impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     type ArtifactId = IDkgArtifactId;
     type MissingArtifactId = (NodeIndex, IDkgArtifactId);
+    type Payload = pb::IDkgPayload;
 
     fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
         self.signed_dealings
@@ -473,9 +476,9 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
         }
     }
 
-    fn try_reconstruct_block(
+    fn try_reconstruct_payload(
         signed_dealings: Vec<(Self::MissingArtifactId, Option<SignedIDkgDealing>)>,
-        block: &mut pb::Block,
+        payload: &mut Self::Payload,
     ) -> Result<(), AssemblyError> {
         let mut idkg_dealings =
             BTreeMap::<IDkgTranscriptId, BTreeMap<NodeIndex, SignedIDkgDealing>>::new();
@@ -489,20 +492,18 @@ impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
                 .insert(dealer_index, signed_dealing);
         }
 
-        if let Some(idkg) = block.idkg_payload.as_mut() {
-            for transcript in &mut idkg.idkg_transcripts {
-                let transcript_id =
-                    try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
-                        .map_err(AssemblyError::DeserializationFailed)?;
-                for dealing in &mut transcript.verified_dealings {
-                    let dealer_index = dealing.dealer_index;
-                    let found_dealing = idkg_dealings
-                        .get_mut(&transcript_id)
-                        .ok_or_else(|| AssemblyError::MissingIDkgTranscript(transcript_id))?
-                        .remove(&dealer_index)
-                        .ok_or_else(|| AssemblyError::MissingIDkgNodeIndex(dealer_index))?;
-                    dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
-                }
+        for transcript in &mut payload.idkg_transcripts {
+            let transcript_id =
+                try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
+                    .map_err(AssemblyError::DeserializationFailed)?;
+            for dealing in &mut transcript.verified_dealings {
+                let dealer_index = dealing.dealer_index;
+                let found_dealing = idkg_dealings
+                    .get_mut(&transcript_id)
+                    .ok_or_else(|| AssemblyError::MissingIDkgTranscript(transcript_id))?
+                    .remove(&dealer_index)
+                    .ok_or_else(|| AssemblyError::MissingIDkgNodeIndex(dealer_index))?;
+                dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
             }
         }
         Ok(())
@@ -593,8 +594,10 @@ impl BlockProposalAssembler {
             stripped_block_proposal.pruned_block_proposal_proto;
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
-            Self::try_reconstruct_block(ingress_messages, block)?;
-            Self::try_reconstruct_block(signed_dealings, block)?;
+            Self::try_reconstruct_payload(ingress_messages, &mut block.ingress_payload)?;
+            if let Some(idkg) = block.idkg_payload.as_mut() {
+                Self::try_reconstruct_payload(signed_dealings, idkg)?;
+            }
         }
 
         reconstructed_block_proposal_proto
