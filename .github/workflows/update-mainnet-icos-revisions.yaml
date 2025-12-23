@@ -36,4 +36,4 @@ jobs:
         run: |
           set -eEuxo pipefail
 
-          time python ci/src/mainnet_revisions/mainnet_revisions.py icos $DRY_RUN
+          time python ci/src/mainnet_revisions/mainnet_revisions.py $DRY_RUN icos

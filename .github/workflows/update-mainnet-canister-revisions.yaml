@@ -76,5 +76,5 @@ jobs:
             --delay=1,2,4,8,15,30,60,120,300,600 \
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
+            $DRY_RUN \
             canisters
-            $DRY_RUN
