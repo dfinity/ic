@@ -368,38 +368,36 @@ pub(crate) enum AssemblyError {
 
 /// A trait keeps track of the missing artifacts in a stripped payload,
 /// and tries to reconstruct the block from it.
-trait PayloadAssembler {
+trait PayloadAssembler<ArtifactMessage> {
     type ArtifactId;
-    type ArtifactMessage;
+    type MissingArtifactId;
 
     /// Returns an iterator over stripped artifacts that are still missing.
-    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId>;
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId>;
 
     /// Tries to insert a missing artifact into this payload assembler.
     fn try_insert(
         &mut self,
         id: Self::ArtifactId,
-        message: Self::ArtifactMessage,
+        message: ArtifactMessage,
     ) -> Result<(), InsertionError>;
 
     /// Tries to reconstruct the part of the block corresponding to this payload assembler.
-    fn try_reconstruct_block(self, block: &mut pb::Block) -> Result<(), AssemblyError>;
+    fn try_reconstruct_block(
+        messages: Vec<(Self::MissingArtifactId, Option<ArtifactMessage>)>,
+        block: &mut pb::Block,
+    ) -> Result<(), AssemblyError>;
 }
 
-/// Assembles the ingress payload of a block proposal.
-struct IngressPayloadAssembler {
-    ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
-}
-
-impl PayloadAssembler for IngressPayloadAssembler {
+impl PayloadAssembler<SignedIngress> for BlockProposalAssembler {
     type ArtifactId = SignedIngressId;
-    type ArtifactMessage = SignedIngress;
+    type MissingArtifactId = SignedIngressId;
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = SignedIngressId> {
         self.ingress_messages
             .iter()
             .filter(|(_, maybe_ingress)| maybe_ingress.is_none())
-            .map(|(id, _)| StrippedMessageId::Ingress(id.clone()))
+            .map(|(id, _)| id.clone())
     }
 
     fn try_insert(
@@ -423,9 +421,11 @@ impl PayloadAssembler for IngressPayloadAssembler {
         }
     }
 
-    fn try_reconstruct_block(self, block: &mut pb::Block) -> Result<(), AssemblyError> {
-        let ingresses = self
-            .ingress_messages
+    fn try_reconstruct_block(
+        ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+        block: &mut pb::Block,
+    ) -> Result<(), AssemblyError> {
+        let ingresses = ingress_messages
             .into_iter()
             .map(|(id, message)| {
                 message
@@ -439,22 +439,15 @@ impl PayloadAssembler for IngressPayloadAssembler {
     }
 }
 
-/// Assembles the IDKG dealings of a block proposal.
-struct IDkgDealingsAssembler {
-    signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
-}
-
-impl PayloadAssembler for IDkgDealingsAssembler {
+impl PayloadAssembler<SignedIDkgDealing> for BlockProposalAssembler {
     type ArtifactId = IDkgArtifactId;
-    type ArtifactMessage = SignedIDkgDealing;
+    type MissingArtifactId = (NodeIndex, IDkgArtifactId);
 
-    fn missing_artifacts(&self) -> impl Iterator<Item = StrippedMessageId> {
+    fn missing_artifacts(&self) -> impl Iterator<Item = Self::MissingArtifactId> {
         self.signed_dealings
             .iter()
             .filter(|(_, maybe_dealing)| maybe_dealing.is_none())
-            .map(|((node_index, dealing_id), _)| {
-                StrippedMessageId::IDkgDealing(dealing_id.clone(), *node_index)
-            })
+            .map(|((node_index, dealing_id), _)| (*node_index, dealing_id.clone()))
     }
 
     fn try_insert(
@@ -480,10 +473,13 @@ impl PayloadAssembler for IDkgDealingsAssembler {
         }
     }
 
-    fn try_reconstruct_block(self, block: &mut pb::Block) -> Result<(), AssemblyError> {
+    fn try_reconstruct_block(
+        signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
+        block: &mut pb::Block,
+    ) -> Result<(), AssemblyError> {
         let mut idkg_dealings =
             BTreeMap::<IDkgTranscriptId, BTreeMap<NodeIndex, SignedIDkgDealing>>::new();
-        for ((dealer_index, dealing_id), signed_dealing) in self.signed_dealings {
+        for ((dealer_index, dealing_id), signed_dealing) in signed_dealings {
             let signed_dealing = signed_dealing
                 .ok_or_else(|| AssemblyError::MissingIDkgDealing(dealing_id.clone()))?;
             let transcript_id = signed_dealing.idkg_dealing().transcript_id;
@@ -535,37 +531,35 @@ fn idkg_dealing_proto(signed_dealing: SignedIDkgDealing) -> IDkgSignedDealingTup
 
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
-    ingress_assembler: IngressPayloadAssembler,
-    idkg_assembler: IDkgDealingsAssembler,
+    ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+    signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
 }
 
 impl BlockProposalAssembler {
     fn new(stripped_block_proposal: StrippedBlockProposal) -> Self {
         Self {
-            ingress_assembler: IngressPayloadAssembler {
-                ingress_messages: stripped_block_proposal
-                    .stripped_ingress_payload
-                    .ingress_messages
-                    .iter()
-                    .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
-                    .collect(),
-            },
-            idkg_assembler: IDkgDealingsAssembler {
-                signed_dealings: stripped_block_proposal
-                    .stripped_idkg_dealings
-                    .stripped_dealings
-                    .iter()
-                    .map(|(node_index, dealing_id)| ((*node_index, dealing_id.clone()), None))
-                    .collect(),
-            },
+            ingress_messages: stripped_block_proposal
+                .stripped_ingress_payload
+                .ingress_messages
+                .iter()
+                .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
+                .collect(),
+            signed_dealings: stripped_block_proposal
+                .stripped_idkg_dealings
+                .stripped_dealings
+                .iter()
+                .map(|(node_index, dealing_id)| ((*node_index, dealing_id.clone()), None))
+                .collect(),
             stripped_block_proposal,
         }
     }
 
     /// Returns the list of messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        let ingress = self.ingress_assembler.missing_artifacts();
-        let idkg_dealings = self.idkg_assembler.missing_artifacts();
+        let ingress = PayloadAssembler::<SignedIngress>::missing_artifacts(self)
+            .map(StrippedMessageId::Ingress);
+        let idkg_dealings = PayloadAssembler::<SignedIDkgDealing>::missing_artifacts(self)
+            .map(|(node_index, dealing_id)| StrippedMessageId::IDkgDealing(dealing_id, node_index));
 
         ingress.chain(idkg_dealings).collect()
     }
@@ -576,11 +570,15 @@ impl BlockProposalAssembler {
         message: StrippedMessage,
     ) -> Result<(), InsertionError> {
         match message {
-            StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => self
-                .ingress_assembler
-                .try_insert(signed_ingress_id, signed_ingress),
+            StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => {
+                PayloadAssembler::<SignedIngress>::try_insert(
+                    self,
+                    signed_ingress_id,
+                    signed_ingress,
+                )
+            }
             StrippedMessage::IDkgDealing(dealing_id, _, signed_dealing) => {
-                self.idkg_assembler.try_insert(dealing_id, signed_dealing)
+                PayloadAssembler::<SignedIDkgDealing>::try_insert(self, dealing_id, signed_dealing)
             }
         }
     }
@@ -592,15 +590,21 @@ impl BlockProposalAssembler {
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
         let BlockProposalAssembler {
             stripped_block_proposal,
-            ingress_assembler,
-            idkg_assembler,
+            ingress_messages,
+            signed_dealings,
         } = self;
         let mut reconstructed_block_proposal_proto =
             stripped_block_proposal.pruned_block_proposal_proto;
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
-            ingress_assembler.try_reconstruct_block(block)?;
-            idkg_assembler.try_reconstruct_block(block)?;
+            <BlockProposalAssembler as PayloadAssembler<SignedIngress>>::try_reconstruct_block(
+                ingress_messages,
+                block,
+            )?;
+            <BlockProposalAssembler as PayloadAssembler<SignedIDkgDealing>>::try_reconstruct_block(
+                signed_dealings,
+                block,
+            )?;
         }
 
         reconstructed_block_proposal_proto
@@ -733,9 +737,7 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing messages
-        assembler
-            .ingress_assembler
-            .try_insert(ingress_id_1, ingress_1)
+        PayloadAssembler::<SignedIngress>::try_insert(&mut assembler, ingress_id_1, ingress_1)
             .unwrap();
 
         // try to reassemble the block
@@ -766,10 +768,12 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only one missing message
-        assembler
-            .idkg_assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
-            .unwrap();
+        PayloadAssembler::<SignedIDkgDealing>::try_insert(
+            &mut assembler,
+            dealing_1.message_id(),
+            dealing_1,
+        )
+        .unwrap();
 
         // try to reassemble the block
         let assembly_error = assembler.try_assemble().unwrap_err();
@@ -805,14 +809,18 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only the missing message
-        assembler
-            .idkg_assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
-            .unwrap();
-        let err = assembler
-            .idkg_assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
-            .unwrap_err();
+        PayloadAssembler::<SignedIDkgDealing>::try_insert(
+            &mut assembler,
+            dealing_1.message_id(),
+            dealing_1,
+        )
+        .unwrap();
+        let err = PayloadAssembler::<SignedIDkgDealing>::try_insert(
+            &mut assembler,
+            dealing_2.message_id(),
+            dealing_2,
+        )
+        .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
         // try to reassemble the block
@@ -859,14 +867,18 @@ mod tests {
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
         // insert back only the missing message
-        assembler
-            .idkg_assembler
-            .try_insert(dealing_1.message_id(), dealing_1)
-            .unwrap();
-        let err = assembler
-            .idkg_assembler
-            .try_insert(dealing_2.message_id(), dealing_2)
-            .unwrap_err();
+        PayloadAssembler::<SignedIDkgDealing>::try_insert(
+            &mut assembler,
+            dealing_1.message_id(),
+            dealing_1,
+        )
+        .unwrap();
+        let err = PayloadAssembler::<SignedIDkgDealing>::try_insert(
+            &mut assembler,
+            dealing_2.message_id(),
+            dealing_2,
+        )
+        .unwrap_err();
         assert_matches!(err, InsertionError::NotNeeded);
 
         // try to reassemble the block
