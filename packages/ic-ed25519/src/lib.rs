@@ -863,9 +863,7 @@ impl PublicKey {
         derivation_path: &DerivationPath,
         chain_code: &[u8; 32],
     ) -> (Self, [u8; 32]) {
-        // TODO(CRP-2412) Use VerifyingKey::to_edwards once available
-
-        let pt = CompressedEdwardsY(self.pk.to_bytes()).decompress().unwrap();
+        let pt = self.pk.to_edwards();
 
         let (pt, _sum, chain_code) = derivation_path.derive_offset(pt, chain_code);
 
