@@ -48,7 +48,6 @@ fish
 node-json5
 
 # IC-OS
-cryptsetup-bin
 dosfstools # provides mkfs.vfat
 faketime
 fdisk
