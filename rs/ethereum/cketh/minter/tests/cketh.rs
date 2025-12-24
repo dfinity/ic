@@ -1397,6 +1397,28 @@ fn should_decode_ledger_burn_gas_fee_memo() {
     );
 }
 
+#[test]
+fn should_decode_ledger_burn_erc20_convert_memo() {
+    let cketh = CkEthSetup::default();
+    let memo = BurnMemo::Erc20Convert {
+        ckerc20_withdrawal_id: 123u64,
+        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
+            ckerc20_withdrawal_id: 123u64,
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
 /// Tests with the EVM RPC canister
 mod cketh_evm_rpc {
     use super::*;
