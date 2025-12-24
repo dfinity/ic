@@ -7,10 +7,11 @@ use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, DecodeLedgerMemoResult, DecodedMemo, EthTransaction, GasFeeEstimate, MemoType,
-    MintMemo as EndpointsMint, MinterInfo, RetrieveEthStatus, TxFinalizedStatus, WithdrawalError,
-    WithdrawalStatus,
+    BurnMemo as EndpointsBurn, CandidBlockTag, DecodeLedgerMemoResult, DecodedMemo, EthTransaction,
+    GasFeeEstimate, MemoType, MintMemo as EndpointsMint, MinterInfo, RetrieveEthStatus,
+    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
+use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
 use ic_cketh_minter::numeric::BlockNumber;
@@ -1344,6 +1345,51 @@ fn should_decode_ledger_mint_reimburse_withdrawal_memo() {
             withdrawal_id: 123u64,
         },
     ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_decode_ledger_burn_convert_memo() {
+    let cketh = CkEthSetup::default();
+    let memo = BurnMemo::Convert {
+        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Convert {
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_decode_ledger_burn_gas_fee_memo() {
+    let cketh = CkEthSetup::default();
+    let memo = BurnMemo::Erc20GasFee {
+        ckerc20_token_symbol: CkTokenSymbol::from_str("ckTEST")
+            .expect("failed to create token symbol"),
+        ckerc20_withdrawal_amount: 123u64.into(),
+        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
+            ckerc20_token_symbol: "ckTEST".to_string(),
+            ckerc20_withdrawal_amount: Nat::from(123u64),
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
     assert_eq!(
         result, expected,
         "Decoded Memo mismatch: {:?} vs {:?}",
