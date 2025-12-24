@@ -209,37 +209,45 @@ pub(crate) fn fake_idkg_dealing_support_artifact_id() -> IDkgArtifactId {
     )
 }
 
-pub(crate) fn fake_idkg_payload_with_dealing(
-    dealing: SignedIDkgDealing,
-    node_index: NodeIndex,
+pub(crate) fn fake_idkg_payload_with_dealings(
+    dealings: Vec<(SignedIDkgDealing, NodeIndex)>,
 ) -> IDkgPayload {
-    let transcript_id = dealing.idkg_dealing().transcript_id;
-    let mut verified_dealings = BTreeMap::new();
-    verified_dealings.insert(
-        node_index,
-        Signed {
-            content: dealing,
-            signature: BasicSignatureBatch {
-                signatures_map: BTreeMap::new(),
-            },
-        },
-    );
-
-    let transcript = IDkgTranscript {
-        transcript_id,
-        receivers: IDkgReceivers::new(BTreeSet::from_iter([NODE_1])).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: Arc::new(verified_dealings),
-        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: vec![],
-    };
-
     let mut idkg_transcripts = BTreeMap::new();
-    idkg_transcripts.insert(transcript_id, transcript);
+    for (dealing, node_index) in dealings {
+        let transcript_id = dealing.idkg_dealing().transcript_id;
+        let transcript = idkg_transcripts
+            .entry(transcript_id)
+            .or_insert_with(|| IDkgTranscript {
+                transcript_id,
+                receivers: IDkgReceivers::new(BTreeSet::from_iter([NODE_1])).unwrap(),
+                registry_version: RegistryVersion::from(1),
+                verified_dealings: Arc::new(BTreeMap::new()),
+                transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+                algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+                internal_transcript_raw: vec![],
+            });
+
+        let dealings = Arc::get_mut(&mut transcript.verified_dealings).unwrap();
+        dealings.insert(
+            node_index,
+            Signed {
+                content: dealing,
+                signature: BasicSignatureBatch {
+                    signatures_map: BTreeMap::new(),
+                },
+            },
+        );
+    }
 
     let mut idkg_payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
     idkg_payload.idkg_transcripts = idkg_transcripts;
 
     idkg_payload
+}
+
+pub(crate) fn fake_idkg_payload_with_dealing(
+    dealing: SignedIDkgDealing,
+    node_index: NodeIndex,
+) -> IDkgPayload {
+    fake_idkg_payload_with_dealings(vec![(dealing, node_index)])
 }
