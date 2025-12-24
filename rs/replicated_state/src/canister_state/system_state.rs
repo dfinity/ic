@@ -41,7 +41,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    NumMessages, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -114,6 +114,31 @@ enum ConsumingCycles {
     No,
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+pub struct LoadMetrics {
+    pub ingress_messages_executed: NumMessages,
+    pub xnet_messages_executed: NumMessages,
+    pub intranet_messages_executed: NumMessages,
+    pub http_outcalls_executed: u64,
+    pub heartbeats_executed: u64,
+    pub global_timers_executed: u64,
+}
+
+impl std::ops::AddAssign for LoadMetrics {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = LoadMetrics {
+            ingress_messages_executed: self.ingress_messages_executed
+                + rhs.ingress_messages_executed,
+            xnet_messages_executed: self.xnet_messages_executed + rhs.xnet_messages_executed,
+            intranet_messages_executed: self.intranet_messages_executed
+                + rhs.intranet_messages_executed,
+            http_outcalls_executed: self.http_outcalls_executed + rhs.http_outcalls_executed,
+            heartbeats_executed: self.heartbeats_executed + rhs.heartbeats_executed,
+            global_timers_executed: self.global_timers_executed + rhs.global_timers_executed,
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
@@ -125,6 +150,9 @@ pub struct CanisterMetrics {
     pub executed: u64,
     pub interrupted_during_execution: u64,
     pub consumed_cycles: NominalCycles,
+    pub instructions_executed: NumInstructions,
+    pub load_metrics: LoadMetrics,
+
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
@@ -136,6 +164,8 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        instructions_executed: NumInstructions,
+        load_metrics: LoadMetrics,
     ) -> Self {
         Self {
             scheduled_as_first,
@@ -144,6 +174,8 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            instructions_executed,
+            load_metrics,
         }
     }
 
