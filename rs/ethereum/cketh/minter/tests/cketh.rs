@@ -1307,6 +1307,50 @@ fn should_decode_ledger_mint_convert_memo() {
     );
 }
 
+#[test]
+fn should_decode_ledger_mint_reimburse_tx_memo() {
+    let cketh = CkEthSetup::default();
+    let memo = MintMemo::ReimburseTransaction {
+        withdrawal_id: 123u64,
+        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseTransaction {
+            withdrawal_id: 123u64,
+            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_decode_ledger_mint_reimburse_withdrawal_memo() {
+    let cketh = CkEthSetup::default();
+    let memo = MintMemo::ReimburseWithdrawal {
+        withdrawal_id: 123u64,
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseWithdrawal {
+            withdrawal_id: 123u64,
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
 /// Tests with the EVM RPC canister
 mod cketh_evm_rpc {
     use super::*;
