@@ -48,6 +48,7 @@ fish
 node-json5
 
 # IC-OS
+cryptsetup-bin
 dosfstools # provides mkfs.vfat
 faketime
 fdisk
@@ -62,7 +63,6 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
-qemu-system-x86 # used for guestos
 zstd
 
 # Unknown
