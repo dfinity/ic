@@ -1,12 +1,13 @@
 #![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_cdk::{
     api::call::{RejectionCode, call_with_payment},
     call, caller, print,
 };
 use ic_management_canister_types_private::{
-    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CanisterSnapshotResponse,
+    CreateCanisterArgs, InstallCodeArgs, TakeCanisterSnapshotArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -23,7 +24,8 @@ use ic_nns_common::{
     types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, TakeCanisterSnapshotError,
+    TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
     UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
@@ -249,5 +251,73 @@ pub async fn update_canister_settings(
                 description,
             })
         }
+    }
+}
+
+pub async fn take_canister_snapshot(
+    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> TakeCanisterSnapshotResponse {
+    let TakeCanisterSnapshotRequest {
+        canister_id,
+        replace_snapshot,
+    } = take_canister_snapshot_request;
+
+    let replace_snapshot = match replace_snapshot {
+        None => None,
+        Some(snapshot_id) => {
+            let snapshot_id = match SnapshotId::try_from(&snapshot_id) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                        code: None,
+                        description: format!("Invalid snapshot ID ({snapshot_id:02X?}): {err}"),
+                    });
+                }
+            };
+
+            Some(snapshot_id)
+        }
+    };
+
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs {
+        canister_id,
+        replace_snapshot,
+        uninstall_code: None,
+        sender_canister_version: management_canister_client.canister_version(),
+    };
+
+    match management_canister_client
+        .take_canister_snapshot(take_canister_snapshot_args)
+        .await
+    {
+        Ok(result) => {
+            let result =
+                convert_from_canister_snapshot_resposne_to_take_canister_snapshot_ok(result);
+            TakeCanisterSnapshotResponse::Ok(result)
+        }
+
+        Err((code, description)) => TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+            code: Some(code),
+            description,
+        }),
+    }
+}
+
+fn convert_from_canister_snapshot_resposne_to_take_canister_snapshot_ok(
+    response: CanisterSnapshotResponse,
+) -> TakeCanisterSnapshotOk {
+    let CanisterSnapshotResponse {
+        id,
+        taken_at_timestamp,
+        total_size,
+    } = response;
+
+    let id = id.to_vec();
+
+    TakeCanisterSnapshotOk {
+        id,
+        taken_at_timestamp,
+        total_size,
     }
 }

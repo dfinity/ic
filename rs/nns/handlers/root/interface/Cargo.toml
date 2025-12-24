@@ -8,6 +8,7 @@ async-trait = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-management-canister-types-private = { path = "../../../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nns-constants = { path = "../../../../nns/constants" }
 serde = { workspace = true }
