@@ -12,7 +12,11 @@ candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 chrono = { workspace = true }
 futures = { workspace = true }
+ic-agent = { workspace = true }
 ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
+ic-universal-canister = { path = "../../../universal_canister/lib" }
+ic-utils = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }

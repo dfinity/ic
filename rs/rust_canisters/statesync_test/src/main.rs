@@ -1,3 +1,7 @@
+use futures::{StreamExt, stream};
+use ic_cdk::management_canister::{
+    ProvisionalCreateCanisterWithCyclesArgs, provisional_create_canister_with_cycles,
+};
 use ic_cdk::stable::{
     WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
 };
@@ -76,6 +80,30 @@ async fn read_state(index: usize) -> Result<u8, String> {
     } else {
         Ok(state[0])
     }
+}
+
+#[update]
+async fn create_many_canisters(n: u64) {
+    let mut futs = vec![];
+
+    for _ in 0..n {
+        let fut = async {
+            let create_args = ProvisionalCreateCanisterWithCyclesArgs {
+                amount: None,
+                settings: None,
+                specified_id: None,
+            };
+            provisional_create_canister_with_cycles(&create_args)
+                .await
+                .expect("Failed to create canister");
+        };
+        futs.push(fut);
+    }
+
+    stream::iter(futs)
+        .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
+        .collect::<Vec<_>>()
+        .await;
 }
 
 fn main() {}
