@@ -1223,10 +1223,13 @@ fn certified_data_set() {
     api.ic0_certified_data_set(0, 32, &heap).unwrap();
 
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -1410,10 +1413,13 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         _ => panic!("expected to get an InsufficientCyclesInMessageMemoryGrow error, got {res:?}"),
     }
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -1562,10 +1568,13 @@ fn helper_test_on_low_wasm_memory(
     }
 
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -1784,10 +1793,13 @@ fn push_output_request_respects_memory_limits() {
 
     // Ensure that exactly one output request was pushed.
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -1901,10 +1913,13 @@ fn push_output_request_oversized_request_memory_limits() {
 
     // Ensure that exactly one output request was pushed.
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -1938,10 +1953,13 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
     // Propagate system state changes
     assert_eq!(system_state.global_timer, CanisterTimer::Inactive);
     let system_state_modifications = api.take_system_state_modifications();
+    let mut subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     system_state_modifications
         .apply_changes(
             UNIX_EPOCH,
             &mut system_state,
+            &mut subnet_available_memory,
             &default_network_topology(),
             subnet_test_id(1),
             false,
@@ -2187,10 +2205,13 @@ fn ic0_call_with_best_effort_response() {
 
         // Propagate system state changes
         let system_state_modifications = api.take_system_state_modifications();
+        let mut subnet_available_memory =
+            SubnetAvailableMemory::new_for_testing(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
         system_state_modifications
             .apply_changes(
                 UNIX_EPOCH,
                 &mut system_state,
+                &mut subnet_available_memory,
                 &default_network_topology(),
                 own_subnet_id,
                 false,
