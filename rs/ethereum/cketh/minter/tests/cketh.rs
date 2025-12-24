@@ -7,8 +7,9 @@ use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::{
-    CandidBlockTag, EthTransaction, GasFeeEstimate, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
+    CandidBlockTag, DecodeLedgerMemoResult, DecodedMemo, EthTransaction, GasFeeEstimate, MemoType,
+    MintMemo as EndpointsMint, MinterInfo, RetrieveEthStatus, TxFinalizedStatus, WithdrawalError,
+    WithdrawalStatus,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::memo::{BurnMemo, MintMemo};
@@ -1283,8 +1284,27 @@ fn format_ethereum_address_to_eip_55(address: &str) -> String {
 }
 
 #[test]
-fn should_decode_ledger_memo() {
+fn should_decode_ledger_mint_convert_memo() {
     let cketh = CkEthSetup::default();
+    let memo = MintMemo::Convert {
+        from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+        log_index: DEFAULT_DEPOSIT_LOG_INDEX.into(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Mint(Some(EndpointsMint::Convert {
+            from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+            log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
 }
 
 /// Tests with the EVM RPC canister

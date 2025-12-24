@@ -214,6 +214,7 @@ rust_ic_test_suite(
         "@crate_index//:candid",
         "@crate_index//:ethers-core",
         "@crate_index//:hex",
+        "@crate_index//:minicbor",
         "@crate_index//:num-bigint",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

@@ -8,8 +8,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cketh_minter::endpoints::events::{Event, EventPayload, GetEventsResult};
 use ic_cketh_minter::endpoints::{
-    AddCkErc20Token, Eip1559TransactionPriceArg, MinterInfo, RetrieveEthStatus, WithdrawalArg,
-    WithdrawalDetail, WithdrawalSearchParameter,
+    AddCkErc20Token, DecodeLedgerMemoArgs, DecodeLedgerMemoResult, Eip1559TransactionPriceArg,
+    MemoType, MinterInfo, RetrieveEthStatus, WithdrawalArg, WithdrawalDetail,
+    WithdrawalSearchParameter,
 };
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
