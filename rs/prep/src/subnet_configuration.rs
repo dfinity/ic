@@ -304,6 +304,7 @@ impl SubnetConfig {
             membership: membership_nodes,
             max_ingress_bytes_per_message: self.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: self.max_ingress_messages_per_block,
+            max_ingress_bytes_per_block: 0,
             max_block_payload_size: self.max_block_payload_size,
             unit_delay_millis: self.unit_delay.as_millis() as u64,
             initial_notary_delay_millis: self.initial_notary_delay.as_millis() as u64,
