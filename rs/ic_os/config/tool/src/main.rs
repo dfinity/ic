@@ -1,10 +1,10 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use config::guestos::bootstrap_ic_node::populate_nns_public_key;
-use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
-use config::serialize_and_write_config;
-use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
-use config::setupos::deployment_json::{VmResources, get_deployment_settings};
+use config_tool::guestos::bootstrap_ic_node::{bootstrap_ic_node, populate_nns_public_key};
+use config_tool::guestos::generate_ic_config;
+use config_tool::serialize_and_write_config;
+use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
+use config_tool::setupos::deployment_json::{VmResources, get_deployment_settings};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -17,36 +17,36 @@ use url::Url;
 pub enum Commands {
     /// Creates SetupOSConfig object
     CreateSetuposConfig {
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_CONFIG_INI_FILE_PATH, value_name = "config.ini")]
         config_ini_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_DEPLOYMENT_JSON_PATH, value_name = "deployment.json")]
         deployment_json_path: PathBuf,
 
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
     },
     /// Creates HostOSConfig object from existing SetupOS config.json file
     GenerateHostosConfig {
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "config.json")]
         setupos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
+        #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
     },
     /// Bootstrap IC Node from a bootstrap package
     BootstrapICNode {
-        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        #[arg(long, default_value = config_tool::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
         bootstrap_dir: PathBuf,
     },
     /// Generate IC configuration from template and guestos config
     GenerateICConfig {
-        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
         guestos_config_json_path: PathBuf,
-        #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
+        #[arg(long, default_value = config_tool::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
     },
     PopulateNnsPublicKey {
-        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        #[arg(long, default_value = config_tool::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
         bootstrap_dir: PathBuf,
     },
 }
@@ -164,7 +164,7 @@ pub fn main() -> Result<()> {
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
 
             let setupos_config: SetupOSConfig =
-                config::deserialize_config(setupos_config_json_path)?;
+                config_tool::deserialize_config(setupos_config_json_path)?;
 
             let hostos_config = HostOSConfig {
                 config_version: setupos_config.config_version,
@@ -198,7 +198,7 @@ pub fn main() -> Result<()> {
         }) => {
             println!("Generating IC configuration");
             let guestos_config: GuestOSConfig =
-                config::deserialize_config(&guestos_config_json_path)?;
+                config_tool::deserialize_config(&guestos_config_json_path)?;
 
             generate_ic_config::generate_ic_config(&guestos_config, &output_path)
         }

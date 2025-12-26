@@ -15,7 +15,7 @@ sev = { workspace = true }
 thiserror = { workspace = true }
 tonic = { workspace = true }
 
-config_types = { path = "../config_types" }
+config_types = { path = "../config/types" }
 ic_sev = { path = "../sev" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }

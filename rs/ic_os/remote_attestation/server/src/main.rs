@@ -1,7 +1,7 @@
 use anyhow::Context;
 use attestation::attestation_package::generate_attestation_package;
 use attestation::custom_data::RawCustomData;
-use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;

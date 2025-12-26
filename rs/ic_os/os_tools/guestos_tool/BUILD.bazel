@@ -4,8 +4,8 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config:config_lib",
-    "//rs/ic_os/config_types",
+    "//rs/ic_os/config/tool:config_tool_lib",
+    "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",

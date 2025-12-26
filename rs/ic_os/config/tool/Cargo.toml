@@ -1,5 +1,5 @@
 [package]
-name = "config"
+name = "config_tool"
 version = "1.0.0"
 edition.workspace = true
 
@@ -8,22 +8,22 @@ anyhow = { workspace = true }
 askama = { workspace = true }
 clap = { workspace = true }
 macaddr = { workspace = true }
-utils = { path = "../utils" }
+utils = { path = "../../utils" }
 url = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 serde_with = "1.6.2"
 regex = { workspace = true }
-ic-config = { path = "../../config" }
-config_types = { path = "../config_types" }
-network = { path = "../networking/network" }                     # Only required by bin
-deterministic_ips = { path = "../networking/deterministic_ips" }
+ic-config = { path = "../../../config" }
+config_types = { path = "../types" }
+network = { path = "../../networking/network" }                     # Only required by bin
+deterministic_ips = { path = "../../networking/deterministic_ips" }
 tempfile = { workspace = true }
 rust-ini = { workspace = true }
 fs_extra = { workspace = true }
 walkdir = { workspace = true }
 get_if_addrs = { workspace = true }
-ic_sev = { path = "../sev" }
+ic_sev = { path = "../../sev" }
 
 [dev-dependencies]
 once_cell = "1.8"
@@ -31,11 +31,11 @@ tempfile = { workspace = true }
 url = { workspace = true }
 
 [lib]
-name = "config"
+name = "config_tool"
 path = "src/lib.rs"
 
 [[bin]]
-name = "config"
+name = "config_tool"
 path = "src/main.rs"
 
 [features]

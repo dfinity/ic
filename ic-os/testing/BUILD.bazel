@@ -6,7 +6,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 all_component_files = component_files | {
     "//ic-os/testing:reload_icos.sh": "/opt/ic/bin/reload_icos.sh",
     "//ic-os/components:upgrade/grub.sh": "/opt/ic/bin/grub.sh",
-    "//rs/ic_os/config:config_dev": "/opt/ic/bin/config",
+    "//rs/ic_os/config/tool:config_tool_dev": "/opt/ic/bin/config_tool",
     "//ic-os/components:upgrade/manageboot/manageboot.sh": "/opt/ic/bin/manageboot.sh",
     "//ic-os/components:misc/metrics.sh": "/opt/ic/bin/metrics.sh",
 }

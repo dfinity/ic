@@ -8,8 +8,8 @@ rust_binary(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         "//rs/ic_os/attestation",
-        "//rs/ic_os/config:config_lib",
-        "//rs/ic_os/config_types",
+        "//rs/ic_os/config/tool:config_tool_lib",
+        "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/remote_attestation/shared",
         "//rs/ic_os/sev",
         "@crate_index//:anyhow",

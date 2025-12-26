@@ -11,7 +11,7 @@ DEPENDENCIES = [
     # Keep sorted.
     ":build_script",
     "//rs/config",
-    "//rs/ic_os/config_types",
+    "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
     "//rs/ic_os/sev",
@@ -58,9 +58,9 @@ LIB_SOURCES = glob(
 )
 
 rust_library(
-    name = "config_lib",
+    name = "config_tool_lib",
     srcs = LIB_SOURCES,
-    crate_name = "config",
+    crate_name = "config_tool",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -73,10 +73,10 @@ rust_library(
 )
 
 rust_library(
-    name = "config_lib_dev",
+    name = "config_tool_lib_dev",
     srcs = LIB_SOURCES,
     crate_features = ["dev"],
-    crate_name = "config",
+    crate_name = "config_tool",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
@@ -88,53 +88,53 @@ rust_library(
 )
 
 # You can update the golden files with
-# bazel test //rs/ic_os/config:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
+# bazel test //rs/ic_os/config/tool:config_tool_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
-    name = "config_lib_test_dev",
-    crate = ":config_lib_dev",
+    name = "config_tool_lib_test_dev",
+    crate = ":config_tool_lib_dev",
     crate_features = ["dev"],
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     deps = TEST_DEPENDENCIES,
 )
 
 rust_test(
-    name = "config_lib_test",
-    crate = ":config_lib",
+    name = "config_tool_lib_test",
+    crate = ":config_tool_lib",
     deps = TEST_DEPENDENCIES,
 )
 
 rust_binary(
-    name = "config",
+    name = "config_tool",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
-    crate_name = "config",
+    crate_name = "config_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = [
-        ":config_lib",
+        ":config_tool_lib",
     ] + DEPENDENCIES,
 )
 
 rust_binary(
-    name = "config_dev",
+    name = "config_tool_dev",
     srcs = BIN_SOURCES,
     aliases = ALIASES,
     crate_features = ["dev"],
-    crate_name = "config",
+    crate_name = "config_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = [
         "@platforms//os:linux",
     ],
     deps = [
-        ":config_lib_dev",
+        ":config_tool_lib_dev",
     ] + DEPENDENCIES,
 )
 
 rust_test(
-    name = "config_test",
-    crate = ":config_dev",
+    name = "config_tool_test",
+    crate = ":config_tool_dev",
     crate_features = ["dev"],
     deps = TEST_DEPENDENCIES,
 )

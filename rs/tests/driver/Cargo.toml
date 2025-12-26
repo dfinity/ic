@@ -16,8 +16,8 @@ candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 chrono = { workspace = true }
 clap = { workspace = true }
-config = { path = "../../ic_os/config", features = ["dev"] }
-config_types = { path = "../../ic_os/config_types" }
+config_tool = { path = "../../ic_os/config/tool", features = ["dev"] }
+config_types = { path = "../../ic_os/config/types" }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 deterministic_ips = { path = "../../ic_os/networking/deterministic_ips" }

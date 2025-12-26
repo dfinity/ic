@@ -7,8 +7,8 @@ name = "guest_vm_runner"
 path = "src/main.rs"
 
 [dependencies]
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
 ic_device = { path = "../../boot/device" }
 grub = { path = "../../boot/grub" }
@@ -36,7 +36,7 @@ systemd = { workspace = true }
 virt = { workspace = true }
 
 [features]
-dev = ["config/dev"]
+dev = ["config_tool/dev"]
 skip_default_tests = []
 integration_tests = []
 upgrade_device_mapper_test = []
