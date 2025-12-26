@@ -9,7 +9,7 @@ rust_test(
     deps = [
         "//rs/ic_os/attestation",
         "//rs/ic_os/attestation/testing",
-        "//rs/ic_os/config_types",
+        "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/guest_upgrade/client:lib",
         "//rs/ic_os/guest_upgrade/server",
         "//rs/ic_os/guest_upgrade/shared",

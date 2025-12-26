@@ -6,7 +6,7 @@ use tokio::runtime::Handle;
 
 #[cfg(target_os = "linux")]
 use {
-    config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config},
+    config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config},
     config_types::GuestOSConfig,
     ic_sev::guest::is_sev_active,
     sev::firmware::guest::Firmware,

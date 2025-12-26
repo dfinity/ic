@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 mod generate_network_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
 
-use config::deserialize_config;
+use config_tool::deserialize_config;
 use config_types::GuestOSConfig;
 use network::systemd::{DEFAULT_SYSTEMD_NETWORK_DIR, restart_systemd_networkd};
 
@@ -18,7 +18,7 @@ pub enum Commands {
         /// systemd-networkd output directory
         systemd_network_dir: String,
 
-        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
         /// config.json input file
         config_object: PathBuf,
     },
@@ -28,7 +28,7 @@ pub enum Commands {
         /// systemd-networkd output directory
         systemd_network_dir: String,
 
-        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
         /// config.json input file
         config_object: PathBuf,
 
