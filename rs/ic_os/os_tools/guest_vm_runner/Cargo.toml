@@ -10,8 +10,8 @@ path = "src/main.rs"
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../networking/deterministic_ips" }
-ic_device = { path = "../../device" }
-grub = { path = "../../grub" }
+ic_device = { path = "../../boot/device" }
+grub = { path = "../../boot/grub" }
 ic-metrics-tool = { path = "../../metrics/metrics_tool" }
 ic_sev = { path = "../../sev" }
 

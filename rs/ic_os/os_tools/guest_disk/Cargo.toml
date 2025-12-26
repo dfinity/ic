@@ -14,7 +14,7 @@ clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 libcryptsetup-rs = { workspace = true }
-ic_device = { path = "../../device" }
+ic_device = { path = "../../boot/device" }
 ic_sev = { path = "../../sev" }
 ic-sys = { path = "../../../sys" }
 itertools = { workspace = true }
