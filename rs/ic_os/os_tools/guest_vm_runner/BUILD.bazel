@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/device",
     "//rs/ic_os/grub",
-    "//rs/ic_os/metrics_tool",
+    "//rs/ic_os/metrics/metrics_tool",
     "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:askama",

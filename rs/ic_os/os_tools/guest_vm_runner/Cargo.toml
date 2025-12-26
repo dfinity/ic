@@ -12,7 +12,7 @@ config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
 ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
-ic-metrics-tool = { path = "../../metrics_tool" }
+ic-metrics-tool = { path = "../../metrics/metrics_tool" }
 ic_sev = { path = "../../sev" }
 
 anyhow = { workspace = true }

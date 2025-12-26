@@ -10,13 +10,13 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-ic-sys = { path = "../../sys" }
+ic-sys = { path = "../../../sys" }
 maplit = "1.0.2"
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
-ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 predicates = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
