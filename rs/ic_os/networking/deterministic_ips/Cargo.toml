@@ -9,8 +9,8 @@ edition.workspace = true
 anyhow = { workspace = true }
 macaddr = { workspace = true }
 clap = { workspace = true }
-config_types = { path = "../config_types" }
-ic-crypto-sha2 = { path = "../../crypto/sha2" }
+config_types = { path = "../../config_types" }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 
 [[bin]]
 name = "deterministic-ips"

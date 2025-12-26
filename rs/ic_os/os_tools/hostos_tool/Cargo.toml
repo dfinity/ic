@@ -12,10 +12,10 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
-deterministic_ips = { path = "../../deterministic_ips" }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
 manual_guestos_recovery = { path = "../manual_guestos_recovery" }
 itertools = { workspace = true }
-network = { path = "../../network" }
+network = { path = "../../networking/network" }
 regex = { workspace = true }
 utils = { path = "../../utils" }
 

@@ -16,7 +16,7 @@ OBJECTS = {
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",
-    "nss_icos": "//rs/ic_os/nss_icos",
+    "nss_icos": "//rs/ic_os/networking/nss_icos",
     "metrics_tool": "//rs/ic_os/metrics/metrics_tool:metrics_tool_bin",
 }
 

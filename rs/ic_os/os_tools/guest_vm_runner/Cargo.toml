@@ -9,7 +9,7 @@ path = "src/main.rs"
 [dependencies]
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
-deterministic_ips = { path = "../../deterministic_ips" }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
 ic_device = { path = "../../device" }
 grub = { path = "../../grub" }
 ic-metrics-tool = { path = "../../metrics/metrics_tool" }

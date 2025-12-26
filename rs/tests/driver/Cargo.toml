@@ -20,7 +20,7 @@ config = { path = "../../ic_os/config", features = ["dev"] }
 config_types = { path = "../../ic_os/config_types" }
 crossbeam-channel = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
-deterministic_ips = { path = "../../ic_os/deterministic_ips" }
+deterministic_ips = { path = "../../ic_os/networking/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ed25519-dalek = { workspace = true }
