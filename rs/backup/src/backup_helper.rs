@@ -2,7 +2,7 @@ use crate::{
     notification_client::NotificationClient,
     util::{block_on, sleep_secs},
 };
-use anyhow::Context;
+use anyhow::{Context, anyhow, bail};
 use chrono::{DateTime, Utc};
 use ic_interfaces_registry::RegistryClient;
 use ic_recovery::{
@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant, SystemTime},
 };
 
 const RETRIES_RSYNC_HOST: u64 = 5;
@@ -46,7 +46,9 @@ pub(crate) struct BackupHelper {
     pub(crate) cold_disk_resource_threshold_percentage: u32,
     pub(crate) cold_storage_dir: PathBuf,
     pub(crate) versions_hot: usize,
+    pub(crate) max_logs_age_to_keep: Option<Duration>,
     pub(crate) artifacts_guard: Mutex<bool>,
+    pub(crate) logs_dir: Arc<Mutex<PathBuf>>,
     pub(crate) daily_replays: usize,
     pub(crate) do_cold_storage: bool,
     pub(crate) thread_id: u32,
@@ -73,8 +75,10 @@ impl BackupHelper {
         self.binary_dir(replica_version).join(executable)
     }
 
-    fn logs_dir(&self) -> PathBuf {
-        create_if_not_exists(self.root_dir.join("logs"))
+    fn logs_dir<'a>(&'a self) -> std::sync::MutexGuard<'a, PathBuf> {
+        let guard = self.logs_dir.lock().unwrap();
+        create_if_not_exists(guard.to_path_buf());
+        guard
     }
 
     fn spool_root_dir(&self) -> PathBuf {
@@ -395,14 +399,14 @@ impl BackupHelper {
                 Ok(ReplayResult::UpgradeRequired(upgrade_version)) => {
                     // replayed the current version, but if there is upgrade try to do it again
                     self.notification_client.message_slack(format!(
-                        "Replica version upgrade detected (current: {current_replica_version} new: {upgrade_version}): \
-                        upgrading the ic-replay tool to retry... 🤞"
+                        "Replica version upgrade detected (current: {current_replica_version} \
+                        new: {upgrade_version}): upgrading the ic-replay tool to retry... 🤞"
                     ));
                     current_replica_version = upgrade_version;
                 }
                 Ok(_) => break,
                 Err(err) => {
-                    error!(self.log, "[#{}] Error replaying: {}", self.thread_id, err);
+                    error!(self.log, "Error replaying: {err:?}");
                     break;
                 }
             }
@@ -442,7 +446,7 @@ impl BackupHelper {
     fn replay_current_version(
         &self,
         replica_version: &ReplicaVersion,
-    ) -> Result<ReplayResult, String> {
+    ) -> anyhow::Result<ReplayResult> {
         let start_height = self.last_state_checkpoint();
         info!(
             self.log,
@@ -451,7 +455,8 @@ impl BackupHelper {
             start_height,
             replica_version
         );
-        self.download_binaries(replica_version, start_height)?;
+        self.download_binaries(replica_version, start_height)
+            .map_err(|err| anyhow!("Failed to download binaries: {err}"))?;
         debug!(self.log, "[#{}] Binaries are downloaded.", self.thread_id);
 
         let ic_admin = self.binary_file("ic-replay", replica_version);
@@ -469,15 +474,17 @@ impl BackupHelper {
             .stdout(Stdio::piped());
         debug!(self.log, "[#{}] Will execute: {:?}", self.thread_id, cmd);
         match exec_cmd(&mut cmd) {
-            Err(e) => {
-                error!(self.log, "[#{}] Error: {}", self.thread_id, e.to_string());
-                if let RecoveryError::CommandError(_, ref out_str) = e {
-                    self.dump_log_file(start_height, out_str)?;
+            Err(err) => {
+                error!(self.log, "[#{}] Error: {}", self.thread_id, err.to_string());
+                if let RecoveryError::CommandError(_, ref out_str) = err {
+                    self.dump_log_file(start_height, out_str)
+                        .context("Failed to dump error logs to file")?;
                 }
-                Err(e.to_string())
+                bail!("Failed to run `ic-replay`: {err}");
             }
             Ok(Some(stdout)) => {
-                self.dump_log_file(start_height, &stdout)?;
+                self.dump_log_file(start_height, &stdout)
+                    .context("Failed to dump success logs to file")?;
 
                 if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
                     debug!(
@@ -486,7 +493,8 @@ impl BackupHelper {
                     );
 
                     Ok(ReplayResult::UpgradeRequired(
-                        ReplicaVersion::try_from(upgrade_version).map_err(|e| e.to_string())?,
+                        ReplicaVersion::try_from(upgrade_version)
+                            .context("Failed to convert replica version")?,
                     ))
                 } else {
                     debug!(
@@ -504,23 +512,62 @@ impl BackupHelper {
                     self.log,
                     "[#{}] No output from the replay process!", self.thread_id
                 );
-                Err("No ic-replay output".to_string())
+                bail!("No `ic-replay` output");
             }
         }
     }
 
-    fn dump_log_file(&self, start_height: u64, stdout: &String) -> Result<(), String> {
+    fn dump_log_file(&self, start_height: u64, stdout: &String) -> anyhow::Result<()> {
         let timestamp = Utc::now().timestamp();
         let log_file_name = format!(
             "{}_{:010}_{:012}.log",
             self.subnet_id, timestamp, start_height
         );
-        let file_name = self.logs_dir().join(log_file_name);
-        debug!(self.log, "Write replay log to: {:?}", file_name);
-        let mut file =
-            File::create(file_name).map_err(|err| format!("Error creating log file: {err:?}"))?;
+        let logs_dir = self.logs_dir();
+        let file_name = logs_dir.join(log_file_name);
+        debug!(self.log, "Write replay log to: {file_name:?}");
+        let mut file = File::create(file_name).context("Failed to create log file")?;
         file.write_all(stdout.as_bytes())
-            .map_err(|err| format!("Error writing log file: {err:?}"))?;
+            .context("Failed to write to log file")?;
+
+        if let Some(min_time_to_keep) = self
+            .max_logs_age_to_keep
+            .and_then(|max_age| SystemTime::now().checked_sub(max_age))
+        {
+            self.purge_old_logs(&logs_dir, min_time_to_keep)
+                .context("Failed to purge old logs")?;
+        }
+
+        Ok(())
+    }
+
+    fn purge_old_logs(&self, logs_dir: &Path, min_time: SystemTime) -> anyhow::Result<()> {
+        for dir_entry in read_dir(logs_dir)
+            .with_context(|| format!("Failed to read directory {}", logs_dir.display()))?
+        {
+            let entry = match dir_entry {
+                Ok(entry) => entry,
+                Err(err) => {
+                    warn!(self.log, "Failed to read directory entry: {err}");
+                    continue;
+                }
+            };
+
+            let creation_time = match entry.metadata().and_then(|metadata| metadata.created()) {
+                Ok(time) => time,
+                Err(err) => {
+                    warn!(self.log, "Failed to get file's creation time: {err}");
+                    continue;
+                }
+            };
+
+            if creation_time < min_time
+                && let Err(err) = std::fs::remove_file(entry.path())
+            {
+                warn!(self.log, "Failed to delete logs file: {err}");
+            }
+        }
+
         Ok(())
     }
 
@@ -1070,12 +1117,13 @@ fn write_timestamp(dir: &Path, timestamp: DateTime<Utc>) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{str::FromStr, thread::sleep};
 
     use ic_registry_client::client::RegistryClientImpl;
     use ic_registry_local_store::LocalStoreImpl;
     use ic_test_utilities_tmpdir::tmpdir;
     use ic_types::PrincipalId;
+    use rstest::rstest;
 
     use super::*;
 
@@ -1295,6 +1343,74 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_purge_old_logs_works() {
+        let dir = tmpdir("test_dir");
+        let backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        let logs_dir = backup_helper.logs_dir();
+        let very_old_file = logs_dir.join("very_old");
+        let old_file = logs_dir.join("old");
+        let new_file = logs_dir.join("new");
+        std::fs::File::create_new(&very_old_file).unwrap();
+        sleep(Duration::from_secs(1));
+        std::fs::File::create_new(&old_file).unwrap();
+        sleep(Duration::from_secs(1));
+        std::fs::File::create_new(&new_file).unwrap();
+
+        backup_helper
+            .purge_old_logs(
+                &logs_dir,
+                std::fs::metadata(&old_file).unwrap().created().unwrap(),
+            )
+            .expect("Should succeed");
+
+        assert!(!std::fs::exists(&very_old_file).unwrap());
+        assert!(std::fs::exists(&old_file).unwrap());
+        assert!(std::fs::exists(&new_file).unwrap());
+    }
+
+    #[rstest]
+    #[case::all_logs_are_kept_when_max_age_not_specified(None, 3)]
+    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(3)), 3)]
+    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(2)), 2)]
+    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(1)), 1)]
+    #[case::only_old_enough_logs_are_purged(Some(Duration::from_secs(0)), 0)]
+    fn test_dump_logs_file_sometimes_purges_logs(
+        #[case] max_logs_age_to_keep: Option<Duration>,
+        #[case] expected_logs_count: usize,
+    ) {
+        let dir = tmpdir("test_dir");
+        let mut backup_helper = fake_backup_helper(
+            dir.as_ref(),
+            /*versions_hot=*/ 2,
+            /*daily_replays=*/ 2,
+        );
+        backup_helper.max_logs_age_to_keep = max_logs_age_to_keep;
+
+        backup_helper
+            .dump_log_file(/*height=*/ 100, &String::from("fake stdout 1"))
+            .unwrap();
+        sleep(Duration::from_secs(1));
+        backup_helper
+            .dump_log_file(/*height=*/ 200, &String::from("fake stdout 2"))
+            .unwrap();
+        sleep(Duration::from_secs(1));
+        backup_helper
+            .dump_log_file(/*height=*/ 300, &String::from("fake stdout 3"))
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read_dir(backup_helper.logs_dir().to_path_buf())
+                .unwrap()
+                .count(),
+            expected_logs_count,
+        );
+    }
+
     // Utility functions below
 
     fn create_artifacts_dir_with_heights(replica_version_dir: &Path, heights: Vec<u64>) {
@@ -1343,6 +1459,8 @@ mod tests {
             registry_client,
             notification_client,
             downloads_guard: Mutex::new(true).into(),
+            logs_dir: Arc::new(Mutex::new(temp_dir.join("backup").join("logs"))),
+            max_logs_age_to_keep: None,
             hot_disk_resource_threshold_percentage: 75,
             cold_disk_resource_threshold_percentage: 95,
             cold_storage_dir: temp_dir.join("cold_storage"),

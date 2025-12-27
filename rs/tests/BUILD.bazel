@@ -2,6 +2,7 @@ load("@aspect_bazel_lib//lib:tar.bzl", "tar")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
@@ -274,4 +275,24 @@ uvm_config_image(
         "vector_activate.sh": "activate",
     },
     tags = ["manual"],
+)
+
+sh_binary(
+    name = "upload_systest_dep",
+    srcs = ["upload_systest_dep.sh"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "run_systest",
+    srcs = ["run_systest.sh"],
+    visibility = ["//visibility:public"],
+)
+
+# the STABLE_VERSION, suffixed with `-test`. Used in testing.
+genrule(
+    name = "version-test",
+    srcs = ["//bazel:version.txt"],
+    outs = ["version-test.txt"],
+    cmd = "sed < $< 's/$$/-test/' > $@",
 )
