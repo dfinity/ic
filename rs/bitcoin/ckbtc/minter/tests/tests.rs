@@ -2064,9 +2064,8 @@ fn test_utxo_consolidation_multiple() {
 
     // Set fee percentiles so that the 25th percentile is 2000 and the median (50th) is 5000.
     // We set the first 40 percentiles to 2000 and the rest to 5000.
-    let fees: Vec<u64> = std::iter::repeat(2000)
-        .take(40)
-        .chain(std::iter::repeat(5000).take(60))
+    let fees: Vec<u64> = std::iter::repeat_n(2000, 40)
+        .chain(std::iter::repeat_n(5000, 60))
         .collect();
     ckbtc.set_fee_percentiles(&fees);
 
@@ -2130,7 +2129,7 @@ fn test_utxo_consolidation_multiple() {
         let vsize = tx.vsize();
         let fee_rate = tx_fee * 1000 / vsize as u64;
         assert!(
-            fee_rate >= 1900 && fee_rate <= 2100,
+            (1900..2100).contains(&fee_rate),
             "Fee rate {} should be around 2000 (25th percentile), not 5000 (median)",
             fee_rate
         );
