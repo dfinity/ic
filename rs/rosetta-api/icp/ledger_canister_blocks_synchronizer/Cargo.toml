@@ -22,7 +22,7 @@ icp-ledger = { path = "../../../ledger_suite/icp" }
 on_wire = { path = "../../../rust_canisters/on_wire" }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
-rusqlite = { version = "~0.28.0", features = ["bundled"] }
+rusqlite = { version = "~0.28.0", features = ["bundled", "hooks"] }
 serde = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
