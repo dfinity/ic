@@ -263,6 +263,34 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
     }
 }
 
+/// Returns an estimate for transaction fees in the 25th percentile in millisatoshi per vbyte. Returns
+/// None if the Bitcoin canister is unavailable or does not have enough data for
+/// an estimate yet.
+pub async fn estimate_25th_fee_per_vbyte<R: CanisterRuntime>(
+    runtime: &R,
+) -> Option<MillisatoshiPerByte> {
+    let btc_network = state::read_state(|s| s.btc_network);
+    match runtime
+        .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
+            network: btc_network.into(),
+        })
+        .await
+    {
+        Ok(fees) => {
+            let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
+            fee_estimator.estimate_nth_fee(&fees, 25)
+        }
+        Err(err) => {
+            log!(
+                Priority::Info,
+                "[estimate_25th_fee_per_vbyte]: failed to get 25th percentile fee per vbyte: {}",
+                err
+            );
+            None
+        }
+    }
+}
+
 fn reimburse_canceled_requests<R: CanisterRuntime>(
     state: &mut state::CkBtcMinterState,
     requests: BTreeSet<state::RetrieveBtcRequest>,
@@ -1485,8 +1513,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
 
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
 
-    // TODO DEFI-2552: use 25% percentile
-    let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
+    let fee_millisatoshi_per_vbyte = estimate_25th_fee_per_vbyte(runtime)
         .await
         .ok_or(ConsolidateUtxosError::EstimateFeeNotAvailable)?;
 
