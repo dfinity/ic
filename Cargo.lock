@@ -10864,6 +10864,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
+ "indicatif",
  "on_wire",
  "proptest",
  "reqwest 0.12.24",

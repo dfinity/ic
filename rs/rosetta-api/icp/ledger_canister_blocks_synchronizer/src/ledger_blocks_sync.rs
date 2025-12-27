@@ -26,6 +26,10 @@ const PRUNE_DELAY: u64 = 100000;
 
 const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 
+use indicatif::{ProgressBar, ProgressStyle};
+
+const PRINT_SYNC_PROGRESS_INTERVAL: u64 = 10_000;
+
 const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
@@ -342,15 +346,23 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         if range.is_empty() {
             return Ok(());
         }
-        let print_progress = if range.end - range.start >= PRINT_SYNC_PROGRESS_THRESHOLD {
+        let progress_bar = if range.end - range.start >= PRINT_SYNC_PROGRESS_THRESHOLD {
             info!(
                 "Syncing {} blocks. New tip will be {}",
                 range.end - range.start,
                 range.end - 1,
             );
-            true
+            let bar = ProgressBar::new(range.end - range.start);
+            bar.set_style(
+                ProgressStyle::with_template(
+                    "[{elapsed_precise}] [{bar:100}] {pos:>7}/{len:7} {msg}",
+                )
+                .unwrap()
+                .progress_chars("=> "),
+            );
+            Some(bar)
         } else {
-            false
+            None
         };
 
         let canister = self.blocks_access.as_ref().unwrap();
@@ -416,15 +428,18 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
                 i += 1;
+                if let Some(ref bar) = progress_bar {
+                    bar.inc(1);
+                }
             }
             self.rosetta_metrics.set_synced_height(i - 1);
             if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
                 blockchain.push_batch(block_batch)?;
-                if print_progress {
-                    info!("Synced up to {}", i - 1);
-                }
                 block_batch = Vec::new();
             }
+        }
+        if let Some(bar) = progress_bar {
+            bar.finish();
         }
         blockchain.push_batch(block_batch)?;
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
