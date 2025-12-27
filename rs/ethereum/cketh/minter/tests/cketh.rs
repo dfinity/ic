@@ -8,9 +8,9 @@ use ic_cketh_minter::endpoints::events::{
     EventPayload, EventSource, TransactionReceipt, TransactionStatus, UnsignedTransaction,
 };
 use ic_cketh_minter::endpoints::{
-    BurnMemo as EndpointsBurn, CandidBlockTag, DecodeLedgerMemoResult, DecodedMemo, EthTransaction,
-    GasFeeEstimate, MemoType, MintMemo as EndpointsMint, MinterInfo, RetrieveEthStatus,
-    TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
+    BurnMemo as EndpointsBurn, CandidBlockTag, DecodeLedgerMemoError, DecodeLedgerMemoResult,
+    DecodedMemo, EthTransaction, GasFeeEstimate, MemoType, MintMemo as EndpointsMint, MinterInfo,
+    RetrieveEthStatus, TxFinalizedStatus, WithdrawalError, WithdrawalStatus,
 };
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
@@ -1358,6 +1358,44 @@ fn should_decode_ledger_mint_reimburse_withdrawal_memo() {
         result, expected,
         "Decoded Memo mismatch: {:?} vs {:?}",
         result, expected
+    );
+}
+
+#[test]
+fn should_return_error_for_invalid_mint_memo() {
+    let cketh = CkEthSetup::default();
+    // empty array
+    let result = cketh.decode_ledger_memo(MemoType::Mint, vec![]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+    // bogus memo
+    let result = cketh.decode_ledger_memo(MemoType::Mint, vec![10u8]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+}
+
+#[test]
+fn should_return_error_for_invalid_burn_memo() {
+    let cketh = CkEthSetup::default();
+    // empty array
+    let result = cketh.decode_ledger_memo(MemoType::Burn, vec![]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding BurnMemo")
+    );
+    // bogus memo
+    let result = cketh.decode_ledger_memo(MemoType::Burn, vec![10u8]);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding BurnMemo")
     );
 }
 
