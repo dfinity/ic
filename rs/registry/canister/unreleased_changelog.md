@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* When performing subnet creation, subnet update, or subnet recovery, it is now mandatory to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys).
+
 ## Deprecated
 
 ## Removed

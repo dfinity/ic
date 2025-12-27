@@ -78,12 +78,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures()
-                            {
-                                7
-                            } else {
-                                0
-                            },
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
                             key_id,
                         })
                         .collect(),
