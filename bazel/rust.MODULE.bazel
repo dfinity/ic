@@ -1322,7 +1322,10 @@ crate.spec(
     version = "0.9",
 )
 crate.spec(
-    features = ["bundled", "hooks"],
+    features = [
+        "bundled",
+        "hooks",
+    ],
     package = "rusqlite",
     version = "^0.28.0",
 )
