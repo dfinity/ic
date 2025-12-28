@@ -28,8 +28,6 @@ const PRINT_SYNC_PROGRESS_THRESHOLD: u64 = 1000;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
-const PRINT_SYNC_PROGRESS_INTERVAL: u64 = 10_000;
-
 const DATABASE_WRITE_BLOCKS_BATCH_SIZE: u64 = 500000;
 // Max number of retry in case of query failure while retrieving blocks.
 const MAX_RETRY: u8 = 5;
