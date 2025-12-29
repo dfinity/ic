@@ -171,9 +171,8 @@ impl EventHandler {
     /// This is useful for sending events to the event handler which will be processed by the next
     /// iteration of the application's event loop.
     pub fn send(&mut self, app_event: AppEvent) {
-        // Ignore the result as the reciever cannot be dropped while this struct still has a
+        // Ignore the result as the receiver cannot be dropped while this struct still has a
         // reference to it
         let _ = self.sender.send(app_event);
     }
 }
-

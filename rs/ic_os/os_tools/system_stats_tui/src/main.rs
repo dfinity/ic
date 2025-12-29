@@ -14,7 +14,7 @@ fn parse_duration(arg: &str) -> Result<Duration, String> {
     )
 }
 
-/// Simple program to greet a person
+/// System stats TUI for monitoring nodes.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
