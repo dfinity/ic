@@ -138,3 +138,5 @@ test_tmpdir/**
 
 # Bare metal deployment secrets files
 zh2-dll01.csv
+
+.ijwb
