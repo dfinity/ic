@@ -176,3 +176,4 @@ impl EventHandler {
         let _ = self.sender.send(app_event);
     }
 }
+

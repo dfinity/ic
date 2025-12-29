@@ -1133,7 +1133,7 @@ name = "bare_metal_deployment"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "http 1.3.1",
  "rand 0.8.5",
  "rexpect",
@@ -2204,7 +2204,7 @@ dependencies = [
  "candid",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare 0.12.0",
  "flate2",
  "futures",
@@ -3282,6 +3282,25 @@ dependencies = [
  "mio 1.0.3",
  "parking_lot",
  "rustix 0.38.44",
+ "signal-hook",
+ "signal-hook-mio",
+ "winapi 0.3.9",
+]
+
+[[package]]
+name = "crossterm"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
+dependencies = [
+ "bitflags 2.10.0",
+ "crossterm_winapi",
+ "derive_more 2.0.1",
+ "document-features",
+ "futures-core",
+ "mio 1.0.3",
+ "parking_lot",
+ "rustix 1.1.2",
  "signal-hook",
  "signal-hook-mio",
  "winapi 0.3.9",
@@ -6166,7 +6185,7 @@ name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
  "axum 0.8.4",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hyper 1.8.1",
  "hyper-util",
  "rand 0.8.5",
@@ -6350,11 +6369,9 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "socket2 0.5.9",
- "system-configuration 0.6.1",
  "tokio",
  "tower-service",
  "tracing",
- "windows-registry",
 ]
 
 [[package]]
@@ -6810,7 +6827,7 @@ dependencies = [
  "bytes",
  "candid",
  "chacha20poly1305",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare 0.14.0",
  "derive-new",
  "flate2",
@@ -6888,7 +6905,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.4",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare 0.14.0",
  "derive-new",
  "fqdn 0.4.6",
@@ -6928,7 +6945,7 @@ dependencies = [
  "axum-extra",
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "dashmap",
  "derive-new",
  "ethnum",
@@ -7067,7 +7084,7 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin-dogecoin",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "flate2",
  "futures",
@@ -9429,7 +9446,7 @@ dependencies = [
  "base64 0.22.1",
  "candid",
  "chacha20poly1305",
- "clap 4.5.27",
+ "clap 4.5.51",
  "derive-new",
  "fqdn 0.4.6",
  "ic-bn-lib",
@@ -9460,7 +9477,7 @@ dependencies = [
  "candid",
  "chacha20poly1305",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "derive-new",
  "fqdn 0.4.6",
  "hickory-resolver",
@@ -9861,7 +9878,7 @@ dependencies = [
  "axum-extra",
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare 0.14.0",
  "ctrlc",
  "derive-new",
@@ -11865,7 +11882,7 @@ name = "ic-nervous-system-submit-motion-proposal"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
  "ic-identity-hsm",
@@ -11946,7 +11963,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
@@ -13286,7 +13303,7 @@ name = "ic-registry-replicator"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-test-utils-reproducible-rng",
@@ -21090,7 +21107,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-agent 0.40.1",
  "k256 0.13.4",
  "rate-limits-api",
@@ -23003,7 +23020,7 @@ name = "setupos-disable-checks"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "indoc 1.0.9",
  "partition_tools",
  "regex",
@@ -23935,6 +23952,14 @@ name = "system-configuration-sys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a75fb188eb626b924683e3b95e3a48e63551fcfb51949de2f06a9d91dbee93c9"
+dependencies = [
+ "core-foundation-sys",
+ "libc",
+]
+
+[[package]]
+name = "system-stats-tui"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -25449,7 +25474,7 @@ dependencies = [
  "bytes",
  "cfg-if 1.0.0",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "jsonschema",
  "lalrpop 0.22.1",
  "lz4_flex",

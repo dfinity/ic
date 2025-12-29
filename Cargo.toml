@@ -191,7 +191,7 @@ members = [
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/os_tools/setupos_tool",
     "rs/ic_os/sev",
-    "rs/ic_os/system_stats_tui",
+    "rs/ic_os/os_tools/system_stats_tui",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
