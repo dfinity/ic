@@ -265,7 +265,7 @@ mod tests {
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
-                    measurement: vec![0x01, 0x02, 0x03],
+                    measurement: vec![0x42; 48],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: Some("foo=bar".to_string()),
                     }),
@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "guest_launch_measurements must not be an empty vector")]
+    #[should_panic(expected = "guest_launch_measurements must not be empty")]
     fn panic_when_measurements_are_empty() {
         let registry = invariant_compliant_registry(0);
 
