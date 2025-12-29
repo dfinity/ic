@@ -538,6 +538,7 @@ fn create_guestos_config_for_node(
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,
         icos_dev_settings: ICOSDevSettings::default(),
+        enable_beta_registration_feature: None,
     };
 
     // Build GuestOSDevSettings
@@ -665,6 +666,7 @@ fn create_setupos_config_image(
             verbose: Default::default(),
             node_reward_type: Some("type3.1".to_string()),
             enable_trusted_execution_environment: Default::default(),
+            enable_beta_registration_feature: None,
         },
         node_operator_private_key.as_deref(),
         nns_public_key_override,
