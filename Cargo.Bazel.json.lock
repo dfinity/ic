@@ -1,5 +1,5 @@
 {
-  "checksum": "e9d5e9b93b2036cff0104e43b708a1a72d5337db5d7a3c6e13f62f25cb2ed4a9",
+  "checksum": "44deaf9b1e5c60218c349845b6ab361301b3baa83bb275e4543e9e6a208093ef",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15344,6 +15344,44 @@
     },
     "convert_case 0.4.0": {
       "name": "convert_case",
+      "version": "0.4.0",
+      "package_url": "https://github.com/rutrum/convert-case",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/convert_case/0.4.0/download",
+          "sha256": "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "convert_case",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "convert_case",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.4.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": null
+    },
+    "convert_case 0.6.0": {
+      "name": "convert_case",
       "version": "0.6.0",
       "package_url": "https://github.com/rutrum/convert-case",
       "repository": {
@@ -17657,6 +17695,148 @@
         },
         "edition": "2021",
         "version": "0.28.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "crossterm 0.29.0": {
+      "name": "crossterm",
+      "version": "0.29.0",
+      "package_url": "https://github.com/crossterm-rs/crossterm",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/crossterm/0.29.0/download",
+          "sha256": "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "crossterm",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "crossterm",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "bracketed-paste",
+            "default",
+            "derive-more",
+            "event-stream",
+            "events",
+            "windows"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "derive_more 2.0.1",
+              "target": "derive_more"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "parking_lot 0.12.5",
+              "target": "parking_lot"
+            }
+          ],
+          "selects": {
+            "aarch64-apple-darwin": [
+              {
+                "id": "mio 1.0.2",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.5",
+                "target": "signal_hook_mio"
+              }
+            ],
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "mio 1.0.2",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.5",
+                "target": "signal_hook_mio"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "rustix 1.1.2",
+                "target": "rustix"
+              }
+            ],
+            "x86_64-apple-darwin": [
+              {
+                "id": "mio 1.0.2",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.5",
+                "target": "signal_hook_mio"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "mio 1.0.2",
+                "target": "mio"
+              },
+              {
+                "id": "signal-hook 0.3.17",
+                "target": "signal_hook"
+              },
+              {
+                "id": "signal-hook-mio 0.2.5",
+                "target": "signal_hook_mio"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "document-features 0.2.12",
+              "target": "document_features"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.29.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -20583,15 +20763,15 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
-              "id": "syn 2.0.101",
+              "id": "syn 2.0.110",
               "target": "syn"
             }
           ],
@@ -21590,6 +21770,10 @@
             {
               "id": "dfx-core 0.1.4",
               "target": "dfx_core"
+            },
+            {
+              "id": "duration-string 0.5.3",
+              "target": "duration_string"
             },
             {
               "id": "dyn-clone 1.0.20",
@@ -23745,6 +23929,42 @@
         },
         "edition": "2018",
         "version": "0.3.0"
+      },
+      "license": null,
+      "license_ids": [],
+      "license_file": "LICENSE"
+    },
+    "duration-string 0.5.3": {
+      "name": "duration-string",
+      "version": "0.5.3",
+      "package_url": "https://github.com/Ronniskansing/duration-string",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/duration-string/0.5.3/download",
+          "sha256": "edbd404ab304f4426de3e981a875a77129597ce04202c9b8b4502c6f1c246809"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "duration_string",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "duration_string",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2021",
+        "version": "0.5.3"
       },
       "license": null,
       "license_ids": [],
@@ -98801,6 +99021,7 @@
     "derive-new 0.7.0",
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",
+    "duration-string 0.5.3",
     "dyn-clone 1.0.20",
     "ed25519-dalek 2.2.0",
     "educe 0.4.22",
