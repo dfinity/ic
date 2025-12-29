@@ -5,6 +5,7 @@ use crate::test_fixtures::{dogecoin_address_to_bitcoin, mock::MockCanisterRuntim
 use crate::transaction::DogecoinTransactionSigner;
 use bitcoin::hashes::Hash;
 use candid::Principal;
+use ic_ckbtc_minter::Txid;
 use ic_ckbtc_minter::tx::{TxOut, UnsignedInput, UnsignedTransaction};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -186,6 +187,62 @@ async fn should_verify_signed_transaction() {
         .to_byte_array();
     let account_public_key = ic_secp256k1::PublicKey::deserialize_sec1(&public_key).unwrap();
     assert!(account_public_key.verify_ecdsa_signature_prehashed(&sighash, &sec1_signature))
+}
+
+#[tokio::test]
+async fn should_be_similar_to_fake_sign() {
+    // DOGE mainnet transaction [32d24dcb68fae3cac41caa55c9f9ed39eb4ee21689ba4d989c53df243b3b7364](https://chain.so/tx/DOGE/32d24dcb68fae3cac41caa55c9f9ed39eb4ee21689ba4d989c53df243b3b7364).
+    let signed_transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(&hex::decode("010000000191e41a8e4029fc0f208faf1de45aab5417400eaa5d1e8dc19071d54cf22a61a7000000006b483045022100921b10e76fdb449fad2518ff321b9072842775f020a1fc3713283bc1bf94f2ff02200f51a76a40c0d2778c44e89ed56d757feac8231db9668631366ba385606adf35012103c0ba3fcf0ac8219fef80d979dcc5bacf6a77be5637191364bb1b70f0275d4275fdffffff0260539b1e010000001976a9142c63a4d417d41515cf1f6de60831d578ad8a0f9588ac40406716020000001976a914969c95abfe91b2019cc64be25920830ce516558688ac00000000").unwrap()).unwrap();
+    let unsigned_transaction = UnsignedTransaction {
+        inputs: signed_transaction
+            .input
+            .clone()
+            .into_iter()
+            .map(|input| UnsignedInput {
+                previous_output: OutPoint {
+                    txid: Txid::from(input.previous_output.txid.to_byte_array()),
+                    vout: input.previous_output.vout,
+                },
+                value: 0, //not relevant
+                sequence: input.sequence.0,
+            })
+            .collect(),
+        outputs: signed_transaction
+            .output
+            .clone()
+            .into_iter()
+            .map(|output| TxOut {
+                value: output.value.to_sat(),
+                address: ic_ckbtc_minter::address::BitcoinAddress::parse(
+                    &bitcoin::Address::from_script(
+                        &output.script_pubkey,
+                        bitcoin::Network::Bitcoin,
+                    )
+                    .unwrap()
+                    .to_string(),
+                    ic_ckbtc_minter::Network::Mainnet,
+                )
+                .unwrap(),
+            })
+            .collect(),
+        lock_time: 0,
+    };
+
+    let fake_signed_transaction: bitcoin::Transaction = bitcoin::consensus::deserialize(
+        &DogecoinTransactionSigner::fake_sign(&unsigned_transaction),
+    )
+    .unwrap();
+
+    assert_eq!(
+        signed_transaction.compute_ntxid(),
+        fake_signed_transaction.compute_ntxid()
+    );
+    let signed_tx_len = bitcoin::consensus::encode::serialize(&signed_transaction).len();
+    let fake_signed_tx_len = bitcoin::consensus::encode::serialize(&fake_signed_transaction).len();
+    let error_margin = signed_tx_len / 20; // 5%
+    assert!(
+        signed_tx_len <= fake_signed_tx_len && fake_signed_tx_len <= signed_tx_len + error_margin
+    );
 }
 
 fn signer() -> (DogecoinTransactionSigner, ic_secp256k1::PrivateKey) {
