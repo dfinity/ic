@@ -53,8 +53,10 @@ rust_test(
         # Keep sorted.
         "//rs/types/base_types",
         "@crate_index//:assert_matches",
+        "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )
 

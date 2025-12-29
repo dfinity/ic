@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::address::DogecoinAddress;
 use ic_ckbtc_minter::{CanisterRuntime, ECDSAPublicKey, management, tx::SignedRawTransaction};
 use icrc_ledger_types::icrc1::account::Account;

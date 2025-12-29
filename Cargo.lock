@@ -7704,12 +7704,14 @@ dependencies = [
  "ic-management-canister-types 0.5.0",
  "ic-secp256k1",
  "icrc-ledger-types",
+ "mockall",
  "pocket-ic",
  "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "test-strategy 0.4.0",
+ "tokio",
 ]
 
 [[package]]

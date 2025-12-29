@@ -31,10 +31,12 @@ assert_matches = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
 ic-management-canister-types = { workspace = true }
+mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 serde_json = { workspace = true }
 test-strategy = "0.4.0"
+tokio = { workspace = true }
 
 [features]
 self_check = []
