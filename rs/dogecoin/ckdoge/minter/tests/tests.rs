@@ -477,7 +477,7 @@ fn should_estimate_withdrawal_fee() {
 
     let expected_fee = WithdrawalFee {
         minter_fee: 180_000_000,
-        dogecoin_fee: 11_500_000,
+        dogecoin_fee: 11_350_000,
     };
     assert_eq!(
         estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
