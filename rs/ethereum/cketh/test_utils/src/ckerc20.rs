@@ -117,14 +117,14 @@ impl CkErc20Setup {
                 .ledger
                 .unwrap();
 
-            self.cketh =
-                self.cketh
-                    .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
-                        chain_id: token.contract.chain_id.clone(),
-                        address: format_ethereum_address_to_eip_55(&token.contract.address),
-                        ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
-                        ckerc20_ledger_id: new_ledger_id,
-                    }]);
+            self.cketh = self.cketh.assert_has_unique_events_in_order(&vec![
+                EventPayload::AddedCkErc20Token {
+                    chain_id: token.contract.chain_id.clone(),
+                    address: format_ethereum_address_to_eip_55(&token.contract.address),
+                    ckerc20_token_symbol: token.ledger_init_arg.token_symbol.clone(),
+                    ckerc20_ledger_id: new_ledger_id,
+                },
+            ]);
         }
         self
     }
@@ -713,7 +713,7 @@ impl CkErc20DepositFlow {
         if let Some(deposit) = self.params.cketh_deposit() {
             let eth_tx_data = deposit.transaction_data();
 
-            self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&[
+            self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&vec![
                 EventPayload::AcceptedDeposit {
                     transaction_hash: eth_tx_data.transaction_hash.to_string(),
                     block_number: Nat::from(eth_tx_data.block_number),
@@ -734,7 +734,7 @@ impl CkErc20DepositFlow {
         }
 
         let erc20_tx_data = self.params.transaction_data();
-        self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&[
+        self.setup.cketh = self.setup.cketh.assert_has_unique_events_in_order(&vec![
             EventPayload::AcceptedErc20Deposit {
                 transaction_hash: erc20_tx_data.transaction_hash.to_string(),
                 block_number: Nat::from(erc20_tx_data.block_number),
