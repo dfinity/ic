@@ -79,11 +79,9 @@ pub(crate) fn check_replica_version_invariants(
             false, // allow_file_url
         );
 
-        // Check that any measured versions actually have measurements
-        if r.guest_launch_measurements
-            .is_some_and(|measurements| measurements.guest_launch_measurements.is_empty())
-        {
-            panic!("guest_launch_measurements must not be an empty vector");
+        // Check that all measured versions are valid
+        if let Some(Err(defects)) = r.guest_launch_measurements.map(|v| v.validate()) {
+            panic!("guest_launch_measurements are not valid. Defects: {defects:?}");
         }
     }
 
