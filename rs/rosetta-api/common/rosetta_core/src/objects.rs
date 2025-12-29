@@ -443,17 +443,20 @@ pub struct BalanceExemption {
 
 /// ExemptionType is used to indicate if the live balance for an account subject to a BalanceExemption could increase above,
 /// decrease below, or equal the computed balance.
-#[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize, Default,
-)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
 pub enum ExemptionType {
     /// The live balance may increase above or equal the computed balance. This typically occurs with staking rewards that accrue on each block.
-    #[default]
     GreaterOrEqual,
     /// The live balance may decrease below or equal the computed balance. This typically occurs as balance moves from locked to spendable on a vesting account.
     LessOrEqual,
     /// The live balance may increase above, decrease below, or equal the computed balance. This typically occurs with tokens that have a dynamic supply.
     Dynamic,
+}
+
+impl Default for ExemptionType {
+    fn default() -> ExemptionType {
+        Self::GreaterOrEqual
+    }
 }
 
 /// Case specifies the expected case for strings and hashes.

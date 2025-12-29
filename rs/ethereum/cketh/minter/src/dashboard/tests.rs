@@ -510,7 +510,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
 
     let dashboard = {
         let mut state = initial_state_with_usdc_support();
-        for (req, tx, _signed_tx, _receipt) in [
+        for (req, tx, _signed_tx, _receipt) in vec![
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
@@ -536,7 +536,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             );
         }
 
-        for (req, tx, signed_tx, _receipt) in [
+        for (req, tx, signed_tx, _receipt) in vec![
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(17),
                 TransactionNonce::from(2_u8),
@@ -645,7 +645,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
                 mint_block_index: LedgerMintIndex::new(43),
             },
         );
-        for (req, tx, signed_tx, receipt) in [
+        for (req, tx, signed_tx, receipt) in vec![
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
@@ -785,7 +785,7 @@ fn should_display_reimbursed_requests() {
             },
         );
 
-        for ((req, tx, signed_tx, receipt), is_reimbursed) in [
+        for ((req, tx, signed_tx, receipt), is_reimbursed) in vec![
             (
                 cketh_withdrawal_flow(
                     LedgerBurnIndex::new(15),

@@ -73,16 +73,21 @@ impl EnvelopePair {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "account_type")]
 pub enum AccountType {
-    #[default]
     Ledger,
     Neuron {
         #[serde(default)]
         neuron_index: u64,
     },
+}
+
+impl Default for AccountType {
+    fn default() -> Self {
+        Self::Ledger
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -350,11 +355,10 @@ pub struct NeuronSubaccountComponents {
 
 /// We use this type to make query to the governance
 /// canister about the current neuron information.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(tag = "account_type")]
 pub enum BalanceAccountType {
     #[serde(rename = "ledger")]
-    #[default]
     Ledger,
     #[serde(rename = "neuron")]
     Neuron {
@@ -373,6 +377,12 @@ pub enum BalanceAccountType {
         #[serde(skip_serializing_if = "Option::is_none")]
         verified_query: Option<bool>,
     },
+}
+
+impl Default for BalanceAccountType {
+    fn default() -> Self {
+        Self::Ledger
+    }
 }
 
 /// The type of metadata for the /account/balance endpoint.
