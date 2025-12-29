@@ -53,6 +53,7 @@ use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rewards_calculation::REWARDS_TABLE_DAYS;
 use rewards_calculation::types::NodeMetricsDailyRaw;
+use std::time::SystemTime;
 use std::{collections::BTreeMap, time::Duration};
 
 struct NodeInfo {
@@ -1093,6 +1094,10 @@ fn add_node(
     mutation_id: u8,
     node_type: NodeRewardType,
 ) -> NodeId {
+    // Sync state machine time to current system time to ensure TLS certificates
+    // generated during node addition have valid notBefore dates
+    state_machine.set_time(SystemTime::now());
+
     let (add_node_payload, _) = prepare_add_node_payload(mutation_id, node_type);
     state_machine
         .execute_ingress_as(

@@ -13,7 +13,7 @@ pub(crate) fn fetch_canister_logs(
     sender: PrincipalId,
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
-    fetch_canister_logs_filter: FlagStatus,
+    log_memory_store_feature: FlagStatus,
 ) -> Result<FetchCanisterLogsResponse, UserError> {
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
@@ -27,7 +27,7 @@ pub(crate) fn fetch_canister_logs(
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
     let records = canister.system_state.canister_log.records();
-    let canister_log_records = match fetch_canister_logs_filter {
+    let canister_log_records = match log_memory_store_feature {
         FlagStatus::Disabled => records.iter().cloned().collect(),
         FlagStatus::Enabled => filter_records(&args, records)?,
     };
