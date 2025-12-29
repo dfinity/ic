@@ -351,11 +351,11 @@ crate.spec(
     version = "^0.5.1",
 )
 crate.spec(
-    package = "crossterm",
-    version = "0.29.0",
     features = [
         "event-stream",
     ],
+    package = "crossterm",
+    version = "0.29.0",
 )
 crate.spec(
     package = "crossbeam",
