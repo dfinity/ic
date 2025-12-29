@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
+use config_tool::guestos::generate_ic_config;
 use dfn_protobuf::{ProtoBuf, protobuf};
 use futures::{
     FutureExt,
@@ -30,7 +31,6 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_cdk::management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
-use config_tool::guestos::generate_ic_config;
 use ic_config::{ConfigOptional, ConfigSource};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
@@ -1530,8 +1530,8 @@ pub fn get_config() -> ConfigOptional {
         malicious_behavior: "null".to_string(),
     };
 
-    let ic_json = generate_ic_config::render_ic_config(template)
-        .expect("Failed to render config template");
+    let ic_json =
+        generate_ic_config::render_ic_config(template).expect("Failed to render config template");
     ConfigSource::Literal(ic_json)
         .load()
         .expect("Failed to parse dummy config")
