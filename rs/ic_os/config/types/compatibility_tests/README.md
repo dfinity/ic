@@ -22,5 +22,5 @@ This module contains tests to ensure backwards compatibility of the config_types
 After updating config_types (and the CONFIG_VERSION const), to generate new fixtures, use the following command:
 
 ```bash
-bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_types_fixture
+bazel run //rs/ic_os/config/types/compatibility_tests:generate_config_types_fixture
 ```
