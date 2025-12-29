@@ -109,6 +109,10 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
           sparse-checkout: "ci/scripts/determine-initial-guest-os-versions.py"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - id: generate
         name: Fetch beginning versions for qualification
         shell: bash
