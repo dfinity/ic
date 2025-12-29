@@ -51,7 +51,7 @@ uvm_config_image(
     name = "root_tests_config_image",
     testonly = True,
     srcs = [
-        "//rs/ic_os/boot/device:device_test",
+        "//rs/ic_os/device:device_test",
         "//rs/ic_os/os_tools/guest_disk:guest_disk_test",
         "//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test",
         "//rs/tests:ubuntu_test_runtime.tar",

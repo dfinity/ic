@@ -173,7 +173,7 @@ members = [
     "rs/ic_os/dev_test_tools/bare_metal_deployment",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
-    "rs/ic_os/boot/device",
+    "rs/ic_os/device",
     "rs/ic_os/boot/grub",
     "rs/ic_os/guest_upgrade/client",
     "rs/ic_os/guest_upgrade/server",
