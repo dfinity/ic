@@ -1,6 +1,9 @@
+use std::io::stdout;
 use std::time::Duration;
 
 use clap::Parser;
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{Clear, ClearType};
 use system_stats_tui::app::App;
 
 fn parse_duration(arg: &str) -> Result<Duration, String> {
@@ -37,5 +40,7 @@ async fn main() -> anyhow::Result<()> {
         .run(terminal)
         .await;
     ratatui::restore();
+    // Clear the terminal after restore to remove any leftover TUI content
+    let _ = execute!(stdout(), Clear(ClearType::All));
     result
 }
