@@ -124,13 +124,13 @@ pub fn swap_two_dealings_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_a.id())
-        .build_with_signature(params, dealer_a, dealer_a.id());
+        .build_with_signature(dealer_a, dealer_a.id());
 
     let dealing_ab = dealing_a
         .content
         .into_builder()
         .with_dealer_id(dealer_b.id())
-        .build_with_signature(params, dealer_b, dealer_b.id());
+        .build_with_signature(dealer_b, dealer_b.id());
 
     let dealing_ab_signed = env
         .nodes
@@ -174,7 +174,7 @@ pub fn copy_dealing_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_to.id())
-        .build_with_signature(params, dealer_to, dealer_to.id());
+        .build_with_signature(dealer_to, dealer_to.id());
 
     let dealing_to_signed = env
         .nodes
@@ -431,14 +431,8 @@ pub mod node {
     }
 
     impl<T: Signable> BasicSigner<T> for Node {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -896,7 +890,7 @@ pub mod node {
                 let mut signatures_map = BTreeMap::new();
                 for signer in self.filter_by_receivers(&params) {
                     let signature = signer
-                        .sign_basic(&signed_dealing, signer.id(), params.registry_version())
+                        .sign_basic(&signed_dealing)
                         .expect("failed to generate basic-signature");
                     signatures_map.insert(signer.id(), signature);
                 }
@@ -1393,9 +1387,9 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     }
     nodes
 }
-
+// Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
+    RegistryVersion::new(rng.gen_range(1..u64::MAX - 10_000))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
@@ -1884,7 +1878,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     Ok(idkg_dealing
         .into_builder()
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], rng)
-        .build_with_signature(transcript_params, basic_signer, signer_id))
+        .build_with_signature(basic_signer, signer_id))
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -2368,13 +2362,12 @@ impl SignedIDkgDealingBuilder {
 
     pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
-        params: &IDkgTranscriptParams,
         basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
         self.signature = BasicSignature {
             signature: basic_signer
-                .sign_basic(&self.content, signer_id, params.registry_version())
+                .sign_basic(&self.content)
                 .expect("Failed to sign a dealing"),
             signer: signer_id,
         };
@@ -2729,7 +2722,7 @@ impl IDkgTranscriptBuilder {
     }
 
     pub fn corrupt_algorithm_id(mut self) -> Self {
-        self.algorithm_id = AlgorithmId::Placeholder;
+        self.algorithm_id = AlgorithmId::Unspecified;
         self
     }
 

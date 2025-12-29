@@ -59,7 +59,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
-    batch::{Batch, BatchMessages, BlockmakerMetrics},
+    batch::{Batch, BatchContent, BatchMessages, BlockmakerMetrics},
     consensus::{
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
         certification::{Certification, CertificationContent, CertificationShare},
@@ -764,32 +764,39 @@ impl Player {
                 )
             }
         };
+
+        let extra_msgs = extra(self, time);
+        if extra_msgs.is_empty() {
+            return (time, None);
+        }
+
+        let extra_ingresses = extra_msgs
+            .iter()
+            .map(|fm| fm.ingress.clone())
+            .collect::<Vec<_>>();
+
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
-            requires_full_state_hash: false,
-            messages: BatchMessages::default(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: extra_ingresses,
+                    ..BatchMessages::default()
+                },
+                chain_key_data: Default::default(),
+                consensus_responses: Vec::new(),
+                requires_full_state_hash: false,
+            },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_data: Default::default(),
             registry_version,
             time,
-            consensus_responses: Vec::new(),
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version,
         };
-        let context_time = extra_batch.time;
-        let extra_msgs = extra(self, context_time);
-        if extra_msgs.is_empty() {
-            return (context_time, None);
-        }
-        if !extra_msgs.is_empty() {
-            extra_batch.messages.signed_ingress_msgs = extra_msgs
-                .iter()
-                .map(|fm| fm.ingress.clone())
-                .collect::<Vec<_>>();
-            println!("extra_batch created with new ingress");
-        }
+
+        println!("extra_batch created with new ingress");
+
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
                 Ok(()) => {
@@ -797,7 +804,7 @@ impl Player {
                     self.wait_for_state(extra_batch.batch_number);
 
                     // We are done once we delivered a batch for a new checkpoint
-                    if extra_batch.requires_full_state_hash {
+                    if extra_batch.requires_full_state_hash() {
                         break;
                     }
 
@@ -805,7 +812,7 @@ impl Player {
                     // empty batches. If all messages could be completed, we need to deliver one
                     // more batch triggering checkpoint creation.
                     let msg_status = self.ingress_history_reader.get_latest_status();
-                    let incomplete_msgs_exists =
+                    let have_incomplete_msgs =
                         extra_msgs
                             .iter()
                             .any(|msg| match msg_status(&msg.ingress.id()) {
@@ -814,13 +821,14 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.messages.signed_ingress_msgs = Default::default();
+                    extra_batch.content = BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data: Default::default(),
+                        consensus_responses: Vec::new(),
+                        requires_full_state_hash: !have_incomplete_msgs,
+                    };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
-
-                    if !incomplete_msgs_exists {
-                        extra_batch.requires_full_state_hash = true;
-                    }
                 }
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),
                 Err(MessageRoutingError::Ignored { .. }) => {
@@ -831,7 +839,7 @@ impl Player {
                 }
             }
         }
-        (context_time, Some((extra_batch.batch_number, extra_msgs)))
+        (time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     fn certify_state_with_dummy_certification(&self) {

@@ -260,6 +260,9 @@ pub struct RoundLimits {
     // TODO would be nice to change that to available, but this requires
     // a lot of changes since available allocation sits in CanisterManager config
     pub compute_allocation_used: u64,
+
+    /// Keeps track of the memory reserved for executing response handlers.
+    pub subnet_memory_reservation: NumBytes,
 }
 
 impl RoundLimits {
@@ -441,6 +444,17 @@ impl ExecutionEnvironment {
                 - memory_taken.wasm_custom_sections().get() as i64,
             scaling_factor,
         )
+    }
+
+    /// Returns the scaled subnet memory reservation.
+    pub fn scaled_subnet_memory_reservation(&self) -> NumBytes {
+        // This function computes the scaled subnet memory reservation per thread.
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
     }
 
     /// Computes the current amount of guaranteed response message memory available
@@ -941,7 +955,7 @@ impl ExecutionEnvironment {
 
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
@@ -1572,7 +1586,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
@@ -1612,7 +1626,7 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
                     let (result, instructions_used) = self.take_canister_snapshot(
-                        *msg.sender(),
+                        msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
@@ -2481,7 +2495,7 @@ impl ExecutionEnvironment {
     /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
     fn take_canister_snapshot(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         state: &mut ReplicatedState,
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
@@ -2505,11 +2519,13 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
+        let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
-            sender,
+            origin,
             &mut canister,
             replace_snapshot,
+            uninstall_code,
             state,
             round_limits,
             &resource_saturation,
@@ -2518,7 +2534,16 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Ok((response, rejects, instructions_used)) => {
+                crate::util::process_responses(
+                    rejects,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    self.canister_not_found_error(),
+                );
+                (Ok(response.encode()), instructions_used)
+            }
             Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
@@ -2912,17 +2937,6 @@ impl ExecutionEnvironment {
             time,
             cost_schedule,
         };
-        // This function is called on an execution thread with a scaled
-        // available memory. We also need to scale the subnet reservation in
-        // order to be consistent with the scaling of the available memory.
-        // We apply the scaling factor `self.scheduler_cores`
-        // consistently with the scaling factor of `SubnetAvailableMemory`
-        // in the function `self.scaled_subnet_available_memory`.
-        // and the scaling factor of `ResourceSaturation`
-        // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores as u64;
-        let scaled_subnet_memory_reservation =
-            NumBytes::new(self.config.subnet_memory_reservation.get() / scaling_factor);
         execute_response(
             canister,
             response,
@@ -2931,7 +2945,6 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
-            scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),
@@ -3260,7 +3273,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },

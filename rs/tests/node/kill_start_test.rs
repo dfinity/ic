@@ -14,7 +14,8 @@ use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
-use slog::{Logger, error, info};
+use nested::util::block_on_bash_script_and_log;
+use slog::{error, info};
 use std::time::Duration;
 
 const POST_KILL_SLEEP_DURATION: Duration = Duration::from_secs(5);
@@ -64,11 +65,6 @@ fn test(env: TestEnv) {
         block_on_bash_script_and_log(log, node, "findmnt /var/lib/ic/crypto");
         block_on_bash_script_and_log(log, node, "findmnt /var/lib/ic/data");
     }
-}
-
-fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
-    let out = node.block_on_bash_script(cmd).unwrap();
-    info!(log, "{cmd}:\n{out}");
 }
 
 fn main() -> Result<()> {

@@ -157,6 +157,7 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
+        reject_code: 0,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -186,7 +187,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgArgDataCopy => vec!["I", "U", "RQ", "NRQ", "CQ", "Ry", "CRy", "F"],
         SystemApiCallId::MsgCallerSize => vec!["*"],
         SystemApiCallId::MsgCallerCopy => vec!["*"],
-        SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt"],
+        SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt", "C"],
         SystemApiCallId::MsgRejectMsgSize => vec!["Rt", "CRt"],
         SystemApiCallId::MsgRejectMsgCopy => vec!["Rt", "CRt"],
         SystemApiCallId::MsgReplyDataAppend => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],
@@ -240,6 +241,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostCreateCanister => vec!["*", "s"],
         SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
         SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequestV2=> vec!["*", "s"],
         SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
@@ -869,6 +871,7 @@ fn api_availability_test(
         SystemApiCallId::CostCall => {}
         SystemApiCallId::CostCreateCanister => {}
         SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostHttpRequestV2 => {}
         SystemApiCallId::CostSignWithEcdsa => {}
         SystemApiCallId::CostSignWithSchnorr => {}
         SystemApiCallId::CostVetkdDeriveKey => {}
@@ -2127,7 +2130,7 @@ fn test_save_log_message_keeps_total_log_size_limited() {
     // Expect only one log record to be kept, staying within the size limit.
     let log = api.canister_log();
     assert_eq!(log.records().len(), initial_records_number + 1);
-    assert_le!(log.used_space(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
+    assert_le!(log.bytes_used(), TEST_DEFAULT_LOG_MEMORY_LIMIT);
 }
 
 #[test]

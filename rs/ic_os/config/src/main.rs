@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use config::guestos::bootstrap_ic_node::populate_nns_public_key;
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
@@ -34,8 +35,8 @@ pub enum Commands {
     },
     /// Bootstrap IC Node from a bootstrap package
     BootstrapICNode {
-        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
-        bootstrap_tar_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
     /// Generate IC configuration from template and guestos config
     GenerateICConfig {
@@ -43,6 +44,10 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
+    },
+    PopulateNnsPublicKey {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
 }
 
@@ -179,9 +184,13 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
-            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
-            bootstrap_ic_node(&bootstrap_tar_path)
+        Some(Commands::BootstrapICNode { bootstrap_dir }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_dir.display());
+            bootstrap_ic_node(&bootstrap_dir)
+        }
+        Some(Commands::PopulateNnsPublicKey { bootstrap_dir }) => {
+            println!("Populating NNS key from: {}", bootstrap_dir.display());
+            populate_nns_public_key(&bootstrap_dir)
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
@@ -216,8 +225,6 @@ pub fn assemble_setupos_config(
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        logging: Logging {},
-        use_nns_public_key: false,
         nns_urls: nns_urls.to_vec(),
         use_node_operator_private_key,
         enable_trusted_execution_environment,
@@ -227,11 +234,7 @@ pub fn assemble_setupos_config(
 
     let setupos_settings = SetupOSSettings;
 
-    #[allow(deprecated)]
     let hostos_settings = HostOSSettings {
-        vm_memory: dev_vm_resources.memory,
-        vm_cpu: dev_vm_resources.cpu.clone(),
-        vm_nr_of_vcpus: dev_vm_resources.nr_of_vcpus,
         verbose,
         hostos_dev_settings: HostOSDevSettings {
             vm_memory: dev_vm_resources.memory,

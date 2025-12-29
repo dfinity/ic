@@ -69,6 +69,7 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
         canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
@@ -107,17 +108,17 @@ fn test_canister_migration() {
         canister_id
     };
 
-    let source_canister = create_canister_on_subnet(subnet_1);
-    let target_canister = create_canister_on_subnet(subnet_2);
+    let migrated_canister = create_canister_on_subnet(subnet_1);
+    let replaced_canister = create_canister_on_subnet(subnet_2);
 
-    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_1);
-    assert_eq!(pic.get_subnet(target_canister).unwrap(), subnet_2);
+    assert_eq!(pic.get_subnet(migrated_canister).unwrap(), subnet_1);
+    assert_eq!(pic.get_subnet(replaced_canister).unwrap(), subnet_2);
 
     let migrate_canister_args = MigrateCanisterArgs {
-        source: source_canister,
-        target: target_canister,
+        migrated_canister_id: migrated_canister,
+        replaced_canister_id: replaced_canister,
     };
-    let res = update_candid::<_, (Result<(), MigrationValidatonError>,)>(
+    let res = update_candid::<_, (Result<(), Option<MigrationValidatonError>>,)>(
         &pic,
         canister_migration_orchestrator,
         "migrate_canister",
@@ -127,14 +128,14 @@ fn test_canister_migration() {
     res.0.unwrap();
 
     let status = || {
-        let res = update_candid::<_, (Vec<MigrationStatus>,)>(
+        let res = update_candid::<_, (Option<MigrationStatus>,)>(
             &pic,
             canister_migration_orchestrator,
             "migration_status",
             (migrate_canister_args.clone(),),
         )
         .unwrap();
-        res.0.last().unwrap().clone()
+        res.0.unwrap()
     };
     loop {
         pic.advance_time(Duration::from_secs(10));
@@ -143,13 +144,13 @@ fn test_canister_migration() {
         }
     }
 
-    pic.start_canister(source_canister, None).unwrap();
+    pic.start_canister(migrated_canister, None).unwrap();
 
-    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_2);
-    assert!(pic.get_subnet(target_canister).is_none());
+    assert_eq!(pic.get_subnet(migrated_canister).unwrap(), subnet_2);
+    assert!(pic.get_subnet(replaced_canister).is_none());
 
-    let res = update_candid::<_, (String,)>(&pic, source_canister, "whoami", ()).unwrap();
-    assert_eq!(res.0, source_canister.to_string());
+    let res = update_candid::<_, (String,)>(&pic, migrated_canister, "whoami", ()).unwrap();
+    assert_eq!(res.0, migrated_canister.to_string());
 }
 
 #[test]
@@ -615,9 +616,7 @@ fn test_cycles_ledger() {
     pic.add_cycles(canister_id, init_cycles);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
-    let check_balance = |owner: Principal,
-                         expected_ledger_balance: u128,
-                         expected_index_balance: u128| {
+    let check_balance = |owner: Principal, expected_balance: u128| {
         // Check balance via cycles ledger.
         let account = Account {
             owner,
@@ -627,7 +626,7 @@ fn test_cycles_ledger() {
             update_candid::<_, (Nat,)>(&pic, cycles_ledger_id, "icrc1_balance_of", (account,))
                 .unwrap()
                 .0;
-        assert_eq!(balance, expected_ledger_balance);
+        assert_eq!(balance, expected_balance);
 
         // The cycles ledger index only syncs with the cycles ledger once per second.
         pic.advance_time(Duration::from_secs(1));
@@ -643,9 +642,7 @@ fn test_cycles_ledger() {
         )
         .unwrap()
         .0;
-        // TODO: Once https://github.com/dfinity/ic/pull/6508 is on mainnet we can remove
-        // `expected_index_balance` param and only compare against `expected_ledger_balance`.
-        assert!(balance == expected_index_balance || balance == expected_ledger_balance);
+        assert!(balance == expected_balance);
     };
     let check_cycles = |expected: u128| {
         let actual = pic.cycle_balance(canister_id);
@@ -657,7 +654,7 @@ fn test_cycles_ledger() {
         );
     };
 
-    check_balance(test_identity, 0, 0);
+    check_balance(test_identity, 0);
     check_cycles(init_cycles);
 
     // Deposit cycles to the cycles ledger.
@@ -672,11 +669,7 @@ fn test_cycles_ledger() {
     .unwrap();
 
     // The fee has been deducted from the deposit.
-    check_balance(
-        test_identity,
-        cycles - CYCLES_LEDGER_FEE,
-        cycles - CYCLES_LEDGER_FEE,
-    );
+    check_balance(test_identity, cycles - CYCLES_LEDGER_FEE);
     check_cycles(init_cycles - cycles);
 
     // Withdraw cycles from the cycles ledger.
@@ -699,14 +692,12 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
-    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
-    // (this bug is independent of PocketIC and to be fixed separately).
-    check_balance(test_identity, 0, CYCLES_LEDGER_FEE);
+    check_balance(test_identity, 0);
     check_cycles(init_cycles);
 
     // Withdraw cycles from the anonymous account on the cycles ledger.
     let anonymous_balance = u128::MAX / 2; // hard-coded in PocketIC server
-    check_balance(Principal::anonymous(), anonymous_balance, anonymous_balance);
+    check_balance(Principal::anonymous(), anonymous_balance);
     let amount = anonymous_balance - CYCLES_LEDGER_FEE;
     let withdraw_args = WithdrawArgs {
         from_subaccount: None,
@@ -725,9 +716,7 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
-    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
-    // (this bug is independent of PocketIC and to be fixed separately).
-    check_balance(Principal::anonymous(), 0, CYCLES_LEDGER_FEE);
+    check_balance(Principal::anonymous(), 0);
     check_cycles(init_cycles + anonymous_balance);
 }
 
@@ -1066,6 +1055,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,

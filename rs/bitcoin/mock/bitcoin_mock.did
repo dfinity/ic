@@ -24,7 +24,7 @@ type NetworkInRequest = variant {
   testnet;
 };
 type OutPoint = record { txid : vec nat8; vout : nat32 };
-type PushUtxoToAddress = record { utxo : Utxo; address : text };
+type PushUtxosToAddress = record { utxos : vec Utxo; address : text };
 type SendTransactionRequest = record {
   transaction : vec nat8;
   network : Network;
@@ -46,9 +46,10 @@ service : (network: Network) -> {
   bitcoin_get_utxos : (GetUtxosRequest) -> (GetUtxosResponse);
   dogecoin_get_utxos : (GetUtxosRequest) -> (GetUtxosResponse);
   bitcoin_send_transaction : (SendTransactionRequest) -> ();
+  dogecoin_send_transaction : (SendTransactionRequest) -> ();
   change_availability : (bool) -> ();
   get_mempool : () -> (vec vec nat8);
-  push_utxo_to_address : (PushUtxoToAddress) -> ();
+  push_utxos_to_address : (PushUtxosToAddress) -> ();
   remove_utxo : (Utxo) -> ();
   reset_mempool : () -> ();
   set_fee_percentiles : (vec nat64) -> ();

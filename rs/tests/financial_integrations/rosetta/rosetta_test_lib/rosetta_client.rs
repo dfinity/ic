@@ -1,6 +1,7 @@
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_nns_governance_api::Proposal;
+use ic_rosetta_api::models::LegacySignedTransaction;
 use ic_rosetta_api::{
     convert::to_model_account_identifier,
     ledger_client::pending_proposals_response::PendingProposalsResponse,
@@ -306,6 +307,24 @@ impl RosettaApiClient {
         }
 
         let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction.to_string());
+
+        to_rosetta_response::<ConstructionSubmitResponse>(
+            self.post_json_request(
+                &format!("{}/construction/submit", self.api_url),
+                serde_json::to_vec(&req).unwrap(),
+            )
+            .await,
+        )
+    }
+
+    pub async fn construction_submit_legacy(
+        &self,
+        signed_transaction: LegacySignedTransaction,
+    ) -> Result<Result<ConstructionSubmitResponse, Error>, String> {
+        let req = ConstructionSubmitRequest::new(
+            self.network_id(),
+            hex::encode(serde_cbor::to_vec(&signed_transaction).unwrap()),
+        );
 
         to_rosetta_response::<ConstructionSubmitResponse>(
             self.post_json_request(

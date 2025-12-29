@@ -466,7 +466,7 @@ impl TipHandler {
         }
     }
 
-    /// Deletes canisters from tip if they are not in ids.
+    /// Deletes canisters from tip if they are not in `ids`.
     pub fn filter_tip_canisters(
         &mut self,
         height: Height,
@@ -482,6 +482,22 @@ impl TipHandler {
                     message: "Cannot remove canister.".to_string(),
                     io_err: err,
                 })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Deletes snapshots from tip if they are not in `ids`.
+    pub fn filter_tip_snapshots(
+        &mut self,
+        height: Height,
+        ids: &BTreeSet<SnapshotId>,
+    ) -> Result<(), LayoutError> {
+        let tip = self.tip(height)?;
+        let snapshots_on_disk = tip.snapshot_ids()?;
+        for id in snapshots_on_disk {
+            if !ids.contains(&id) {
+                tip.snapshot(&id)?.delete_dir()?;
             }
         }
         Ok(())

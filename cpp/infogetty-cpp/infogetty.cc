@@ -190,18 +190,33 @@ main(int argc, char** argv)
     sigaction(SIGQUIT, &saved_quit, NULL);
     sigaction(SIGINT, &saved_int, NULL);
 
-    // Drop into shell. We do this via the "login" binary which establishes
-    // everything nicely to have a login session.
-    // When the shell terminates, systemd will respawn us and we will take
-    // over the terminal again.
-    const char* cmdline[] = {
-        "/usr/bin/login",
-        "-f",
-        "-p",
-        opts.login_user.c_str(),
-        0
-    };
-    check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve login failed");
+    // For limited-console user, run a program directly without login
+    // For other users (like root), use the login process
+    if (opts.login_user == "limited-console") {
+        // Use su to run the program as the limited-console user
+        const char* cmdline[] = {
+            "/bin/su",
+            "-s", "/opt/ic/bin/limited-console",
+            "limited-console",
+            0
+        };
+        // Minimal environment with only TERM set (needed for terminal commands like 'clear')
+        char* const minimal_env[] = { (char*)"TERM=linux", NULL };
+        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), minimal_env), opts.tty_dev, "execve limited-console failed");
+    } else {
+        // Drop into shell. We do this via the "login" binary which establishes
+        // everything nicely to have a login session.
+        // When the shell terminates, systemd will respawn us and we will take
+        // over the terminal again.
+        const char* cmdline[] = {
+            "/usr/bin/login",
+            "-f",
+            "-p",
+            opts.login_user.c_str(),
+            0
+        };
+        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve login failed");
+    }
 
     return 1;
 }

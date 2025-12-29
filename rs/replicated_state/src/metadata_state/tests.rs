@@ -1,9 +1,11 @@
-use super::*;
-use crate::metadata_state::subnet_call_context_manager::{
+use super::subnet_call_context_manager::{
     EcdsaArguments, EcdsaMatchedPreSignature, InstallCodeCall, PreSignatureStash, RawRandContext,
     SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, StopCanisterCall,
     SubnetCallContext, SubnetCallContextManager, ThresholdArguments,
 };
+use super::*;
+use crate::InputQueueType;
+use crate::testing::CanisterQueuesTesting;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
@@ -19,35 +21,30 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
-use ic_test_utilities_types::{
-    ids::{
-        SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id,
-        subnet_test_id, user_test_id,
-    },
-    messages::{RequestBuilder, ResponseBuilder},
-    xnet::{StreamHeaderBuilder, StreamSliceBuilder},
+use ic_test_utilities_types::ids::{
+    SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
+    user_test_id,
 };
-use ic_types::{
-    Cycles, ExecutionRound, Height,
-    batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
-    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
-    crypto::{
-        AlgorithmId,
-        canister_threshold_sig::{
-            SchnorrPreSignatureTranscript,
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
-        },
-    },
-    ingress::WasmResult,
-    messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata},
-    time::CoarseTime,
+use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
+use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
+use ic_types::batch::BlockmakerMetrics;
+use ic_types::canister_http::{
+    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication, Transform,
 };
-use ic_types::{canister_http::Transform, time::current_time};
+use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript};
+use ic_types::ingress::WasmResult;
+use ic_types::messages::{CallbackId, CanisterCall, Payload, Refund, Request, RequestMetadata};
+use ic_types::time::{CoarseTime, current_time};
+use ic_types::{Cycles, ExecutionRound, Height};
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use proptest::prelude::*;
-use std::{ops::Range, sync::Arc, time::Duration};
+use std::ops::Range;
+use std::sync::Arc;
+use std::time::Duration;
 use strum::IntoEnumIterator;
 
 struct DummyMetrics;
@@ -494,9 +491,7 @@ fn system_metadata_split() {
     metadata_a.after_split(is_canister_on_subnet_a, &mut subnet_queues);
 
     // Expect same metadata, but with pruned ingress history and no split marker.
-    expected
-        .ingress_history
-        .prune_after_split(is_receiver_on_subnet_a);
+    expected.ingress_history.split(is_receiver_on_subnet_a);
     expected.split_from = None;
     assert_eq!(expected, metadata_a);
 
@@ -520,9 +515,7 @@ fn system_metadata_split() {
 
     // Expect pruned ingress history and no split marker.
     expected.split_from = None;
-    expected
-        .ingress_history
-        .prune_after_split(is_canister_on_subnet_b);
+    expected.ingress_history.split(is_canister_on_subnet_b);
     assert_eq!(expected, metadata_b);
 }
 
@@ -580,6 +573,170 @@ fn system_metadata_split_with_batch_time() {
 }
 
 #[test]
+fn system_metadata_online_split() {
+    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    const SUBNET_A: SubnetId = SUBNET_0;
+    const SUBNET_B: SubnetId = SUBNET_1;
+    const SUBNET_C: SubnetId = SUBNET_2;
+
+    // 2 canisters: we will retain `CANISTER_1` on `SUBNET_A` and split off
+    // `CANISTER_2` to `SUBNET_B`.
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2_U64: u64 = 2;
+    const CANISTER_2: CanisterId = CanisterId::from_u64(CANISTER_2_U64);
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: CanisterId::from_u64(0), end: CanisterId::from_u64(CANISTER_2_U64 - 1)} => SUBNET_A,
+        CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64), end: CanisterId::from_u64(CANISTER_2_U64)} => SUBNET_B,
+        CanisterIdRange {start: CanisterId::from_u64(CANISTER_2_U64 + 1), end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
+    })
+    .unwrap();
+
+    // Ingress history with 3 `Received` messages; one each to canisters 1 and 2;
+    // and one to `IC_00` (i.e., the `SUBNET_A` management canister).
+    let mut ingress_history = IngressHistoryState::new();
+    let time = UNIX_EPOCH;
+    let receivers = [CANISTER_1.get(), CANISTER_2.get(), IC_00.get()];
+    for (i, receiver) in receivers.into_iter().enumerate().rev() {
+        ingress_history.insert(
+            message_test_id(i as u64),
+            IngressStatus::Known {
+                receiver,
+                user_id: user_test_id(i as u64),
+                time,
+                state: IngressState::Received,
+            },
+            time,
+            NumBytes::from(u64::MAX),
+            |_| {},
+        );
+    }
+
+    // A stream to subnet C.
+    let streams =
+        btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) };
+
+    // Non-empty subnet queues.
+    let mut subnet_queues = CanisterQueues::default();
+    subnet_queues
+        .push_input(
+            RequestBuilder::default()
+                .sender(CANISTER_1)
+                .receiver(SUBNET_A.into())
+                .build()
+                .into(),
+            InputQueueType::LocalSubnet,
+        )
+        .unwrap();
+
+    // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
+    // detect a regression in the subnet type assigned to subnet B.
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::VerifiedApplication);
+    system_metadata.ingress_history = ingress_history;
+    system_metadata.streams = streams.into();
+    system_metadata.canister_allocation_ranges =
+        CanisterIdRanges::try_from(vec![CanisterIdRange {
+            start: CanisterId::from_u64(0),
+            end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1),
+        }])
+        .unwrap();
+    system_metadata.last_generated_canister_id = Some(CANISTER_2);
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.batch_time = current_time();
+    system_metadata.network_topology.routing_table = Arc::new(routing_table);
+    system_metadata.subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: 2197.into(),
+        ..Default::default()
+    };
+
+    // In-flight `install_code` management canister calls for each of the canisters.
+    const INSTALL_CODE_SENDER: CanisterId = CanisterId::from_u64(13);
+    const INSTALL_CODE_CALLBACK_ID: CallbackId = CallbackId::new(17);
+    let mut push_install_code_call = |canister_id: CanisterId| {
+        let request = RequestBuilder::default()
+            .sender(INSTALL_CODE_SENDER)
+            .receiver(SUBNET_A.into())
+            .sender_reply_callback(INSTALL_CODE_CALLBACK_ID)
+            .build();
+        subnet_queues
+            .push_input(request.clone().into(), InputQueueType::LocalSubnet)
+            .unwrap();
+        subnet_queues.pop_input().unwrap();
+        system_metadata
+            .subnet_call_context_manager
+            .push_install_code_call(InstallCodeCall {
+                call: CanisterCall::Request(Arc::new(request)),
+                effective_canister_id: canister_id,
+                time: UNIX_EPOCH,
+            })
+    };
+    let _canister_1_install_code_call = push_install_code_call(CANISTER_1);
+    let canister_2_install_code_call = push_install_code_call(CANISTER_2);
+
+    // Split off subnet A'.
+    let metadata_a = system_metadata
+        .clone()
+        .online_split(SUBNET_A, &mut subnet_queues)
+        .unwrap();
+
+    // Expect a pruned ingress history.
+    let mut expected = system_metadata.clone();
+    expected
+        .ingress_history
+        .split(|canister_id| canister_id != CANISTER_2);
+    // And the split marker should be set.
+    expected.subnet_split_from = Some(SUBNET_A);
+    expected.split_from = None;
+
+    // The `install_code` call targeting `CANISTER_2` has been dropped and a reject
+    // response was enqueued for it.
+    expected
+        .subnet_call_context_manager
+        .remove_install_code_call(canister_2_install_code_call);
+    subnet_queues.push_output_response(Arc::new(Response {
+        originator: INSTALL_CODE_SENDER,
+        respondent: SUBNET_A.into(),
+        originator_reply_callback: INSTALL_CODE_CALLBACK_ID,
+        refund: Default::default(),
+        response_payload: Payload::Reject(RejectContext::new(
+            RejectCode::SysTransient,
+            format!("Canister {CANISTER_2} migrated during a subnet split"),
+        )),
+        deadline: CoarseTime::from_secs_since_unix_epoch(0),
+    }));
+    assert_eq!(expected, metadata_a);
+
+    // Split off subnet B.
+    let metadata_b = system_metadata
+        .clone()
+        .online_split(SUBNET_B, &mut subnet_queues)
+        .unwrap();
+
+    // Start off with the original metadata state.
+    let mut expected = system_metadata;
+    // New subnet ID.
+    expected.own_subnet_id = SUBNET_B;
+
+    // Ingress history should only contain the message to `CANISTER_2`.
+    expected
+        .ingress_history
+        .split(|canister_id| canister_id == CANISTER_2);
+    // No streams.
+    expected.streams = Default::default();
+    // No canister allocation ranges. Will be initialized in the next round.
+    expected.canister_allocation_ranges = Default::default();
+    expected.last_generated_canister_id = None;
+    // And the split marker should be set.
+    expected.subnet_split_from = Some(SUBNET_A);
+    expected.split_from = None;
+    // No management canister calls.
+    expected.subnet_call_context_manager = Default::default();
+    // Default subnet metrics.
+    expected.subnet_metrics = Default::default();
+    // Everything else should be unchanged.
+    assert_eq!(expected, metadata_b);
+}
+
+#[test]
 fn subnet_call_contexts_deserialization() {
     let url = "https://".to_string();
     let transform = Transform {
@@ -603,6 +760,7 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -1412,7 +1570,7 @@ fn ingress_history_split() {
     let is_local_canister = |_: CanisterId| true;
     let expected = ingress_history.clone();
 
-    ingress_history.prune_after_split(is_local_canister);
+    ingress_history.split(is_local_canister);
 
     // All messages should be retained.
     assert_eq!(expected, ingress_history);
@@ -1434,7 +1592,7 @@ fn ingress_history_split() {
         |_| {},
     );
 
-    ingress_history.prune_after_split(is_local_canister);
+    ingress_history.split(is_local_canister);
     assert_eq!(expected, ingress_history);
 }
 

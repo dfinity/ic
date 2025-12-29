@@ -297,10 +297,9 @@ pub fn construct_ic_stack(
         rt_handle_main.clone(),
         metrics_registry,
         config.adapters_config,
-        execution_services.https_outcalls_service,
+        execution_services.transform_execution_service,
         max_canister_http_requests_in_flight,
         log.clone(),
-        nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());

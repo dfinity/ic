@@ -3,15 +3,15 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpsOutcallResult, https_outcall_result,
     https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
-use ic_interfaces::execution_environment::{QueryExecutionInput, QueryExecutionService};
+use ic_interfaces::execution_environment::{TransformExecutionInput, TransformExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
-use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_types::{
     CanisterId, NumBytes,
     canister_http::{
@@ -20,7 +20,7 @@ use ic_types::{
         Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
-    messages::{CertificateDelegation, CertificateDelegationMetadata, Query, QuerySource, Request},
+    messages::{Query, QuerySource, Request},
 };
 use std::time::Instant;
 use tokio::{
@@ -57,9 +57,8 @@ pub struct CanisterHttpAdapterClientImpl {
     grpc_channel: Channel,
     tx: Sender<CanisterHttpResponse>,
     rx: Receiver<CanisterHttpResponse>,
-    query_service: QueryExecutionService,
+    query_service: TransformExecutionService,
     metrics: Metrics,
-    nns_delegation_reader: NNSDelegationReader,
     log: ReplicaLogger,
 }
 
@@ -67,10 +66,9 @@ impl CanisterHttpAdapterClientImpl {
     pub fn new(
         rt_handle: Handle,
         grpc_channel: Channel,
-        query_service: QueryExecutionService,
+        query_service: TransformExecutionService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
-        nns_delegation_reader: NNSDelegationReader,
         log: ReplicaLogger,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
@@ -82,7 +80,6 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             query_service,
             metrics,
-            nns_delegation_reader,
             log,
         }
     }
@@ -118,9 +115,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = HttpsOutcallsServiceClient::new(self.grpc_channel.clone());
         let query_handler = self.query_service.clone();
         let metrics = self.metrics.clone();
-        let delegation_from_nns = self
-            .nns_delegation_reader
-            .get_delegation_with_metadata(CanisterRangesFilter::Flat);
         let log = self.log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
@@ -146,10 +140,33 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         http_method: request_http_method,
                         max_response_bytes: request_max_response_bytes,
                         transform: request_transform,
+                        pricing_version: request_pricing_version,
                         ..
                     },
                 socks_proxy_addrs,
             } = canister_http_request;
+
+            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
+                warn!(
+                    log,
+                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: \
+                    request_id {}, sender {}, process_id: {}",
+                    request_id,
+                    request_sender,
+                    std::process::id(),
+                );
+                let _ = permit.send(CanisterHttpResponse {
+                    id: request_id,
+                    timeout: request_timeout,
+                    canister_id: request_sender,
+                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: "Canister HTTP request with PayAsYouGo pricing is not supported"
+                            .to_string(),
+                    }),
+                });
+                return;
+            }
 
             let adapter_req_timer = Instant::now();
             let max_response_size_bytes = request_max_response_bytes
@@ -174,8 +191,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // TODO(BOUN-1467): Remove this field once everything is done.
-                    socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
@@ -184,26 +199,52 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         grpc_status.message().to_string(),
                     )
                 })
-                .and_then(|adapter_response| async move {
-                    //TODO: We should also log the downloaded bytes when the adapter returns an error.
-                    let HttpsOutcallResponse {
-                        status,
-                        headers,
-                        content: body,
+                .and_then(|adapter_response: tonic::Response<HttpsOutcallResult>| async move {
+                    let HttpsOutcallResult {
+                        metrics: adapter_metrics,
+                        result,
                     } = adapter_response.into_inner();
-
-                    let headers_size: usize = headers.iter().map(|h| h.name.len() + h.value.len()).sum();
 
                     info!(
                         log,
-                        "Received canister http response from adapter: request_size: {}, response_time {}, downloaded_bytes {}, reply_callback_id {}, sender {}, process_id: {}",
+                        "Received canister http response from adapter: request_size: {}, \
+                         response_time {}, downloaded_bytes {}, reply_callback_id {}, \
+                         sender {}, process_id: {}",
                         request_size,
                         adapter_req_timer.elapsed().as_millis(),
-                        body.len() + headers_size,
+                        adapter_metrics.map_or(0, |m| m.downloaded_bytes),
                         reply_callback_id,
                         request_sender,
                         std::process::id(),
                     );
+
+                    let response = match result {
+                        Some(https_outcall_result::Result::Response(https_outcall_response)) => {
+                            Ok(https_outcall_response)
+                        },
+                        Some(https_outcall_result::Result::Error(canister_http_error)) => {
+                            let code = match canister_http_error.kind() {
+                                CanisterHttpErrorKind::InvalidInput => RejectCode::SysFatal,
+                                CanisterHttpErrorKind::Connection => RejectCode::SysTransient,
+                                CanisterHttpErrorKind::LimitExceeded => RejectCode::SysFatal,
+                                CanisterHttpErrorKind::Internal => RejectCode::SysTransient,
+                                CanisterHttpErrorKind::Unspecified => RejectCode::SysFatal,
+                            };
+                            Err((code, canister_http_error.message))
+                        }
+                        None => {
+                            Err((
+                                RejectCode::SysFatal,
+                                "Adapter returned empty result".to_string()
+                            ))
+                        }
+                    }?;
+
+                    let HttpsOutcallResponse {
+                        status,
+                        headers,
+                        content: body,
+                    } = response;
 
                     let canister_http_payload = CanisterHttpResponsePayload {
                         status: status as u128,
@@ -241,7 +282,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 canister_http_payload,
                                 request_sender,
                                 transform,
-                                delegation_from_nns,
                             )
                             .await;
                             let transform_result_size = match &transform_result {
@@ -322,11 +362,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
-    query_handler: QueryExecutionService,
+    query_handler: TransformExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
-    delegation_from_nns: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
     let transform_args = TransformArgs {
         response: canister_http_response,
@@ -347,10 +386,7 @@ async fn transform_adapter_response(
         method_payload,
     };
 
-    let query_execution_input = QueryExecutionInput {
-        query,
-        certificate_delegation_with_metadata: delegation_from_nns,
-    };
+    let query_execution_input = TransformExecutionInput { query };
 
     match Oneshot::new(query_handler, query_execution_input).await {
         Ok(query_response) => match query_response {
@@ -390,20 +426,19 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        HttpsOutcallRequest, HttpsOutcallResponse,
+        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult,
         https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{Replication, Transform};
+    use ic_types::canister_http::{PricingVersion, Replication, Transform};
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
-    use tokio::sync::watch;
     use tonic::{
         Request, Response, Status,
         transport::{Channel, Endpoint, Server, Uri},
@@ -413,11 +448,11 @@ mod tests {
 
     #[derive(Clone)]
     pub struct SingleResponseAdapter {
-        response: Result<HttpsOutcallResponse, (Code, String)>,
+        response: Result<HttpsOutcallResult, (Code, String)>,
     }
 
     impl SingleResponseAdapter {
-        fn new(response: Result<HttpsOutcallResponse, (Code, String)>) -> Self {
+        fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
             Self { response }
         }
     }
@@ -427,7 +462,7 @@ mod tests {
         async fn https_outcall(
             &self,
             _request: Request<HttpsOutcallRequest>,
-        ) -> Result<Response<HttpsOutcallResponse>, Status> {
+        ) -> Result<Response<HttpsOutcallResult>, Status> {
             match self.response.clone() {
                 Ok(resp) => Ok(Response::new(resp)),
                 Err((code, msg)) => Err(Status::new(code, msg)),
@@ -436,7 +471,7 @@ mod tests {
     }
 
     async fn setup_adapter_mock(
-        adapter_response: Result<HttpsOutcallResponse, (Code, String)>,
+        adapter_response: Result<HttpsOutcallResult, (Code, String)>,
     ) -> Channel {
         let (client, server) = tokio::io::duplex(1024);
         let mock_adapter = SingleResponseAdapter::new(adapter_response);
@@ -489,6 +524,7 @@ mod tests {
                 }),
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
+                pricing_version: PricingVersion::Legacy,
             },
             socks_proxy_addrs: vec![],
         }
@@ -541,13 +577,13 @@ mod tests {
     }
 
     fn setup_system_query_mock() -> (
-        QueryExecutionService,
-        Handle<QueryExecutionInput, QueryExecutionResponse>,
+        TransformExecutionService,
+        Handle<TransformExecutionInput, QueryExecutionResponse>,
     ) {
         let (service, handle) =
-            tower_test::mock::pair::<QueryExecutionInput, QueryExecutionResponse>();
+            tower_test::mock::pair::<TransformExecutionInput, QueryExecutionResponse>();
 
-        let infallible_service = tower::service_fn(move |request: QueryExecutionInput| {
+        let infallible_service = tower::service_fn(move |request: TransformExecutionInput| {
             let mut service_clone = service.clone();
             async move {
                 Ok::<QueryExecutionResponse, std::convert::Infallible>({
@@ -562,6 +598,13 @@ mod tests {
             }
         });
         (BoxCloneService::new(infallible_service), handle)
+    }
+
+    fn create_result_from_response(response: HttpsOutcallResponse) -> HttpsOutcallResult {
+        HttpsOutcallResult {
+            metrics: None,
+            result: Some(https_outcall_result::Result::Response(response)),
+        }
     }
 
     /// Test canister http client send/receive without transform.
@@ -582,12 +625,12 @@ mod tests {
         }];
 
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
 
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
@@ -597,15 +640,12 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -652,15 +692,12 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -692,12 +729,12 @@ mod tests {
     #[tokio::test]
     async fn test_client_transformed_limit() {
         // Adapter mock setup
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: Vec::new(),
             content: Vec::new(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 
@@ -715,15 +752,12 @@ mod tests {
             )));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -747,7 +781,8 @@ mod tests {
                             UNIX_EPOCH,
                             RejectCode::SysFatal,
                             format!(
-                                "Transformed http response exceeds limit: {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
+                                "Transformed http response exceeds limit: \
+                                {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
                             )
                         )
                     );
@@ -775,15 +810,12 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -829,12 +861,12 @@ mod tests {
         }];
 
         // Adapter mock setup.
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 
@@ -863,15 +895,12 @@ mod tests {
             )));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -924,12 +953,12 @@ mod tests {
         }];
 
         // Adapter mock setup. Not relevant for client response in this test case.
-        let mock_grpc_channel = setup_adapter_mock(Ok(HttpsOutcallResponse {
+        let response = HttpsOutcallResponse {
             status: 200,
             headers: adapter_headers.clone(),
             content: adapter_body.clone(),
-        }))
-        .await;
+        };
+        let mock_grpc_channel = setup_adapter_mock(Ok(create_result_from_response(response))).await;
         // Asynchronous query handler mock setup. Does not serve any purpose in this test case.
         let (svc, mut handle) = setup_system_query_mock();
 
@@ -938,15 +967,12 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
             mock_grpc_channel,
             svc,
             100,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 
@@ -994,8 +1020,6 @@ mod tests {
             rsp.send_response(Err(QueryExecutionError::CertifiedStateUnavailable));
         });
 
-        let (_, rx) = watch::channel(None);
-
         // Create a client with a capacity of 2.
         let mut client = CanisterHttpAdapterClientImpl::new(
             tokio::runtime::Handle::current(),
@@ -1003,7 +1027,6 @@ mod tests {
             svc,
             2,
             MetricsRegistry::default(),
-            NNSDelegationReader::new(rx, no_op_logger()),
             no_op_logger(),
         );
 

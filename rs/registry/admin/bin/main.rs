@@ -13,11 +13,12 @@ use helpers::{
     get_node_record_pb, get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details,
     parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
+use ic_admin::get_routing_table;
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key_from_der, parse_threshold_sig_key_from_pem_file,
 };
 use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
@@ -79,9 +80,7 @@ use ic_protobuf::registry::{
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::{
-        CanisterMigrations, RoutingTable, routing_table::Entry as RoutingTableEntry,
-    },
+    routing_table::v1::CanisterMigrations,
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -91,11 +90,11 @@ use ic_registry_client_helpers::{
     ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, FirewallRulesScope,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
-    ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key, get_node_record_node_id,
-    is_node_operator_record_key, is_node_record_key, make_api_boundary_node_record_key,
-    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, FirewallRulesScope, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
+    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
+    make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
@@ -117,7 +116,6 @@ use ic_sns_wasm::pb::v1::{
 use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
     crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey},
-    subnet_id_try_from_protobuf,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -350,7 +348,7 @@ enum SubCommand {
     GetGuestOSVersion(GetGuestOsVersionCmd),
 
     /// Get the latest routing table.
-    GetRoutingTable,
+    GetRoutingTable(GetRoutingTableCmd),
 
     /// Get the last version of a subnet from the registry.
     GetSubnet(GetSubnetCmd),
@@ -675,6 +673,14 @@ struct GetNodeCmd {
 struct ConvertNumericNodeIdtoPrincipalIdCmd {
     /// The integer Id of the node to convert to actual node id.
     node_id: u64,
+}
+
+/// Sub-command to fetch a `RoutingTable` from the registry.
+#[derive(Parser)]
+struct GetRoutingTableCmd {
+    /// The registry version to use. Defaults to the latest registry version.
+    #[clap(long)]
+    registry_version: Option<u64>,
 }
 
 /// Sub-command to fetch a `SubnetRecord` from the registry.
@@ -2199,9 +2205,10 @@ struct ProposeToAddNodeOperatorCmd {
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 
-    #[clap(long, required = true)]
+    #[clap(long, hide = true)]
+    /// Deprecated, will be removed in the future.
     /// The remaining number of nodes that could be added by this node operator
-    pub node_allowance: u64,
+    pub node_allowance: Option<u64>,
 
     //// The principal id of this node operator's provider
     pub node_provider_principal_id: PrincipalId,
@@ -2227,7 +2234,7 @@ struct ProposeToAddNodeOperatorCmd {
     ///
     /// Example:
     /// '{ "type1.1": 10, "type3.1": 24 }'
-    #[clap(long)]
+    #[clap(long, required = true)]
     max_rewardable_nodes: Option<String>,
 }
 
@@ -2253,6 +2260,15 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        // TODO(DRE-583): Remove the `--node-allowance` flag after callers of `ic-admin`
+        // have migrated to `--max-rewardable-nodes`.
+        let node_allowance = self.node_allowance.map(|allowance| {
+            if allowance != 0 {
+                eprintln!("WARNING: node allowance is deprecated and will be removed in the future. Overriding value to 0");
+            }
+            0
+        }).unwrap_or_default();
+
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
@@ -2260,7 +2276,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
-            node_allowance: self.node_allowance,
+            node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
             dc_id: self
                 .dc_id
@@ -4244,8 +4260,15 @@ async fn main() {
             )
             .await;
         }
-        SubCommand::GetRoutingTable => {
-            print_routing_table(reachable_nns_urls);
+        SubCommand::GetRoutingTable(cmd) => {
+            let registry_version = cmd.registry_version.map(RegistryVersion::from);
+            let (routing_table, version) = get_routing_table(reachable_nns_urls, registry_version);
+            if opts.json {
+                let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+                println!("{}", routing_table_json);
+            } else {
+                print_routing_table(&routing_table, version);
+            }
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -6002,99 +6025,33 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
-    let registry_client = RegistryClientImpl::new(
-        Arc::new(NnsDataProvider::new(
-            tokio::runtime::Handle::current(),
-            nns_urls,
-        )),
-        None,
-    );
+fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {
+    println!("Routing table. Most recent version is {version}");
 
-    registry_client
-        .try_polling_latest_version(usize::MAX)
-        .unwrap();
-
-    let latest_version = registry_client.get_latest_version();
-
-    println!("Routing table. Most recent version is {latest_version}");
-
-    let keys = registry_client
-        .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
-        .unwrap();
-
-    for routing_table_key in keys.iter() {
-        let routing_table_value = registry_client
-            .get_versioned_value(routing_table_key, latest_version)
-            .unwrap()
-            .value
-            .unwrap();
-        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
-
-        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            println!("Subnet: {subnet_id}");
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            println!(
-                "    Range start: {} (0x{})",
-                range.start,
-                hex::encode(range.start.get_ref().as_slice())
-            );
-            println!(
-                "    Range end:   {} (0x{})",
-                range.end,
-                hex::encode(range.end.get_ref().as_slice())
-            );
-        }
+    for (range, subnet_id) in routing_table {
+        println!("Subnet: {subnet_id}");
+        println!(
+            "    Range start: {} (0x{})",
+            range.start,
+            hex::encode(range.start.get_ref().as_slice())
+        );
+        println!(
+            "    Range end:   {} (0x{})",
+            range.end,
+            hex::encode(range.end.get_ref().as_slice())
+        );
     }
-
-    keys.iter()
-        .flat_map(|key| {
-            let value = registry_client
-                .get_versioned_value(key, latest_version)
-                .unwrap()
-                .value
-                .unwrap();
-            let routing_table = RoutingTable::decode(&value[..]).unwrap();
-            routing_table.entries
-        })
-        .map(|RoutingTableEntry { range, subnet_id }| {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            (subnet_id, range)
-        })
-        .collect()
 }
 
 /// Writes a threshold signing public key to the given path.
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
     let pk = ThresholdSigPublicKey::try_from(pk.clone())
         .expect("failed to parse threshold signature PK from protobuf");
-    let der_bytes = ic_crypto_utils_threshold_sig_der::public_key_to_der(&pk.into_bytes())
-        .expect("failed to encode threshold signature PK into DER");
-
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\r\n");
-    for chunk in base64::encode(&der_bytes[..]).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\r\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\r\n");
+    let pem_bytes = ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_pem(pk)
+        .expect("failed to encode threshold signature PK into PEM");
 
     let path = path.as_ref();
-    std::fs::write(path, bytes)
+    std::fs::write(path, pem_bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
 }
 
@@ -6395,7 +6352,7 @@ fn parse_nns_public_key(
     // If we talk to `ic0.app` we verify against mainnet root key by default.
     if verify_nns_responses || is_mainnet(&nns_url) {
         let nns_key = if let Some(path) = nns_public_key_pem_file {
-            parse_threshold_sig_key(&path).expect("Failed to parse PEM file.")
+            parse_threshold_sig_key_from_pem_file(&path).expect("Failed to parse PEM file.")
         } else {
             let decoded_nns_mainnet_key = base64::decode(IC_ROOT_PUBLIC_KEY_BASE64)
                 .expect("Failed to decode mainnet public key from base64.");

@@ -185,6 +185,8 @@ pub enum SystemApiCallId {
     CostCreateCanister,
     /// Tracker for `ic0.cost_http_request()`
     CostHttpRequest,
+    /// Tracker for `ic0.cost_http_request_v2()`
+    CostHttpRequestV2,
     /// Tracker for `ic0.cost_sign_with_ecdsa()`
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
@@ -541,10 +543,24 @@ pub enum ExecutionMode {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
+/// Errors that can occur when filtering out ingress messages that
+/// the canister is not willing to accept.
+#[derive(Debug, Error)]
+pub enum IngressFilterError {
+    #[error("Certified state is not available yet")]
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterResponse = Result<Result<(), UserError>, IngressFilterError>;
+
+/// The input type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterInput = (ProvisionalWhitelist, SignedIngress);
+
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
 pub type IngressFilterService =
-    BoxCloneService<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>, Infallible>;
+    BoxCloneService<IngressFilterInput, IngressFilterResponse, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]
@@ -569,6 +585,16 @@ pub struct QueryExecutionInput {
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
     BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
+
+/// The input type to a `call()` request in [`TransformExecutionService`].
+#[derive(Debug)]
+pub struct TransformExecutionInput {
+    pub query: Query,
+}
+
+/// Interface for the component to execute canister http transform.
+pub type TransformExecutionService =
+    BoxCloneService<TransformExecutionInput, QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -1304,6 +1330,14 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// This system call indicates the cycle cost of signing with ecdsa,
     /// i.e., the management canister's `sign_with_ecdsa`, for the key
     /// (whose name is given by textual representation at heap location `src`
@@ -1492,6 +1526,13 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Code to be executed in a checkpoint round, iff `execute_round()` was not
+    /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
 }
 
 /// Combination of memory used by and reserved for guaranteed response messages

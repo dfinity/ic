@@ -8,12 +8,14 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
+
 ## Changed
 
 ## Deprecated
-
-* Deprecated node_allowance field in favor of max_rewardable_nodes in
-  `add_node`. https://github.com/dfinity/ic/pull/7404
 
 ## Removed
 

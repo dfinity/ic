@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
+    canister_manager::uninstall_canister,
     execution_environment::{
         ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
         as_num_instructions, as_round_instructions, execute_canister,
@@ -103,6 +103,9 @@ struct SchedulerRoundLimits {
 
     /// Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
+
+    /// Keeps track of the memory reserved for executing response handlers.
+    subnet_memory_reservation: NumBytes,
 }
 
 impl SchedulerRoundLimits {
@@ -112,6 +115,7 @@ impl SchedulerRoundLimits {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         }
     }
 
@@ -121,6 +125,7 @@ impl SchedulerRoundLimits {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         }
     }
 
@@ -129,6 +134,7 @@ impl SchedulerRoundLimits {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
+        self.subnet_memory_reservation = round_limits.subnet_memory_reservation;
     }
 
     pub fn update_canister_round_limits(&mut self, round_limits: &RoundLimits) {
@@ -136,6 +142,7 @@ impl SchedulerRoundLimits {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
+        self.subnet_memory_reservation = round_limits.subnet_memory_reservation;
     }
 }
 
@@ -927,7 +934,6 @@ impl SchedulerImpl {
                         canister,
                         None, /* we're at the end of a round so no need to update round limits */
                         state_time,
-                        AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
@@ -949,7 +955,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.delete_snapshots(canister_id);
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1127,6 +1133,9 @@ impl SchedulerImpl {
     }
 
     /// Code that must be executed unconditionally after each round.
+    ///
+    /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
+    /// must be safe to call even when no execution has taken place.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1333,6 +1342,7 @@ impl Scheduler for SchedulerImpl {
                 subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
+                subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
             }
         };
 
@@ -1556,10 +1566,10 @@ impl Scheduler for SchedulerImpl {
                         };
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
                         self.metrics
                             .canister_log_delta_memory_usage
@@ -1668,6 +1678,10 @@ impl Scheduler for SchedulerImpl {
                 final_state.canister_states.len() as u64;
             final_state
         }
+    }
+
+    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+        self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
 }
 

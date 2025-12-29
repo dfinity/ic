@@ -481,6 +481,46 @@ impl TopologySnapshot {
         )
     }
 
+    pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_system_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_app_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
     pub fn elected_replica_versions(&self) -> anyhow::Result<Vec<String>> {
         Ok(self
             .local_registry
@@ -868,21 +908,6 @@ impl IcNodeSnapshot {
         node_record.domain
     }
 
-    /// Is it accessible via ssh with the `admin` user.
-    /// Waits until connection is ready.
-    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        let sess = self.block_on_ssh_session()?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("echo ready")?;
-        let mut s = String::new();
-        channel.read_to_string(&mut s)?;
-        if s.trim() == "ready" {
-            Ok(())
-        } else {
-            bail!("Failed receive from ssh session")
-        }
-    }
-
     pub fn subnet_id(&self) -> Option<SubnetId> {
         let registry_version = self.registry_version;
         self.local_registry
@@ -1047,7 +1072,7 @@ impl IcNodeSnapshot {
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
             RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
-            
+
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
 
@@ -1313,7 +1338,7 @@ pub trait HasGroupSetup {
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
-        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+        if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
                 log,
@@ -1478,13 +1503,18 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
     fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
@@ -1532,6 +1562,21 @@ pub trait SshSession: HasTestEnv {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
+    }
+
+    /// Is it accessible via ssh with the `admin` user.
+    /// Waits until connection is ready.
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        let sess = self.block_on_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("echo ready")?;
+        let mut s = String::new();
+        channel.read_to_string(&mut s)?;
+        if s.trim() == "ready" {
+            Ok(())
+        } else {
+            bail!("Failed receive from ssh session")
+        }
     }
 }
 
@@ -2389,13 +2434,22 @@ pub async fn install_nns_canisters(
             builder.push_init_mutate_request(mutation);
         }
 
-        if registry_canister_init_payload.is_swapping_feature_enabled {
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_globally();
         }
-        for caller in registry_canister_init_payload.swapping_whitelisted_callers {
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
             builder.whitelist_swapping_feature_caller(caller);
         }
-        for subnet in registry_canister_init_payload.swapping_enabled_subnets {
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_for_subnet(subnet);
         }
 

@@ -17,21 +17,26 @@ pub async fn get_doge_address(
         "the owner must be non-anonymous"
     );
     ic_ckbtc_minter::updates::get_btc_address::init_ecdsa_public_key().await;
-    read_state(|s| account_to_p2pkh_address_from_state(s, &account))
+    read_state(|s| {
+        account_to_p2pkh_address_from_state(s, &account)
+            .display(&Network::try_from(s.btc_network).expect("BUG: unsupported network"))
+    })
 }
 
-pub fn account_to_p2pkh_address_from_state(state: &CkBtcMinterState, account: &Account) -> String {
+pub fn account_to_p2pkh_address_from_state(
+    state: &CkBtcMinterState,
+    account: &Account,
+) -> DogecoinAddress {
     let ecdsa_public_key = state
         .ecdsa_public_key
         .as_ref()
         .cloned()
         .expect("bug: the ECDSA public key must be initialized");
-    let network = Network::from(state.btc_network);
     let public_key: [u8; 33] = derive_public_key(&ecdsa_public_key, account)
         .public_key
         .try_into()
         .expect("BUG: invalid ECDSA compressed public key");
-    DogecoinAddress::from_compressed_public_key(&public_key).display(&network)
+    DogecoinAddress::from_compressed_public_key(&public_key)
 }
 
 /// Returns the derivation path that should be used to sign a message from a

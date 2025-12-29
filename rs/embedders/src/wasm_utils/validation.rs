@@ -37,7 +37,7 @@ use wirm::{
     wasmparser::{ExternalKind, Operator, TypeRef, ValType},
 };
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use crate::WASM_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -64,7 +64,7 @@ pub const WASM_VALID_SYSTEM_FUNCTIONS: [&str; 7] = [
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(1_000_000);
 pub const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
-pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 11 * 1024 * 1024;
+pub const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 12 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -788,6 +788,16 @@ fn get_valid_system_apis_common(
                 API_VERSION_IC0,
                 FunctionSignature {
                     param_types: vec![DataType::I64, DataType::I64, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
+            "cost_http_request_v2",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
                     return_type: vec![],
                 },
             )],

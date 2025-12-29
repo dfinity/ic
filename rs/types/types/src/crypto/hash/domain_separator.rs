@@ -3,10 +3,8 @@ pub enum DomainSeparator {
     /// The domain separator to be used when calculating the sender signature for a
     /// request to the Internet Computer according to the
     /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-    #[allow(dead_code)]
-    // This variant is only defined to check in tests that there are no
-    // collisions in separators. The used variable is defined in DOMAIN_IC_REQUEST
     IcRequest,
+    IcRequestAuthDelegation,
     NotarizationContent,
     Notarization,
     NotarizationShare,
@@ -70,6 +68,7 @@ impl DomainSeparator {
     pub const fn as_str(&self) -> &'static str {
         match self {
             DomainSeparator::IcRequest => "ic-request",
+            DomainSeparator::IcRequestAuthDelegation => "ic-request-auth-delegation",
             DomainSeparator::NotarizationContent => "notarization_content_domain",
             DomainSeparator::Notarization => "notarization_domain",
             DomainSeparator::NotarizationShare => "notarization_share_domain",
@@ -163,5 +162,131 @@ fn ic_request_domain_variable_is_sound_and_consistent_with_the_enum_variant() {
     assert_eq!(
         DOMAIN_IC_REQUEST[0] as usize,
         DomainSeparator::IcRequest.as_str().len()
+    );
+}
+
+/// Stability test for domain separators used in crypto_hash.
+///
+/// This test ensures that the domain separator strings returned by each type
+/// implementing CryptoHashDomain remain stable. Changing these strings would
+/// change the hash output for all instances of that type, potentially breaking
+/// consensus or other cryptographic protocols.
+///
+/// If you need to add a new type, add its expected domain string here.
+/// DO NOT modify existing domain strings unless you understand the full impact.
+#[test]
+fn domain_separators_are_stable() {
+    use super::domain_separator::DomainSeparator;
+    use strum::IntoEnumIterator;
+
+    // Expected domain separator strings - these MUST NOT change
+    let expected_domains: Vec<(&str, &str)> = vec![
+        ("IcRequest", "ic-request"),
+        ("IcRequestAuthDelegation", "ic-request-auth-delegation"),
+        ("NotarizationContent", "notarization_content_domain"),
+        ("Notarization", "notarization_domain"),
+        ("NotarizationShare", "notarization_share_domain"),
+        ("FinalizationContent", "finalization_content_domain"),
+        ("Finalization", "finalization_domain"),
+        ("FinalizationShare", "finalization_share_domain"),
+        ("Block", "block_domain"),
+        ("_BlockProposal", "block_proposal_domain"),
+        ("BlockMetadata", "block_metadata_domain"),
+        ("BlockMetadataProposal", "block_metadata_proposal_domain"),
+        ("EquivocationProof", "equivocation_proof_domain"),
+        ("InmemoryPayload", "inmemory_payload_domain"),
+        ("RandomBeaconContent", "random_beacon_content_domain"),
+        ("RandomBeacon", "random_beacon_domain"),
+        ("RandomBeaconShare", "random_beacon_share_domain"),
+        ("CertificationContent", "ic-state-root"),
+        ("Certification", "certification_domain"),
+        ("CertificationShare", "certification_share_domain"),
+        ("DealingContent", "dealing_content_non_interactive"),
+        ("DkgMessage", "dkg_message_non_interactive"),
+        ("HttpCanisterUpdate", "http_canister_update_domain"),
+        ("SignedRequestBytes", "signed_request_bytes_domain"),
+        ("MessageId", "messageid_domain"),
+        (
+            "_IcOnchainObservabilityReport",
+            "ic-onchain-observability-report-domain",
+        ),
+        ("QueryResponse", "ic-response"),
+        ("RandomTapeContent", "random_tape_content_domain"),
+        ("RandomTape", "random_tape_domain"),
+        ("RandomTapeShare", "random_tape_share_domain"),
+        ("CatchUpContent", "catch_up_content_domain"),
+        ("CatchUpContentProto", "catch_up_content_proto_domain"),
+        ("CatchUpShareContent", "catch_up_share_content_domain"),
+        ("CatchUpPackage", "catch_up_package_domain"),
+        ("CatchUpPackageShare", "catch_up_package_share_domain"),
+        ("_StateSyncMessage", "state_sync_message_domain"),
+        ("ConsensusMessage", "consensus_message_domain"),
+        ("CertificationMessage", "certification_message_domain"),
+        ("IDkgMessage", "ic-threshold-ecdsa-message-domain"),
+        ("IdkgDealing", "ic-idkg-dealing-domain"),
+        ("SignedIdkgDealing", "ic-idkg-signed-dealing-domain"),
+        ("IdkgDealingSupport", "ic-idkg-dealing-support-domain"),
+        ("IDkgTranscript", "ic-idkg-transcript-domain"),
+        ("EcdsaSigShare", "ic-threshold-ecdsa-sig-share-domain"),
+        ("SchnorrSigShare", "ic-threshold-schnorr-sig-share-domain"),
+        ("VetKdKeyShare", "ic-vetkd-key-share-domain"),
+        (
+            "VetKdEncryptedKeyShareContent",
+            "ic-vetkd-encrypted-key-share-content-domain",
+        ),
+        (
+            "IDkgComplaintContent",
+            "ic-threshold-ecdsa-complaint-content-domain",
+        ),
+        ("SignedIDkgComplaint", "ic-threshold-ecdsa-complaint-domain"),
+        (
+            "IDkgOpeningContent",
+            "ic-threshold-ecdsa-opening-content-domain",
+        ),
+        ("SignedIDkgOpening", "ic-threshold-ecdsa-opening-domain"),
+        ("CanisterHttpResponse", "ic-canister-http-response-domain"),
+        (
+            "CryptoHashOfCanisterHttpResponseMetadata",
+            "ic-crypto-hash-of-canister-http-response-metadata-domain",
+        ),
+        (
+            "CanisterHttpResponseShare",
+            "ic-canister-http-response-share-domain",
+        ),
+    ];
+
+    // Build a map from variant name to expected domain string
+    let expected_map: std::collections::HashMap<&str, &str> =
+        expected_domains.iter().cloned().collect();
+
+    // Verify all DomainSeparator variants have stable domain strings
+    for variant in DomainSeparator::iter() {
+        let variant_name = format!("{:?}", variant);
+        let actual_domain = variant.as_str();
+
+        let expected_domain = expected_map.get(variant_name.as_str()).unwrap_or_else(|| {
+            panic!(
+                "Missing expected domain for variant '{}'. \
+                If this is a new variant, add it to expected_domains with value: \"{}\"",
+                variant_name, actual_domain
+            )
+        });
+
+        assert_eq!(
+            actual_domain, *expected_domain,
+            "Domain separator for {:?} has changed from '{}' to '{}'. \
+            This is a breaking change that affects hash outputs!",
+            variant, expected_domain, actual_domain
+        );
+    }
+
+    // Also verify we haven't removed any expected domains
+    assert_eq!(
+        expected_domains.len(),
+        DomainSeparator::iter().count(),
+        "Number of domain separators changed. Expected {}, got {}. \
+        If you removed a variant, remove it from expected_domains too.",
+        expected_domains.len(),
+        DomainSeparator::iter().count()
     );
 }

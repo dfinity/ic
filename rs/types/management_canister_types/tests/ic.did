@@ -351,6 +351,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version: opt nat32;
 };
 
 type ecdsa_public_key_args = record {
@@ -473,6 +474,8 @@ type snapshot = record {
 type take_canister_snapshot_args = record {
   canister_id : canister_id;
   replace_snapshot : opt snapshot_id;
+  uninstall_code : opt bool;
+  sender_canister_version : opt nat64;
 };
 
 type take_canister_snapshot_result = snapshot;

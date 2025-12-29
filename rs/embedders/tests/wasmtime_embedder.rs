@@ -29,7 +29,7 @@ use ic_types::{
 };
 use wirm::wasmparser;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use ic_embedders::WASM_PAGE_SIZE;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
@@ -1907,7 +1907,7 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
             let instructions_used = before - instance.instruction_counter();
             let system_api = &instance.store_data().system_api().unwrap();
             // Assert that there is no space left in the canister log, but the next index is incremented.
-            assert_eq!(system_api.canister_log().remaining_space(), 0);
+            assert_eq!(system_api.canister_log().remaining_bytes(), 0);
             assert_eq!(system_api.canister_log().next_idx(), i + 1);
             // Check the instructions used for each call.
             match i {

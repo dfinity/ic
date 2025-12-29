@@ -5,7 +5,7 @@ type AccountIdentifier = record {
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   DeregisterKnownNeuron : DeregisterKnownNeuron;
-  ManageNeuron : ManageNeuron;
+  ManageNeuron : ManageNeuronProposal;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
   StopOrStartCanister : StopOrStartCanister;
@@ -21,6 +21,7 @@ type Action = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
 };
 
 type AddHotKey = record {
@@ -153,7 +154,7 @@ type SetFollowingResponse = record {
 };
 
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-type Command = variant {
+type ManageNeuronProposalCommand = variant {
   Spawn : Spawn;
   Split : Split;
   Follow : Follow;
@@ -448,10 +449,12 @@ type DeregisterKnownNeuron = record {
 type KnownNeuronData = record {
   name : text;
   description : opt text;
+  // Links related to the known neuron. Can be links to social URLs (OpenChat, X, etc.), or a homepage.
   links : opt vec text;
-  // The first `opt` makes it so that the field can be renamed/deprecated in the future, and
-  // the second `opt` makes it so that an older client not recognizing a new variant can still
-  // get the rest of the `vec`.
+  // Topics that the known neuron is committed to always vote on.
+  // Note regarding the type: the first `opt` makes it so that the field can be renamed/deprecated
+  // in the future, and the second `opt` makes it so that an older client not recognizing a new
+  // variant can still get the rest of the `vec`.
   committed_topics : opt vec opt TopicToFollow;
 };
 
@@ -517,7 +520,7 @@ type ListNodeProvidersResponse = record {
   node_providers : vec NodeProvider;
 };
 
-type ListProposalInfo = record {
+type ListProposalInfoRequest = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
   before_proposal : opt ProposalId;
@@ -525,6 +528,7 @@ type ListProposalInfo = record {
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
+  return_self_describing_action : opt bool;
 };
 
 type ListProposalInfoResponse = record {
@@ -543,11 +547,11 @@ type MakeProposalResponse = record {
   proposal_id : opt ProposalId;
 };
 
-// Not to be confused with ManageNeuronRequest. (Yes, this is very structurally
-// similar to that, but not actually exactly equivalent.)
-type ManageNeuron = record {
+// Not to be confused with ManageNeuronRequest. This is only used to represent a manage neuron proposal. 
+// (Yes, this is very structurally similar to that, but not actually exactly equivalent)
+type ManageNeuronProposal = record {
   id : opt NeuronId;
-  command : opt Command;
+  command : opt ManageNeuronProposalCommand;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 
@@ -611,11 +615,20 @@ type MergeResponse = record {
   source_neuron_info : opt NeuronInfo;
 };
 
+type DateUtc = record {
+  year : nat32;
+  month : nat32;
+  day : nat32;
+};
+
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
+  algorithm_version : opt nat32;
   node_providers : vec NodeProvider;
   timestamp : nat64;
+  start_date : opt DateUtc;
+  end_date : opt DateUtc;
   rewards : vec RewardNodeProvider;
   xdr_conversion_rate : opt XdrConversionRate;
   maximum_node_provider_rewards_e8s : opt nat64;
@@ -998,6 +1011,7 @@ type Proposal = record {
   title : opt text;
   action : opt Action;
   summary : text;
+  self_describing_action : opt SelfDescribingProposalAction;
 };
 
 type ProposalActionRequest = variant {
@@ -1016,6 +1030,7 @@ type ProposalActionRequest = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1049,6 +1064,41 @@ type FulfillSubnetRentalRequest = record {
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
 };
+
+// Declares an approved set of alternative replica virtual machine software for
+// disaster recovery purposes.
+type BlessAlternativeGuestOsVersion = record {
+  // AMD Secure Processor chip IDs that are allowed to run this software.
+  // Each chip ID must be exactly 64 bytes.
+  chip_ids : opt vec blob;
+
+  // Hexadecimal fingerprint of the recovery rootfs.
+  // Must contain only hexadecimal characters (0-9, A-F, a-f).
+  rootfs_hash : opt text;
+
+  // The version being replaced by this (alternative version) must match this
+  // field (or one of the possibilities therein).
+  //
+  // (Here, we refer to the version being replaced as the "base" version.)
+  base_guest_launch_measurements : opt GuestLaunchMeasurements; };
+
+type GuestLaunchMeasurements = record {
+  guest_launch_measurements : opt vec GuestLaunchMeasurement;
+};
+
+type GuestLaunchMeasurement = record {
+  // SEV-SNP measurement (48 bytes).
+  measurement : opt blob;
+
+  // Metadata associated with the measurement.
+  metadata : opt GuestLaunchMeasurementMetadata;
+};
+
+type GuestLaunchMeasurementMetadata = record {
+  // Kernel command line used for this measurement.
+  kernel_cmdline : opt text;
+};
+
 
 type ProposalData = record {
   id : opt ProposalId;
@@ -1417,6 +1467,25 @@ type Vote = variant {
   No;
 };
 
+type SelfDescribingProposalAction = record {
+  type_name : opt text;
+  type_description : opt text;
+  value : opt SelfDescribingValue;
+};
+
+type SelfDescribingValue = variant {
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Int : int;
+  Array : vec SelfDescribingValue;
+  Map : vec record { text; SelfDescribingValue };
+};
+
+type GetPendingProposalsRequest = record {
+  return_self_describing_action : opt bool;
+}
+
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
   claim_or_refresh_neuron_from_account : (ClaimOrRefreshNeuronFromAccount) -> (
@@ -1444,7 +1513,7 @@ service : (Governance) -> {
       GetNeuronsFundAuditInfoResponse,
     ) query;
   get_node_provider_by_caller : (null) -> (Result_7) query;
-  get_pending_proposals : () -> (vec ProposalInfo) query;
+  get_pending_proposals : (opt GetPendingProposalsRequest) -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   get_restore_aging_summary : () -> (RestoreAgingSummary) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;
@@ -1453,7 +1522,7 @@ service : (Governance) -> {
       ListNodeProviderRewardsResponse,
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
-  list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (

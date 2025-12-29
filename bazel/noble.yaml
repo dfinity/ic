@@ -8,13 +8,13 @@ version: 1
 # Various channels used to pull packages from
 sources:
   - channel: noble main
-    url: https://snapshot.ubuntu.com/ubuntu/20250804T000000Z
+    url: https://snapshot.ubuntu.com/ubuntu/20251204T000000Z
   - channel: noble universe
-    url: https://snapshot.ubuntu.com/ubuntu/20250804T000000Z
+    url: https://snapshot.ubuntu.com/ubuntu/20251204T000000Z
   - channel: noble-security main
-    url: https://snapshot.ubuntu.com/ubuntu/20250804T000000Z
+    url: https://snapshot.ubuntu.com/ubuntu/20251204T000000Z
   - channel: noble-updates main
-    url: https://snapshot.ubuntu.com/ubuntu/20250804T000000Z
+    url: https://snapshot.ubuntu.com/ubuntu/20251204T000000Z
 
 archs:
   - "amd64"
@@ -27,6 +27,7 @@ packages:
   - "dmsetup"
   - "dosfstools"
   - "dpkg" # for apt list --installed
+  - "e2fsprogs" # for mkfs.ext4 used in ICOS device tests
   - "gawk" # for build-bootstrap-config-image
   - "gzip" # for tar-ing up ic regsitry store in systests
   - "libcryptsetup-dev"

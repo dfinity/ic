@@ -21,16 +21,15 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:cb3a6693a10777d16c301d98f5b67e23db405bf962d0eb8cec74082916c17bc7
       options: >-
-         -e NODE_NAME --privileged --cgroupns host
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    timeout-minutes: 90
     steps:
       - &checkout
         name: Checkout
@@ -38,6 +37,16 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
           ref: ${{ inputs.commit-sha }}
+      - name: Run Libfuzzer targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: libfuzzer
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: afl
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   config:
     name: Set Config
@@ -63,10 +72,10 @@ jobs:
               fi
           done
 
-          if [[ "${is_protected_branch:-}" == "true" || '${{ github.event_name }}' == 'workflow_call' ]]; then
-              # if we are on a "protected" branch, targeting an rc branch or
-              # we're called from another workflow (i.e. release-testing) we
+          if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
+              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
@@ -87,6 +96,11 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
+          elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
@@ -98,13 +112,6 @@ jobs:
               full_macos_build="true"
           else
               full_macos_build="false"
-          fi
-
-
-          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
-              skip_didc_checks="true"
-          else
-              skip_didc_checks="false"
           fi
 
 
@@ -133,10 +140,6 @@ jobs:
           echo "full_macos_build: $full_macos_build"
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "skip_didc_checks: $skip_didc_checks"
-          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
-          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_buf_checks: $skip_buf_checks"
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
@@ -193,9 +196,6 @@ jobs:
             targets_args=()
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")
@@ -330,6 +330,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build and Test
         run: |
+          mkdir -p /tmp/zig-cache
+
           bazel \
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
@@ -423,24 +425,6 @@ jobs:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-
-  bazel-run-fuzzers:
-    name: Bazel Run Fuzzers
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - name: Run Libfuzzer targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: libfuzzer
-          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
-      - name: Run AFL targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
     name: Python CI Tests
@@ -598,7 +582,8 @@ jobs:
             -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
             execlogs-cache/execlogs.csv \
             execlogs-nocache/execlogs.csv \
-            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
+            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }' \
+            | column -t | sort
 
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache
@@ -632,6 +617,7 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             cargo:
               - "**/*.rs"

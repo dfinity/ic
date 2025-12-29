@@ -55,6 +55,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
+strum = { workspace = true }
 tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
@@ -73,7 +74,6 @@ ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 pocket-ic = { path = "../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
-strum = { workspace = true }
 
 [[bin]]
 name = "ic-replay"

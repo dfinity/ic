@@ -31,10 +31,11 @@ use ic_protobuf::{
 use ic_types::{
     Height, PrincipalId, Randomness, SubnetId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
+        ConsensusResponse,
     },
     consensus::{
-        Block, HasVersion,
+        Block, BlockPayload, HasVersion,
         idkg::{self},
     },
     crypto::threshold_sig::{
@@ -48,7 +49,6 @@ use std::collections::BTreeMap;
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
@@ -76,7 +76,7 @@ pub fn deliver_batches(
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(clippy::type_complexity)]
 pub(crate) fn deliver_batches_with_result_processor(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
@@ -208,26 +208,40 @@ pub(crate) fn deliver_batches_with_result_processor(
 
         let mut batch_stats = BatchStats::new(height);
 
-        // Compute consensus' responses to subnet calls.
+        let chain_key_data = ChainKeyData {
+            master_public_keys: chain_key_subnet_public_keys,
+            idkg_pre_signatures,
+            nidkg_ids,
+        };
         let consensus_responses = generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
-
         // This flag can only be true, if we've called deliver_batches with a height
         // limit.  In this case we also want to have a checkpoint for that last height.
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
-        let batch_messages = if block.payload.is_summary() {
-            BatchMessages::default()
-        } else {
-            let batch_payload = &block.payload.as_ref().as_data().batch;
-            batch_stats.add_from_payload(batch_payload);
-            batch_payload
-                .clone()
-                .into_messages()
-                .map_err(|err| {
-                    error!(log, "batch payload deserialization failed: {:?}", err);
-                    err
-                })
-                .unwrap_or_default()
+        let batch_content = match block.payload.as_ref() {
+            BlockPayload::Summary(_summary_payload) => BatchContent::Data {
+                batch_messages: BatchMessages::default(),
+                chain_key_data,
+                consensus_responses,
+                requires_full_state_hash,
+            },
+            BlockPayload::Data(data_payload) => {
+                batch_stats.add_from_payload(&data_payload.batch);
+                BatchContent::Data {
+                    batch_messages: data_payload
+                        .batch
+                        .clone()
+                        .into_messages()
+                        .map_err(|err| {
+                            error!(log, "batch payload deserialization failed: {:?}", err);
+                            err
+                        })
+                        .unwrap_or_default(),
+                    chain_key_data,
+                    consensus_responses,
+                    requires_full_state_hash,
+                }
+            }
         };
 
         let Some(previous_beacon) = pool.get_random_beacon(last_delivered_batch_height) else {
@@ -269,17 +283,11 @@ pub(crate) fn deliver_batches_with_result_processor(
                 next_checkpoint_height,
                 current_interval_length,
             }),
-            requires_full_state_hash,
-            messages: batch_messages,
+            content: batch_content,
             randomness,
-            chain_key_data: ChainKeyData {
-                master_public_keys: chain_key_subnet_public_keys,
-                idkg_pre_signatures,
-                nidkg_ids,
-            },
+
             registry_version: block.context.registry_version,
             time: block.context.time,
-            consensus_responses,
             blockmaker_metrics,
             replica_version,
         };

@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+candid = { workspace = true }
 clap = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
@@ -46,14 +47,13 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "38.0.3", default-features = false, features = [
+wasmtime = { version = "39.0.1", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "38.0.3"
 wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.
@@ -64,7 +64,6 @@ mach2 = "0.4.2"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 embedders_bench = { path = "benches/embedders_bench" }

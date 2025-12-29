@@ -14,10 +14,6 @@ inputs:
     required: true
     description: |
       The name of the workflow that produced the result.
-  event_name:
-    required: false
-    description: |
-      The name of the event that triggered the workflow (e.g., 'pull_request').
 
 runs:
   using: "composite"
@@ -34,22 +30,6 @@ runs:
           } else if ('${{ inputs.run-result }}' === 'failure') {
             state = 'failure';
             description = 'Required checks failed';
-
-          } else if ('${{ inputs.run-result }}' === 'skipped') {
-            description = '${{ inputs.name }} checks were skipped';
-
-            // On pull requests, skipped checks are treated as failures to ensure the PR is blocked 
-            if ('${{ inputs.event_name }}' === 'pull_request') {
-              state = 'failure';
-
-            // If the checks were skipped on a merge queue, mark them as success
-            } else if ('${{ inputs.event_name }}' === 'merge_group') {
-              state = 'success';
-
-            } else {
-              state = 'error';
-              description = 'Unexpected event ${{ inputs.event_name }} for skipped checks';
-            }
 
           } else {
             state = 'error';
