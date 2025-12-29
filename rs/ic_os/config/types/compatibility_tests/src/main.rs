@@ -6,7 +6,7 @@ use std::path::PathBuf;
 fn main() -> Result<()> {
     let repo_root = get_repo_root()?;
 
-    let fixtures_dir = repo_root.join("rs/ic_os/config_types/compatibility_tests/fixtures");
+    let fixtures_dir = repo_root.join("rs/ic_os/config/types/compatibility_tests/fixtures");
 
     generate_fixtures(&fixtures_dir)?;
     println!(
