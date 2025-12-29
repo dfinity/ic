@@ -570,7 +570,7 @@ mod tests {
         const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
+        let transcripts_for_remote_subnets = [
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -624,7 +624,7 @@ mod tests {
         });
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![(
+        let transcripts_for_remote_subnets = [(
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_test_id(0),

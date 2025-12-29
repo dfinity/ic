@@ -4377,9 +4377,8 @@ mod test {
         expected_response: DeployNewSnsResponse,
     ) {
         canister_wrapper.with(|c| {
-            if available_subnet.is_some() {
-                c.borrow_mut()
-                    .set_sns_subnets(vec![available_subnet.unwrap()]);
+            if let Some(available_subnet) = available_subnet {
+                c.borrow_mut().set_sns_subnets(vec![available_subnet]);
             }
             if wasm_available {
                 add_dummy_wasms(&mut c.borrow_mut(), None);
