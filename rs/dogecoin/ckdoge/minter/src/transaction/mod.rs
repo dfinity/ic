@@ -29,11 +29,11 @@ impl DogecoinTransactionSigner {
         assert_eq!(
             unsigned_tx.inputs.len(),
             accounts.len(),
-            "BUG: expected on account per input"
+            "BUG: expected one account per input"
         );
 
         let dogecoin_tx = bitcoin::Transaction {
-            // Dogecoin does not support BIP-68.
+            // Dogecoin transactions use Version 1 (BIP-68 is not supported)"
             version: bitcoin::transaction::Version::ONE,
             lock_time: bitcoin::absolute::LockTime::ZERO,
             input: unsigned_tx
