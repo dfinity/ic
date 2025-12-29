@@ -30,6 +30,7 @@ use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_cdk::management_canister::{
     SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
+use config_tool::guestos::generate_ic_config;
 use ic_config::{ConfigOptional, ConfigSource};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
@@ -1514,7 +1515,7 @@ pub fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let template = config::guestos::generate_ic_config::IcConfigTemplate {
+    let template = generate_ic_config::IcConfigTemplate {
         ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
@@ -1529,7 +1530,7 @@ pub fn get_config() -> ConfigOptional {
         malicious_behavior: "null".to_string(),
     };
 
-    let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
+    let ic_json = generate_ic_config::render_ic_config(template)
         .expect("Failed to render config template");
     ConfigSource::Literal(ic_json)
         .load()
