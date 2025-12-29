@@ -556,11 +556,16 @@ pub enum LedgerField {
     Blocks,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, Default)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
 pub enum LedgerState {
     Migrating(LedgerField),
-    #[default]
     Ready,
+}
+
+impl Default for LedgerState {
+    fn default() -> Self {
+        Self::Ready
+    }
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
