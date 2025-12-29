@@ -1,5 +1,5 @@
 [package]
-name = "system-stats-tui"
+name = "system_stats_tui"
 version.workspace = true
 edition.workspace = true
 
@@ -20,5 +20,5 @@ reqwest = { workspace = true }
 tokio = { workspace = true }
 
 [[bin]]
-name = "system-stats-tui"
+name = "system_stats_tui"
 path = "src/main.rs"

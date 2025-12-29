@@ -13,6 +13,7 @@ OBJECTS = {
     "setupos_tool": "//rs/ic_os/os_tools/setupos_tool:setupos_tool",
     "config": "//rs/ic_os/config:config",
     "config_dev": "//rs/ic_os/config:config_dev",
+    "system_stats_tui": "//rs/ic_os/os_tools/system_stats_tui:system_stats_tui",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "metrics-proxy": "@crate_index//:metrics-proxy__metrics-proxy",

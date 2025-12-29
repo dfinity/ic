@@ -23958,7 +23958,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "system-stats-tui"
+name = "system_stats_tui"
 version = "0.9.0"
 dependencies = [
  "anyhow",

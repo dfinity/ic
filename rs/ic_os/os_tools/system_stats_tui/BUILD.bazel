@@ -38,6 +38,7 @@ rust_test(
 rust_binary(
     name = "system_stats_tui",
     srcs = ["src/main.rs"],
+    visibility = ["//rs/ic_os/release:__pkg__"],
     deps = [
         ":lib",
         "@crate_index//:anyhow",
