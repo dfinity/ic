@@ -20,8 +20,8 @@ use ratatui::widgets::Table;
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Direction, Layout},
-    style::Stylize,
-    text::Line,
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
     widgets::{Block, Paragraph},
 };
 use regex::Regex;
@@ -37,6 +37,53 @@ lazy_static! {
     static ref NET_REGEX: Regex =
         Regex::new("node_network_(transmit|receive)_(bytes|errs)_total").unwrap();
     static ref TEMP_REGEX: Regex = Regex::new("node_hwmon_(sensor_label|chip_names)").unwrap();
+}
+
+// Threshold constants for color-coding
+const TEMP_WARN_CELSIUS: f64 = 70.0;
+const TEMP_CRIT_CELSIUS: f64 = 85.0;
+const IO_BUSY_WARN_PERCENT: f64 = 80.0;
+const IO_BUSY_CRIT_PERCENT: f64 = 95.0;
+
+/// Returns a color based on temperature thresholds
+fn temp_color(celsius: f64) -> Color {
+    if celsius >= TEMP_CRIT_CELSIUS {
+        Color::Red
+    } else if celsius >= TEMP_WARN_CELSIUS {
+        Color::Yellow
+    } else {
+        Color::Reset
+    }
+}
+
+/// Returns a color based on I/O busy percentage (0.0 to 1.0 scale, displayed as %)
+fn io_busy_color(busy_ratio: f64) -> Color {
+    let percent = busy_ratio * 100.0;
+    if percent >= IO_BUSY_CRIT_PERCENT {
+        Color::Red
+    } else if percent >= IO_BUSY_WARN_PERCENT {
+        Color::Yellow
+    } else {
+        Color::Reset
+    }
+}
+
+/// Returns a color for network errors (any errors = warning)
+fn error_color(error_count: f64) -> Color {
+    if error_count > 0.0 {
+        Color::Yellow
+    } else {
+        Color::Reset
+    }
+}
+
+/// Returns a color for network interface state
+fn nic_state_color(state: &str) -> Color {
+    match state {
+        "up" => Color::Green,
+        "down" => Color::Red,
+        _ => Color::Yellow,
+    }
 }
 
 fn format_prometheus_value(v: &Value) -> f64 {
@@ -261,34 +308,37 @@ impl App {
         };
 
         let mut icinfo_rows = vec![Row::new(vec![
-            "HostOS version".to_string(),
+            Cell::from("HostOS version"),
             match &self.hostos_node_exporter_latest_sample {
-                Ok(sn) => sn.ic.hostos_version.clone().unwrap_or("(not found)".into()),
-                Err(e) => e.to_string(),
+                Ok(sn) => Cell::from(sn.ic.hostos_version.clone().unwrap_or("(not found)".into())),
+                Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
             },
         ])];
         if !ip_address_list.is_empty() {
             icinfo_rows.push(Row::new(vec![
-                "HostOS IPs".to_string(),
-                ip_address_list.join(" • "),
+                Cell::from("HostOS IPs"),
+                Cell::from(ip_address_list.join(" • ")),
             ]))
         }
         icinfo_rows.append(&mut vec![
             Row::new(vec![
-                "GuestOS version".to_string(),
+                Cell::from("GuestOS version"),
                 match &self.guestos_node_exporter_latest_sample {
-                    Ok(sn) => sn.guestos_version.clone().unwrap_or("(not found)".into()),
-                    Err(e) => e.to_string(),
+                    Ok(sn) => {
+                        Cell::from(sn.guestos_version.clone().unwrap_or("(not found)".into()))
+                    }
+                    Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
                 },
             ]),
             Row::new(vec![
-                "Block height".to_string(),
+                Cell::from("Block height"),
                 match &self.guestos_replica_latest_sample {
-                    Ok(sn) => sn
-                        .block_height
-                        .map(|v| format!("{}", v))
-                        .unwrap_or("(unknown)".into()),
-                    Err(e) => e.to_string(),
+                    Ok(sn) => Cell::from(
+                        sn.block_height
+                            .map(|v| format!("{}", v))
+                            .unwrap_or("(unknown)".into()),
+                    ),
+                    Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
                 },
             ]),
         ]);
@@ -328,40 +378,40 @@ impl App {
                     })
                     .collect::<Vec<_>>();
 
+                // Each entry is (text, optional_color)
                 let line_clusters_by_chip = temps_by_chip
                     .iter()
                     .map(|(top_temp, temps)| {
-                        [
-                            vec![
-                                format!("{}", top_temp.chip),
-                                format!("({})", top_temp.chip_name),
-                            ],
-                            temps
-                                .iter()
-                                .map(|temp| {
-                                    format!(
-                                        "{}: {:.0}°",
-                                        if temp.sensor_label.is_empty() {
-                                            temp.sensor.to_string()
-                                        } else {
-                                            temp.sensor_label.to_string()
-                                        },
-                                        temp.temp.round()
-                                    )
-                                })
-                                .collect(),
-                        ]
-                        .concat()
+                        let mut lines: Vec<(String, Option<Color>)> = vec![
+                            (top_temp.chip.clone(), None),
+                            (format!("({})", top_temp.chip_name), None),
+                        ];
+                        for temp in temps {
+                            let label = if temp.sensor_label.is_empty() {
+                                temp.sensor.to_string()
+                            } else {
+                                temp.sensor_label.to_string()
+                            };
+                            let color = temp_color(temp.temp);
+                            let color_opt = if color == Color::Reset {
+                                None
+                            } else {
+                                Some(color)
+                            };
+                            lines
+                                .push((format!("{}: {:.0}°", label, temp.temp.round()), color_opt));
+                        }
+                        lines
                     })
                     .map(|cluster| {
                         (
-                            cluster.iter().map(|l| l.len()).max().unwrap() as u16,
+                            cluster.iter().map(|(l, _)| l.len()).max().unwrap() as u16,
                             cluster,
                         )
                     })
-                    .collect::<Vec<(u16, Vec<String>)>>();
+                    .collect::<Vec<(u16, Vec<(String, Option<Color>)>)>>();
 
-                let mut rows: Vec<Vec<Vec<String>>> = vec![vec![]];
+                let mut rows: Vec<Vec<Vec<(String, Option<Color>)>>> = vec![vec![]];
 
                 let mut remainder = metrics_slot_width.saturating_sub(2); // 2 accounts for border
                 for (w, cluster) in line_clusters_by_chip {
@@ -524,10 +574,17 @@ impl App {
                         right_aligned_cell(format_bps(data.bytes_read_per_second)),
                         right_aligned_cell(format_bps(data.bytes_written_per_second)),
                         right_aligned_cell(format!("{:.0} sec", data.sectors_discarded_per_second)),
-                        right_aligned_cell(format!(
-                            "{:.0} %",
-                            data.seconds_spent_on_io_per_second * 100.0
-                        )),
+                        Cell::from(
+                            Text::from(format!(
+                                "{:.0} %",
+                                data.seconds_spent_on_io_per_second * 100.0
+                            ))
+                            .alignment(Alignment::Right)
+                            .style(
+                                Style::default()
+                                    .fg(io_busy_color(data.seconds_spent_on_io_per_second)),
+                            ),
+                        ),
                     ])
                 }));
             frame.render_widget(
@@ -588,18 +645,30 @@ impl App {
                     Row::new(vec![
                         left_aligned_cell(nic.name.to_string()),
                         left_aligned_cell(nic.mac.to_string()),
-                        left_aligned_cell(nic.state.to_string()),
+                        Cell::from(
+                            Text::from(nic.state.to_string())
+                                .alignment(Alignment::Left)
+                                .style(Style::default().fg(nic_state_color(&nic.state))),
+                        ),
                         right_aligned_cell(nic.tx_bytes.map(format_bps).unwrap_or("—".into())),
                         right_aligned_cell(nic.rx_bytes.map(format_bps).unwrap_or("—".into())),
-                        right_aligned_cell(
-                            nic.tx_errors
-                                .map(|v| format!("{:.0} e", v))
-                                .unwrap_or("—".into()),
+                        Cell::from(
+                            Text::from(
+                                nic.tx_errors
+                                    .map(|v| format!("{:.0} e", v))
+                                    .unwrap_or("—".into()),
+                            )
+                            .alignment(Alignment::Right)
+                            .style(Style::default().fg(error_color(nic.tx_errors.unwrap_or(0.0)))),
                         ),
-                        right_aligned_cell(
-                            nic.rx_errors
-                                .map(|v| format!("{:.0} e", v))
-                                .unwrap_or("—".into()),
+                        Cell::from(
+                            Text::from(
+                                nic.rx_errors
+                                    .map(|v| format!("{:.0} e", v))
+                                    .unwrap_or("—".into()),
+                            )
+                            .alignment(Alignment::Right)
+                            .style(Style::default().fg(error_color(nic.rx_errors.unwrap_or(0.0)))),
                         ),
                         right_aligned_cell(format!("{}", nic.carrier_changes)),
                     ])
@@ -647,16 +716,28 @@ impl App {
                         row.iter()
                             .map(|r| {
                                 Constraint::Length(
-                                    r.iter().map(|rrr| rrr.len()).max().unwrap() as u16
+                                    r.iter().map(|(s, _)| s.len()).max().unwrap() as u16
                                 )
                             })
                             .collect::<Vec<_>>(),
                     )
                     .flex(Flex::Center)
                     .split(*layout_row);
-                for (layout_column, block) in std::iter::zip(layout_columns.iter(), row) {
-                    frame
-                        .render_widget(Paragraph::new(block.join("\n")).centered(), *layout_column);
+                for (layout_column, cluster) in std::iter::zip(layout_columns.iter(), row) {
+                    // Build colored lines from the cluster
+                    let lines: Vec<Line> = cluster
+                        .iter()
+                        .map(|(text, color_opt)| {
+                            let span = match color_opt {
+                                Some(color) => {
+                                    Span::styled(text.as_str(), Style::default().fg(*color))
+                                }
+                                None => Span::raw(text.as_str()),
+                            };
+                            Line::from(span)
+                        })
+                        .collect();
+                    frame.render_widget(Paragraph::new(lines).centered(), *layout_column);
                 }
             }
         }
