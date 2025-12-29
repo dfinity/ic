@@ -22,8 +22,8 @@ use ic_replicated_state::{
 use ic_sys::{fs::sync_path, mmap::ScopedMmap};
 use ic_types::{
     AccumulatedPriority, CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles,
-    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, NumMessages,
-    PrincipalId, SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
+    ExecutionRound, Height, LongExecutionMode, MemoryAllocation, NumInstructions, PrincipalId,
+    SnapshotId, Time, batch::TotalQueryStats, nominal_cycles::NominalCycles,
 };
 use ic_utils::thread::maybe_parallel_map;
 use ic_wasm_types::{CanisterModule, MemoryMappableWasmFile, WasmHash};
@@ -185,9 +185,9 @@ pub struct CanisterStateBits {
     pub canister_version: u64,
     pub consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     pub instructions_executed: NumInstructions,
-    pub ingress_messages_executed: NumMessages,
-    pub xnet_messages_executed: NumMessages,
-    pub intranet_messages_executed: NumMessages,
+    pub ingress_messages_executed: u64,
+    pub xnet_messages_executed: u64,
+    pub intranet_messages_executed: u64,
     pub http_outcalls_executed: u64,
     pub heartbeats_executed: u64,
     pub global_timers_executed: u64,

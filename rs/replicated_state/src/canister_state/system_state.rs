@@ -41,7 +41,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    NumMessages, PrincipalId, Time,
+    PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -114,11 +114,14 @@ enum ConsumingCycles {
     No,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+/// The structure keeps track of messages, group by the type of messages, executed by a canister.
+/// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
+/// canisters contribute to heavy subnet load.
 pub struct LoadMetrics {
-    pub ingress_messages_executed: NumMessages,
-    pub xnet_messages_executed: NumMessages,
-    pub intranet_messages_executed: NumMessages,
+    pub ingress_messages_executed: u64,
+    pub xnet_messages_executed: u64,
+    pub intranet_messages_executed: u64,
     pub http_outcalls_executed: u64,
     pub heartbeats_executed: u64,
     pub global_timers_executed: u64,

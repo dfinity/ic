@@ -1877,20 +1877,20 @@ fn execute_canisters_on_thread(
             );
             match input_type {
                 Some(CanisterInputType::Ingress) => {
-                    load_metrics.ingress_messages_executed.inc_assign()
+                    load_metrics.ingress_messages_executed += 1;
                 }
-                Some(CanisterInputType::Xnet) => load_metrics.xnet_messages_executed.inc_assign(),
-                Some(CanisterInputType::Intranet) => {
-                    load_metrics.intranet_messages_executed.inc_assign()
+                Some(CanisterInputType::RemoteSubnetMessage) => {
+                    load_metrics.xnet_messages_executed += 1;
+                }
+                Some(CanisterInputType::LocalSubnetMessage) => {
+                    load_metrics.intranet_messages_executed += 1;
                 }
                 Some(CanisterInputType::HeartbeatTask) => load_metrics.heartbeats_executed += 1,
                 Some(CanisterInputType::GlobalTimerTask) => {
                     load_metrics.global_timers_executed += 1
                 }
                 // For now we don't track these tasks
-                Some(CanisterInputType::PausedExecutionTask) => {}
-                Some(CanisterInputType::OnLowWasmMemoryTask) => {}
-                None => {}
+                None | Some(CanisterInputType::Other) => {}
             }
             if let Some(instructions_used) = instructions_used {
                 total_instructions_used += instructions_used;

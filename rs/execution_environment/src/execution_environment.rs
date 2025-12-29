@@ -4417,12 +4417,11 @@ fn get_canister_mut(
 
 pub enum CanisterInputType {
     Ingress,
-    Xnet,
-    Intranet,
+    RemoteSubnetMessage,
+    LocalSubnetMessage,
     HeartbeatTask,
     GlobalTimerTask,
-    PausedExecutionTask,
-    OnLowWasmMemoryTask,
+    Other,
 }
 
 /// The result of `execute_canister()`.
@@ -4454,25 +4453,25 @@ fn execute_canister_input(
     let info = input.to_string();
     let input_type = match &input {
         CanisterMessageOrTask::Message(CanisterMessage::Ingress(_)) => CanisterInputType::Ingress,
-        CanisterMessageOrTask::Message(CanisterMessage::Request(request))
-            if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) =>
-        {
-            CanisterInputType::Intranet
+        CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
+            if network_topology.route(request.sender.get()) == Some(exec_env.own_subnet_id) {
+                CanisterInputType::LocalSubnetMessage
+            } else {
+                CanisterInputType::RemoteSubnetMessage
+            }
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Request(_)) => CanisterInputType::Xnet,
-        CanisterMessageOrTask::Message(CanisterMessage::Response(resp))
-            if network_topology.route(resp.respondent.get()) == Some(exec_env.own_subnet_id) =>
-        {
-            CanisterInputType::Intranet
+        CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+            if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
+                CanisterInputType::LocalSubnetMessage
+            } else {
+                CanisterInputType::RemoteSubnetMessage
+            }
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Response(_)) => CanisterInputType::Xnet,
         CanisterMessageOrTask::Task(CanisterTask::GlobalTimer) => {
             CanisterInputType::GlobalTimerTask
         }
         CanisterMessageOrTask::Task(CanisterTask::Heartbeat) => CanisterInputType::HeartbeatTask,
-        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => {
-            CanisterInputType::OnLowWasmMemoryTask
-        }
+        CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory) => CanisterInputType::Other,
     };
     let result = exec_env.execute_canister_input(
         canister,
@@ -4563,7 +4562,7 @@ pub fn execute_canister(
                     heap_delta,
                     ingress_status,
                     description: Some("paused execution".to_string()),
-                    input_type: Some(CanisterInputType::PausedExecutionTask),
+                    input_type: Some(CanisterInputType::Other),
                 };
             }
             ExecutionTask::Heartbeat => {

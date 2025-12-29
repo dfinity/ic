@@ -99,11 +99,12 @@ struct EstimateArgs {
     #[clap(long)]
     load_samples_path: PathBuf,
 
-    /// Optional path to a CSV file containing a sample of load metrics on the source subnet.
-    /// If present, we will look at the difference between metrics at
-    /// [`EstimateArgs::load_samples_path`] and [`EstimateArgs::load_samples_reference_path`]
+    /// Path to a CSV file containing an older sample of load metrics on the source subnet.
+    /// We will look at the difference between metrics at
+    /// [`EstimateArgs::load_samples_path`] and [`EstimateArgs::load_samples_baseline_path`] to
+    /// estimate the load which occurred in the time frame between the two samples were collected.
     #[clap(long)]
-    load_samples_reference_path: Option<PathBuf>,
+    load_samples_baseline_path: PathBuf,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -212,7 +213,7 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
         args.canister_id_ranges_to_move,
         args.state_manifest_path,
         args.load_samples_path,
-        args.load_samples_reference_path,
+        args.load_samples_baseline_path,
     )
     .context("Failed to estimate the load")?;
 

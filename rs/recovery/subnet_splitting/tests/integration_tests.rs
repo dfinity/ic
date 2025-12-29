@@ -1,4 +1,4 @@
-use std::{io::Write, sync::Arc};
+use std::io::Write;
 
 use candid::Encode;
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, HttpMethod};
@@ -18,7 +18,27 @@ use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
     let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
-    let state_machine = set_up(/*canisters_count=*/ 100);
+    let (state_machine, other_state_machine) = two_subnets_simple();
+
+    // Use `state-tool` to extract the canister metrics baseline from the replicated state.
+    state_machine.checkpointed_tick();
+    state_machine.state_manager.flush_tip_channel();
+    let checkpoint_dir =
+        std::fs::read_dir(state_machine.state_manager.state_layout().checkpoints())
+            .unwrap()
+            .last()
+            .expect("There should be at least one checkpoint")
+            .unwrap()
+            .path();
+    let load_samples_baseline_path = dir.path().join("load_samples_baseline.csv");
+    ic_state_tool::commands::canister_metrics::get(checkpoint_dir, &load_samples_baseline_path)
+        .expect("Should compute canister metrics for a valid checkpoint");
+
+    set_up(
+        state_machine.as_ref(),
+        other_state_machine.as_ref(),
+        /*canisters_count=*/ 100,
+    );
     state_machine.checkpointed_tick();
     state_machine.state_manager.flush_tip_channel();
     let state_layout = state_machine.state_manager.state_layout();
@@ -69,7 +89,7 @@ fn load_metrics_e2e_test() {
             canister_id_ranges,
             manifest_path,
             load_samples_path,
-            /*load_samples_reference_path=*/ None,
+            load_samples_baseline_path,
         )
         .expect("Should succeed given valid inputs")
     );
@@ -134,9 +154,11 @@ fn load_metrics_e2e_test() {
 
 /// Sets up two state machines which talk to each other and sends a couple of ingress messages to
 /// them.
-fn set_up(canisters_count: usize) -> Arc<StateMachine> {
-    let (state_machine, other_state_machine) = two_subnets_simple();
-
+fn set_up(
+    state_machine: &StateMachine,
+    other_state_machine: &StateMachine,
+    canisters_count: usize,
+) {
     let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
         .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
     let uc_wasm = std::fs::read(&uc_wasm_path).unwrap();
@@ -145,14 +167,12 @@ fn set_up(canisters_count: usize) -> Arc<StateMachine> {
         std::env::var("PROXY_WASM_PATH").expect("PROXY_WASM_PATH not set");
     let http_outcalls_wasm = std::fs::read(&http_outcalls_wasm_path).unwrap();
 
-    let canister_id_on_the_other_subnet =
-        create_canister(other_state_machine.as_ref(), uc_wasm.to_vec());
+    let canister_id_on_the_other_subnet = create_canister(other_state_machine, uc_wasm.to_vec());
 
     let mut previous_canister_id = None;
     for _ in 0..canisters_count {
-        let canister_id = create_canister(state_machine.as_ref(), uc_wasm.to_vec());
-        let http_outcalls_canister_id =
-            create_canister(state_machine.as_ref(), http_outcalls_wasm.to_vec());
+        let canister_id = create_canister(state_machine, uc_wasm.to_vec());
+        let http_outcalls_canister_id = create_canister(state_machine, http_outcalls_wasm.to_vec());
 
         // Grow the canister a bit and set a global timer
         state_machine
@@ -240,8 +260,6 @@ fn set_up(canisters_count: usize) -> Arc<StateMachine> {
 
         previous_canister_id = Some(canister_id);
     }
-
-    state_machine
 }
 
 fn create_canister(state_machine: &StateMachine, module: Vec<u8>) -> CanisterId {

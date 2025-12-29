@@ -23,7 +23,7 @@ pub fn estimate(
     canister_id_ranges_to_move: Vec<CanisterIdRange>,
     state_manifest_path: PathBuf,
     load_samples_path: PathBuf,
-    load_samples_reference_path: Option<PathBuf>,
+    load_samples_baseline_path: PathBuf,
 ) -> anyhow::Result<(StateSizeEstimates, LoadEstimates)> {
     let canister_ranges = CanisterIdRanges::try_from(canister_id_ranges_to_move)
         .map_err(|err| anyhow!("Failed to convert canister id ranges: {err:?}"))?;
@@ -34,14 +34,12 @@ pub fn estimate(
 
     let mut load_samples =
         read_load_samples(&load_samples_path).context("Failed to read the load samples file")?;
-    if let Some(load_samples_reference_path) = load_samples_reference_path {
-        let load_samples_reference = read_load_samples(&load_samples_reference_path)
-            .context("Failed to read the load samples reference file")?;
+    let load_samples_baseline = read_load_samples(&load_samples_baseline_path)
+        .context("Failed to read the load samples baseline file")?;
 
-        for (canister_id, samples) in load_samples.iter_mut() {
-            if let Some(reference) = load_samples_reference.get(canister_id) {
-                *samples -= *reference;
-            }
+    for (canister_id, samples) in load_samples.iter_mut() {
+        if let Some(reference) = load_samples_baseline.get(canister_id) {
+            *samples -= *reference;
         }
     }
 
