@@ -129,8 +129,10 @@ fn read_load_samples(path: &Path) -> anyhow::Result<BTreeMap<CanisterId, LoadSam
 pub struct LoadEstimates {
     pub instructions_used: Estimates,
     pub ingress_messages_executed: Estimates,
-    pub xnet_messages_executed: Estimates,
-    pub intranet_messages_executed: Estimates,
+    // Note: it could happen that canisters which communicate with each other end up on different
+    // subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
+    pub xnet_messages_executed_lower_bound: Estimates,
+    pub intranet_messages_executed_upper_bound: Estimates,
     pub http_outcalls_executed: Estimates,
     pub heartbeats_executed: Estimates,
     pub global_timers_executed: Estimates,
@@ -147,9 +149,12 @@ fn estimate_loads(
             load_estimates.instructions_used.destination += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.destination +=
                 load_sample.ingress_messages_executed;
-            load_estimates.xnet_messages_executed.destination += load_sample.xnet_messages_executed;
-            load_estimates.intranet_messages_executed.destination +=
-                load_sample.intranet_messages_executed;
+            load_estimates
+                .xnet_messages_executed_lower_bound
+                .destination += load_sample.xnet_messages_executed;
+            load_estimates
+                .intranet_messages_executed_upper_bound
+                .destination += load_sample.intranet_messages_executed;
             load_estimates.http_outcalls_executed.destination += load_sample.http_outcalls_executed;
             load_estimates.heartbeats_executed.destination += load_sample.heartbeats_executed;
             load_estimates.global_timers_executed.destination += load_sample.global_timers_executed;
@@ -157,8 +162,9 @@ fn estimate_loads(
             load_estimates.instructions_used.source += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.source +=
                 load_sample.ingress_messages_executed;
-            load_estimates.xnet_messages_executed.source += load_sample.xnet_messages_executed;
-            load_estimates.intranet_messages_executed.source +=
+            load_estimates.xnet_messages_executed_lower_bound.source +=
+                load_sample.xnet_messages_executed;
+            load_estimates.intranet_messages_executed_upper_bound.source +=
                 load_sample.intranet_messages_executed;
             load_estimates.http_outcalls_executed.source += load_sample.http_outcalls_executed;
             load_estimates.heartbeats_executed.source += load_sample.heartbeats_executed;

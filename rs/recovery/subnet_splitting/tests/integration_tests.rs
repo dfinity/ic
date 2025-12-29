@@ -78,8 +78,8 @@ fn load_metrics_e2e_test() {
         LoadEstimates {
             instructions_used,
             ingress_messages_executed,
-            xnet_messages_executed,
-            intranet_messages_executed,
+            xnet_messages_executed_lower_bound,
+            intranet_messages_executed_upper_bound,
             http_outcalls_executed,
             heartbeats_executed,
             global_timers_executed,
@@ -116,14 +116,14 @@ fn load_metrics_e2e_test() {
         }
     );
     assert_eq!(
-        xnet_messages_executed,
+        xnet_messages_executed_lower_bound,
         Estimates {
             source: 49,
             destination: 51,
         }
     );
     assert_eq!(
-        intranet_messages_executed,
+        intranet_messages_executed_upper_bound,
         Estimates {
             source: 146,
             destination: 152,
