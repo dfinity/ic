@@ -101,11 +101,12 @@ impl DogecoinTransactionSigner {
             )
             .await?;
             let mut signature = ic_ckbtc_minter::signature::sec1_to_der(&sec1_signature);
+            // The signature must end with a single byte indicating the SIGHASH type.
+            signature.push(sighash_type as u8);
             debug_assert_eq!(
                 Ok(()),
                 ic_ckbtc_minter::signature::validate_encoded_signature(&signature)
             );
-            signature.push(sighash_type as u8);
             let sig_push_bytes: &bitcoin::script::PushBytes = signature
                 .as_slice()
                 .try_into()

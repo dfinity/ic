@@ -31,6 +31,7 @@ assert_matches = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
 ic-management-canister-types = { workspace = true }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }

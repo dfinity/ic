@@ -51,6 +51,7 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
         "//rs/types/base_types",
         "@crate_index//:assert_matches",
         "@crate_index//:mockall",
