@@ -19,7 +19,7 @@ fn parse_duration(arg: &str) -> Result<Duration, String> {
 #[command(version, about, long_about = None)]
 struct Args {
     /// Base URL with IPv4 / IPv6 address or hostname of the machine to analyze.
-    #[arg(short, long, default_value = "http://localhost")]
+    #[arg(short, long, default_value = "https://localhost")]
     address: String,
 
     /// How frequently to sample the exporters on the machine.
@@ -30,11 +30,12 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    let terminal = ratatui::init();
+    let mut terminal = ratatui::init();
+    // Clear the terminal after init to ensure a clean screen
+    terminal.clear()?;
     let result = App::new(args.address, args.sampling_frequency)
         .run(terminal)
         .await;
     ratatui::restore();
     result
 }
-
