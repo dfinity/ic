@@ -411,6 +411,7 @@ impl App {
                     })
                     .collect::<Vec<(u16, Vec<(String, Option<Color>)>)>>();
 
+                #[allow(clippy::type_complexity)]
                 let mut rows: Vec<Vec<Vec<(String, Option<Color>)>>> = vec![vec![]];
 
                 let mut remainder = metrics_slot_width.saturating_sub(2); // 2 accounts for border
