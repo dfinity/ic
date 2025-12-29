@@ -2,7 +2,6 @@ use crate::{
     BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, CkDogeEventLogger,
     GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, Utxo,
     fees::DogecoinFeeEstimator,
-    tx,
     tx::{SignedRawTransaction, UnsignedTransaction},
 };
 use async_trait::async_trait;
@@ -41,7 +40,6 @@ mock! {
         async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
         async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
         async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
-        async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: ic_ckbtc_minter::Network) -> Result<(), CallError>;
         async fn send_raw_transaction(&self, transaction: Vec<u8>, network: ic_ckbtc_minter::Network) -> Result<(), CallError>;
         async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
     }

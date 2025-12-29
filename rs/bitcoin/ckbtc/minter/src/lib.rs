@@ -1625,12 +1625,6 @@ pub trait CanisterRuntime {
         message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError>;
 
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: Network,
-    ) -> Result<(), CallError>;
-
     async fn send_raw_transaction(
         &self,
         raw_transaction: Vec<u8>,
@@ -1725,14 +1719,6 @@ impl CanisterRuntime for IcCanisterRuntime {
         .await
         .map(|result| result.signature)
         .map_err(CallError::from_sign_error)
-    }
-
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: Network,
-    ) -> Result<(), CallError> {
-        management::send_transaction(transaction, network).await
     }
 
     async fn send_raw_transaction(

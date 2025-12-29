@@ -130,19 +130,6 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .map_err(CallError::from_sign_error)
     }
 
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: ic_ckbtc_minter::Network,
-    ) -> Result<(), CallError> {
-        dogecoin_canister::dogecoin_send_transaction(&dogecoin_canister::SendTransactionRequest {
-            transaction: transaction.serialize(),
-            network: network.into(),
-        })
-        .await
-        .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
-    }
-
     async fn send_raw_transaction(
         &self,
         transaction: Vec<u8>,

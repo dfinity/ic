@@ -31,7 +31,7 @@ pub mod mock {
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
     use ic_ckbtc_minter::{
         CanisterRuntime, ECDSAPublicKey, GetCurrentFeePercentilesRequest, GetUtxosRequest,
-        GetUtxosResponse, Network, state::eventlog::CkBtcEventLogger, tx, tx::SignedRawTransaction,
+        GetUtxosResponse, Network, state::eventlog::CkBtcEventLogger, tx::SignedRawTransaction,
         tx::UnsignedTransaction,
     };
     use icrc_ledger_types::icrc1::account::Account;
@@ -65,7 +65,6 @@ pub mod mock {
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
             async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
-            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String, ) -> Result<BtcAddressCheckStatus, CallError>;
         }
