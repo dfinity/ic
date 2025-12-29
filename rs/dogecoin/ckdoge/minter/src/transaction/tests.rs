@@ -5,11 +5,8 @@ use crate::test_fixtures::{dogecoin_address_to_bitcoin, mock::MockCanisterRuntim
 use crate::transaction::DogecoinTransactionSigner;
 use bitcoin::hashes::Hash;
 use candid::Principal;
-use ic_ckbtc_minter::ECDSAPublicKey;
-use ic_ckbtc_minter::tx::UnsignedTransaction;
 use ic_ckbtc_minter::tx::{TxOut, UnsignedInput, UnsignedTransaction};
 use icrc_ledger_types::icrc1::account::Account;
-
 
 #[tokio::test]
 async fn should_be_noop_when_no_transactions() {
@@ -192,20 +189,8 @@ async fn should_verify_signed_transaction() {
 }
 
 fn signer() -> (DogecoinTransactionSigner, ic_secp256k1::PrivateKey) {
-    let canister_id = Principal::from_text("ypu6c-niaaa-aaaar-qbzxa-cai").unwrap();
-    let master_private_key = ic_secp256k1::PrivateKey::generate_from_seed(&[42; 32]);
-    let derivation_path =
-        ic_secp256k1::DerivationPath::from_canister_id_and_path(canister_id.as_slice(), &[]);
-    let (canister_private_key, chain_code) = master_private_key.derive_subkey(&derivation_path);
-    let canister_public_key = canister_private_key.public_key().serialize_sec1(true);
-
-    let signer = DogecoinTransactionSigner::new(
-        "key_1".to_string(),
-        ECDSAPublicKey {
-            public_key: canister_public_key,
-            chain_code: chain_code.to_vec(),
-        },
-    );
-
+    let (canister_public_key, canister_private_key) =
+        crate::test_fixtures::canister_public_key_pair();
+    let signer = DogecoinTransactionSigner::new("key_1".to_string(), canister_public_key);
     (signer, canister_private_key)
 }
