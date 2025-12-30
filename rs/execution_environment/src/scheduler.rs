@@ -1880,14 +1880,13 @@ fn execute_canisters_on_thread(
                     load_metrics.ingress_messages_executed += 1;
                 }
                 Some(CanisterInputType::RemoteSubnetMessage) => {
-                    load_metrics.xnet_messages_executed += 1;
+                    load_metrics.remote_subnet_messages_executed += 1;
                 }
                 Some(CanisterInputType::LocalSubnetMessage) => {
-                    load_metrics.intranet_messages_executed += 1;
+                    load_metrics.local_subnet_messages_executed += 1;
                 }
-                Some(CanisterInputType::HeartbeatTask) => load_metrics.heartbeats_executed += 1,
-                Some(CanisterInputType::GlobalTimerTask) => {
-                    load_metrics.global_timers_executed += 1
+                Some(CanisterInputType::HeartbeatTask | CanisterInputType::GlobalTimerTask) => {
+                    load_metrics.heartbeats_and_global_timers_executed += 1
                 }
                 // For now we don't track these tasks
                 None | Some(CanisterInputType::Other) => {}

@@ -38,7 +38,7 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
     // Write the header.
     writeln!(
         output_file,
-        "canister_id,instructions_executed,ingress_messages_executed,xnet_messages_executed,intranet_messages_executed,http_outcalls_executed,heartbeats_executed,global_timers_executed"
+        "canister_id,instructions_executed,ingress_messages_executed,remote_subnet_messages_executed,local_subnet_messages_executed,http_outcalls_executed,heartbeats_and_global_timers_executed"
     )
     .map_err(|err| format!("Failed to write header: {err}"))?;
 
@@ -49,17 +49,16 @@ pub fn get(checkpoint_dir: PathBuf, output_path: &Path) -> Result<(), String> {
             load_metrics:
                 LoadMetrics {
                     ingress_messages_executed,
-                    xnet_messages_executed,
-                    intranet_messages_executed,
+                    remote_subnet_messages_executed,
+                    local_subnet_messages_executed,
                     http_outcalls_executed,
-                    heartbeats_executed,
-                    global_timers_executed,
+                    heartbeats_and_global_timers_executed,
                 },
             ..
         } = canister_state.system_state.canister_metrics;
         writeln!(
             output_file,
-            "{canister_id},{instructions_executed},{ingress_messages_executed},{xnet_messages_executed},{intranet_messages_executed},{http_outcalls_executed},{heartbeats_executed},{global_timers_executed}"
+            "{canister_id},{instructions_executed},{ingress_messages_executed},{remote_subnet_messages_executed},{local_subnet_messages_executed},{http_outcalls_executed},{heartbeats_and_global_timers_executed}"
         )
         .map_err(|err| format!("Failed to write row: {err}"))?;
     }

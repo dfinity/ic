@@ -614,7 +614,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 64
+/// Next ID: 63
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -634,12 +634,6 @@ pub struct CanisterStateBits {
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,
-    #[prost(bytes = "vec", tag = "20")]
-    pub certified_data: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint64, tag = "21")]
-    pub interrupted_during_execution: u64,
-    #[prost(message, optional, tag = "22")]
-    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "57")]
     pub instructions_executed: u64,
     #[prost(uint64, tag = "58")]
@@ -651,9 +645,13 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "61")]
     pub http_outcalls_executed: u64,
     #[prost(uint64, tag = "62")]
-    pub heartbeats_executed: u64,
-    #[prost(uint64, tag = "63")]
-    pub global_timers_executed: u64,
+    pub heartbeats_and_global_timers_executed: u64,
+    #[prost(bytes = "vec", tag = "20")]
+    pub certified_data: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "21")]
+    pub interrupted_during_execution: u64,
+    #[prost(message, optional, tag = "22")]
+    pub consumed_cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
     #[prost(uint64, tag = "23")]
     pub freeze_threshold: u64,
     #[prost(message, repeated, tag = "25")]

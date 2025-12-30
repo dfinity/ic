@@ -114,17 +114,16 @@ enum ConsumingCycles {
     No,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// The structure keeps track of messages, group by the type of messages, executed by a canister.
 /// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
 /// canisters contribute to heavy subnet load.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct LoadMetrics {
     pub ingress_messages_executed: u64,
-    pub xnet_messages_executed: u64,
-    pub intranet_messages_executed: u64,
+    pub remote_subnet_messages_executed: u64,
+    pub local_subnet_messages_executed: u64,
     pub http_outcalls_executed: u64,
-    pub heartbeats_executed: u64,
-    pub global_timers_executed: u64,
+    pub heartbeats_and_global_timers_executed: u64,
 }
 
 impl std::ops::AddAssign for LoadMetrics {
@@ -132,12 +131,13 @@ impl std::ops::AddAssign for LoadMetrics {
         *self = LoadMetrics {
             ingress_messages_executed: self.ingress_messages_executed
                 + rhs.ingress_messages_executed,
-            xnet_messages_executed: self.xnet_messages_executed + rhs.xnet_messages_executed,
-            intranet_messages_executed: self.intranet_messages_executed
-                + rhs.intranet_messages_executed,
+            remote_subnet_messages_executed: self.remote_subnet_messages_executed
+                + rhs.remote_subnet_messages_executed,
+            local_subnet_messages_executed: self.local_subnet_messages_executed
+                + rhs.local_subnet_messages_executed,
             http_outcalls_executed: self.http_outcalls_executed + rhs.http_outcalls_executed,
-            heartbeats_executed: self.heartbeats_executed + rhs.heartbeats_executed,
-            global_timers_executed: self.global_timers_executed + rhs.global_timers_executed,
+            heartbeats_and_global_timers_executed: self.heartbeats_and_global_timers_executed
+                + rhs.heartbeats_and_global_timers_executed,
         }
     }
 }
@@ -151,11 +151,10 @@ pub struct CanisterMetrics {
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
-    pub interrupted_during_execution: u64,
-    pub consumed_cycles: NominalCycles,
     pub instructions_executed: NumInstructions,
     pub load_metrics: LoadMetrics,
-
+    pub interrupted_during_execution: u64,
+    pub consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 

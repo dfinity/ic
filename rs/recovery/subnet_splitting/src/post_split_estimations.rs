@@ -84,11 +84,10 @@ struct LoadSample {
     canister_id: CanisterId,
     instructions_executed: u64,
     ingress_messages_executed: u64,
-    xnet_messages_executed: u64,
-    intranet_messages_executed: u64,
+    remote_subnet_messages_executed: u64,
+    local_subnet_messages_executed: u64,
     http_outcalls_executed: u64,
-    heartbeats_executed: u64,
-    global_timers_executed: u64,
+    heartbeats_and_global_timers_executed: u64,
 }
 
 impl std::ops::SubAssign for LoadSample {
@@ -100,12 +99,13 @@ impl std::ops::SubAssign for LoadSample {
             instructions_executed: self.instructions_executed - other.instructions_executed,
             ingress_messages_executed: self.ingress_messages_executed
                 - other.ingress_messages_executed,
-            xnet_messages_executed: self.xnet_messages_executed - other.xnet_messages_executed,
-            intranet_messages_executed: self.intranet_messages_executed
-                - other.intranet_messages_executed,
+            remote_subnet_messages_executed: self.remote_subnet_messages_executed
+                - other.remote_subnet_messages_executed,
+            local_subnet_messages_executed: self.local_subnet_messages_executed
+                - other.local_subnet_messages_executed,
             http_outcalls_executed: self.http_outcalls_executed - other.http_outcalls_executed,
-            heartbeats_executed: self.heartbeats_executed - other.heartbeats_executed,
-            global_timers_executed: self.global_timers_executed - other.global_timers_executed,
+            heartbeats_and_global_timers_executed: self.heartbeats_and_global_timers_executed
+                - other.heartbeats_and_global_timers_executed,
         };
     }
 }
@@ -129,13 +129,14 @@ fn read_load_samples(path: &Path) -> anyhow::Result<BTreeMap<CanisterId, LoadSam
 pub struct LoadEstimates {
     pub instructions_used: Estimates,
     pub ingress_messages_executed: Estimates,
-    // Note: it could happen that canisters which communicate with each other end up on different
-    // subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
-    pub xnet_messages_executed_lower_bound: Estimates,
-    pub intranet_messages_executed_upper_bound: Estimates,
+    /// Note: it could happen that canisters which communicate with each other end up on different
+    /// subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
+    pub remote_subnet_messages_executed_lower_bound: Estimates,
+    /// Note: it could happen that canisters which communicate with each other end up on different
+    /// subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
+    pub local_subnet_messages_executed_upper_bound: Estimates,
     pub http_outcalls_executed: Estimates,
-    pub heartbeats_executed: Estimates,
-    pub global_timers_executed: Estimates,
+    pub heartbeats_and_global_timers_executed: Estimates,
 }
 
 fn estimate_loads(
@@ -150,25 +151,28 @@ fn estimate_loads(
             load_estimates.ingress_messages_executed.destination +=
                 load_sample.ingress_messages_executed;
             load_estimates
-                .xnet_messages_executed_lower_bound
-                .destination += load_sample.xnet_messages_executed;
+                .remote_subnet_messages_executed_lower_bound
+                .destination += load_sample.remote_subnet_messages_executed;
             load_estimates
-                .intranet_messages_executed_upper_bound
-                .destination += load_sample.intranet_messages_executed;
+                .local_subnet_messages_executed_upper_bound
+                .destination += load_sample.local_subnet_messages_executed;
             load_estimates.http_outcalls_executed.destination += load_sample.http_outcalls_executed;
-            load_estimates.heartbeats_executed.destination += load_sample.heartbeats_executed;
-            load_estimates.global_timers_executed.destination += load_sample.global_timers_executed;
+            load_estimates
+                .heartbeats_and_global_timers_executed
+                .destination += load_sample.heartbeats_and_global_timers_executed;
         } else {
             load_estimates.instructions_used.source += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.source +=
                 load_sample.ingress_messages_executed;
-            load_estimates.xnet_messages_executed_lower_bound.source +=
-                load_sample.xnet_messages_executed;
-            load_estimates.intranet_messages_executed_upper_bound.source +=
-                load_sample.intranet_messages_executed;
+            load_estimates
+                .remote_subnet_messages_executed_lower_bound
+                .source += load_sample.remote_subnet_messages_executed;
+            load_estimates
+                .local_subnet_messages_executed_upper_bound
+                .source += load_sample.local_subnet_messages_executed;
             load_estimates.http_outcalls_executed.source += load_sample.http_outcalls_executed;
-            load_estimates.heartbeats_executed.source += load_sample.heartbeats_executed;
-            load_estimates.global_timers_executed.source += load_sample.global_timers_executed;
+            load_estimates.heartbeats_and_global_timers_executed.source +=
+                load_sample.heartbeats_and_global_timers_executed;
         }
     }
 

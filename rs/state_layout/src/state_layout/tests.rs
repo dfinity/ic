@@ -66,8 +66,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         xnet_messages_executed: 0,
         intranet_messages_executed: 0,
         http_outcalls_executed: 0,
-        heartbeats_executed: 0,
-        global_timers_executed: 0,
+        heartbeats_and_global_timers_executed: 0,
     }
 }
 

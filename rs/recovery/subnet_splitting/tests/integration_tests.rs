@@ -78,11 +78,10 @@ fn load_metrics_e2e_test() {
         LoadEstimates {
             instructions_used,
             ingress_messages_executed,
-            xnet_messages_executed_lower_bound,
-            intranet_messages_executed_upper_bound,
+            remote_subnet_messages_executed_lower_bound: xnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound: intranet_messages_executed_upper_bound,
             http_outcalls_executed,
-            heartbeats_executed,
-            global_timers_executed,
+            heartbeats_and_global_timers_executed,
         },
     ) = dbg!(
         ic_subnet_splitting::post_split_estimations::estimate(
@@ -97,8 +96,8 @@ fn load_metrics_e2e_test() {
     assert_eq!(
         states_sizes_bytes,
         Estimates {
-            source: 44854849,
-            destination: 46088212,
+            source: 44854703,
+            destination: 46088059,
         }
     );
     assert_eq!(
@@ -137,17 +136,10 @@ fn load_metrics_e2e_test() {
         }
     );
     assert_eq!(
-        heartbeats_executed,
+        heartbeats_and_global_timers_executed,
         Estimates {
-            source: 32352,
-            destination: 32997,
-        }
-    );
-    assert_eq!(
-        global_timers_executed,
-        Estimates {
-            source: 49,
-            destination: 51,
+            source: 32401,
+            destination: 33048,
         }
     );
 }
