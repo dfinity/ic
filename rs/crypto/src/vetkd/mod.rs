@@ -1,7 +1,7 @@
 use super::get_log_id;
 use crate::sign::BasicSigVerifierInternal;
-use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
+use crate::sign::basic_sig;
 use crate::sign::lazily_calculated_public_key_from_store;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
@@ -14,6 +14,7 @@ use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
 use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError;
 use ic_crypto_internal_csp::{CryptoServiceProvider, key_id::KeyId, vault::api::CspVault};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -34,7 +35,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
-    // TODO(CRP-2639): Adapt VetKdKeyShareCreationError so that clippy exception is no longer needed
     #[allow(clippy::result_large_err)]
     fn create_encrypted_key_share(
         &self,
@@ -53,11 +53,9 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
         let start_time = self.metrics.now();
         let result = create_encrypted_key_share_internal(
             &self.lockable_threshold_sig_data_store,
-            self.registry_client.as_ref(),
             self.vault.as_ref(),
-            &self.csp,
+            &self.metrics,
             args,
-            self.node_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::VetKd,
@@ -191,24 +189,17 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
     }
 }
 
-// TODO(CRP-2639): Adapt VetKdKeyShareCreationError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
-fn create_encrypted_key_share_internal<S: CspSigner>(
+fn create_encrypted_key_share_internal(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
-    registry: &dyn RegistryClient,
     vault: &dyn CspVault,
-    csp_signer: &S,
+    metrics: &CryptoMetrics,
     args: VetKdArgs,
-    self_node_id: NodeId,
 ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
-    let (pub_coeffs_from_store, registry_version_from_store) = lockable_threshold_sig_data_store
+    let pub_coeffs_from_store = lockable_threshold_sig_data_store
         .read()
         .transcript_data(args.ni_dkg_id)
-        .map(|transcript_data| {
-            let pub_coeffs = transcript_data.public_coefficients().clone();
-            let registry_version = transcript_data.registry_version();
-            (pub_coeffs, registry_version)
-        })
+        .map(|transcript_data| transcript_data.public_coefficients().clone())
         .ok_or_else(|| {
             VetKdKeyShareCreationError::ThresholdSigDataNotFound(
                 ThresholdSigDataNotFoundError::ThresholdSigDataNotFound {
@@ -248,15 +239,8 @@ fn create_encrypted_key_share_internal<S: CspSigner>(
         )
         .map_err(vetkd_key_share_creation_error_from_vault_error)?;
 
-    let signature = BasicSignerInternal::sign_basic(
-        csp_signer,
-        registry,
-        &encrypted_key_share,
-        self_node_id,
-        // TODO(CRP-2666): Cleanup: Remove registry_version from BasicSigner::sign_basic API
-        registry_version_from_store,
-    )
-    .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
+    let signature = basic_sig::sign(&encrypted_key_share, vault, metrics)
+        .map_err(VetKdKeyShareCreationError::KeyShareSigningError)?;
 
     Ok(VetKdEncryptedKeyShare {
         encrypted_key_share,

@@ -214,10 +214,7 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash(
-        b"ic-crypto-nizk-chunking-proof-y0",
-        &rng.r#gen::<[u8; 32]>(),
-    );
+    let y0 = G1Affine::hash("ic-crypto-nizk-chunking-proof-y0", &rng.r#gen::<[u8; 32]>());
 
     let g1 = &instance.g1_gen;
 

@@ -54,7 +54,6 @@ wasmtime = { version = "39.0.1", default-features = false, features = [
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "39.0.1"
 wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.

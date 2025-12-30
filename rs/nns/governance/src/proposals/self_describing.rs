@@ -1,11 +1,14 @@
 use crate::pb::v1::{
-    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
+    Account, ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
     SelfDescribingValueArray, SelfDescribingValueMap,
-    self_describing_value::Value::{Array, Map, Text},
+    self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
-use std::collections::HashMap;
+use ic_cdk::println;
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use icp_ledger::protobuf::AccountIdentifier;
+use std::{collections::HashMap, marker::PhantomData};
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
 /// management canister method to get the candid file of an external canister. Every proposal action
@@ -52,21 +55,20 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
-            .add_array_field("principals", self.principals.clone())
+            .add_field("principals", self.principals.clone())
             .build()
     }
 }
 
 /// A builder for `SelfDescribingValue` objects.
-pub(crate) struct ValueBuilder {
+#[derive(Default)]
+pub struct ValueBuilder {
     fields: HashMap<String, SelfDescribingValue>,
 }
 
 impl ValueBuilder {
     pub fn new() -> Self {
-        Self {
-            fields: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn add_field(mut self, key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
@@ -74,20 +76,30 @@ impl ValueBuilder {
         self
     }
 
-    pub fn add_array_field(
-        mut self,
+    /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
+    /// payload (e.g., StartDissolving, StopDissolving).
+    pub fn add_empty_field(self, key: impl ToString) -> Self {
+        self.add_field(key, SelfDescribingValue::EMPTY)
+    }
+
+    /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
+    /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
+    /// is designed to be required, while we want to still add an empty field to the builder in case
+    /// of a bug.
+    pub fn add_field_with_empty_as_fallback(
+        self,
         key: impl ToString,
-        values: impl IntoIterator<Item = impl Into<SelfDescribingValue>>,
+        value: Option<impl Into<SelfDescribingValue>>,
     ) -> Self {
-        self.fields.insert(
-            key.to_string(),
-            SelfDescribingValue {
-                value: Some(Array(SelfDescribingValueArray {
-                    values: values.into_iter().map(Into::into).collect(),
-                })),
-            },
-        );
-        self
+        if let Some(value) = value {
+            self.add_field(key, value)
+        } else {
+            println!(
+                "A field {} is added with an empty value while we think it should be impossible",
+                key.to_string()
+            );
+            self.add_empty_field(key)
+        }
     }
 
     pub fn build(self) -> SelfDescribingValue {
@@ -106,12 +118,185 @@ impl From<String> for SelfDescribingValue {
     }
 }
 
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue {
+            value: Some(Text(value.to_string())),
+        }
+    }
+}
+
 impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
         SelfDescribingValue {
             value: Some(Text(value.to_string())),
         }
     }
+}
+
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue {
+            value: Some(Blob(value)),
+        }
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue {
+            value: Some(to_self_describing_nat(if value { 1_u8 } else { 0_u8 })),
+        }
+    }
+}
+
+impl<T> From<Option<T>> for SelfDescribingValue
+where
+    SelfDescribingValue: From<T>,
+{
+    fn from(value: Option<T>) -> Self {
+        SelfDescribingValue {
+            value: Some(Array(SelfDescribingValueArray {
+                values: value.into_iter().map(SelfDescribingValue::from).collect(),
+            })),
+        }
+    }
+}
+
+impl<T> From<Vec<T>> for SelfDescribingValue
+where
+    SelfDescribingValue: From<T>,
+{
+    fn from(value: Vec<T>) -> Self {
+        SelfDescribingValue {
+            value: Some(Array(SelfDescribingValueArray {
+                values: value.into_iter().map(SelfDescribingValue::from).collect(),
+            })),
+        }
+    }
+}
+pub(crate) struct SelfDescribingProstEnum<E> {
+    value: i32,
+    prost_type: PhantomData<E>,
+}
+
+impl<E> SelfDescribingProstEnum<E>
+where
+    E: TryFrom<i32>,
+{
+    pub fn new(value: i32) -> Self {
+        Self {
+            value,
+            prost_type: PhantomData,
+        }
+    }
+}
+
+impl<E> From<SelfDescribingProstEnum<E>> for SelfDescribingValue
+where
+    E: TryFrom<i32> + std::fmt::Debug,
+{
+    fn from(prost_enum: SelfDescribingProstEnum<E>) -> Self {
+        let SelfDescribingProstEnum { value, .. } = prost_enum;
+        let value = match E::try_from(value) {
+            Ok(value) => format!("{value:?}"),
+            Err(_) => {
+                let enum_type_name = enum_type_name::<E>();
+                println!("Unknown value for enum {enum_type_name}: {value}");
+                format!("UNKNOWN_{}_{}", enum_type_name.to_ascii_uppercase(), value)
+            }
+        };
+        SelfDescribingValue::from(value)
+    }
+}
+
+fn enum_type_name<E>() -> &'static str
+where
+    E: TryFrom<i32>,
+{
+    std::any::type_name::<E>()
+        .split("::")
+        .last()
+        .unwrap_or("???")
+}
+
+impl From<NeuronId> for SelfDescribingValue {
+    fn from(value: NeuronId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<ProposalId> for SelfDescribingValue {
+    fn from(value: ProposalId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<AccountIdentifier> for SelfDescribingValue {
+    fn from(value: AccountIdentifier) -> Self {
+        Self::from(value.hash)
+    }
+}
+
+impl From<Account> for SelfDescribingValue {
+    fn from(account: Account) -> Self {
+        let Account { owner, subaccount } = account;
+        let subaccount = subaccount.map(|subaccount| subaccount.subaccount);
+        ValueBuilder::new()
+            .add_field_with_empty_as_fallback("owner", owner)
+            .add_field("subaccount", subaccount)
+            .build()
+    }
+}
+
+impl SelfDescribingValue {
+    pub const EMPTY: Self = Self {
+        value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+    };
+
+    pub fn singleton_map(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
+        ValueBuilder::new().add_field(key, value).build()
+    }
+}
+
+/// A trait for types that can be converted to a SelfDescribingValue as an unsigned integer. This is
+/// used because we can't do `impl<T: Into<candid::Nat>> From<T> for SelfDescribingValue` because of
+/// potential conflicts.
+pub(crate) trait ToSelfDescribingNat: Into<candid::Nat> {}
+
+impl<T> From<T> for SelfDescribingValue
+where
+    T: ToSelfDescribingNat,
+{
+    fn from(value: T) -> Self {
+        SelfDescribingValue {
+            value: Some(to_self_describing_nat(value.into())),
+        }
+    }
+}
+
+// Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
+impl ToSelfDescribingNat for u64 {}
+impl ToSelfDescribingNat for u32 {}
+
+pub(crate) fn to_self_describing_nat<N>(n: N) -> Value
+where
+    candid::Nat: From<N>,
+{
+    let n = candid::Nat::from(n);
+    let mut bytes = Vec::new();
+    n.encode(&mut bytes).expect("Failed to encode Nat");
+    Value::Nat(bytes)
+}
+
+pub(crate) fn to_self_describing_int<I>(i: I) -> Value
+where
+    candid::Int: From<I>,
+{
+    let i = candid::Int::from(i);
+    let mut bytes = Vec::new();
+    i.encode(&mut bytes).expect("Failed to encode Int");
+    Value::Int(bytes)
 }
 
 #[path = "self_describing_tests.rs"]

@@ -64,6 +64,7 @@ ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-derive-self-describing = { path = "./derive_self_describing" }
 ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
@@ -132,5 +133,6 @@ tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
+performance-based-rewards = []
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]

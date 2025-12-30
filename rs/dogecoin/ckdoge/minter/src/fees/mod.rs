@@ -34,7 +34,7 @@ impl DogecoinFeeEstimator {
 
     pub fn from_state(state: &ic_ckbtc_minter::state::CkBtcMinterState) -> Self {
         Self::new(
-            Network::from(state.btc_network),
+            Network::try_from(state.btc_network).expect("BUG: unsupported network"),
             state.retrieve_btc_min_amount,
         )
     }
@@ -49,15 +49,15 @@ impl FeeEstimator for DogecoinFeeEstimator {
     // corresponding to 10k millikoinus/byte
     const MIN_RELAY_FEE_RATE_INCREASE: u64 = 10_000;
 
-    fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
+    fn estimate_nth_fee(&self, fee_percentiles: &[u64], nth: usize) -> Option<u64> {
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 
         match &self.network {
-            Network::Mainnet | Network::Testnet => {
-                if fee_percentiles.len() < 100 {
+            Network::Mainnet => {
+                if fee_percentiles.len() < 100 || nth >= 100 {
                     return None;
                 }
-                Some(fee_percentiles[50])
+                Some(fee_percentiles[nth])
             }
             Network::Regtest => Some(DEFAULT_REGTEST_FEE),
         }
@@ -91,7 +91,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
 
     fn fee_based_minimum_withdrawal_amount(&self, median_fee: u64) -> u64 {
         match self.network {
-            Network::Mainnet | Network::Testnet => {
+            Network::Mainnet => {
                 //in Koinu
                 const PER_REQUEST_RBF_BOUND: u64 = 374_000;
                 // in Bytes
@@ -134,6 +134,7 @@ pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
     median_fee_millikoinu_per_byte: u64,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the specified amount.
@@ -147,6 +148,7 @@ pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
         median_fee_millikoinu_per_byte,
         dummy_minter_address,
         dummy_recipient_address,
+        max_num_inputs_in_transaction,
         fee_estimator,
     )
     .map(WithdrawalFee::from)
