@@ -126,22 +126,6 @@ pub struct LoadMetrics {
     pub heartbeats_and_global_timers_executed: u64,
 }
 
-impl std::ops::AddAssign for LoadMetrics {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = LoadMetrics {
-            ingress_messages_executed: self.ingress_messages_executed
-                + rhs.ingress_messages_executed,
-            remote_subnet_messages_executed: self.remote_subnet_messages_executed
-                + rhs.remote_subnet_messages_executed,
-            local_subnet_messages_executed: self.local_subnet_messages_executed
-                + rhs.local_subnet_messages_executed,
-            http_outcalls_executed: self.http_outcalls_executed + rhs.http_outcalls_executed,
-            heartbeats_and_global_timers_executed: self.heartbeats_and_global_timers_executed
-                + rhs.heartbeats_and_global_timers_executed,
-        }
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
