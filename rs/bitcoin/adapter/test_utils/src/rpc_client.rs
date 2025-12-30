@@ -348,6 +348,12 @@ impl<T: RpcClientType> RpcClient<T> {
         self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }
 
+    /// Adds a private key (as returned by `dumpprivkey`) to your wallet.
+    pub fn import_private_key(&self, private_key: &str, label: &str) -> Result<()> {
+        let args = [into_json(private_key)?, into_json(label)?];
+        self.call("importprivkey", &args)
+    }
+
     fn create_wallet(
         &self,
         wallet: &str,

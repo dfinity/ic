@@ -1,3 +1,4 @@
+use crate::dogecoin::DogecoinUsers;
 use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
@@ -74,6 +75,24 @@ where
             .as_ref()
             .dogecoin()
             .push_utxos(deposit_utxos.clone(), self.deposit_address.to_string());
+
+        UpdateBalanceFlow {
+            setup: self.setup,
+            account: self.account,
+            deposit_utxos,
+        }
+    }
+
+    pub fn dogecoin_send_transaction<I: IntoIterator<Item = u64>>(
+        self,
+        amounts: I,
+    ) -> UpdateBalanceFlow<S> {
+        let dogecoind = self.setup.as_ref().dogecoind();
+        let mut deposit_utxos = BTreeSet::new();
+        for amount in amounts {
+            let txid =
+                dogecoind.send_transaction(&DogecoinUsers::Miner, &self.deposit_address, amount);
+        }
 
         UpdateBalanceFlow {
             setup: self.setup,

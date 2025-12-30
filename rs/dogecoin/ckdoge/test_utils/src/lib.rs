@@ -4,7 +4,7 @@ pub mod flow;
 mod ledger;
 mod minter;
 
-use crate::dogecoin::DogecoinCanister;
+use crate::dogecoin::{DogecoinCanister, DogecoinDaemon};
 use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
@@ -30,7 +30,7 @@ use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
@@ -56,7 +56,7 @@ pub struct Setup {
     dogecoin: Option<CanisterId>,
     minter: CanisterId,
     ledger: CanisterId,
-    dogecoind: Option<Daemon<DogeNetwork>>,
+    dogecoind: Option<Arc<Daemon<DogeNetwork>>>,
 }
 
 impl Setup {
@@ -66,14 +66,14 @@ impl Setup {
             Network::Regtest => {
                 let dogecoind_path = std::env::var("DOGECOIND_BIN")
                     .expect("Missing DOGECOIND_BIN (path to dogecoind executable) in env.");
-                Some(Daemon::new(
+                Some(Arc::new(Daemon::new(
                     &dogecoind_path,
                     DogeNetwork::Regtest,
                     ic_btc_adapter_test_utils::bitcoind::Conf {
                         p2p: true,
                         ..Default::default()
                     },
-                ))
+                )))
             }
         };
         let env = match &dogecoind {
@@ -88,6 +88,7 @@ impl Setup {
                     .with_dogecoind_addrs(vec![daemon.p2p_socket().unwrap().into()])
                     .with_icp_features(icp_features)
                     .build();
+                pic.set_time(SystemTime::now().into());
                 Arc::new(pic)
             }
             None => Arc::new(
@@ -223,6 +224,17 @@ impl Setup {
         DogecoinCanister {
             env: self.env.clone(),
             id: self.dogecoin.expect("BUG: mock not available for Regtest"),
+        }
+    }
+
+    pub fn dogecoind(&self) -> DogecoinDaemon {
+        DogecoinDaemon {
+            env: self.env.clone(),
+            daemon: self
+                .dogecoind
+                .as_ref()
+                .expect("BUG: mock not available for Mainnet")
+                .clone(),
         }
     }
 

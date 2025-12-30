@@ -1,11 +1,16 @@
+use bitcoin::dogecoin;
 use bitcoin::hashes::Hash;
-use candid::{Decode, Encode, Principal};
-use ic_bitcoin_canister_mock::{PushUtxosToAddress, Utxo};
+use bitcoin::hashes::serde::Deserialize;
+use candid::{CandidType, Decode, Encode, Nat, Principal};
+use ic_bitcoin_canister_mock::{Address, PushUtxosToAddress, Utxo};
+use ic_btc_adapter_test_utils::bitcoind::Daemon;
 use ic_ckdoge_minter::Txid;
 use ic_management_canister_types::CanisterId;
-use pocket_ic::PocketIc;
+use pocket_ic::{PocketIc, RejectResponse};
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
+use crate::DOGE;
 
 pub type Mempool = BTreeMap<Txid, bitcoin::Transaction>;
 
@@ -33,7 +38,7 @@ impl DogecoinCanister {
         })
     }
 
-    pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
+    pub fn push_utxos<I: IntoIterator<Item=Utxo>>(&self, utxos: I, address: String) {
         let request = PushUtxosToAddress {
             utxos: utxos.into_iter().collect(),
             address,
@@ -116,4 +121,171 @@ fn decode_dogecoin_transaction(tx_bytes: &[u8]) -> bitcoin::Transaction {
         );
     }
     tx
+}
+
+pub struct DogecoinDaemon {
+    pub(crate) env: Arc<PocketIc>,
+    pub(crate) daemon: Arc<Daemon<dogecoin::Network>>,
+}
+
+impl DogecoinDaemon {
+    pub fn mine_to_wallet(&self) {
+        // See https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L423
+        const COINBASE_MATURITY_REGTEST: u64 = 60;
+        const BLOCK_REWARD: u64 = 500_000 * DOGE;
+        const MAX_TICKS: u64 = 1000;
+
+        let dogecoin_canister = DogecoinCanister2::new(self.env.clone());
+        let miner_balance_request = GetBalanceRequest {
+            address: DogecoinUsers::Miner.address().to_string(),
+            network: NetworkInRequest::Regtest,
+            min_confirmations: None,
+        };
+        let balance_before = dogecoin_canister.dogecoin_get_balance_query(&miner_balance_request).unwrap_or_default();
+
+        let mined_blocks = self.await_ok(|dogecoind| {
+            dogecoind.generate_to_address(
+                COINBASE_MATURITY_REGTEST + 1,
+                &DogecoinUsers::Miner.address(),
+            )
+        });
+        let expected_balance_diff = mined_blocks.len() as u128 * BLOCK_REWARD as u128;
+
+        for _ in 0..MAX_TICKS {
+            if let Ok(balance_after) = dogecoin_canister.dogecoin_get_balance_query(&miner_balance_request) {
+                if balance_after.saturating_sub(balance_before) == expected_balance_diff {
+                    return;
+                }
+            }
+            self.env.tick();
+        }
+
+        panic!("BUG: Failed to mine to wallet after {MAX_TICKS} ticks");
+    }
+
+    pub fn send_transaction(
+        &self,
+        from: &DogecoinUsers,
+        to: &dogecoin::Address,
+        amount: u64,
+    ) -> bitcoin::Txid {
+        self.await_ok(|dogecoind| dogecoind.import_private_key(from.private_key(), from.label()));
+        self.await_ok(|dogecoind| {
+            dogecoind.send(
+                &from.address(),
+                to,
+                bitcoin::Amount::from_sat(amount),
+                bitcoin::Amount::ZERO,
+            )
+        })
+    }
+
+    fn await_ok<F, T>(&self, call: F) -> T
+    where
+        F: Fn(
+            &ic_btc_adapter_test_utils::rpc_client::RpcClient<dogecoin::Network>,
+        ) -> ic_btc_adapter_test_utils::rpc_client::Result<T>,
+    {
+        use ic_btc_adapter_test_utils::rpc_client::RpcError;
+
+        const TIMEOUT: Duration = Duration::from_secs(30);
+        const WAITING: Duration = Duration::from_millis(500);
+
+        let start = std::time::Instant::now();
+        loop {
+            match call(&self.daemon.rpc_client) {
+                Ok(value) => return value,
+                Err(RpcError::JsonRpc(err)) => {
+                    if start.elapsed() > TIMEOUT {
+                        panic!("Timed out when waiting for dogecoind; last error: {err}");
+                    }
+                    std::thread::sleep(WAITING);
+                }
+                Err(err) => panic!("Unexpected error when talking to dogecoind: {err:?}"),
+            }
+        }
+    }
+}
+
+#[derive(CandidType, Debug, PartialEq, Eq)]
+pub struct GetBalanceRequest {
+    pub address: String,
+    pub network: NetworkInRequest,
+    pub min_confirmations: Option<u32>,
+}
+
+#[derive(CandidType, Debug, PartialEq, Eq)]
+pub enum NetworkInRequest {
+    /// Bitcoin Mainnet.
+    Mainnet,
+    /// Bitcoin Mainnet.
+    #[allow(non_camel_case_types)]
+    mainnet,
+    /// Bitcoin Regtest.
+    Regtest,
+    /// Bitcoin Regtest.
+    #[allow(non_camel_case_types)]
+    regtest,
+}
+
+pub enum DogecoinUsers {
+    /// Receive block rewards.
+    Miner,
+    /// User with initially zero balance.
+    User1,
+}
+
+impl DogecoinUsers {
+    /// Output of `dogecoin-cli dumpprivkey`
+    pub fn private_key(&self) -> &str {
+        match self {
+            Self::Miner => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
+            Self::User1 => "cVJe3RYJyTgwPFr7KeKpSJ6PTiwpFqynWXp9MYmjfctmrVQKPDXb",
+        }
+    }
+
+    pub fn address(&self) -> dogecoin::Address {
+        let address = match self {
+            DogecoinUsers::Miner => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
+            DogecoinUsers::User1 => "n3zDWiJxzMzH1w8mXjruGeyzXdCKuqSk7R",
+        };
+        address
+            .parse::<dogecoin::Address<_>>()
+            .unwrap()
+            .require_network(dogecoin::Network::Regtest)
+            .unwrap()
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            DogecoinUsers::Miner => "miner",
+            DogecoinUsers::User1 => "user1",
+        }
+    }
+}
+
+pub struct DogecoinCanister2 {
+    env: Arc<PocketIc>,
+}
+
+impl DogecoinCanister2 {
+    pub const ID: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
+
+    pub fn new(env: Arc<PocketIc>) -> Self {
+        Self {
+            env
+        }
+    }
+
+    pub fn dogecoin_get_balance_query(&self, request: &GetBalanceRequest) -> Result<u128, RejectResponse> {
+        let call_result = self
+            .env
+            .query_call(
+                Self::ID,
+                Principal::anonymous(),
+                "dogecoin_get_balance_query",
+                Encode!(request).unwrap(),
+            )?;
+        Ok(Decode!(&call_result, Nat).unwrap().0.try_into().unwrap())
+    }
 }
