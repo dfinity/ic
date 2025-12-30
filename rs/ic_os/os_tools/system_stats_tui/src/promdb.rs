@@ -370,12 +370,15 @@ impl<'a> IndexedSeriesSubset<'a> {
         start_sample: usize,
         sample_count: usize,
     ) -> Vec<(Sample, TimeDelta)> {
-        // FIXME maybe we should not be clamping, but just returning empty stuff.
+        if self.series.1.is_empty() || sample_count == 0 {
+            return vec![];
+        }
+
         let start = min(start_sample, self.series.1.len() - 1);
         let end = min(start_sample + sample_count, self.series.1.len() - 1);
         if start == end {
             return vec![];
-        };
+        }
 
         let first_scrape = &self.series.1[start];
         let last_scrape = &self.series.1[end];
@@ -434,7 +437,10 @@ impl<'a> IndexedSeriesSubset<'a> {
     }
 
     pub fn at(&self, start_sample: usize) -> IndexedScrape {
-        // FIXME maybe we should not be clamping, but just returning empty stuff.
+        if self.series.1.is_empty() {
+            return IndexedScrape::from(vec![]);
+        }
+
         let start = min(start_sample, self.series.1.len() - 1);
         let scrape = &self.series.1[start];
         let samples = scrape.search(self.labelsets.clone());
