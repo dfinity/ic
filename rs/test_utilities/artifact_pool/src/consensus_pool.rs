@@ -4,6 +4,7 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
@@ -19,7 +20,6 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};

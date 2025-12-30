@@ -45,9 +45,9 @@ rust_library(
         "//rs/types/wasm_types",
         "//rs/utils",
         "//rs/utils/lru_cache",
-        "//rs/wasm_transform",
         "@crate_index//:anyhow",
         "@crate_index//:bincode",
+        "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
         "@crate_index//:libc",
@@ -65,7 +65,7 @@ rust_library(
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
-        "@crate_index//:wasmtime-environ",
+        "@crate_index//:wirm",
     ],
 )
 
@@ -124,13 +124,13 @@ rust_test(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
-        "//rs/wasm_transform",
         "@crate_index//:insta",
         "@crate_index//:itertools",
         "@crate_index//:pretty_assertions",
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
         "@crate_index//:wat",
+        "@crate_index//:wirm",
     ],
 )
 
@@ -161,7 +161,6 @@ rust_ic_test_suite_with_extra_srcs(
     ] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
-        "tests/round-trip-test-data/*",
     ]),
     env = dict(ENV.items() + [
         ("CARGO_MANIFEST_DIR", "rs/embedders"),
@@ -199,7 +198,6 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
-        "//rs/wasm_transform",
         "@crate_index//:anyhow",
         "@crate_index//:assert_matches",
         "@crate_index//:lazy_static",
@@ -210,9 +208,9 @@ rust_ic_test_suite_with_extra_srcs(
         "@crate_index//:wasmparser",
         "@crate_index//:wasmprinter",
         "@crate_index//:wasmtime",
-        "@crate_index//:wasmtime-environ",
         "@crate_index//:wast",
         "@crate_index//:wat",
+        "@crate_index//:wirm",
     ],
 )
 
@@ -290,9 +288,9 @@ rust_library(
         "//rs/rust_canisters/canister_test",
         "//rs/test_utilities/execution_environment",
         "//rs/types/types",
-        "//rs/wasm_transform",
         "@crate_index//:candid",
         "@crate_index//:criterion",
+        "@crate_index//:wirm",
     ],
 )
 

@@ -55,7 +55,7 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::get,
 };
 use crossbeam::atomic::AtomicCell;
@@ -117,6 +117,12 @@ const TLS_HANDHAKE_BYTES: u8 = 22;
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (self.status, self.message).into_response()
+    }
 }
 
 /// Struct that holds all endpoint services.
@@ -252,10 +258,10 @@ pub fn start_server(
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+    query_signer: Arc<dyn BasicSigner<QueryResponseHash>>,
     registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -566,6 +572,8 @@ fn make_router(
     metrics: HttpHandlerMetrics,
     health_status_refresher: HealthStatusRefreshLayer,
 ) -> Router {
+    let pprof_concurrency_limiter =
+        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
     let base_router = Router::new()
         .route(
             "/",
@@ -579,87 +587,86 @@ fn make_router(
             make_plaintext_response(StatusCode::NOT_FOUND, "Endpoint not found.".to_string())
         });
 
-    let service_builder = |concurrency_limit| {
+    let service_builder = |concurrency_limit_layer: GlobalConcurrencyLimitLayer| {
         ServiceBuilder::new()
             .layer(HandleErrorLayer::new(map_box_error_to_response))
             .load_shed()
-            .layer(GlobalConcurrencyLimitLayer::new(concurrency_limit))
+            .layer(concurrency_limit_layer)
     };
 
-    let final_router = base_router
-        .merge(
-            http_handler
-                .status_router
-                .layer(service_builder(config.max_status_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .call_v2_router
-                .layer(service_builder(config.max_call_concurrent_requests)),
-        )
-        // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
-        .merge(http_handler.call_v3_router)
-        .merge(http_handler.call_v4_router)
-        .merge(
-            http_handler
-                .query_v2_router
-                .layer(service_builder(config.max_query_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .query_v3_router
-                .layer(service_builder(config.max_query_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .subnet_read_state_v2_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .subnet_read_state_v3_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .canister_read_state_v2_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .canister_read_state_v3_router
-                .layer(service_builder(config.max_read_state_concurrent_requests)),
-        )
-        .merge(http_handler.catchup_router.layer(service_builder(
-            config.max_catch_up_package_concurrent_requests,
-        )))
-        .merge(
-            http_handler
-                .dashboard_router
-                .layer(service_builder(config.max_dashboard_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_home_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_flamegraph_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .pprof_profile_router
-                .layer(service_builder(config.max_pprof_concurrent_requests)),
-        )
-        .merge(
-            http_handler
-                .tracing_flamegraph_router
-                .layer(service_builder(
-                    config.max_tracing_flamegraph_concurrent_requests,
-                )),
-        );
+    let final_router =
+        base_router
+            .merge(http_handler.status_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_status_concurrent_requests),
+            )))
+            .merge(http_handler.call_v2_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_call_concurrent_requests),
+            )))
+            // TODO(CON-1574): see if there is any reasonable explicit concurrency limit we could use here.
+            .merge(http_handler.call_v3_router)
+            .merge(http_handler.call_v4_router)
+            .merge(http_handler.query_v2_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(http_handler.query_v3_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_query_concurrent_requests),
+            )))
+            .merge(
+                http_handler
+                    .subnet_read_state_v2_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .subnet_read_state_v3_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .canister_read_state_v2_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(
+                http_handler
+                    .canister_read_state_v3_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_read_state_concurrent_requests,
+                    ))),
+            )
+            .merge(http_handler.catchup_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_catch_up_package_concurrent_requests),
+            )))
+            .merge(http_handler.dashboard_router.layer(service_builder(
+                GlobalConcurrencyLimitLayer::new(config.max_dashboard_concurrent_requests),
+            )))
+            .merge(
+                http_handler
+                    .pprof_home_router
+                    .layer(service_builder(pprof_concurrency_limiter.clone())),
+            )
+            .merge(
+                http_handler
+                    .pprof_flamegraph_router
+                    .layer(service_builder(pprof_concurrency_limiter.clone())),
+            )
+            .merge(
+                http_handler
+                    .pprof_profile_router
+                    .layer(service_builder(pprof_concurrency_limiter)),
+            )
+            .merge(
+                http_handler
+                    .tracing_flamegraph_router
+                    .layer(service_builder(GlobalConcurrencyLimitLayer::new(
+                        config.max_tracing_flamegraph_concurrent_requests,
+                    ))),
+            );
 
     final_router.layer(
         ServiceBuilder::new()

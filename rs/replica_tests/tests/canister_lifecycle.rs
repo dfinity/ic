@@ -7,7 +7,7 @@ use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob, IC_00,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
+    InstallCodeArgs, LogVisibilityV2, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -22,6 +22,7 @@ use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4_096;
 
 #[test]
 fn can_create_canister_from_another_canister() {
@@ -722,7 +723,8 @@ fn can_get_canister_information() {
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                Default::default(),
+                LogVisibilityV2::default(),
+                TEST_DEFAULT_LOG_MEMORY_LIMIT,
                 0u128,
                 0u128,
                 0u128,
@@ -790,7 +792,8 @@ fn can_get_canister_information() {
                     None,
                     259200,
                     None,
-                    Default::default(),
+                    LogVisibilityV2::default(),
+                    TEST_DEFAULT_LOG_MEMORY_LIMIT,
                     0u128,
                     0u128,
                     0u128,

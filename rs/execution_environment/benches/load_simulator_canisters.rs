@@ -43,7 +43,7 @@ fn bytes_to_str(bytes: &[u8]) -> String {
 
 fn setup_env(total_canisters: usize) -> StateMachine {
     assert!(total_canisters >= CANISTERS_PER_CREATOR);
-    assert!(total_canisters % CANISTERS_PER_CREATOR == 0);
+    assert!(total_canisters.is_multiple_of(CANISTERS_PER_CREATOR));
 
     let env = StateMachine::new();
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("canister_creator_canister", &[]);

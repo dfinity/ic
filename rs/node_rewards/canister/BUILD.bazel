@@ -1,14 +1,16 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//rs/interfaces/registry",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/timer_task",
     "//rs/nns/constants",
     "//rs/node_rewards/canister/api",
     "//rs/node_rewards/rewards_calculation",
@@ -106,6 +108,16 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "nrc-test",
+    srcs = LIB_SRCS,
+    crate_features = ["test"],
+    crate_name = "ic_node_rewards_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES,
+)
+
 rust_canister(
     name = "node-rewards-canister",
     srcs = ["src/main.rs"],
@@ -123,7 +135,7 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":node-rewards-canister.did",
     deps = DEPENDENCIES + [
-        ":nrc",
+        ":nrc-test",
     ],
 )
 
@@ -145,7 +157,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_ic_test_suite_with_extra_srcs(
+rust_ic_test_suite(
     name = "node_rewards_canister_integration_test",
     srcs = glob(
         ["tests/*.rs"],
@@ -156,7 +168,6 @@ rust_ic_test_suite_with_extra_srcs(
     ),
     data = DEV_DATA,
     env = DEV_ENV,
-    extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nrc"],
 )

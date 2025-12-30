@@ -8,6 +8,8 @@ rust_library(
     visibility = [
         "//rs/canister_client/sender:__pkg__",
         "//rs/crypto:__subpackages__",
+        "//rs/tests/crypto:__subpackages__",
+        "//rs/validator:__subpackages__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [

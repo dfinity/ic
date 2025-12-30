@@ -127,6 +127,7 @@ fn btcscan_request(txid: Txid, max_response_bytes: u32) -> HttpRequestArgs {
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
+        is_replicated: None,
     }
 }
 
@@ -149,6 +150,7 @@ fn make_get_request(
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: request_headers,
+        is_replicated: None,
     }
 }
 
@@ -166,6 +168,7 @@ fn make_post_request(
         max_response_bytes: Some(max_response_bytes as u64),
         transform: param_transform(),
         headers: vec![header],
+        is_replicated: None,
     })
 }
 

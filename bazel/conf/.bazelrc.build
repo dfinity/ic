@@ -43,7 +43,6 @@ build --experimental_repository_downloader_retries=3 # https://bazel.build/refer
 
 common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
-common --flag_alias=k8s=//rs/tests:k8s
 common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 

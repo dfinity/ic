@@ -119,12 +119,17 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::KeyConfig) -> Result<Self, Self::Error> {
-        Ok(KeyConfig {
-            pre_signatures_to_create_in_advance: try_from_option_field(
-                value.pre_signatures_to_create_in_advance,
+        let key_id: MasterPublicKeyId = try_from_option_field(value.key_id, "KeyConfig::key_id")?;
+        if key_id.requires_pre_signatures() && value.pre_signatures_to_create_in_advance.is_none() {
+            return Err(ProxyDecodeError::MissingField(
                 "KeyConfig::pre_signatures_to_create_in_advance",
-            )?,
-            key_id: try_from_option_field(value.key_id, "KeyConfig::key_id")?,
+            ));
+        }
+        Ok(KeyConfig {
+            pre_signatures_to_create_in_advance: value
+                .pre_signatures_to_create_in_advance
+                .unwrap_or(0),
+            key_id,
             max_queue_size: try_from_option_field(
                 value.max_queue_size,
                 "KeyConfig::max_queue_size",

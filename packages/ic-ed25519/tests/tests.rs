@@ -654,3 +654,60 @@ fn offline_key_derivation_matches_mainnet_for_test_key_1() {
         "d9a2ce6a3cd33fe16dce37e045609e51ff516e93bb51013823d6d7a915e3cfb9"
     );
 }
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::Key1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "f419977bb61ca6c95ae6ec5b58189ab82e2681f3dbc8fc5d09ce3c6f6103c107",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::TestKey1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "c4afcb035090ab7dcc6aae48ff7b7df1a3d1120a3d8cbdc37a8d280e5e36ea6a",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_dfx_test_key() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("uzt4z-lp777-77774-qaabq-cai").unwrap();
+    let derivation_path = [];
+
+    let dpk = PublicKey::derive_pocketic_key(
+        ic_ed25519::PocketIcMasterPublicKeyId::DfxTestKey,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "17eb4d719c3c27cdfd7505e38142de4cebea1fc64352aa8b7a41b3d9c6574915",
+    );
+}

@@ -6,9 +6,8 @@ use crate::driver::{
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::GroupSetup,
 };
-use crate::k8s::tnet::TNet;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -256,15 +255,6 @@ impl InternetComputer {
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
-
-        if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let image_url = res_request.primary_image.url.clone();
-            let image_sha = res_request.primary_image.sha256.clone();
-            let tnet = TNet::read_attribute(env)
-                .image_url(image_url.as_ref())
-                .image_sha(image_sha.as_ref());
-            tnet.write_attribute(env);
-        }
 
         if let Some(record) = self.unassigned_record_config {
             record.write_attribute(env);

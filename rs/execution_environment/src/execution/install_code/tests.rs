@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallChunkedCodeArgsLegacy,
@@ -10,7 +11,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -25,6 +26,7 @@ use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::mem::size_of;
+use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
@@ -614,7 +616,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::new(canister_history_memory_usage as u64),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
@@ -1080,6 +1082,188 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
     // Simulate a subnet split that migrates canister 2 to another subnet.
     test.state_mut().take_canister_state(&canister_id_2);
     after_split(test.state_mut());
+
+    // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&message_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {canister_id_2} migrated during a subnet split"),
+        ))
+    );
+}
+
+#[test]
+fn subnet_split_cleans_in_progress_install_code_calls() {
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
+        // Ensure that all `install_code()` executions will get paused.
+        .with_install_code_slice_instruction_limit(1_000)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+    // Neither does canister 1's task queue.
+    assert_eq!(
+        test.canister_state(canister_id_1)
+            .system_state
+            .task_queue
+            .len(),
+        0
+    );
+
+    //
+    // Test install code call with canister request origin.
+    //
+
+    // `install_code()` will not complete execution in one slice and become paused,
+    // because we've set a very low `install_code_slice_instruction_limit` above.
+    test.inject_call_to_ic00(
+        Method::InstallCode,
+        install_code_args(canister_id_1).encode(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // The first task of canister 1 is a `ContinueInstallCode`.
+    assert_eq!(
+        test.canister_state(canister_id_1).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert!(own_subnet_id != other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, own_subnet_id);
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `InstallCodeCall` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `InstallCodeCall` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test install code call with ingress origin.
+    //
+    assert_eq!(
+        test.canister_state(canister_id_2)
+            .system_state
+            .task_queue
+            .len(),
+        0
+    );
+
+    // Send install code message and start execution.
+    let message_id = test.dts_install_code(install_code_args(canister_id_2));
+
+    // The first task of canister 2 is a `ContinueInstallCode`.
+    assert_eq!(
+        test.canister_state(canister_id_2).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    // And `SubnetCallContextManager` now contains one `InstallCodeCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `InstallCodeCall` and does not change the ingress state.
+    assert_eq!(
+        test.canister_state(canister_id_2).next_execution(),
+        NextExecution::ContinueInstallCode
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .install_code_calls_len(),
+        1
+    );
+    assert_matches!(
+        test.ingress_status(&message_id),
+        IngressStatus::Known {
+            state: IngressState::Processing,
+            ..
+        }
+    );
+
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `InstallCodeCall` and set the ingress state to `Failed`.
     assert_eq!(

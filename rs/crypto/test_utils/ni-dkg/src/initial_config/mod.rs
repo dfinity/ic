@@ -204,10 +204,10 @@ impl AsRef<[u8]> for CombinedSignatureBytes {
 }
 
 pub fn sign_message(message: &[u8], secret_key: &SecretKeyBytes) -> CombinedSignatureBytes {
-    let dst = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+    let dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
     let secret = Scalar::deserialize(&secret_key.val).expect("Invalid SecretKeyBytes");
     let message = G1Affine::hash(dst, message);
-    let signature = message * secret;
+    let signature = G1Affine::from(message * secret);
 
     CombinedSignatureBytes {
         val: signature.serialize(),

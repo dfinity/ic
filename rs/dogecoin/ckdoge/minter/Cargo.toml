@@ -15,18 +15,25 @@ async-trait = { workspace = true }
 bs58 = "0.5.0"
 candid = { workspace = true }
 candid_parser = { workspace = true }
+ciborium = { workspace = true }
 hex = { workspace = true }
 ic-cdk = { workspace = true }
 ic-ckbtc-minter = { path = "../../../bitcoin/ckbtc/minter" }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 serde = { workspace = true }
 sha2 = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
 ic-ckdoge-minter-test-utils = { path = "../test_utils" }
-pocket-ic = {path = "../../../../packages/pocket-ic"}
+ic-management-canister-types = { workspace = true }
+pocket-ic = { path = "../../../../packages/pocket-ic" }
+proptest = { workspace = true }
 serde_json = { workspace = true }
+test-strategy = "0.4.0"
 
 [features]
 self_check = []

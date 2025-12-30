@@ -245,6 +245,16 @@ impl IDkgPayload {
             .chain(xnet_reshares_transcripts)
     }
 
+    /// Return an iterator of all transcript configs that have no matching
+    /// results yet.
+    pub fn iter_pre_sig_transcript_configs_in_creation(
+        &self,
+    ) -> impl Iterator<Item = &IDkgTranscriptParamsRef> + '_ {
+        self.pre_signatures_in_creation
+            .iter()
+            .flat_map(|(_, pre_sig)| pre_sig.iter_transcript_configs_in_creation())
+    }
+
     /// Return an iterator of the ongoing xnet reshare transcripts on the source side.
     pub fn iter_xnet_transcripts_source_subnet(
         &self,
@@ -897,6 +907,18 @@ impl IDkgMessage {
             IDkgMessage::Complaint(x) => x.message_id(),
             IDkgMessage::Opening(x) => x.message_id(),
             IDkgMessage::Transcript(x) => x.message_id(),
+        }
+    }
+
+    pub fn sig_share_dedup_key(&self) -> Option<(RequestId, NodeId)> {
+        match self {
+            IDkgMessage::EcdsaSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::SchnorrSigShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::VetKdKeyShare(x) => Some((x.request_id, x.signer_id)),
+            IDkgMessage::Dealing(_)
+            | IDkgMessage::DealingSupport(_)
+            | IDkgMessage::Complaint(_)
+            | IDkgMessage::Opening(_) => None,
         }
     }
 }

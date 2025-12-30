@@ -658,6 +658,7 @@ mod tests {
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_interfaces::{
         execution_environment::IngressHistoryError,
         ingress_pool::ChangeAction,
@@ -671,7 +672,6 @@ mod tests {
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -1887,7 +1887,7 @@ mod tests {
     #[test]
     fn test_validate_empty_payload_succeeds() {
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,
@@ -1906,7 +1906,7 @@ mod tests {
         let certified_height = Height::new(0);
         let error = IngressHistoryError::StateRemoved(Height::new(1));
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,
@@ -1930,7 +1930,7 @@ mod tests {
         let certified_height = Height::new(0);
         let error = StateManagerError::StateNotCommittedYet(Height::new(1));
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,

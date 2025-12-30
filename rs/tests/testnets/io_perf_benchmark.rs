@@ -9,10 +9,10 @@
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
+//   $ NUM_PERF_HOSTS=1 ict testnet create io_perf_benchmark --verbose --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //
@@ -54,7 +54,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
-use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
+use ic_system_test_driver::driver::ic_gateway_vm::IcGatewayVm;
 use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -303,8 +303,5 @@ pub fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to setup ic-gateway");
     }
-    let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 }

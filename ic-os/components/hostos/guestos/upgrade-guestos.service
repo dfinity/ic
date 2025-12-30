@@ -8,5 +8,5 @@ RequiresMountsFor=/var
 [Service]
 Type=notify
 ExecStart=/opt/ic/bin/guest_vm_runner --type=upgrade
-Restart=always
+Restart=no
 RestartSec=20

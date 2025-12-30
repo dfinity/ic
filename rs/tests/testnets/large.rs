@@ -2,10 +2,10 @@
 //   one 4-node System, one 4-node Application, and one 1-node Application subnets, a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 2,000 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create large --lifetime-mins=180 --output-dir=./large -- --test_tmpdir=./large
+//   $ ict testnet create large --output-dir=./large -- --test_tmpdir=./large
 //
 // The --output-dir=./large will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./large will store the remaining test output in the specified directory.
@@ -110,8 +110,7 @@ pub fn setup(env: TestEnv) {
     }
     let ic_gateway = env.get_deployed_ic_gateway("ic-gateway-0").unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 
     // pick an SNS subnet among the application subnets
     let topology = env.topology_snapshot();

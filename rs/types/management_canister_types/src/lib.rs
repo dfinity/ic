@@ -10,8 +10,10 @@ pub use bounded_vec::*;
 use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
-    HttpMethod, TransformArgs, TransformContext, TransformFunc,
+    ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS, BoundedHttpHeaders, CanisterHttpRequestArgs,
+    CanisterHttpResponsePayload, DEFAULT_HTTP_OUTCALLS_PRICING_VERSION, HttpHeader, HttpMethod,
+    PRICING_VERSION_LEGACY, PRICING_VERSION_PAY_AS_YOU_GO, TransformArgs, TransformContext,
+    TransformFunc,
 };
 use ic_base_types::{
     CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
@@ -416,6 +418,7 @@ impl CanisterSettingsChangeRecord {
 ///        version : nat64;
 ///        total_num_changes : nat64;
 ///    };
+///    requested_by : principal;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -423,6 +426,25 @@ pub struct CanisterRenameRecord {
     canister_id: PrincipalId,
     total_num_changes: u64,
     rename_to: RenameToRecord,
+    requested_by: PrincipalId,
+}
+
+impl CanisterRenameRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
+
+    pub fn rename_to(&self) -> &RenameToRecord {
+        &self.rename_to
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -430,6 +452,20 @@ pub struct RenameToRecord {
     canister_id: PrincipalId,
     version: u64,
     total_num_changes: u64,
+}
+
+impl RenameToRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
 }
 
 /// `CandidType` for `CanisterChangeDetails`
@@ -469,6 +505,7 @@ pub struct RenameToRecord {
 ///       version : nat64;
 ///       total_num_changes : nat64;
 ///     };
+///     requested_by : principal;
 ///   };
 /// }
 /// ```
@@ -549,6 +586,7 @@ impl CanisterChangeDetails {
         to_canister_id: PrincipalId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
     ) -> CanisterChangeDetails {
         let rename_to = RenameToRecord {
             canister_id: to_canister_id,
@@ -559,6 +597,7 @@ impl CanisterChangeDetails {
             canister_id,
             total_num_changes,
             rename_to,
+            requested_by,
         };
         CanisterChangeDetails::CanisterRename(record)
     }
@@ -918,6 +957,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             version: canister_rename.rename_to.version,
                             total_num_changes: canister_rename.rename_to.total_num_changes,
                         }),
+                        requested_by: Some(canister_rename.requested_by.into()),
                     },
                 )
             }
@@ -1045,6 +1085,19 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                 let rename_to = canister_rename
                     .rename_to
                     .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
+                // The only principal who could request canister renaming before
+                // that principal started to be recorded in canister history
+                // is the following principal allowlisted in the NNS proposal 139083:
+                // https://dashboard.internetcomputer.org/proposal/139083
+                let default_requested_by = PrincipalId::from_str(
+                    "axa43-ya3vf-zi3lb-xbffp-vdsi5-alaja-wujmj-qg26n-pugel-72qro-iae",
+                )
+                .unwrap();
+                let requested_by = if let Some(requested_by) = canister_rename.requested_by {
+                    requested_by.try_into()?
+                } else {
+                    default_requested_by
+                };
                 Ok(CanisterChangeDetails::rename_canister(
                     canister_rename
                         .canister_id
@@ -1063,6 +1116,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                         .try_into()?,
                     rename_to.version,
                     rename_to.total_num_changes,
+                    requested_by,
                 ))
             }
         }
@@ -1232,6 +1286,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///   freezing_threshold : nat;
 ///   reserved_cycles_limit : nat;
 ///   log_visibility : log_visibility;
+///   log_memory_limit : nat;
 ///   wasm_memory_limit : nat;
 ///   wasm_memory_threshold : nat;
 ///   environment_variables : vec environment_variable;
@@ -1246,6 +1301,7 @@ pub struct DefiniteCanisterSettingsArgs {
     freezing_threshold: candid::Nat,
     reserved_cycles_limit: candid::Nat,
     log_visibility: LogVisibilityV2,
+    log_memory_limit: candid::Nat,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
     environment_variables: Vec<EnvironmentVariable>,
@@ -1260,6 +1316,7 @@ impl DefiniteCanisterSettingsArgs {
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: u64,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
         environment_variables: EnvironmentVariables,
@@ -1282,6 +1339,7 @@ impl DefiniteCanisterSettingsArgs {
             freezing_threshold: candid::Nat::from(freezing_threshold),
             reserved_cycles_limit,
             log_visibility,
+            log_memory_limit: candid::Nat::from(log_memory_limit),
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
             environment_variables,
@@ -1298,6 +1356,10 @@ impl DefiniteCanisterSettingsArgs {
 
     pub fn log_visibility(&self) -> &LogVisibilityV2 {
         &self.log_visibility
+    }
+
+    pub fn log_memory_limit(&self) -> candid::Nat {
+        self.log_memory_limit.clone()
     }
 
     pub fn wasm_memory_limit(&self) -> candid::Nat {
@@ -1423,6 +1485,7 @@ impl CanisterStatusResultV2 {
         freezing_threshold: u64,
         reserved_cycles_limit: Option<u128>,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: u64,
         idle_cycles_burned_per_day: u128,
         reserved_cycles: u128,
         query_num_calls: u128,
@@ -1462,6 +1525,7 @@ impl CanisterStatusResultV2 {
                 freezing_threshold,
                 reserved_cycles_limit,
                 log_visibility,
+                log_memory_limit,
                 wasm_memory_limit,
                 wasm_memory_threshold,
                 environment_variables,
@@ -1577,6 +1641,10 @@ impl CanisterStatusResultV2 {
 
     pub fn reserved_cycles(&self) -> u128 {
         self.reserved_cycles.0.to_u128().unwrap()
+    }
+
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.settings.environment_variables
     }
 
     pub fn settings(&self) -> DefiniteCanisterSettingsArgs {
@@ -2175,6 +2243,7 @@ pub struct EnvironmentVariable {
 ///   freezing_threshold : opt nat;
 ///   reserved_cycles_limit : opt nat;
 ///   log_visibility : opt log_visibility;
+///   log_memory_limit : opt nat;
 ///   wasm_memory_limit : opt nat;
 ///   wasm_memory_threshold : opt nat;
 ///   environment_variables : opt vec environment_variable;
@@ -2188,6 +2257,7 @@ pub struct CanisterSettingsArgs {
     pub freezing_threshold: Option<candid::Nat>,
     pub reserved_cycles_limit: Option<candid::Nat>,
     pub log_visibility: Option<LogVisibilityV2>,
+    pub log_memory_limit: Option<candid::Nat>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
     pub environment_variables: Option<Vec<EnvironmentVariable>>,
@@ -2206,6 +2276,7 @@ impl CanisterSettingsArgs {
             freezing_threshold: None,
             reserved_cycles_limit: None,
             log_visibility: None,
+            log_memory_limit: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
             environment_variables: None,
@@ -2221,6 +2292,7 @@ pub struct CanisterSettingsArgsBuilder {
     freezing_threshold: Option<candid::Nat>,
     reserved_cycles_limit: Option<candid::Nat>,
     log_visibility: Option<LogVisibilityV2>,
+    log_memory_limit: Option<candid::Nat>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
     environment_variables: Option<Vec<EnvironmentVariable>>,
@@ -2240,6 +2312,7 @@ impl CanisterSettingsArgsBuilder {
             freezing_threshold: self.freezing_threshold,
             reserved_cycles_limit: self.reserved_cycles_limit,
             log_visibility: self.log_visibility,
+            log_memory_limit: self.log_memory_limit,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
             environment_variables: self.environment_variables,
@@ -2296,6 +2369,18 @@ impl CanisterSettingsArgsBuilder {
         }
     }
 
+    /// Sets the freezing threshold in seconds. For more details see
+    /// the description of this field in the IC specification.
+    /// Values larger than `u64::MAX` are invalid and thus this function
+    /// should only be used in tests.
+    #[doc(hidden)]
+    pub fn with_freezing_threshold_u128(self, freezing_threshold: u128) -> Self {
+        Self {
+            freezing_threshold: Some(candid::Nat::from(freezing_threshold)),
+            ..self
+        }
+    }
+
     /// Sets the reserved cycles limit in cycles.
     pub fn with_reserved_cycles_limit(self, reserved_cycles_limit: u128) -> Self {
         Self {
@@ -2308,6 +2393,14 @@ impl CanisterSettingsArgsBuilder {
     pub fn with_log_visibility(self, log_visibility: LogVisibilityV2) -> Self {
         Self {
             log_visibility: Some(log_visibility),
+            ..self
+        }
+    }
+
+    /// Sets the log capacity in bytes.
+    pub fn with_log_memory_limit(self, log_memory_limit: u64) -> Self {
+        Self {
+            log_memory_limit: Some(candid::Nat::from(log_memory_limit)),
             ..self
         }
     }
@@ -3429,10 +3522,10 @@ impl Payload<'_> for NodeMetricsHistoryResponse {}
 /// Exclusive range for fetching canister logs `[start, end)`.
 /// It's used both for `idx` and `timestamp_nanos` based filtering.
 /// If `end` is below `start`, the range is considered empty.
-#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRange {
-    start: u64, // Inclusive.
-    end: u64,   // Exclusive, values below `start` are ignored.
+    pub start: u64, // Inclusive.
+    pub end: u64,   // Exclusive, values below `start` are ignored.
 }
 
 impl Payload<'_> for FetchCanisterLogsRange {}
@@ -3441,6 +3534,11 @@ impl FetchCanisterLogsRange {
     /// Creates a new range from `start` (inclusive) to `end` (exclusive).
     pub fn new(start: u64, end: u64) -> Self {
         Self { start, end }
+    }
+
+    /// Returns true if the range is valid (i.e., start < end).
+    pub fn is_valid(&self) -> bool {
+        self.start < self.end
     }
 
     /// Returns the length of the range.
@@ -3465,7 +3563,7 @@ impl FetchCanisterLogsRange {
     }
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Copy, Clone, Debug, CandidType, Deserialize)]
 pub enum FetchCanisterLogsFilter {
     #[serde(rename = "by_idx")]
     ByIdx(FetchCanisterLogsRange),
@@ -3475,6 +3573,15 @@ pub enum FetchCanisterLogsFilter {
 }
 
 impl Payload<'_> for FetchCanisterLogsFilter {}
+
+impl FetchCanisterLogsFilter {
+    pub fn is_valid(&self) -> bool {
+        match self {
+            FetchCanisterLogsFilter::ByIdx(range) => range.is_valid(),
+            FetchCanisterLogsFilter::ByTimestampNanos(range) => range.is_valid(),
+        }
+    }
+}
 
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
@@ -3609,7 +3716,7 @@ impl UploadChunkArgs {
 ///   hash : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Serialize, Deserialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -3840,19 +3947,30 @@ impl Payload<'_> for StoredChunksReply {}
 /// record {
 ///   canister_id : principal;
 ///   replace_snapshot : opt blob;
+///   uninstall_code : opt bool;
+///   sender_canister_version : opt na64;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
     pub replace_snapshot: Option<SnapshotId>,
+    pub uninstall_code: Option<bool>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl TakeCanisterSnapshotArgs {
-    pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
+    pub fn new(
+        canister_id: CanisterId,
+        replace_snapshot: Option<SnapshotId>,
+        uninstall_code: Option<bool>,
+        sender_canister_version: Option<u64>,
+    ) -> Self {
         Self {
             canister_id: canister_id.get(),
             replace_snapshot,
+            uninstall_code,
+            sender_canister_version,
         }
     }
 
@@ -3862,6 +3980,14 @@ impl TakeCanisterSnapshotArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
+    }
+
+    pub fn uninstall_code(&self) -> Option<bool> {
+        self.uninstall_code
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 impl Payload<'_> for TakeCanisterSnapshotArgs {}
@@ -4131,7 +4257,7 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, EnumIter)]
 pub enum SnapshotSource {
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
@@ -4228,7 +4354,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// }
 /// ```
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
@@ -4615,6 +4741,7 @@ pub enum CanisterSnapshotDataOffset {
 ///     version : nat64;
 ///     total_num_changes : nat64;
 ///   };
+///   requested_by : principal;
 ///   sender_canister_version : nat64;
 /// }
 /// ```
@@ -4623,6 +4750,7 @@ pub enum CanisterSnapshotDataOffset {
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
     pub rename_to: RenameToArgs,
+    pub requested_by: PrincipalId,
     pub sender_canister_version: u64,
 }
 
@@ -4631,6 +4759,10 @@ impl Payload<'_> for RenameCanisterArgs {}
 impl RenameCanisterArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {

@@ -47,8 +47,6 @@ ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 ic-types = { path = "../../../types/types" }
 proptest = { workspace = true }
-serde_bytes = { workspace = true }
-serde_json = { workspace = true }
 
 [features]
 default = []

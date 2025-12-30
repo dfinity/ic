@@ -4,16 +4,17 @@ use crate::common::rest::{
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
     InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
     RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
 use crate::{
-    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
-    copy_dir, start_server,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams,
+    TickConfigs, Time, copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
@@ -37,7 +38,7 @@ use reqwest::{StatusCode, Url};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{File, read_dir};
+use std::fs::read_dir;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -128,6 +129,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -138,6 +140,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -154,10 +157,7 @@ impl PocketIc {
             server_url
         };
 
-        let subnet_config_set = subnet_config_set
-            .into()
-            .try_with_icp_features(&icp_features)
-            .unwrap();
+        let subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
@@ -182,19 +182,6 @@ impl PocketIc {
             .expect("Failed to copy state directory");
         };
 
-        // now that we initialized the state dir, we check if it contains a topology file
-        let has_topology = state_dir
-            .as_ref()
-            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
-            .unwrap_or_default();
-
-        // if there is no topology to fetch from the state dir,
-        // the topology will be derived from the provided subnet config set
-        // that we need to validate
-        if !has_topology {
-            subnet_config_set.validate().unwrap();
-        }
-
         let instance_config = InstanceConfig {
             subnet_config_set,
             http_gateway_config,
@@ -207,6 +194,7 @@ impl PocketIc {
             icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            dogecoind_addr,
             icp_features: Some(icp_features),
             incomplete_state: None,
             initial_time,
@@ -385,7 +373,8 @@ impl PocketIc {
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, configs).await;
+        self.post::<(), RawTickConfigs>(endpoint, configs.into())
+            .await;
     }
 
     /// Configures the IC to make progress automatically,
@@ -527,7 +516,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {message}")
+                panic!("Failed to create http gateway: {message}")
             }
         }
     }
@@ -1704,6 +1693,60 @@ impl PocketIc {
         let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
+    }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let endpoint = "update/canister_snapshot_download";
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_download = RawCanisterSnapshotDownload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            snapshot_id,
+            snapshot_dir,
+        };
+        self.post(endpoint, raw_canister_snapshot_download).await
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let endpoint = "update/canister_snapshot_upload";
+        let replace_snapshot =
+            replace_snapshot.map(|snapshot_id| RawCanisterSnapshotId { snapshot_id });
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_upload = RawCanisterSnapshotUpload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            replace_snapshot,
+            snapshot_dir,
+        };
+        self.post::<RawCanisterSnapshotId, _>(endpoint, raw_canister_snapshot_upload)
+            .await
+            .snapshot_id
     }
 }
 

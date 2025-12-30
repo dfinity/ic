@@ -84,7 +84,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.6"
+ROSETTA_VERSION = "1.2.7"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -175,13 +175,13 @@ rust_test_suite_with_extra_srcs(
         "tests/*.json",
         "tests/*.ros",
     ]) + [
+        "//:rosetta-cli",
         "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
-        "@rosetta-cli//:rosetta-cli",
     ],
     env = LOCAL_REPLICA_ENV | {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
         "ICRC3_TEST_LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz)",
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "ROSETTA_CLI": "$(rootpath //:rosetta-cli)",
     },
     extra_srcs = glob([
         "tests/common/*.rs",
@@ -200,11 +200,11 @@ rust_test_suite_with_extra_srcs(
         "tests/*.json",
         "tests/*.ros",
     ]) + [
-        "@rosetta-cli//:rosetta-cli",
+        "//:rosetta-cli",
     ],
     env = LOCAL_REPLICA_ENV | {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/",
-        "ROSETTA_CLI": "$(rootpath @rosetta-cli//:rosetta-cli)",
+        "ROSETTA_CLI": "$(rootpath //:rosetta-cli)",
         "RUST_TEST_THREADS": "4",
     },
     extra_srcs = glob([
@@ -293,7 +293,6 @@ oci_image(
     name = "ic_icrc_rosetta_image",
     base = ":ic_icrc_rosetta_image_base",
     entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
-    tags = ["local"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

@@ -58,11 +58,41 @@ function update_node_operator_private_key_metric() {
         "gauge"
 }
 
+function update_tee_metrics() {
+    # Define the metric metadata once.
+    local metric_family="guestos_tee"
+    clear_metrics "$metric_family"
+
+    tee_configuration_str=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
+
+    if [[ "${tee_configuration_str}" == "true" ]]; then
+        tee_configured=1
+    elif [[ "${tee_configuration_str}" == "false" ]]; then
+        tee_configured=0
+    else
+        # Default/fallback if the key is missing or empty
+        tee_configured=0
+    fi
+
+    write_metric_header "$metric_family" \
+        "guestos_tee_configured" \
+        "Indicates whether the virtual machine is configured to run in a Trusted Execution Environment (1 = TEE configured, 0 = TEE not configured)" \
+        "gauge"
+    append_metric "$metric_family" "guestos_tee_configured" "" "${tee_configured}"
+
+    write_metric_header "$metric_family" \
+        "guestos_tee_active" \
+        "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
+        "gauge"
+    append_metric "$metric_family" "guestos_tee_active" "" "$SEV_ACTIVE"
+}
+
 function main() {
     update_guestos_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
     update_node_operator_private_key_metric
+    update_tee_metrics
 }
 
 main

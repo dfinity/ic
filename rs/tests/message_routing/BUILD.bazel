@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MAINNET_ENV", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -13,7 +13,6 @@ system_test_nns(
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = XNET_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
@@ -38,7 +37,6 @@ system_test(
         "memory_safety.wasm",
     ],
     tags = [
-        "k8s",
         "long_test",
     ],
     deps = [
@@ -61,11 +59,9 @@ system_test_nns(
     name = "rejoin_test",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps =
-        GRAFANA_RUNTIME_DEPS +
         UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
@@ -87,7 +83,6 @@ system_test_nns(
     ],
     test_timeout = "eternal",
     runtime_deps =
-        GRAFANA_RUNTIME_DEPS +
         STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -105,14 +100,12 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
     },
+    guestos = "malicious",
     tags = [
-        "k8s",
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    runtime_deps = GRAFANA_RUNTIME_DEPS + STATESYNC_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = STATESYNC_TEST_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",

@@ -19,8 +19,8 @@ fn should_create_signature_share_successfully_with_new_key() {
         let receiver = env
             .nodes
             .random_filtered_by_receivers(inputs.receivers(), rng);
-        receiver.load_tschnorr_sig_transcripts(&inputs);
-        let result = receiver.create_sig_share(&inputs);
+        receiver.load_tschnorr_sig_transcripts(&inputs.as_ref());
+        let result = receiver.create_sig_share(&inputs.as_ref());
         assert_matches!(result, Ok(_));
     }
 }
@@ -39,7 +39,7 @@ fn should_fail_to_create_signature_if_not_receiver() {
             .build();
 
         assert_eq!(
-            bad_crypto_component.create_sig_share(&inputs),
+            bad_crypto_component.create_sig_share(&inputs.as_ref()),
             Err(ThresholdSchnorrCreateSigShareError::NotAReceiver)
         );
     }
@@ -54,8 +54,8 @@ fn should_fail_to_sign_when_input_transcripts_are_not_retained() {
         let receiver = env
             .nodes
             .random_filtered_by_receivers(inputs.receivers(), rng);
-        receiver.load_tschnorr_sig_transcripts(&inputs);
-        assert_matches!(receiver.create_sig_share(&inputs), Ok(_));
+        receiver.load_tschnorr_sig_transcripts(&inputs.as_ref());
+        assert_matches!(receiver.create_sig_share(&inputs.as_ref()), Ok(_));
         let another_key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let active_transcripts = hashset!(another_key_transcript);
         assert_eq!(
@@ -63,7 +63,7 @@ fn should_fail_to_sign_when_input_transcripts_are_not_retained() {
             Ok(())
         );
 
-        let result = receiver.create_sig_share(&inputs);
+        let result = receiver.create_sig_share(&inputs.as_ref());
         assert_matches!(
             result,
             Err(ThresholdSchnorrCreateSigShareError::SecretSharesNotFound { .. })
@@ -80,15 +80,15 @@ fn should_fail_to_sign_when_only_key_transcript_is_not_retained() {
         let receiver = env
             .nodes
             .random_filtered_by_receivers(inputs.receivers(), rng);
-        receiver.load_tschnorr_sig_transcripts(&inputs);
-        assert_matches!(receiver.create_sig_share(&inputs), Ok(_));
+        receiver.load_tschnorr_sig_transcripts(&inputs.as_ref());
+        assert_matches!(receiver.create_sig_share(&inputs.as_ref()), Ok(_));
         let active_transcripts = hashset!(inputs.presig_transcript().blinder_unmasked().clone());
         assert_eq!(
             receiver.retain_active_transcripts(&active_transcripts),
             Ok(())
         );
 
-        let result = receiver.create_sig_share(&inputs);
+        let result = receiver.create_sig_share(&inputs.as_ref());
         assert_matches!(
             result,
             Err(ThresholdSchnorrCreateSigShareError::SecretSharesNotFound { .. })
@@ -105,15 +105,15 @@ fn should_fail_to_sign_when_only_presig_transcript_is_not_retained() {
         let receiver = env
             .nodes
             .random_filtered_by_receivers(inputs.receivers(), rng);
-        receiver.load_tschnorr_sig_transcripts(&inputs);
-        assert_matches!(receiver.create_sig_share(&inputs), Ok(_));
+        receiver.load_tschnorr_sig_transcripts(&inputs.as_ref());
+        assert_matches!(receiver.create_sig_share(&inputs.as_ref()), Ok(_));
         let active_transcripts = hashset!(inputs.key_transcript().clone());
         assert_eq!(
             receiver.retain_active_transcripts(&active_transcripts),
             Ok(())
         );
 
-        let result = receiver.create_sig_share(&inputs);
+        let result = receiver.create_sig_share(&inputs.as_ref());
         assert_matches!(
             result,
             Err(ThresholdSchnorrCreateSigShareError::SecretSharesNotFound { .. })

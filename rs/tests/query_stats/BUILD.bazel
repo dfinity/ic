@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,10 +7,9 @@ system_test(
     name = "query_stats_basic",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/query_stats/lib",
@@ -23,10 +22,9 @@ system_test(
     env = UNIVERSAL_CANISTER_ENV,
     flaky = True,  # flakiness rate of 1.22% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/query_stats/lib",
@@ -38,10 +36,23 @@ system_test(
     name = "query_stats_above_threshold",
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/query_stats/lib",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test(
+    name = "query_stats_https_outcalls",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/query_stats/lib",

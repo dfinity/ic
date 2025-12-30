@@ -558,8 +558,8 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 mod tests {
     use super::*;
     use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};

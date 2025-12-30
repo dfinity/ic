@@ -26,12 +26,10 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = CryptoError;
 
     fn try_from(public_key_bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Projective::deserialize(&public_key_bytes.0).map_err(|_| {
-            CryptoError::MalformedPublicKey {
-                algorithm: AlgorithmId::MultiBls12_381,
-                key_bytes: Some(public_key_bytes.0.to_vec()),
-                internal_error: "Point decoding failed".to_string(),
-            }
+        G2Affine::deserialize(&public_key_bytes.0).map_err(|_| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(public_key_bytes.0.to_vec()),
+            internal_error: "Point decoding failed".to_string(),
         })
     }
 }
@@ -44,7 +42,7 @@ impl From<&PublicKey> for PublicKeyBytes {
 impl TryFrom<&IndividualSignatureBytes> for IndividualSignature {
     type Error = CryptoError;
     fn try_from(signature: &IndividualSignatureBytes) -> Result<Self, Self::Error> {
-        G1Projective::deserialize(&signature.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&signature.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: signature.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),
@@ -62,7 +60,7 @@ impl TryFrom<&PopBytes> for Pop {
     type Error = CryptoError;
 
     fn try_from(pop_bytes: &PopBytes) -> Result<Self, Self::Error> {
-        G1Projective::deserialize(&pop_bytes.0).map_err(|_| CryptoError::MalformedPop {
+        G1Affine::deserialize(&pop_bytes.0).map_err(|_| CryptoError::MalformedPop {
             algorithm: AlgorithmId::MultiBls12_381,
             pop_bytes: pop_bytes.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),
@@ -78,7 +76,7 @@ impl From<&Pop> for PopBytes {
 impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
     type Error = CryptoError;
     fn try_from(signature: &CombinedSignatureBytes) -> Result<Self, Self::Error> {
-        G1Projective::deserialize(&signature.0).map_err(|_| CryptoError::MalformedSignature {
+        G1Affine::deserialize(&signature.0).map_err(|_| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::MultiBls12_381,
             sig_bytes: signature.0.to_vec(),
             internal_error: "Point decoding failed".to_string(),

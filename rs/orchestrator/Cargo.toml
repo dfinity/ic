@@ -16,6 +16,7 @@ clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
 get_if_addrs = { workspace = true }
+guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
@@ -28,6 +29,7 @@ ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-dashboard = { path = "./dashboard" }
 ic-ed25519 = { path = "../../packages/ic-ed25519" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
@@ -65,12 +67,14 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
 url = { workspace = true }
+qrcode = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
 hyper-util = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
@@ -78,7 +82,6 @@ ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
