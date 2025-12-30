@@ -14869,7 +14869,6 @@ dependencies = [
  "json5",
  "lazy_static",
  "macaddr",
- "maplit",
  "nix 0.24.3",
  "num_cpus",
  "on_wire",
