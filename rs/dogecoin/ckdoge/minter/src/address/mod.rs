@@ -122,6 +122,13 @@ impl DogecoinAddress {
         }
     }
 
+    pub fn into_array(self) -> [u8; 20] {
+        match self {
+            DogecoinAddress::P2pkh(data) => data,
+            DogecoinAddress::P2sh(data) => data,
+        }
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         match self {
             DogecoinAddress::P2pkh(data) => data.as_slice(),

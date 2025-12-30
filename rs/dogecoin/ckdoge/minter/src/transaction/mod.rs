@@ -44,14 +44,13 @@ impl DogecoinTransactionSigner {
                 &account,
             );
             let address = DogecoinAddress::p2pkh_from_public_key(&public_key);
-            let script_pubkey = match address {
-                DogecoinAddress::P2pkh(hash) => {
-                    bitcoin::ScriptBuf::new_p2pkh(&bitcoin::PubkeyHash::from_byte_array(hash))
-                }
-                DogecoinAddress::P2sh(hash) => {
-                    bitcoin::ScriptBuf::new_p2sh(&bitcoin::ScriptHash::from_byte_array(hash))
-                }
-            };
+            assert!(
+                matches!(address, DogecoinAddress::P2pkh(_)),
+                "BUG: expected P2PKH address. Other type of addresses would require other script_sig."
+            );
+            let script_pubkey = bitcoin::ScriptBuf::new_p2pkh(
+                &bitcoin::PubkeyHash::from_byte_array(address.into_array()),
+            );
             let sighash = cache
                 .legacy_signature_hash(input_index, &script_pubkey, sighash_type.to_u32())
                 .expect("BUG: sighash should not error");
