@@ -47,7 +47,7 @@ use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight,
+        HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     crypto::*,
@@ -66,7 +66,7 @@ pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
     #[allow(clippy::disallowed_types)]
@@ -82,7 +82,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -101,7 +101,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
         initial_backoff: Duration,
@@ -365,9 +365,18 @@ impl CatchUpPackageProvider {
         })?;
         info!(
             self.logger,
-            "Persisting CUP (registry version={}, height={}) to file {}",
+            "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
+            cup.content.version(),
             cup.content.registry_version(),
-            cup.height(),
+            cup.content.height(),
+            cup.is_signed(),
+            hex::encode(cup.content.state_hash.clone().get().0),
+            cup.content
+                .block
+                .get_value()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
             &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
@@ -506,12 +515,12 @@ mod tests {
         service::service_fn,
     };
     use hyper_util::rt::{TokioExecutor, TokioIo};
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
     use ic_logger::no_op_logger;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
     use rcgen::{CertificateParams, KeyPair};

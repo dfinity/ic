@@ -45,7 +45,7 @@ fn expected_overlay_file_size(num_pages: u64, num_ranges: u64) -> u64 {
 
 /// Division with rounding up, e.g. 2 / 2 -> 1, 1 / 2 -> 1
 fn divide_rounding_up(a: u64, b: u64) -> u64 {
-    a / b + if a % b != 0 { 1 } else { 0 }
+    a / b + if !a.is_multiple_of(b) { 1 } else { 0 }
 }
 
 /// Expected sizes of the shards; 0 if the shards has no data and should not exist.

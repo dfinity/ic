@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
+    RecoveryArgs, RecoveryResult,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_version,
@@ -22,23 +22,94 @@ use url::Url;
 use crate::{Recovery, Step};
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    Debug,
+    Deserialize,
+    EnumIter,
+    EnumMessage,
+    EnumString,
+    Serialize,
+    strum_macros::Display,
 )]
 pub enum StepType {
+    /// Before we can start the recovery process, we need to prevent the subnet from attempting to
+    /// finalize new blocks. There is no way of halting the NNS subnet like we do for application
+    /// subnets (by issuing a proposal), so this is a requirement before starting the recovery. As a
+    /// fail-safe, this first step will stop the replica process on the given admin node.
     StopReplica,
+    /// In order to determine whether we had a possible state divergence during the subnet failure,
+    /// we need to pull the certification pools from as many nodes as possible.
     DownloadCertifications,
+    /// In this step we will merge all found certifications and determine whether it is safe to
+    /// continue without a manual intervention. In most cases, when a subnet happened due to a
+    /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
+    /// In this step we will download all finalized consensus artifacts. For that we should use a
+    /// node, that is up to date with the highest finalization height because this node will contain
+    /// all required artifacts for the recovery.
     DownloadConsensusPool,
+    /// In this step we will download the subnet state from a node that is sufficiently up to date
+    /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
+    /// transferring the state over the network, it is recommended to perform the recovery directly
+    /// on one of the nodes of the subnet and input "local" at this step. The node needs to have
+    /// admin access because a readonly key cannot be deployed, like we do in application subnet
+    /// recoveries.
     DownloadState,
+    /// In this step we will take the latest persisted subnet state downloaded in the previous step
+    /// and apply the finalized consensus artifacts on it via the deterministic state machine part
+    /// of the replica to hopefully obtain the exact state which existed in the memory of all subnet
+    /// nodes at the moment when a subnet issue has occurred. Note that if the cause of this recovery
+    /// is a panic in the deterministic state machine when executing a certain height, we can specify
+    /// a "target replay height" in this step. This target height should be chosen such that it is
+    /// below the height causing the panic, but above or equal to the height of the last certification
+    /// (share).
+    /// This step will also add ingress messages to the registry canister to: (optionally) add and
+    /// bless an upgrade version, and update the NNS subnet record to point to this new version.
+    /// ic-replay will stop at the given height (+ the added heights for the ingress messages) and
+    /// create a checkpoint, which will then be used to create the recovery CUP.
     ICReplay,
+    /// Now we want to verify that the height of the locally obtained execution state matches the
+    /// highest finalized height which was agreed upon by the subnet (+ the added heights for the
+    /// ingress messages).
     ValidateReplayOutput,
+    /// This step creates a new registry local store corresponding to the registry canister state
+    /// at the height of the recovery CUP. This will later indicate to nodes to upgrade to the
+    /// upgrade version.
     UpdateRegistryLocalStore,
+    /// This step creates a tarball of the updated registry local store created in the previous
+    /// step.
     CreateRegistryTar,
+    /// This step creates a recovery CUP with the state hash corresponding to the checkpoint created
+    /// in the ICReplay step. The DKG transcripts are the exact same ones as the last CUP of the
+    /// subnet before the stall.
     GetRecoveryCUP,
+    /// In this step we will create the recovery artifacts archive containing the recovery CUP and
+    /// the registry archive created in the previous steps. After this step, the recovery artifacts
+    /// should be uploaded to a well-known location that the rest of the subnet nodes will download
+    /// from using guestos-recovery-upgrader and guestos-recovery-engine. They will overwrite their
+    /// CUP and local store with the ones provided in this archive.
     CreateArtifacts,
+    /// Our subnet should know by now that it's supposed to restart the computation from a state
+    /// with the hash which we have written into the recovery CUP in the previous step. But the
+    /// state with this hash only exists on our current machine. By uploading this state to any
+    /// valid subnet node, we allow all other nodes to find and sync this state to their local
+    /// disks. The node will be chosen as the one given in StopReplica or DownloadState step (the
+    /// admin node).
     UploadState,
+    /// The following step is optional but recommended. It will perform the action of the
+    /// guestos-recovery-engine by overwriting the CUP and registry local store on the admin node.
+    /// It is recommended to execute this step to ensure the upgrade is detected and the CUP is
+    /// fetchable (done in the next step).
     UploadCUPAndRegistry,
+    /// The following step is optional and executed only if the previous step was executed. It will
+    /// poll the admin node until the recovery CUP is served. This is the sign of a successful
+    /// upgrade to the upgrade version.
     WaitForCUP,
+    /// This step deletes the working directory with all data. This step is safe to run if the
+    /// recovery went smooth and no teams need data for further debugging. In particular, this will
+    /// delete the recovery artifacts archive if using the default output directory.
     Cleanup,
 }
 
@@ -83,7 +154,8 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub keep_downloaded_state: Option<bool>,
 
-    /// IP address of the node used to poll for the recovery CUP
+    /// IP address of the node used to upload the recovery CUP and registry local store to and poll
+    /// for the CUP
     #[clap(long)]
     pub wait_for_cup_node: Option<IpAddr>,
 
@@ -144,10 +216,6 @@ impl NNSRecoverySameNodes {
             logger,
         }
     }
-
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
-    }
 }
 
 impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
@@ -172,11 +240,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
         match step_type {
-            StepType::StopReplica
-            | StepType::DownloadState
-            | StepType::UploadState
-            | StepType::UploadCUPAndRegistry => {
+            StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
                     self.params.admin_access_location = read_optional_data_location(
                         &self.logger,
@@ -188,13 +255,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         }
         match step_type {
             StepType::DownloadConsensusPool => {
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_pool_node.is_none() {
+                    // We could pick a node with highest finalization height automatically, but we
+                    // might have a preference between nodes of the same finalization height.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
                     self.params.download_pool_node = read_optional(
                         &self.logger,
                         "Enter consensus pool download IP (backup access required):",
@@ -246,16 +315,23 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::WaitForCUP => {
+            StepType::UploadCUPAndRegistry => {
                 if self.params.wait_for_cup_node.is_none() {
-                    if let Some(DataLocation::Remote(ip)) = self.params.admin_access_location {
-                        self.params.wait_for_cup_node = Some(ip);
-                    } else {
-                        self.params.wait_for_cup_node = read_optional(
+                    self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
+                        self.params.admin_access_location
+                    {
+                        consent_given(
                             &self.logger,
-                            "Enter IP of the node to be polled for the recovery CUP:",
-                        );
-                    }
+                            &format!(
+                                "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
+                            ),
+                            ).then_some(ip)
+                    } else {
+                        read_optional(
+                            &self.logger,
+                            "If you would like to recover the admin node now, i.e. upload the CUP and registry local store to it, enter its IP address:",
+                        )
+                    };
                 }
             }
 
@@ -292,38 +368,30 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadConsensusPool => {
                 if let Some(node_ip) = self.params.download_pool_node {
-                    Ok(Box::new(self.recovery.get_download_state_step(
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
                         node_ip,
                         SshUser::Backup,
                         self.params.backup_key_file.clone(),
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
-                                                                      // download only the
-                                                                      // consensus pool
-                    )))
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::DownloadState => {
-                match self.params.admin_access_location {
-                    Some(DataLocation::Local) => {
-                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                    }
-                    Some(DataLocation::Remote(node_ip)) => {
-                        Ok(Box::new(self.recovery.get_download_state_step(
-                            node_ip,
-                            SshUser::Admin,
-                            self.recovery.admin_key_file.clone(),
-                            self.params.keep_downloaded_state == Some(true),
-                            /*additional_excludes=*/ vec![CUPS_DIR],
-                        )))
-                    }
-                    None => Err(RecoveryError::StepSkipped),
+            StepType::DownloadState => match self.params.admin_access_location {
+                Some(DataLocation::Local) => {
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
-            }
+                Some(DataLocation::Remote(node_ip)) => {
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                        self.params.keep_downloaded_state == Some(true),
+                    )?))
+                }
+                None => Err(RecoveryError::StepSkipped),
+            },
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
@@ -386,18 +454,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                    Ok(Box::new(
+                        self.recovery.get_upload_state_and_restart_step(method),
+                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
             StepType::UploadCUPAndRegistry => {
-                if let Some(method) = self.params.admin_access_location {
-                    let node_ip = match method {
-                        DataLocation::Remote(ip) => ip,
-                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
-                    };
+                if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)

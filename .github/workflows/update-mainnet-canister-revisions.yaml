@@ -1,0 +1,85 @@
+name: Update mainnet canister versions file
+
+# NOTE: The workflow  update-nervous-system-wasms is crucial for keeping the currently deployed canister versions`
+# up to date.  SNS Canister release qualification tests (under rs/nervous_system/integration_tests) depend on the
+# version of the canister being up to date.  If it is disabled, tests might succeed that ought to fail.  Please do not
+# disable without consulting (or minimally informing) the team(s) maintaining the NNS and SNS (currently Governance).
+
+on:
+  schedule:
+    - cron: "0 */2 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/update-mainnet-canister-revisions.yaml'
+
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # IMPORTANT: See note at the top of this file.
+  update-nervous-system-wasms:
+    runs-on:
+      labels: dind-small
+    environment: CREATE_PR
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:cb3a6693a10777d16c301d98f5b67e23db405bf962d0eb8cec74082916c17bc7
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Create GitHub App Token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup python3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Setup gh cli
+        env:
+          GH_CLI_VERSION: 2.74.0
+        run: |
+          # Without --fail, 4xx and 5xx are considered "success", because UNIX.
+          # If this keeps failing, consider applying other --retry-??? flags.
+          curl \
+            --location https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_386.tar.gz \
+            --output gh_cli.tar.gz \
+            --fail \
+            --retry 7
+
+          tar -xvf gh_cli.tar.gz
+          mv "gh_${GH_CLI_VERSION}_linux_386" gh_cli
+          chmod +x ./gh_cli/bin/gh
+          sudo cp ./gh_cli/bin/gh /usr/local/bin/
+          rm -rf gh_cli*
+
+      - name: Update mainnet canister versions file
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
+        run: |
+          set -eEuxo pipefail
+
+          # Run mainnet_revisions.py with exponential backoff, because it is
+          # sensitive to network issues, which are pretty frequent yet
+          # transient.
+          retry \
+            --times=10 \
+            --delay=1,2,4,8,15,30,60,120,300,600 \
+            -- time python \
+            ci/src/mainnet_revisions/mainnet_revisions.py \
+            $DRY_RUN \
+            canisters

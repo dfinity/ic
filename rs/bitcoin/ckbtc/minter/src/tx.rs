@@ -67,7 +67,7 @@ impl fmt::Display for DisplayAmount {
             let frac_prefix: u64 = {
                 // The fraction part without trailing zeros.
                 let mut f = frac;
-                while f % 10 == 0 {
+                while f.is_multiple_of(10) {
                     f /= 10
                 }
                 f

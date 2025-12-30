@@ -10,8 +10,10 @@ use ic_interfaces::{
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
+use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
 use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion,
     artifact::IDkgMessageId,
@@ -79,6 +81,7 @@ pub(crate) struct IDkgComplaintHandlerImpl {
     node_id: NodeId,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: IDkgComplaintMetrics,
     log: ReplicaLogger,
 }
@@ -88,6 +91,7 @@ impl IDkgComplaintHandlerImpl {
         node_id: NodeId,
         consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         crypto: Arc<dyn ConsensusCrypto>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -95,6 +99,7 @@ impl IDkgComplaintHandlerImpl {
             node_id,
             consensus_block_cache,
             crypto,
+            state_reader,
             metrics: IDkgComplaintMetrics::new(metrics_registry),
             log,
         }
@@ -105,8 +110,8 @@ impl IDkgComplaintHandlerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         block_reader: &dyn IDkgBlockReader,
+        active_transcripts: &BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
     ) -> IDkgChangeSet {
-        let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
 
         // Collection of validated complaints <complainer Id, transcript Id, dealer Id>
@@ -129,12 +134,12 @@ impl IDkgComplaintHandlerImpl {
 
             match Action::action(
                 block_reader,
-                &active_transcripts,
+                active_transcripts,
                 &requested_transcripts,
                 complaint.idkg_complaint.transcript_id.source_height(),
                 &complaint.idkg_complaint.transcript_id,
             ) {
-                Action::Process(transcript_ref) => {
+                Action::Process(transcript) => {
                     if self.has_complainer_issued_complaint(
                         idkg_pool,
                         &complaint.idkg_complaint,
@@ -146,25 +151,11 @@ impl IDkgComplaintHandlerImpl {
                             format!("Duplicate complaint: {signed_complaint}"),
                         ));
                     } else {
-                        match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
-                        {
-                            Some(transcript) => {
-                                let action =
-                                    self.crypto_verify_complaint(id, &transcript, signed_complaint);
-                                if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                                    validated_complaints.insert(key);
-                                }
-                                ret.append(&mut action.into_iter().collect());
-                            }
-                            None => {
-                                ret.push(IDkgChangeAction::HandleInvalid(
-                                    id,
-                                    format!(
-                                        "validate_complaints(): failed to resolve: {signed_complaint}"
-                                    ),
-                                ));
-                            }
+                        let action = self.crypto_verify_complaint(id, transcript, signed_complaint);
+                        if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
+                            validated_complaints.insert(key);
                         }
+                        ret.append(&mut action.into_iter().collect());
                     }
                 }
                 Action::Drop => ret.push(IDkgChangeAction::RemoveUnvalidated(id)),
@@ -179,10 +170,8 @@ impl IDkgComplaintHandlerImpl {
     fn send_openings(
         &self,
         idkg_pool: &dyn IDkgPool,
-        block_reader: &dyn IDkgBlockReader,
+        active_transcripts: &BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
     ) -> IDkgChangeSet {
-        let active_transcripts = self.active_transcripts(block_reader);
-
         idkg_pool
             .validated()
             .complaints()
@@ -202,19 +191,12 @@ impl IDkgComplaintHandlerImpl {
             .filter_map(|(_, signed_complaint)| {
                 // Look up the transcript for the complained transcript Id.
                 let complaint = signed_complaint.get();
-                match active_transcripts.get(&complaint.idkg_complaint.transcript_id) {
-                    Some(transcript_ref) => self
-                        .resolve_ref(transcript_ref, block_reader, "send_openings")
-                        .map(|transcript| (signed_complaint, transcript)),
-                    None => {
-                        self.metrics
-                            .complaint_errors_inc("complaint_inactive_transcript");
-                        None
-                    }
-                }
+                active_transcripts
+                    .get(&complaint.idkg_complaint.transcript_id)
+                    .map(|transcript| (signed_complaint, transcript))
             })
             .flat_map(|(signed_complaint, transcript)| {
-                self.crypto_create_opening(&signed_complaint, &transcript)
+                self.crypto_create_opening(&signed_complaint, transcript)
             })
             .collect()
     }
@@ -224,8 +206,8 @@ impl IDkgComplaintHandlerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         block_reader: &dyn IDkgBlockReader,
+        active_transcripts: &BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
     ) -> IDkgChangeSet {
-        let active_transcripts = self.active_transcripts(block_reader);
         let requested_transcripts = self.requested_transcripts(block_reader);
 
         // Collection of validated openings <opener Id, transcript Id, dealer Id>
@@ -249,12 +231,12 @@ impl IDkgComplaintHandlerImpl {
 
             match Action::action(
                 block_reader,
-                &active_transcripts,
+                active_transcripts,
                 &requested_transcripts,
                 opening.idkg_opening.transcript_id.source_height(),
                 &opening.idkg_opening.transcript_id,
             ) {
-                Action::Process(transcript_ref) => {
+                Action::Process(transcript) => {
                     if self.has_node_issued_opening(
                         idkg_pool,
                         &opening.idkg_opening.transcript_id,
@@ -269,28 +251,16 @@ impl IDkgComplaintHandlerImpl {
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
                     {
-                        match self.resolve_ref(transcript_ref, block_reader, "validate_openings") {
-                            Some(transcript) => {
-                                let action = self.crypto_verify_opening(
-                                    id,
-                                    &transcript,
-                                    signed_opening,
-                                    &signed_complaint,
-                                );
-                                if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
-                                    validated_openings.insert(key);
-                                }
-                                ret.append(&mut action.into_iter().collect());
-                            }
-                            None => {
-                                ret.push(IDkgChangeAction::HandleInvalid(
-                                    id,
-                                    format!(
-                                        "validate_openings(): failed to resolve: {signed_opening}"
-                                    ),
-                                ));
-                            }
+                        let action = self.crypto_verify_opening(
+                            id,
+                            transcript,
+                            signed_opening,
+                            &signed_complaint,
+                        );
+                        if let Some(IDkgChangeAction::MoveToValidated(_)) = action {
+                            validated_openings.insert(key);
                         }
+                        ret.append(&mut action.into_iter().collect());
                     } else {
                         // Defer handling the opening in case it was received
                         // before the complaint.
@@ -311,12 +281,9 @@ impl IDkgComplaintHandlerImpl {
         &self,
         idkg_pool: &dyn IDkgPool,
         block_reader: &dyn IDkgBlockReader,
+        active_transcripts: &BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
     ) -> IDkgChangeSet {
-        let active_transcripts = block_reader
-            .active_transcripts()
-            .iter()
-            .map(|transcript_ref| transcript_ref.transcript_id)
-            .collect::<BTreeSet<_>>();
+        let active_transcripts = active_transcripts.keys().cloned().collect::<BTreeSet<_>>();
 
         let mut ret = Vec::new();
         let current_height = block_reader.tip_height();
@@ -712,18 +679,18 @@ impl IDkgComplaintHandlerImpl {
     }
 
     /// Resolves the active ref -> transcripts
-    fn resolve_ref(
+    fn resolve_ref<'a>(
         &self,
         transcript_ref: &TranscriptRef,
-        block_reader: &dyn IDkgBlockReader,
+        block_reader: &'a dyn IDkgBlockReader,
         reason: &str,
-    ) -> Option<IDkgTranscript> {
+    ) -> Option<&'a IDkgTranscript> {
         let _timer = self
             .metrics
             .on_state_change_duration
             .with_label_values(&["resolve_transcript_refs"])
             .start_timer();
-        match block_reader.transcript(transcript_ref) {
+        match block_reader.transcript_as_ref(transcript_ref) {
             Ok(transcript) => {
                 self.metrics
                     .complaint_metrics_inc("resolve_transcript_refs");
@@ -744,18 +711,6 @@ impl IDkgComplaintHandlerImpl {
         }
     }
 
-    /// Returns the active transcript map.
-    fn active_transcripts(
-        &self,
-        block_reader: &dyn IDkgBlockReader,
-    ) -> BTreeMap<IDkgTranscriptId, TranscriptRef> {
-        block_reader
-            .active_transcripts()
-            .iter()
-            .map(|transcript_ref| (transcript_ref.transcript_id, *transcript_ref))
-            .collect::<BTreeMap<_, _>>()
-    }
-
     /// Returns the requested transcript map.
     fn requested_transcripts(
         &self,
@@ -766,6 +721,69 @@ impl IDkgComplaintHandlerImpl {
             .map(|transcript_ref| transcript_ref.transcript_id)
             .collect::<BTreeSet<_>>()
     }
+
+    /// Returns the active transcript map.
+    fn active_transcripts<'a>(
+        &self,
+        block_reader: &'a dyn IDkgBlockReader,
+        snapshot: &'a dyn CertifiedStateSnapshot<State = ReplicatedState>,
+    ) -> BTreeMap<IDkgTranscriptId, &'a IDkgTranscript> {
+        // Get the active transcript references in the finalized tip
+        let transcript_refs_tip = block_reader
+            .active_transcripts()
+            .into_iter()
+            .map(|transcript_ref| (transcript_ref.transcript_id, transcript_ref));
+
+        // Get the transcript references of delivered pre-signatures above the state height
+        let state_height = snapshot.get_height();
+        let transcript_refs_delivered = block_reader
+            .iter_above(state_height)
+            .flat_map(|payload| payload.available_pre_signatures.values())
+            .flat_map(|pre_sig| pre_sig.get_refs())
+            .map(|transcript_ref| (transcript_ref.transcript_id, transcript_ref));
+
+        // Deduplicate all references
+        let transcript_refs =
+            BTreeMap::from_iter(transcript_refs_tip.chain(transcript_refs_delivered));
+
+        // Resolve all references to transcripts on the blockchain
+        let chain_transcripts = transcript_refs
+            .values()
+            .filter_map(|transcript_ref| {
+                self.resolve_ref(transcript_ref, block_reader, "active_transcripts")
+            })
+            .map(|transcript| (transcript.transcript_id, transcript));
+
+        let state = snapshot.get_state();
+        // Pre-signature transcripts stashed in replicated state
+        let stashed_pre_sig_transcripts = state
+            .pre_signature_stashes()
+            .values()
+            .flat_map(|stash| stash.pre_signatures.values())
+            .flat_map(|pre_sig| pre_sig.iter_idkg_transcripts())
+            .map(|transcript| (transcript.transcript_id, transcript));
+
+        // Key transcripts stashed in replicated state
+        let stashed_key_transcripts = state
+            .pre_signature_stashes()
+            .values()
+            .map(|stash| stash.key_transcript.as_ref())
+            .map(|transcript| (transcript.transcript_id, transcript));
+
+        // Transcripts paired with active requests
+        let paired_transcripts = state
+            .signature_request_contexts()
+            .values()
+            .flat_map(|ctxt| ctxt.iter_idkg_transcripts())
+            .map(|transcript| (transcript.transcript_id, transcript));
+
+        BTreeMap::from_iter(
+            chain_transcripts
+                .chain(stashed_pre_sig_transcripts)
+                .chain(stashed_key_transcripts)
+                .chain(paired_transcripts),
+        )
+    }
 }
 
 impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
@@ -774,13 +792,34 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         idkg_pool: &dyn IDkgPool,
         schedule: &IDkgSchedule<Height>,
     ) -> IDkgChangeSet {
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
+        let Some(snapshot) = self.state_reader.get_certified_state_snapshot() else {
+            return IDkgChangeSet::new();
+        };
+        let state_height = snapshot.get_height();
+        let finalized_chain = self.consensus_block_cache.finalized_chain();
+
+        if finalized_chain.get_block_by_height(state_height).is_err() {
+            // The finalized chain only contains blocks above and including the latest summary.
+            // However, the latest state height may be below the latest summary block height.
+            // In that case we would miss active transcripts that were delivered in blocks between
+            // the state height and the latest summary block height.
+            // Therefore, we do not run the complaints phase unless the state height is part of
+            // the finalized chain.
+            return IDkgChangeSet::new();
+        }
+        let block_reader = IDkgBlockReaderImpl::new(finalized_chain);
         let metrics = self.metrics.clone();
+
+        let active_transcripts = timed_call(
+            "active_transcripts",
+            || self.active_transcripts(&block_reader, snapshot.as_ref()),
+            &metrics.on_state_change_duration,
+        );
 
         let mut changes = if schedule.update_last_purge(block_reader.tip_height()) {
             timed_call(
                 "purge_artifacts",
-                || self.purge_artifacts(idkg_pool, &block_reader),
+                || self.purge_artifacts(idkg_pool, &block_reader, &active_transcripts),
                 &metrics.on_state_change_duration,
             )
         } else {
@@ -790,21 +829,21 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let validate_complaints = || {
             timed_call(
                 "validate_complaints",
-                || self.validate_complaints(idkg_pool, &block_reader),
+                || self.validate_complaints(idkg_pool, &block_reader, &active_transcripts),
                 &metrics.on_state_change_duration,
             )
         };
         let send_openings = || {
             timed_call(
                 "send_openings",
-                || self.send_openings(idkg_pool, &block_reader),
+                || self.send_openings(idkg_pool, &active_transcripts),
                 &metrics.on_state_change_duration,
             )
         };
         let validate_openings = || {
             timed_call(
                 "validate_openings",
-                || self.validate_openings(idkg_pool, &block_reader),
+                || self.validate_openings(idkg_pool, &block_reader, &active_transcripts),
                 &metrics.on_state_change_duration,
             )
         };
@@ -927,7 +966,7 @@ impl IDkgTranscriptLoader for IDkgComplaintHandlerImpl {
 enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately.
-    Process(&'a TranscriptRef),
+    Process(&'a IDkgTranscript),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -943,7 +982,7 @@ impl<'a> Action<'a> {
     #[allow(clippy::self_named_constructors)]
     fn action(
         block_reader: &'a dyn IDkgBlockReader,
-        active_transcripts: &'a BTreeMap<IDkgTranscriptId, TranscriptRef>,
+        active_transcripts: &'a BTreeMap<IDkgTranscriptId, &IDkgTranscript>,
         requested_transcripts: &'a BTreeSet<IDkgTranscriptId>,
         msg_height: Height,
         msg_transcript_id: &IDkgTranscriptId,
@@ -954,8 +993,8 @@ impl<'a> Action<'a> {
             return Action::Defer;
         }
 
-        if let Some(transcript_ref) = active_transcripts.get(msg_transcript_id) {
-            return Action::Process(transcript_ref);
+        if let Some(transcript) = active_transcripts.get(msg_transcript_id) {
+            return Action::Process(transcript);
         }
 
         // The transcript is not yet completed on this node, process
@@ -971,6 +1010,7 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::complaints::tests::crypto_failing_basic_signing::CryptoWrapperFailingBasicSigning;
     use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
@@ -982,10 +1022,12 @@ mod tests {
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
         Height,
-        consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, TranscriptRef},
-        crypto::AlgorithmId,
+        consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, PreSigId, RequestId, TranscriptRef},
+        crypto::{AlgorithmId, CryptoError},
+        messages::CallbackId,
         time::UNIX_EPOCH,
     };
+    use ic_types_test_utils::ids::subnet_test_id;
 
     // Tests the Action logic
     #[test]
@@ -1004,8 +1046,10 @@ mod tests {
         let block_reader =
             TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![ref_1, ref_2]);
         let mut active = BTreeMap::new();
-        active.insert(id_1, ref_1);
-        active.insert(id_2, ref_2);
+        let t1 = create_transcript(&key_id, id_1, &[NODE_1]);
+        let t2 = create_transcript(&key_id, id_2, &[NODE_2]);
+        active.insert(id_1, &t1);
+        active.insert(id_2, &t2);
         let mut requested = BTreeSet::new();
         requested.insert(id_5);
 
@@ -1040,6 +1084,135 @@ mod tests {
             Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
             Action::Process(_)
         );
+    }
+
+    #[test]
+    fn test_get_active_transcripts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (_, complaints) = create_complaint_dependencies(pool_config, logger);
+                let key_id = fake_ecdsa_idkg_master_public_key_id();
+                let state_height = Height::from(10);
+                let empty_snapshot = fake_state_with_signature_requests(state_height, []);
+
+                // Should return transcripts that are active in the tip
+                let id = create_transcript_id(1);
+                let block_reader = TestIDkgBlockReader::for_complainer_test(
+                    &key_id,
+                    Height::new(100),
+                    vec![TranscriptRef::new(Height::new(10), id)],
+                );
+
+                let active_transcripts =
+                    complaints.active_transcripts(&block_reader, &empty_snapshot);
+                // Assert that the active transcripts contains only the transcript with id 1
+                assert_eq!(active_transcripts.len(), 1);
+                assert!(active_transcripts.contains_key(&id));
+
+                // Should not return transcripts that fail to resolve
+                let block_reader = block_reader.with_fail_to_resolve();
+                assert!(
+                    complaints
+                        .active_transcripts(&block_reader, &empty_snapshot)
+                        .is_empty()
+                );
+
+                // Should return transcripts of delivered pre-signatures above the state height
+                let mut block_reader =
+                    TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![]);
+                let (mut payload_at_state_height, _, _) = set_up_idkg_payload(
+                    &mut reproducible_rng(),
+                    subnet_test_id(0),
+                    4,
+                    vec![key_id.clone()],
+                    true,
+                );
+                let mut payload_above_state_height = payload_at_state_height.clone();
+                let current_key_transcript_ref = payload_at_state_height
+                    .current_key_transcript(key_id.inner())
+                    .cloned()
+                    .unwrap();
+                create_available_pre_signature_with_key_transcript_and_height(
+                    &mut payload_at_state_height,
+                    1,
+                    key_id.clone(),
+                    Some(current_key_transcript_ref.unmasked_transcript()),
+                    state_height,
+                );
+                create_available_pre_signature_with_key_transcript_and_height(
+                    &mut payload_above_state_height,
+                    2,
+                    key_id.clone(),
+                    Some(current_key_transcript_ref.unmasked_transcript()),
+                    Height::from(15),
+                );
+                let payload_transcripts = payload_above_state_height.idkg_transcripts.clone();
+
+                block_reader.add_payload(state_height, payload_at_state_height);
+                block_reader.add_payload(Height::from(15), payload_above_state_height);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&block_reader, &empty_snapshot);
+                assert_eq!(active_transcripts.len(), 4);
+                for (id, active_transcript) in active_transcripts {
+                    let payload_transcript = payload_transcripts.get(&id).unwrap();
+                    assert_eq!(payload_transcript, active_transcript);
+                }
+
+                let empty_reader =
+                    TestIDkgBlockReader::for_complainer_test(&key_id, Height::new(100), vec![]);
+
+                // Should return stashed transcripts
+                let stash = fake_pre_signature_stash(&key_id, 2);
+                let mut snapshot_with_stash = empty_snapshot;
+                Arc::get_mut(&mut snapshot_with_stash.state)
+                    .unwrap()
+                    .metadata
+                    .subnet_call_context_manager
+                    .pre_signature_stashes = BTreeMap::from([(key_id.clone(), stash.clone())]);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&empty_reader, &snapshot_with_stash);
+
+                assert_eq!(active_transcripts.len(), 9); // 1 key + 2 * 4 pre-signature transcripts
+                assert_eq!(
+                    *active_transcripts
+                        .get(&stash.key_transcript.transcript_id)
+                        .unwrap(),
+                    stash.key_transcript.as_ref()
+                );
+                for pre_sig in stash.pre_signatures.values() {
+                    for transcript in pre_sig.iter_idkg_transcripts() {
+                        assert_eq!(
+                            *active_transcripts.get(&transcript.transcript_id).unwrap(),
+                            transcript
+                        );
+                    }
+                }
+
+                // Should return paired transcripts
+                let (id, context) = fake_signature_request_context_from_id(
+                    key_id.inner().clone(),
+                    PreSigId(0),
+                    RequestId {
+                        callback_id: CallbackId::from(1),
+                        height: state_height,
+                    },
+                );
+                let snapshot_with_requests =
+                    fake_state_with_signature_requests(state_height, [(id, context.clone())]);
+
+                let active_transcripts =
+                    complaints.active_transcripts(&empty_reader, &snapshot_with_requests);
+                assert_eq!(active_transcripts.len(), 5); // 1 key + 4 pre-signature transcripts
+                for transcript in context.iter_idkg_transcripts() {
+                    assert_eq!(
+                        *active_transcripts.get(&transcript.transcript_id).unwrap(),
+                        transcript
+                    );
+                }
+            })
+        });
     }
 
     #[test]
@@ -1124,7 +1297,14 @@ mod tests {
 
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
-                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_complaints(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
@@ -1143,7 +1323,14 @@ mod tests {
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 // Crypto should return a transient error thus validation of msg_id_3 should be deferred.
-                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_complaints(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
             })
@@ -1158,11 +1345,18 @@ mod tests {
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
-                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_complaints(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
 
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_3));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_3));
             })
         });
     }
@@ -1199,7 +1393,14 @@ mod tests {
                     Height::new(30),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
-                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_complaints(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
             })
@@ -1288,7 +1489,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(30), id_1)],
                 );
-                let change_set = complaint_handler.validate_complaints(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_complaints(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_1));
@@ -1352,7 +1560,10 @@ mod tests {
                         .map(|a| IDkgChangeAction::AddToValidated(a.clone()))
                         .collect(),
                 );
-                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.send_openings(&idkg_pool, &active_transcripts);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_opening_added_to_validated(
                     &change_set,
@@ -1379,7 +1590,10 @@ mod tests {
                         .collect(),
                 );
 
-                let change_set = complaint_handler.send_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.send_openings(&idkg_pool, &active_transcripts);
                 assert!(change_set.is_empty());
             })
         });
@@ -1464,6 +1678,7 @@ mod tests {
         // Opening for a transcript currently active,
         // without a matching complaint (deferred)
         let opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
+        let msg_id_3 = opening.message_id();
         artifacts.push(UnvalidatedArtifact {
             message: IDkgMessage::Opening(opening),
             peer_id: NODE_4,
@@ -1488,7 +1703,14 @@ mod tests {
                 artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
                 idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
-                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_openings(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
@@ -1508,7 +1730,14 @@ mod tests {
                 idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
-                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_openings(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
             })
@@ -1524,10 +1753,18 @@ mod tests {
                 idkg_pool.apply(vec![IDkgChangeAction::AddToValidated(complaint.clone())]);
 
                 let block_reader = block_reader.clone().with_fail_to_resolve();
-                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
-                assert_eq!(change_set.len(), 2);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_openings(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
+                assert_eq!(change_set.len(), 3);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_3));
             })
         });
     }
@@ -1563,7 +1800,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_openings(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_handle_invalid(&change_set, &msg_id));
             })
@@ -1616,7 +1860,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.validate_openings(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.validate_openings(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
@@ -1671,7 +1922,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.purge_artifacts(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
@@ -1720,7 +1978,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.purge_artifacts(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id));
             })
@@ -1772,7 +2037,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.purge_artifacts(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id));
             })
@@ -1821,7 +2093,14 @@ mod tests {
                     Height::new(100),
                     vec![TranscriptRef::new(Height::new(10), id_1)],
                 );
-                let change_set = complaint_handler.purge_artifacts(&idkg_pool, &block_reader);
+                let snapshot = fake_state_with_signature_requests(Height::from(0), []);
+                let active_transcripts =
+                    complaint_handler.active_transcripts(&block_reader, &snapshot);
+                let change_set = complaint_handler.purge_artifacts(
+                    &idkg_pool,
+                    &block_reader,
+                    &active_transcripts,
+                );
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id));
             })
@@ -1909,11 +2188,19 @@ mod tests {
                     .next()
                     .unwrap()
                     .crypto();
-                let (idkg_pool, complaint_handler) =
-                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
+                let crypto_failing_basic_signing = Arc::new(CryptoWrapperFailingBasicSigning::new(
+                    crypto,
+                    CryptoError::TransientInternalError {
+                        internal_error: "boom!".to_string(),
+                    },
+                ));
+                let (idkg_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_failing_basic_signing),
+                );
 
-                // Will attempt to create a complaint but fail since node ID of crypto and
-                // complaint_handler are different
+                // Will attempt to create a complaint but fail because basic signing fails
                 let status = complaint_handler.load_transcript(&idkg_pool, &transcript);
                 assert_matches!(status, TranscriptLoadStatus::Failure);
             })
@@ -1992,5 +2279,517 @@ mod tests {
                 assert_matches!(status, TranscriptLoadStatus::Success);
             })
         })
+    }
+
+    mod crypto_failing_basic_signing {
+        use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
+        use ic_interfaces::crypto::{
+            BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
+            IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
+            LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
+            ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
+            ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
+            ThresholdSigner, VetKdProtocol,
+        };
+        use ic_types::crypto::canister_threshold_sig::error::{
+            IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
+            IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
+            IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
+            IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+            ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
+            ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+            ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
+            ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
+        };
+        use ic_types::crypto::canister_threshold_sig::idkg::{
+            BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
+            IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
+        };
+        use ic_types::crypto::canister_threshold_sig::{
+            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
+            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+        };
+        use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
+        use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+            create_dealing_error::DkgCreateDealingError,
+            create_transcript_error::DkgCreateTranscriptError,
+            key_removal_error::DkgKeyRemovalError, load_transcript_error::DkgLoadTranscriptError,
+            verify_dealing_error::DkgVerifyDealingError,
+        };
+        use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
+        use ic_types::crypto::vetkd::{
+            VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+            VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+        };
+        use ic_types::crypto::{
+            BasicSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoError, CryptoResult,
+            CurrentNodePublicKeys, IndividualMultiSigOf, Signable, ThresholdSigShareOf,
+            UserPublicKey,
+        };
+        use ic_types::signature::BasicSignatureBatch;
+        use ic_types::{NodeId, RegistryVersion, SubnetId};
+        use std::collections::{BTreeMap, BTreeSet, HashSet};
+        use std::sync::Arc;
+
+        pub struct CryptoWrapperFailingBasicSigning<C> {
+            crypto: Arc<C>,
+            sign_basic_error: CryptoError,
+        }
+
+        impl<C> CryptoWrapperFailingBasicSigning<C> {
+            pub fn new(crypto: Arc<C>, sign_basic_error: CryptoError) -> Self {
+                Self {
+                    crypto,
+                    sign_basic_error,
+                }
+            }
+        }
+
+        impl<C: BasicSigner<T>, T: Signable> BasicSigner<T> for CryptoWrapperFailingBasicSigning<C> {
+            fn sign_basic(&self, _message: &T) -> CryptoResult<BasicSigOf<T>> {
+                Err(self.sign_basic_error.clone())
+            }
+        }
+
+        impl<T: Signable, C: BasicSigVerifier<T>> BasicSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_basic_sig(
+                &self,
+                signature: &BasicSigOf<T>,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig(signature, message, signer, registry_version)
+            }
+
+            fn combine_basic_sig(
+                &self,
+                signatures: BTreeMap<NodeId, &BasicSigOf<T>>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<BasicSignatureBatch<T>> {
+                self.crypto.combine_basic_sig(signatures, registry_version)
+            }
+
+            fn verify_basic_sig_batch(
+                &self,
+                signature_batch: &BasicSignatureBatch<T>,
+                message: &T,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig_batch(signature_batch, message, registry_version)
+            }
+        }
+
+        impl<C: KeyManager> KeyManager for CryptoWrapperFailingBasicSigning<C> {
+            fn check_keys_with_registry(
+                &self,
+                registry_version: RegistryVersion,
+            ) -> Result<(), CheckKeysWithRegistryError> {
+                self.crypto.check_keys_with_registry(registry_version)
+            }
+
+            fn current_node_public_keys(
+                &self,
+            ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
+                self.crypto.current_node_public_keys()
+            }
+
+            fn rotate_idkg_dealing_encryption_keys(
+                &self,
+                registry_version: RegistryVersion,
+            ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
+                self.crypto
+                    .rotate_idkg_dealing_encryption_keys(registry_version)
+            }
+        }
+
+        impl<C: NiDkgAlgorithm> NiDkgAlgorithm for CryptoWrapperFailingBasicSigning<C> {
+            fn create_dealing(
+                &self,
+                config: &NiDkgConfig,
+            ) -> Result<NiDkgDealing, DkgCreateDealingError> {
+                self.crypto.create_dealing(config)
+            }
+
+            fn verify_dealing(
+                &self,
+                config: &NiDkgConfig,
+                dealer: NodeId,
+                dealing: &NiDkgDealing,
+            ) -> Result<(), DkgVerifyDealingError> {
+                self.crypto.verify_dealing(config, dealer, dealing)
+            }
+
+            fn create_transcript(
+                &self,
+                config: &NiDkgConfig,
+                verified_dealings: &BTreeMap<NodeId, NiDkgDealing>,
+            ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
+                self.crypto.create_transcript(config, verified_dealings)
+            }
+
+            fn load_transcript(
+                &self,
+                transcript: &NiDkgTranscript,
+            ) -> Result<LoadTranscriptResult, DkgLoadTranscriptError> {
+                self.crypto.load_transcript(transcript)
+            }
+
+            fn retain_only_active_keys(
+                &self,
+                transcripts: HashSet<NiDkgTranscript>,
+            ) -> Result<(), DkgKeyRemovalError> {
+                self.crypto.retain_only_active_keys(transcripts)
+            }
+        }
+
+        impl<C: ThresholdSigner<T>, T: Signable> ThresholdSigner<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn sign_threshold(
+                &self,
+                message: &T,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<ThresholdSigShareOf<T>> {
+                self.crypto.sign_threshold(message, dkg_id)
+            }
+        }
+
+        impl<C: ThresholdSigVerifier<T>, T: Signable> ThresholdSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_threshold_sig_share(
+                &self,
+                signature: &ThresholdSigShareOf<T>,
+                message: &T,
+                dkg_id: &NiDkgId,
+                signer: NodeId,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_threshold_sig_share(signature, message, dkg_id, signer)
+            }
+
+            fn combine_threshold_sig_shares(
+                &self,
+                shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<CombinedThresholdSigOf<T>> {
+                self.crypto.combine_threshold_sig_shares(shares, dkg_id)
+            }
+
+            fn verify_threshold_sig_combined(
+                &self,
+                signature: &CombinedThresholdSigOf<T>,
+                message: &T,
+                dkg_id: &NiDkgId,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_threshold_sig_combined(signature, message, dkg_id)
+            }
+        }
+
+        impl<C: ThresholdSigVerifierByPublicKey<T>, T: Signable> ThresholdSigVerifierByPublicKey<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_combined_threshold_sig_by_public_key(
+                &self,
+                signature: &CombinedThresholdSigOf<T>,
+                message: &T,
+                subnet_id: SubnetId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto.verify_combined_threshold_sig_by_public_key(
+                    signature,
+                    message,
+                    subnet_id,
+                    registry_version,
+                )
+            }
+        }
+
+        impl<C: MultiSigner<T>, T: Signable> MultiSigner<T> for CryptoWrapperFailingBasicSigning<C> {
+            fn sign_multi(
+                &self,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<IndividualMultiSigOf<T>> {
+                self.crypto.sign_multi(message, signer, registry_version)
+            }
+        }
+
+        impl<C: MultiSigVerifier<T>, T: Signable> MultiSigVerifier<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_multi_sig_individual(
+                &self,
+                signature: &IndividualMultiSigOf<T>,
+                message: &T,
+                signer: NodeId,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto.verify_multi_sig_individual(
+                    signature,
+                    message,
+                    signer,
+                    registry_version,
+                )
+            }
+
+            fn combine_multi_sig_individuals(
+                &self,
+                signatures: BTreeMap<NodeId, IndividualMultiSigOf<T>>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<CombinedMultiSigOf<T>> {
+                self.crypto
+                    .combine_multi_sig_individuals(signatures, registry_version)
+            }
+
+            fn verify_multi_sig_combined(
+                &self,
+                signature: &CombinedMultiSigOf<T>,
+                message: &T,
+                signers: BTreeSet<NodeId>,
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_multi_sig_combined(signature, message, signers, registry_version)
+            }
+        }
+
+        impl<C: IDkgProtocol> IDkgProtocol for CryptoWrapperFailingBasicSigning<C> {
+            fn create_dealing(
+                &self,
+                params: &IDkgTranscriptParams,
+            ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
+                self.crypto.create_dealing(params)
+            }
+
+            fn verify_dealing_public(
+                &self,
+                params: &IDkgTranscriptParams,
+                signed_dealing: &SignedIDkgDealing,
+            ) -> Result<(), IDkgVerifyDealingPublicError> {
+                self.crypto.verify_dealing_public(params, signed_dealing)
+            }
+
+            fn verify_dealing_private(
+                &self,
+                params: &IDkgTranscriptParams,
+                signed_dealing: &SignedIDkgDealing,
+            ) -> Result<(), IDkgVerifyDealingPrivateError> {
+                self.crypto.verify_dealing_private(params, signed_dealing)
+            }
+
+            fn verify_initial_dealings(
+                &self,
+                params: &IDkgTranscriptParams,
+                initial_dealings: &InitialIDkgDealings,
+            ) -> Result<(), IDkgVerifyInitialDealingsError> {
+                self.crypto
+                    .verify_initial_dealings(params, initial_dealings)
+            }
+
+            fn create_transcript(
+                &self,
+                params: &IDkgTranscriptParams,
+                dealings: &BatchSignedIDkgDealings,
+            ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
+                self.crypto.create_transcript(params, dealings)
+            }
+
+            fn verify_transcript(
+                &self,
+                params: &IDkgTranscriptParams,
+                transcript: &IDkgTranscript,
+            ) -> Result<(), IDkgVerifyTranscriptError> {
+                self.crypto.verify_transcript(params, transcript)
+            }
+
+            fn load_transcript(
+                &self,
+                transcript: &IDkgTranscript,
+            ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
+                self.crypto.load_transcript(transcript)
+            }
+
+            fn verify_complaint(
+                &self,
+                transcript: &IDkgTranscript,
+                complainer_id: NodeId,
+                complaint: &IDkgComplaint,
+            ) -> Result<(), IDkgVerifyComplaintError> {
+                self.crypto
+                    .verify_complaint(transcript, complainer_id, complaint)
+            }
+
+            fn open_transcript(
+                &self,
+                transcript: &IDkgTranscript,
+                complainer_id: NodeId,
+                complaint: &IDkgComplaint,
+            ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
+                self.crypto
+                    .open_transcript(transcript, complainer_id, complaint)
+            }
+
+            fn verify_opening(
+                &self,
+                transcript: &IDkgTranscript,
+                opener: NodeId,
+                opening: &IDkgOpening,
+                complaint: &IDkgComplaint,
+            ) -> Result<(), IDkgVerifyOpeningError> {
+                self.crypto
+                    .verify_opening(transcript, opener, opening, complaint)
+            }
+
+            fn load_transcript_with_openings(
+                &self,
+                transcript: &IDkgTranscript,
+                openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
+            ) -> Result<(), IDkgLoadTranscriptError> {
+                self.crypto
+                    .load_transcript_with_openings(transcript, openings)
+            }
+
+            fn retain_active_transcripts(
+                &self,
+                active_transcripts: &HashSet<IDkgTranscript>,
+            ) -> Result<(), IDkgRetainKeysError> {
+                self.crypto.retain_active_transcripts(active_transcripts)
+            }
+        }
+
+        impl<C: ThresholdEcdsaSigner> ThresholdEcdsaSigner for CryptoWrapperFailingBasicSigning<C> {
+            fn create_sig_share(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+            ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaCreateSigShareError> {
+                self.crypto.create_sig_share(inputs)
+            }
+        }
+
+        impl<C: ThresholdEcdsaSigVerifier> ThresholdEcdsaSigVerifier
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_sig_share(
+                &self,
+                signer: NodeId,
+                inputs: &ThresholdEcdsaSigInputs,
+                share: &ThresholdEcdsaSigShare,
+            ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+                self.crypto.verify_sig_share(signer, inputs, share)
+            }
+
+            fn combine_sig_shares(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+                shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
+            ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError>
+            {
+                self.crypto.combine_sig_shares(inputs, shares)
+            }
+
+            fn verify_combined_sig(
+                &self,
+                inputs: &ThresholdEcdsaSigInputs,
+                signature: &ThresholdEcdsaCombinedSignature,
+            ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+                self.crypto.verify_combined_sig(inputs, signature)
+            }
+        }
+
+        impl<C: ThresholdSchnorrSigner> ThresholdSchnorrSigner for CryptoWrapperFailingBasicSigning<C> {
+            fn create_sig_share(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+            ) -> Result<ThresholdSchnorrSigShare, ThresholdSchnorrCreateSigShareError> {
+                self.crypto.create_sig_share(inputs)
+            }
+        }
+
+        impl<C: ThresholdSchnorrSigVerifier> ThresholdSchnorrSigVerifier
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_sig_share(
+                &self,
+                signer: NodeId,
+                inputs: &ThresholdSchnorrSigInputs,
+                share: &ThresholdSchnorrSigShare,
+            ) -> Result<(), ThresholdSchnorrVerifySigShareError> {
+                self.crypto.verify_sig_share(signer, inputs, share)
+            }
+
+            fn combine_sig_shares(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+                shares: &BTreeMap<NodeId, ThresholdSchnorrSigShare>,
+            ) -> Result<ThresholdSchnorrCombinedSignature, ThresholdSchnorrCombineSigSharesError>
+            {
+                self.crypto.combine_sig_shares(inputs, shares)
+            }
+
+            fn verify_combined_sig(
+                &self,
+                inputs: &ThresholdSchnorrSigInputs,
+                signature: &ThresholdSchnorrCombinedSignature,
+            ) -> Result<(), ThresholdSchnorrVerifyCombinedSigError> {
+                self.crypto.verify_combined_sig(inputs, signature)
+            }
+        }
+
+        impl<C: VetKdProtocol> VetKdProtocol for CryptoWrapperFailingBasicSigning<C> {
+            fn create_encrypted_key_share(
+                &self,
+                args: VetKdArgs,
+            ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+                self.crypto.create_encrypted_key_share(args)
+            }
+
+            fn verify_encrypted_key_share(
+                &self,
+                signer: NodeId,
+                key_share: &VetKdEncryptedKeyShare,
+                args: &VetKdArgs,
+            ) -> Result<(), VetKdKeyShareVerificationError> {
+                self.crypto
+                    .verify_encrypted_key_share(signer, key_share, args)
+            }
+
+            fn combine_encrypted_key_shares(
+                &self,
+                shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+                args: &VetKdArgs,
+            ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+                self.crypto.combine_encrypted_key_shares(shares, args)
+            }
+
+            fn verify_encrypted_key(
+                &self,
+                key: &VetKdEncryptedKey,
+                args: &VetKdArgs,
+            ) -> Result<(), VetKdKeyVerificationError> {
+                self.crypto.verify_encrypted_key(key, args)
+            }
+        }
+
+        impl<C: BasicSigVerifierByPublicKey<T>, T: Signable> BasicSigVerifierByPublicKey<T>
+            for CryptoWrapperFailingBasicSigning<C>
+        {
+            fn verify_basic_sig_by_public_key(
+                &self,
+                signature: &BasicSigOf<T>,
+                signed_bytes: &T,
+                public_key: &UserPublicKey,
+            ) -> CryptoResult<()> {
+                self.crypto
+                    .verify_basic_sig_by_public_key(signature, signed_bytes, public_key)
+            }
+        }
     }
 }

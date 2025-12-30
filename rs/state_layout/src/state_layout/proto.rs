@@ -24,7 +24,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             )
             .into(),
             execution_state_bits: item.execution_state_bits.as_ref().map(|v| v.into()),
-            memory_allocation: item.memory_allocation.bytes().get(),
+            memory_allocation: item.memory_allocation.pre_allocated_bytes().get(),
             wasm_memory_threshold: Some(item.wasm_memory_threshold.get()),
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
@@ -59,6 +59,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -191,7 +192,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            canister_log: CanisterLog::new(
+            log_memory_limit: NumBytes::from(value.log_memory_limit),
+            canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value
                     .canister_log_records

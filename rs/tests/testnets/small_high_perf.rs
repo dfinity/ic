@@ -3,10 +3,10 @@
 // The single system subnet node uses the default: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk,
 // while the single application subnet node uses: 64 vCPUs, 512 GiB of RAM, and 500 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create small_high_perf --lifetime-mins=180 --output-dir=./small_high_perf -- --test_tmpdir=./small_high_perf
+//   $ ict testnet create small_high_perf --output-dir=./small_high_perf -- --test_tmpdir=./small_high_perf
 //
 // The --output-dir=./small_high_perf will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./small_high_perf will store the remaining test output in the specified directory.
@@ -42,7 +42,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
+    ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
@@ -81,8 +81,5 @@ pub fn setup(env: TestEnv) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
         .expect("failed to setup ic-gateway");
-    let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
-    let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 }

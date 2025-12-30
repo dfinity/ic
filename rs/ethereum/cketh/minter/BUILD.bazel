@@ -1,26 +1,8 @@
-load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
-load("@io_bazel_rules_closure//closure:defs.bzl", "closure_js_library", "closure_js_test")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
-
-sol_binary(
-    name = "contracts",
-    srcs = [
-        "EthDepositHelper.sol",
-    ],
-)
-
-# Export the compiled bytecode and ABI files as artifacts
-filegroup(
-    name = "contract_artifacts",
-    srcs = [
-        ":contracts",
-    ],
-    visibility = ["//visibility:public"],
-)
 
 filegroup(
     name = "helper_contracts",
@@ -55,16 +37,18 @@ rust_library(
         "//packages/icrc-cbor:icrc-cbor_u256",
         "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/ethereum/evm-rpc-client",
         "//rs/phantom_newtype",
         "//rs/types/management_canister_types",
         "//rs/utils/ensure",
         "@crate_index//:candid",
         "@crate_index//:ethnum",
+        "@crate_index//:evm_rpc_client",
+        "@crate_index//:evm_rpc_types",
         "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
         "@crate_index//:ic-canister-log",
+        "@crate_index//:ic-canister-runtime",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
@@ -223,6 +207,7 @@ rust_ic_test_suite(
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "//rs/types/management_canister_types",
+        "//rs/types/types",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ethers-core",
@@ -232,33 +217,5 @@ rust_ic_test_suite(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
-    ],
-)
-
-closure_js_library(
-    name = "principal_to_bytes",
-    srcs = ["templates/principal_to_bytes.js"],
-    # We don't automatically build this because the build is unreliable.
-    tags = ["manual"],
-    # the test doesn't need to run on macOS; just linux is enough
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-closure_js_test(
-    name = "principal_to_bytes_test",
-    srcs = ["tests/principal_to_bytes_test.js"],
-    # We don't automatically build this because the build is unreliable.
-    tags = ["manual"],
-    # the test doesn't need to run on macOS; just linux is enough
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    deps = [
-        # Keep sorted.
-        ":principal_to_bytes",
-        "@com_google_javascript_closure_library//closure/goog/testing:asserts",
-        "@com_google_javascript_closure_library//closure/goog/testing:jsunit",
     ],
 )

@@ -1636,13 +1636,41 @@ pub struct GetIngressMessageInBlockResponse {
     pub ingress_message: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedBlockProposal {
+pub struct GetIDkgDealingInBlockRequest {
+    #[prost(uint32, tag = "1")]
+    pub node_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
+    #[prost(message, optional, tag = "3")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIDkgDealingInBlockResponse {
     #[prost(message, optional, tag = "1")]
-    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    pub signed_dealing:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedBlockProposal {
+    /// The original block proposal proto but all \[`Strippable`\] data is removed.
+    #[prost(message, optional, tag = "1")]
+    pub pruned_block_proposal: ::core::option::Option<BlockProposal>,
+    /// The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
     #[prost(message, repeated, tag = "2")]
     pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    /// The consensus message ID of the original (unstripped) block proposal, including the \[`Strippable`\] data.
     #[prost(message, optional, tag = "3")]
     pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+    /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
+    #[prost(message, repeated, tag = "4")]
+    pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedIDkgDealing {
+    #[prost(uint32, tag = "1")]
+    pub dealer_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedIngressMessage {

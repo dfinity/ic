@@ -205,11 +205,9 @@ impl CanisterHttpPoolManagerImpl {
             SubnetType::System => self
                 .registry_client
                 .get_system_api_boundary_node_ids(latest_registry_version),
-            SubnetType::Application | SubnetType::VerifiedApplication => {
-                //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
-                // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
-                Ok(vec![])
-            }
+            SubnetType::Application | SubnetType::VerifiedApplication => self
+                .registry_client
+                .get_app_api_boundary_node_ids(latest_registry_version),
         };
 
         allowed_boundary_nodes
@@ -748,6 +746,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -854,6 +853,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
@@ -967,6 +967,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1099,6 +1100,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1237,6 +1239,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1340,6 +1343,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1452,6 +1456,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1633,6 +1638,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1744,6 +1750,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1837,6 +1844,140 @@ pub mod test {
     }
 
     #[test]
+    fn test_oversized_reject_with_multibyte_char_is_pruned_safely() {
+        // This test ensures that when pruning an oversized reject message,
+        // the logic correctly handles multi-byte UTF-8 characters that
+        // straddle the byte limit, preventing a panic that a simple `truncate()` would cause.
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                // 1. SETUP: Standard dependencies.
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 4);
+
+                let callback_id = CallbackId::from(0); // Use ID that will pass validation filter
+                let delegated_node_id = ic_test_utilities_types::ids::node_test_id(1);
+
+                // 2. CONTEXT: Set up a NonReplicated request context.
+                let request_context = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
+                };
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            callback_id,
+                            request_context,
+                        )]))),
+                    ));
+
+                // 3. MALICIOUS RESPONSE: Construct a string where a 4-byte emoji ('👍')
+                // starts 2 bytes before the limit, causing it to cross the boundary.
+                let max_len = MAXIMUM_ALLOWED_ERROR_MESSAGE_BYTES;
+                let padding = "a".repeat(max_len - 2);
+                let emoji = "👍"; // A 4-byte character
+                let oversized_message = format!("{}{}", padding, emoji);
+
+                // Verify the setup: the message is oversized and the emoji crosses the boundary.
+                assert!(oversized_message.len() > max_len);
+                assert_eq!(padding.len(), max_len - 2);
+
+                let oversized_response = CanisterHttpResponse {
+                    id: callback_id,
+                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: oversized_message,
+                    }),
+                    ..empty_canister_http_response(callback_id.get())
+                };
+
+                // 4. MOCK ADAPTER: Mock the adapter to return this specific response.
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .times(1)
+                    .return_once(move || Ok(oversized_response.clone()));
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                // 5. ACTION: Call the function. The test will fail with a panic if
+                // the pruning logic is incorrect (i.e., not UTF-8 aware).
+                let change_set = pool_manager.create_shares_from_responses(Height::from(1));
+
+                // 6. ASSERTIONS:
+                assert_eq!(
+                    change_set.len(),
+                    1,
+                    "A change action should have been created"
+                );
+
+                assert_matches!(
+                    &change_set[0],
+                    CanisterHttpChangeAction::AddToValidatedAndGossipResponse(share, response) => {
+                        let pruned_message = if let CanisterHttpResponseContent::Reject(r) = &response.content {
+                            &r.message
+                        } else {
+                            panic!("Test failed: Expected a Reject response content");
+                        };
+
+                        // Assert that the pruned message is now within the byte limit.
+                        assert!(
+                            pruned_message.len() <= max_len,
+                            "The pruned message (len: {}) should not exceed the max length ({})",
+                            pruned_message.len(), max_len
+                        );
+
+                        // Assert the emoji is still present because ellipsize preserves the end of the string.
+                        assert!(
+                            pruned_message.contains(emoji),
+                            "Pruned message should still contain the emoji from the suffix"
+                        );
+
+                        // Assert that the hash in the share matches the hash of the now-pruned response.
+                        let expected_hash = ic_types::crypto::crypto_hash(response);
+                        assert_eq!(
+                            share.content.content_hash, expected_hash,
+                            "The share's content hash must match the pruned response"
+                        );
+                    }
+                );
+            })
+        });
+    }
+
+    #[test]
     fn test_dishonest_oversized_reject_is_invalidated() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|log| {
@@ -1865,6 +2006,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1987,6 +2129,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -2103,6 +2246,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -2251,6 +2395,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -2349,6 +2494,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 // Expect times to be called exactly once to check that already

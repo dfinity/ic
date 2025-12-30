@@ -1,5 +1,6 @@
 load("@python_deps//:requirements.bzl", "requirement")
-load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,10 +19,6 @@ py_library(
 py_library(
     name = "utils",
     srcs = ["utils.py"],
-    deps = [
-        requirement("invoke"),
-        requirement("loguru"),
-    ],
 )
 
 # Build tools
@@ -29,7 +26,6 @@ py_binary(
     name = "build_container_base_image",
     srcs = ["build_container_base_image.py"],
     deps = [
-        ":utils",
         requirement("loguru"),
         requirement("invoke"),
         requirement("simple_parsing"),
@@ -41,8 +37,6 @@ py_binary(
     srcs = ["build_container_filesystem_tar.py"],
     deps = [
         requirement("invoke"),
-        requirement("loguru"),
-        ":utils",
     ],
 )
 

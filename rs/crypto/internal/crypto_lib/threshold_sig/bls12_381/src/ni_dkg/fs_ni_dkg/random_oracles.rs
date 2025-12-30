@@ -1,6 +1,6 @@
 //! Hashing to group elements (fields, curves)
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::collections::BTreeMap;
 
 const DOMAIN_RO_INT: &str = "ic-random-oracle-integer";
@@ -249,15 +249,4 @@ pub fn random_oracle_to_scalar(domain: &str, data: &dyn UniqueHash) -> Scalar {
     let hash = random_oracle(domain, data);
     let rng = &mut rand_chacha::ChaChaRng::from_seed(hash);
     Scalar::miracl_random(rng)
-}
-
-/// Computes the hash of a struct using an hash function that can be modelled as
-/// a random oracle. Returns a group element of G1 in BLS12_381.
-///
-/// A distinct `domain` should be used for each purpose of the random oracle.
-pub fn random_oracle_to_g1(domain: &str, data: &dyn UniqueHash) -> G1Affine {
-    G1Affine::hash(
-        DomainSeparationContext::new(domain).as_bytes(),
-        &data.unique_hash(),
-    )
 }

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -11,7 +11,6 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:p384",
     "@crate_index//:rand",
-    "@crate_index//:raw-cpuid",
     "@crate_index//:rcgen",
     "@crate_index//:reqwest",
     "@crate_index//:rsa",
@@ -42,15 +41,6 @@ rust_library(
     ],
     crate_name = "ic_sev",
     deps = DEPENDENCIES,
-)
-
-rust_binary(
-    name = "sev_active",
-    srcs = ["src/bin/sev_active.rs"],
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-    deps = [":sev"],
 )
 
 rust_test(

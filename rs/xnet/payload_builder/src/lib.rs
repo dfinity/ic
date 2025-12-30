@@ -326,7 +326,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
+        tls_handshake: Arc<dyn TlsConfig>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -895,7 +895,11 @@ impl XNetPayloadBuilderImpl {
                     SliceValidationResult::Invalid(_) => {
                         info!(
                             self.log,
-                            "Invalid slice from {}: {:?}", subnet_id, validation_result
+                            "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
+                            subnet_id,
+                            validation_result,
+                            validation_context.certified_height,
+                            past_payloads.len()
                         );
                     }
 
@@ -1680,7 +1684,7 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        tls: Arc<dyn TlsConfig + Send + Sync>,
+        tls: Arc<dyn TlsConfig>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         #[cfg(not(test))]

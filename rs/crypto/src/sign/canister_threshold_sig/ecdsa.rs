@@ -7,7 +7,6 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
     combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
@@ -17,7 +16,8 @@ use ic_types::crypto::canister_threshold_sig::idkg::IDkgReceivers;
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::{NodeId, NodeIndex};
+use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
+use ic_types::{NodeId, NodeIndex, Randomness};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -57,10 +57,15 @@ pub fn sign_share(
     let kappa_times_lambda = q.kappa_times_lambda().transcript_to_bytes();
     let key_times_lambda = q.key_times_lambda().transcript_to_bytes();
 
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: *inputs.caller(),
+        derivation_path: inputs.derivation_path().to_vec(),
+    };
+
     let internal_sig_share = vault.create_ecdsa_sig_share(
-        inputs.derivation_path().clone(),
+        extended_derivation_path,
         inputs.hashed_message().to_vec(),
-        *inputs.nonce(),
+        Randomness::from(*inputs.nonce()),
         IDkgTranscriptInternalBytes::from(key),
         IDkgTranscriptInternalBytes::from(kappa_unmasked),
         IDkgTranscriptInternalBytes::from(lambda_masked),
@@ -117,12 +122,16 @@ pub fn verify_sig_share(
             signer_id: signer,
         },
     )?;
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: *inputs.caller(),
+        derivation_path: inputs.derivation_path().to_vec(),
+    };
 
     verify_ecdsa_signature_share(
         &sig_share,
-        &DerivationPath::from(inputs.derivation_path()),
+        &DerivationPath::from(extended_derivation_path),
         inputs.hashed_message(),
-        *inputs.nonce(),
+        Randomness::from(*inputs.nonce()),
         signer_index,
         &key,
         &kappa_unmasked,
@@ -173,12 +182,16 @@ pub fn verify_combined_signature(
                     internal_error: format!("failed to deserialize signature share: {}", e.0),
                 },
             )?;
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: *inputs.caller(),
+        derivation_path: inputs.derivation_path().to_vec(),
+    };
 
     verify_ecdsa_threshold_signature(
         &signature,
-        &DerivationPath::from(inputs.derivation_path()),
+        &DerivationPath::from(extended_derivation_path),
         inputs.hashed_message(),
-        *inputs.nonce(),
+        Randomness::from(*inputs.nonce()),
         &kappa_unmasked,
         &key,
         inputs.algorithm_id(),
@@ -229,10 +242,15 @@ pub fn combine_sig_shares(
     let key = IDkgTranscriptInternal::try_from(inputs.key_transcript())
         .map_err(|e| conv_error(e, "key"))?;
 
+    let extended_derivation_path = ExtendedDerivationPath {
+        caller: *inputs.caller(),
+        derivation_path: inputs.derivation_path().to_vec(),
+    };
+
     let internal_combined_sig = combine_ecdsa_signature_shares(
-        &DerivationPath::from(inputs.derivation_path()),
+        &DerivationPath::from(extended_derivation_path),
         inputs.hashed_message(),
-        *inputs.nonce(),
+        Randomness::from(*inputs.nonce()),
         &key,
         &kappa_unmasked,
         inputs.reconstruction_threshold(),

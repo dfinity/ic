@@ -7,9 +7,11 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, RegistryVersion};
 
-use anyhow::{anyhow, bail, ensure};
+use anyhow::{Result, anyhow, bail, ensure};
 use slog::{Logger, info};
 use ssh2::Session;
+use std::fmt::Debug;
+use std::time::Duration;
 
 use crate::ssh_access::execute_bash_command;
 
@@ -164,34 +166,68 @@ pub fn assert_node_is_unassigned_with_ssh_session(
     .expect("Failed to detect that node has deleted its state.");
 }
 
+fn fetch_metric_from_nodes<T>(nodes: Vec<IcNodeSnapshot>, metric_name: &str) -> Result<Vec<T>>
+where
+    T: Copy + Debug + std::str::FromStr,
+{
+    let metrics_fetcher = MetricsFetcher::new(nodes.iter().cloned(), vec![metric_name.to_string()]);
+    let metrics = block_on(metrics_fetcher.fetch::<T>())
+        .map_err(|err| anyhow!("Could not connect to metrics yet {:?}", err))?;
+
+    let vals = metrics[metric_name].clone();
+    if vals.len() != nodes.len() {
+        bail!(
+            "Metrics not available for all nodes yet. {} metrics, {} nodes",
+            vals.len(),
+            nodes.len()
+        );
+    }
+
+    Ok(vals)
+}
+
+const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
+
+pub fn get_node_earliest_topology_version(node: &IcNodeSnapshot) -> Result<RegistryVersion> {
+    fetch_metric_from_nodes::<u64>(vec![node.clone()], EARLIEST_TOPOLOGY_VERSION)
+        .map(|versions| RegistryVersion::from(versions[0]))
+}
+
 pub fn await_subnet_earliest_topology_version(
     subnet: &SubnetSnapshot,
     target_version: RegistryVersion,
     logger: &Logger,
 ) {
-    const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
+    await_subnet_earliest_topology_version_with_retries(
+        subnet,
+        target_version,
+        logger,
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+    )
+}
+
+pub fn await_subnet_earliest_topology_version_with_retries(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+    retry_timeout: Duration,
+    retry_backoff: Duration,
+) {
     info!(
         logger,
         "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
     );
-    let metrics = MetricsFetcher::new(subnet.nodes(), vec![EARLIEST_TOPOLOGY_VERSION.into()]);
     ic_system_test_driver::retry_with_msg!(
         format!(
             "Waiting until earliest topology version {} on subnet {}",
             target_version, subnet.subnet_id,
         ),
         logger.clone(),
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || match block_on(metrics.fetch::<u64>()) {
-            Ok(val) => {
-                let earliest_registry_versions = &val[EARLIEST_TOPOLOGY_VERSION];
-                ensure!(
-                    earliest_registry_versions.len() == subnet.nodes().count(),
-                    "Metrics not available for all nodes yet. {} metrics, {} nodes",
-                    earliest_registry_versions.len(),
-                    subnet.nodes().count()
-                );
+        retry_timeout,
+        retry_backoff,
+        || fetch_metric_from_nodes::<u64>(subnet.nodes().collect(), EARLIEST_TOPOLOGY_VERSION)
+            .and_then(|earliest_registry_versions| {
                 let min_earliest_registry_version =
                     earliest_registry_versions.iter().min().unwrap();
                 assert!(
@@ -205,11 +241,7 @@ pub fn await_subnet_earliest_topology_version(
                     target_version
                 );
                 Ok(())
-            }
-            Err(err) => {
-                bail!("Could not connect to metrics yet {:?}", err);
-            }
-        }
+            })
     )
     .expect("The subnet did not reach the specified registry version in time")
 }

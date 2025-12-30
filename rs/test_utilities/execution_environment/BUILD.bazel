@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-error-types",
     "//rs/config",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/execution_environment",
@@ -30,6 +31,8 @@ DEPENDENCIES = [
     "//rs/universal_canister/lib",
     "@crate_index//:bincode",
     "@crate_index//:maplit",
+    "@crate_index//:num-traits",
+    "@crate_index//:prometheus",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",

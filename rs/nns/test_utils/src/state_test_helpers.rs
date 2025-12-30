@@ -3,6 +3,7 @@ use crate::common::{
     build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
     build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
+use crate::state_test_helpers::nns_governance_pb::Visibility;
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
 use cycles_minting_canister::{
@@ -39,11 +40,12 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
+    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
+    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -89,7 +91,6 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Serialize;
 use std::{convert::TryInto, time::Duration};
-
 /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
 /// Canisters created in those tests without any `specified_id` are assigned to the default range
 /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
@@ -1141,6 +1142,24 @@ pub fn nns_increase_dissolve_delay(
     )
 }
 
+pub fn nns_make_neuron_public(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> Result<
+    nns_governance_pb::manage_neuron_response::ConfigureResponse,
+    nns_governance_pb::GovernanceError,
+> {
+    nns_configure_neuron(
+        state_machine,
+        sender,
+        neuron_id,
+        Operation::SetVisibility(nns_governance_pb::manage_neuron::SetVisibility {
+            visibility: Some(Visibility::Public as i32),
+        }),
+    )
+}
+
 pub fn nns_start_dissolving(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1477,7 +1496,7 @@ pub fn nns_set_auto_stake_maturity(
 
 pub fn nns_list_proposals(
     state_machine: &StateMachine,
-    request: ListProposalInfo,
+    request: ListProposalInfoRequest,
 ) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(
@@ -1496,13 +1515,13 @@ pub fn nns_list_proposals(
 }
 
 /// Return the monthly Node Provider rewards
-pub fn nns_get_monthly_node_provider_rewards(
+pub fn nns_get_node_provider_rewards(
     state_machine: &StateMachine,
 ) -> Result<RewardNodeProviders, GovernanceError> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
-            "get_monthly_node_provider_rewards",
+            "get_node_provider_rewards",
             Encode!(&()).unwrap(),
         )
         .unwrap();
@@ -2284,7 +2303,7 @@ pub fn nns_register_known_neuron(
     proposer_principal: PrincipalId,
     proposer_neuron_id: NeuronId,
     known_neuron: ic_nns_governance_api::KnownNeuron,
-) {
+) -> ProposalId {
     let proposal = ic_nns_governance_api::MakeProposalRequest {
         title: Some("Register Known Neuron".to_string()),
         summary: "Proposal to register a neuron as a known neuron".to_string(),
@@ -2305,6 +2324,7 @@ pub fn nns_register_known_neuron(
         ic_nns_governance_api::manage_neuron_response::Command::MakeProposal(response) => {
             let proposal_id = response.proposal_id.unwrap();
             nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+            proposal_id
         }
         other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
@@ -2340,6 +2360,39 @@ pub fn nns_deregister_known_neuron(
         }
         other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
+}
+
+/// Helper function to list neuron votes.
+pub fn nns_list_neuron_votes(
+    state_machine: &StateMachine,
+    neuron_id: NeuronId,
+) -> ListNeuronVotesResponse {
+    let request = ListNeuronVotesRequest {
+        neuron_id: Some(neuron_id),
+        before_proposal: None,
+        limit: None,
+    };
+    let response = query(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "list_neuron_votes",
+        Encode!(&request).unwrap(),
+    )
+    .expect("Error calling list_neuron_votes");
+    Decode!(&response, ListNeuronVotesResponse).expect("Error decoding ListNeuronVotesResponse")
+}
+
+pub fn nns_list_neuron_votes_or_panic(
+    state_machine: &StateMachine,
+    neuron_id: NeuronId,
+) -> Vec<(ProposalId, Vote)> {
+    nns_list_neuron_votes(state_machine, neuron_id)
+        .unwrap()
+        .votes
+        .unwrap()
+        .into_iter()
+        .map(|vote| (vote.proposal_id.unwrap(), vote.vote.unwrap()))
+        .collect()
 }
 
 /// Helper function to list known neurons.

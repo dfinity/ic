@@ -13,3 +13,4 @@ pub mod registry_lifecycle;
 pub mod storage;
 
 mod invariants;
+mod rate_limits;

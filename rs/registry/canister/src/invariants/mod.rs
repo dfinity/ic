@@ -7,6 +7,7 @@ mod endpoint;
 mod firewall;
 mod hostos_version;
 mod node_operator;
+mod node_record;
 mod replica_version;
 mod routing_table;
 mod subnet;

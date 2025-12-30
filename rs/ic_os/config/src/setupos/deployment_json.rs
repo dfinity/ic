@@ -10,9 +10,8 @@ use url::Url;
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentSettings {
     pub deployment: Deployment,
-    pub logging: Logging,
     pub nns: Nns,
-    pub vm_resources: VmResources,
+    pub dev_vm_resources: VmResources,
 }
 
 #[serde_as]
@@ -24,10 +23,6 @@ pub struct Deployment {
     /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
-
-// NODE-1681: Leftover from push-based logging. Remove in NODE-1681
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Logging {}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
@@ -46,6 +41,18 @@ pub struct VmResources {
     pub nr_of_vcpus: u32,
 }
 
+impl Default for VmResources {
+    /// These currently match the defaults for nested tests on Farm:
+    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
+    fn default() -> Self {
+        VmResources {
+            memory: 16,
+            cpu: "kvm".to_string(),
+            nr_of_vcpus: 16,
+        }
+    }
+}
+
 pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSettings> {
     let file = File::open(deployment_json).context("failed to open deployment config file")?;
     serde_json::from_reader(&file).context("Invalid json content")
@@ -54,6 +61,7 @@ pub fn get_deployment_settings(deployment_json: &Path) -> Result<DeploymentSetti
 #[cfg(test)]
 mod test {
     use super::*;
+    use config_types::HostOSDevSettings;
     use once_cell::sync::Lazy;
     use serde_json::{Value, json};
 
@@ -63,12 +71,11 @@ mod test {
                 "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
-              "logging": {},
               "nns": {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
-              "vm_resources": {
-                "memory": "490",
+              "dev_vm_resources": {
+                "memory": "16",
                 "cpu": "kvm",
                 "nr_of_vcpus": 64
               }
@@ -81,12 +88,11 @@ mod test {
     "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
-  "logging": {},
   "nns": {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
-  "vm_resources": {
-    "memory": "490",
+  "dev_vm_resources": {
+    "memory": "16",
     "cpu": "kvm",
     "nr_of_vcpus": 64
   }
@@ -97,7 +103,6 @@ mod test {
             deployment_environment: DeploymentEnvironment::Mainnet,
             mgmt_mac: None,
         },
-        logging: Logging {},
         nns: Nns {
             urls: vec![
                 Url::parse("https://icp-api.io").unwrap(),
@@ -105,8 +110,8 @@ mod test {
                 Url::parse("https://ic0.app").unwrap(),
             ],
         },
-        vm_resources: VmResources {
-            memory: 490,
+        dev_vm_resources: VmResources {
+            memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 64,
         },
@@ -124,5 +129,17 @@ mod test {
         let parsed_deployment = { serde_json::from_value(DEPLOYMENT_VALUE.clone()).unwrap() };
 
         assert_eq!(*DEPLOYMENT_STRUCT, parsed_deployment);
+    }
+
+    #[test]
+    /// Confirm that the defaults for HostOsDevSettings (the config type) and
+    /// VmResources (the type from deployment.json) are in line.
+    fn defaults_aligned() {
+        let dev_settings = HostOSDevSettings::default();
+        let vm_resources = VmResources::default();
+
+        assert_eq!(dev_settings.vm_memory, vm_resources.memory);
+        assert_eq!(dev_settings.vm_cpu, vm_resources.cpu);
+        assert_eq!(dev_settings.vm_nr_of_vcpus, vm_resources.nr_of_vcpus);
     }
 }

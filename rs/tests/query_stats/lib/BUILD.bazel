@@ -13,6 +13,7 @@ rust_library(
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/universal_canister/lib",
         "@crate_index//:candid",

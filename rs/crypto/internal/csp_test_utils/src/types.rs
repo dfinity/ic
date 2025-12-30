@@ -76,5 +76,5 @@ pub fn csp_sig_thres_bls12381_combined_from_array_of(byte: u8) -> CspSignature {
     ];
     cbor.extend_from_slice(&[byte; 48]);
     serde_cbor::from_slice(&cbor)
-        .expect("failed to convert hex value to multi_bls12381_cobined CSP signature")
+        .expect("failed to convert hex value to multi_bls12381_combined CSP signature")
 }

@@ -10,11 +10,12 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
@@ -335,17 +336,6 @@ def icos_build(
         ],
     )
 
-    # Disk images just for testing.
-    disk_image_no_tar(
-        name = "disk.img",
-        layout = image_deps["partition_table"],
-        partitions = partitions,
-        expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
-        target_compatible_with = ["@platforms//os:linux"],
-        visibility = visibility,
-    )
-
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
@@ -378,16 +368,16 @@ def icos_build(
     # -------------------- Vulnerability Scanning Tool ------------
 
     if vuln_scan:
-        native.sh_binary(
+        sh_binary(
             name = "vuln-scan",
             srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [
-                "@trivy//:trivy",
+                "//:trivy",
                 ":rootfs-tree.tar",
                 "//ic-os:vuln-scan/vuln-scan.html",
             ],
             env = {
-                "trivy_path": "$(rootpath @trivy//:trivy)",
+                "trivy_path": "$(rootpath //:trivy)",
                 "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },

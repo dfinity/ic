@@ -10,8 +10,6 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
-
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
@@ -41,14 +39,6 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     cd .. && \
     rm -rf e2fsdroid
 
-# Install an older libtinfo for rules_haskell
-RUN mkdir libtinfo && \
-    cd libtinfo && \
-    wget "http://mirrors.kernel.org/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb" && \
-    apt -yqq install ./libtinfo5_6.3-2ubuntu0.1_amd64.deb && \
-    cd .. && \
-    rm -rf libtinfo
-
 ARG mkcert_version=1.4.4
 ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
 RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
@@ -59,14 +49,6 @@ ARG bazelisk_sha=fd8fdff418a1758887520fa42da7e6ae39aefc788cf5e7f7bb8db6934d279fc
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.25.0/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
-
-ARG nvm_version=v0.39.1
-ARG dependency_mgmt_nns_dapp_node_version=18.20.5
-ARG dependency_mgmt_default_node_version=20
-ARG dependency_mgmt_oisy_wallet_node_version=22.12.0
-ENV NVM_DIR=/opt/nvm
-RUN mkdir $NVM_DIR && \
-    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
 
 # Add cocogitto
 ARG COCOGITTO_VERSION="5.4.0"
@@ -109,18 +91,6 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
 ARG motoko_version=0.14.7
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Add kubectl
-ARG KUBECTL_BIN="/usr/local/bin/kubectl"
-ARG KUBECTL_VERSION="1.22.17"
-RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
-    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
-    chmod +x "${KUBECTL_BIN}"
-
-RUN . /opt/nvm/nvm.sh && \
-    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version} && \
-    nvm install ${dependency_mgmt_oisy_wallet_node_version}
-
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
@@ -144,7 +114,7 @@ RUN mkdir -p /afl && \
 # Pre-populate the Bazel installation for root
 # (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
 COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
+RUN cd /tmp/bazel && bazel version
 
 COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
@@ -156,7 +126,6 @@ USER ubuntu
 
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-ENV PYTHONPATH=/ic/ci/src:/ic/ci/src/dependencies:$PYTHONPATH
 
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
@@ -175,7 +144,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 RUN rm -rf /tmp/rust-version
 
 # Add cargo-audit
-ARG CARGO_AUDIT_VERSION=0.21.0
+ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc

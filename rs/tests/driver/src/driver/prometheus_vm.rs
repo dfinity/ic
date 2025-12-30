@@ -19,6 +19,7 @@ use crate::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     ic_gateway_vm::HasIcGatewayVm,
+    ic_gateway_vm::Playnet,
     log_events,
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
@@ -34,8 +35,6 @@ use crate::driver::{
     test_env::TestEnvAttribute,
     test_env_api::CreateDnsRecords,
 };
-use crate::k8s::config::TNET_DNS_SUFFIX;
-use crate::k8s::tnet::TNet;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -256,21 +255,8 @@ mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
 for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
-
 mkdir -p /config/grafana/dashboards
-
-if uname -a | grep -q Ubuntu; then
-  # k8s
-  chmod g+s /etc/prometheus
-  cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards /var/lib/grafana/
-  chown -R grafana:grafana /var/lib/grafana/dashboards
-  chown -R {SSH_USERNAME}:prometheus /etc/prometheus
-  systemctl reload prometheus
-else
-  # farm
-  chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
-fi
+chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 "#
                 ),
             )
@@ -341,21 +327,6 @@ fi
                     format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
                 )
             }
-            InfraProvider::K8s => {
-                let tnet = TNet::read_attribute(env);
-                (
-                    format!(
-                        "prometheus-{}.{}",
-                        tnet.unique_name.clone().expect("no unique name"),
-                        *TNET_DNS_SUFFIX
-                    ),
-                    format!(
-                        "grafana-{}.{}",
-                        tnet.unique_name.clone().expect("no unique name"),
-                        *TNET_DNS_SUFFIX
-                    ),
-                )
-            }
         };
         let prometheus_message = format!("Prometheus Web UI at http://{prometheus_fqdn}");
         let grafana_message = format!("Grafana at http://{grafana_fqdn}");
@@ -381,11 +352,6 @@ pub trait HasPrometheus {
     /// JSON files and scps them to the prometheus VM.
     fn sync_with_prometheus(&self);
 
-    /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `playnet_domain` is specified, add a
-    /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>);
-
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
     ///
@@ -397,22 +363,21 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_by_name("", None)
-    }
-
-    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_domain: Option<String>) {
-        if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            playnet_domain = None;
-        }
-
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
         let group_name = GroupSetup::read_attribute(self).infra_group_name;
+
+        let playnet_domain = if Playnet::attribute_exists(self) {
+            Some(Playnet::read_attribute(self).playnet_cert.playnet)
+        } else {
+            None
+        };
+
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),
-            self.topology_snapshot_by_name(name),
+            self.topology_snapshot(),
             &playnet_domain,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");

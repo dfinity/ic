@@ -468,6 +468,7 @@ mod tests {
             message_test_id(1),
             IngressStatus::Unknown,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(2),
@@ -478,6 +479,7 @@ mod tests {
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(3),
@@ -488,6 +490,7 @@ mod tests {
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(4),
@@ -501,6 +504,7 @@ mod tests {
                 )),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(5),
@@ -511,6 +515,7 @@ mod tests {
                 state: IngressState::Completed(WasmResult::Reply(b"reply".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(6),
@@ -521,6 +526,7 @@ mod tests {
                 state: IngressState::Completed(WasmResult::Reject("reject".to_string())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(7),
@@ -531,6 +537,7 @@ mod tests {
                 state: IngressState::Done,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
 
         for certification_version in all_supported_versions() {

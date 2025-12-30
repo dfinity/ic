@@ -1,5 +1,4 @@
-// Stuff here used in tests and benchmarks.
-// Since benchmarks use ic-boundary as an external library crate - this has to be public.
+// Stuff here used in tests
 
 use std::{sync::Arc, time::Duration};
 
@@ -7,10 +6,9 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
-use http;
 use ic_base_types::NodeId;
-use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_bn_lib::prometheus::Registry;
+use ic_bn_lib_common::{traits::http::Client as HttpClient, types::http::ConnInfo};
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -34,7 +32,6 @@ use ic_types::{
     CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
     replica_version::ReplicaVersion, time::Time,
 };
-use reqwest;
 
 use crate::routes::ProxyRouter;
 use crate::{
@@ -104,6 +101,7 @@ pub fn new_threshold_key() -> ThresholdSigPublicKey {
     pk
 }
 
+/// Generate test subnet record
 pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
@@ -128,7 +126,7 @@ pub fn test_subnet_record() -> SubnetRecord {
     }
 }
 
-// Generate a fake registry client with some data
+/// Generate a fake registry client with some data
 #[allow(clippy::type_complexity)]
 pub fn create_fake_registry_client(
     subnet_count: usize,
@@ -250,6 +248,7 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+/// Inject some dummy ConnInfo
 async fn add_conninfo(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
@@ -260,6 +259,7 @@ async fn add_conninfo(
     next.run(request).await
 }
 
+/// Create a test router using some bogus data
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
@@ -270,6 +270,8 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
+        "--listen-http-port",
+        "111",
         "--registry-local-store-path",
         "/tmp",
         "--obs-log-null",
@@ -292,9 +294,6 @@ pub fn setup_test_router(
         args.push("104857600");
     }
 
-    #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(args);
-    #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
         args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args

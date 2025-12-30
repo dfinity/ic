@@ -2,7 +2,7 @@
 Description=Setup shared-data storage
 DefaultDependencies=no
 Requires=dev-mapper-store\x2dshared\x2d\x2ddata.device
-After=dev-mapper-store\x2dshared\x2d\x2ddata.device
+After=init-config.service dev-mapper-store\x2dshared\x2d\x2ddata.device
 Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
 # Add an explicit sequencing to LVM setup. The observed problem is that the
 # LV apparently becomes notified as "ready" through udev before the actual
@@ -11,6 +11,7 @@ Before=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service
 # in turn.
 After=setup-lvs.service
 Requires=setup-lvs.service
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2ddata.service

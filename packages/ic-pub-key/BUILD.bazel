@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,7 +11,7 @@ rust_library(
         "vetkeys",
     ],
     crate_name = "ic_pub_key",
-    version = "0.1.0",
+    version = "0.2.0",
     deps = [
         "//packages/ic-ed25519",
         "//packages/ic-secp256k1",
@@ -33,20 +33,16 @@ rust_doc(
     ],
 )
 
-# TODO: The rust_doc_test rule is disabled because currently it is not possible
-# to enable crate features. This will soon become possible though once
-# https://github.com/bazelbuild/rules_rust/pull/3544 is part of a release and
-# we are using the respective rules_rust version.
-# rust_doc_test(
-#     name = "doc_test",
-#     crate = ":ic-pub-key",
-#     crate_features = [
-#         "secp256k1",
-#         "ed25519",
-#         "vetkeys",
-#     ],
-#     deps = [":ic-pub-key"],
-# )
+rust_doc_test(
+    name = "doc_test",
+    crate = ":ic-pub-key",
+    crate_features = [
+        "secp256k1",
+        "ed25519",
+        "vetkeys",
+    ],
+    deps = [":ic-pub-key"],
+)
 
 rust_test(
     name = "unit_tests",
@@ -69,6 +65,5 @@ rust_test_suite(
     deps = [
         ":ic-pub-key",
         "@crate_index//:hex",
-        "@crate_index//:hex-literal",
     ],
 )

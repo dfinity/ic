@@ -139,6 +139,11 @@ pub struct Refund {
     pub amount: ::core::option::Option<Cycles>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Refunds {
+    #[prost(message, repeated, tag = "1")]
+    pub refunds: ::prost::alloc::vec::Vec<Refund>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StreamMessage {
     #[prost(oneof = "stream_message::Message", tags = "1, 2, 3")]
     pub message: ::core::option::Option<stream_message::Message>,

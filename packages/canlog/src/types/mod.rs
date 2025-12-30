@@ -1,5 +1,5 @@
 use candid::CandidType;
-use regex::Regex;
+use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -17,15 +17,27 @@ impl RegexString {
     /// Compile the string into a regular expression.
     ///
     /// This is a relatively expensive operation that's currently not cached.
-    pub fn compile(&self) -> Result<Regex, regex::Error> {
-        Regex::new(&self.0)
+    pub fn compile(&self) -> Result<Regex, InvalidRegex> {
+        Regex::new(&self.0).map_err(|e| InvalidRegex(e.to_string()))
     }
 
     /// Checks if the given string matches the compiled regex pattern.
     ///
     /// Returns `Ok(true)` if `value` matches, `Ok(false)` if not, or an error if the regex is invalid.
-    pub fn try_is_valid(&self, value: &str) -> Result<bool, regex::Error> {
+    pub fn try_is_valid(&self, value: &str) -> Result<bool, InvalidRegex> {
         Ok(self.compile()?.is_match(value))
+    }
+}
+
+/// An error that occurred during parsing or compiling a regular expression.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InvalidRegex(String);
+
+impl std::error::Error for InvalidRegex {}
+
+impl std::fmt::Display for InvalidRegex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -34,7 +46,7 @@ impl RegexString {
 pub struct RegexSubstitution {
     /// The pattern to be matched.
     pub pattern: RegexString,
-    /// The string to replace occurrences [`pattern`] with.
+    /// The string to replace occurrences `pattern` with.
     pub replacement: String,
 }
 

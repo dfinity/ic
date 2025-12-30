@@ -11,30 +11,28 @@ use std::fmt;
 #[cfg(test)]
 mod test;
 
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct VetKdArgs {
-    pub ni_dkg_id: NiDkgId,
-    #[serde(with = "serde_bytes")]
-    pub input: Vec<u8>,
-    pub context: VetKdDerivationContext,
-    #[serde(with = "serde_bytes")]
-    pub transport_public_key: Vec<u8>,
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct VetKdArgs<'a> {
+    pub ni_dkg_id: &'a NiDkgId,
+    pub input: &'a Vec<u8>,
+    pub context: VetKdDerivationContextRef<'a>,
+    pub transport_public_key: &'a Vec<u8>,
 }
 
-impl fmt::Debug for VetKdArgs {
+impl fmt::Debug for VetKdArgs<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("VetKdArgs")
-            .field("ni_dkg_id", &self.ni_dkg_id)
-            .field("input", &HexEncoding::from(&self.input))
+            .field("ni_dkg_id", self.ni_dkg_id)
+            .field("input", &HexEncoding::from(self.input))
             .field("context", &self.context)
             .field(
                 "transport_public_key",
-                &HexEncoding::from(&self.transport_public_key),
+                &HexEncoding::from(self.transport_public_key),
             )
             .finish()
     }
 }
-impl_display_using_debug!(VetKdArgs);
+impl_display_using_debug!(VetKdArgs<'_>);
 
 #[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
 pub struct VetKdEncryptedKeyShareContent(#[serde(with = "serde_bytes")] pub Vec<u8>);
@@ -104,6 +102,22 @@ impl std::fmt::Debug for VetKdDerivationContext {
     }
 }
 impl_display_using_debug!(VetKdDerivationContext);
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct VetKdDerivationContextRef<'a> {
+    pub caller: &'a PrincipalId,
+    pub context: &'a Vec<u8>,
+}
+
+impl std::fmt::Debug for VetKdDerivationContextRef<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("VetKdDerivationContextRef")
+            .field("caller", self.caller)
+            .field("context", &HexEncoding::from(self.context))
+            .finish()
+    }
+}
+impl_display_using_debug!(VetKdDerivationContextRef<'_>);
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum VetKdKeyShareCreationError {

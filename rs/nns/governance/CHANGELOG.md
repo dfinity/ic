@@ -11,6 +11,106 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-12-05: Proposal 139678
+
+http://dashboard.internetcomputer.org/proposal/139678
+
+## Fixed
+
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
+
+# 2025-11-28: Proposal 139575
+
+http://dashboard.internetcomputer.org/proposal/139575
+
+##  Fixed
+
+- Add default case for start_date fetching in Performance Based Rewards. This is done to ensure that a valid start date
+  is always returned, even when no previous rewards exist.
+  
+- Added `algorithm_version` field to node provider rewards.
+
+
+# 2025-11-07: Proposal 139313
+
+http://dashboard.internetcomputer.org/proposal/139313
+
+## Fixed
+
+* Previously, a lock was released only in the happy case (during minting node
+  provider rewards). Now, it is released no matter how the function returns.
+
+
+# 2025-10-24: Proposal 139086
+
+http://dashboard.internetcomputer.org/proposal/139086
+
+## Added
+
+* New proposal types:
+
+    * `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+    * `SetSubnetOperationalLevel`
+
+        * Mainly, this sets the `is_halted` field in `SubnetRecord`.
+
+        * This also sets a couple other things:
+            * `ssh_readonly_access` - Also in `SubnetRecord`.
+            * `ssh_node_state_write_access` - In `NodeRecord` (not `SubnetRecord`!).
+
+        * Motivation: This will be used in a slightly enhanced subnet recovery
+          procedure. This is needed before we can fully enable SEV.
+
+* A new API function `get_neuron_index` is added. It accepts an exclusive lower bound on the neuron ID and a page size, and returns all neurons whose IDs are greater than the specified lower bound.
+
+# 2025-10-17: Proposal 138991
+
+https://dashboard.internetcomputer.org/proposal/138991
+
+## Added
+
+* `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+## Changed
+
+* Following private neurons is now generally disallowed. There are some exceptions to this though: 
+    * A private neuron P can be followed by another neuron N, if either they share a controller or N's controller is listed as P's hotkey.
+    * Following private neurons on the topic `NeuronManagement` is not a subject of this limitation. Furthermore, following public neurons is always allowed.
+
+* Following non-existing Neuron IDs is disallowed as well.
+
+# 2025-10-10: Proposal 138913
+
+http://dashboard.internetcomputer.org/proposal/138913
+
+## Added
+
+* Record votes by known neurons before clearing ballots.
+* Allow updating known neuron through RegisterKnownNeuron without having to change its name.
+* Added `committed_topics` to the `KnownNeuronData` that can be submitted as part of the
+  `RegisterKnownNeuron` proposal.
+* Add an API to list neuron votes given a specific neuron id. In the short term it only works for
+  known neurons as only known neuron votes are recorded.
+* Enable 2 features - (1) recording known enuron voting history and (2) proposal type to deregister
+  known neurons. See [the forum post](https://forum.dfinity.org/t/better-known-neurons/55747) for
+  more details.
+
+## Changed
+
+* Stop exposing known neuron data in list_neurons so that it's less likely to exceed message size
+  limit.
+
+* The Dogecoin canister (ID begins with gordg-) is considered a "protocol"
+  canister. This affects proposal topics.
+
+## Deprecated
+
+* The `StopOrStartCanister` NNS Function is now obsolete (Use `Action::StopOrStartCanister`
+  instead).
+
+
 # 2025-09-19: Proposal 138583
 
 https://dashboard.internetcomputer.org/proposal/138583

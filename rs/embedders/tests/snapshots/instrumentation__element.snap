@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 63
+assertion_line: 65
 expression: out
 ---
 (module
@@ -12,20 +12,20 @@ expression: out
   (type (;5;) (func (param i64 i64 i32) (result i64)))
   (type (;6;) (func (param i64 i64 i64)))
   (type (;7;) (func (param i32 i32) (result i32 i32)))
-  (import "__" "out_of_instructions" (func (;0;) (type 0)))
-  (import "__" "try_grow_wasm_memory" (func (;1;) (type 4)))
-  (import "__" "try_grow_stable_memory" (func (;2;) (type 5)))
-  (import "__" "internal_trap" (func (;3;) (type 3)))
-  (import "__" "stable_read_first_access" (func (;4;) (type 6)))
-  (import "ic0" "msg_cycles_accept" (func (;5;) (type 2)))
-  (import "ic0" "msg_cycles_available" (func (;6;) (type 1)))
+  (import "ic0" "msg_cycles_accept" (func (;0;) (type 2)))
+  (import "ic0" "msg_cycles_available" (func (;1;) (type 1)))
+  (import "__" "out_of_instructions" (func (;2;) (type 0)))
+  (import "__" "try_grow_wasm_memory" (func (;3;) (type 4)))
+  (import "__" "try_grow_stable_memory" (func (;4;) (type 5)))
+  (import "__" "internal_trap" (func (;5;) (type 3)))
+  (import "__" "stable_read_first_access" (func (;6;) (type 6)))
   (table (;0;) 5 5 funcref)
   (memory (;0;) i64 0 8192000)
   (memory (;1;) 2000 2000)
   (global (;0;) (mut i64) i64.const 0)
   (global (;1;) (mut i64) i64.const 0)
   (global (;2;) (mut i64) i64.const 0)
-  (export "Mt.call" (func 5))
+  (export "Mt.call" (func 0))
   (export "call Mt.call" (func 8))
   (export "call" (func 9))
   (export "table" (table 0))
@@ -34,7 +34,7 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
-  (elem (;0;) (i32.const 0) func 7 7 7 6 5)
+  (elem (;0;) (i32.const 0) func 7 7 7 1 0)
   (func (;7;) (type 1) (result i64)
     global.get 0
     i64.const 2
@@ -44,7 +44,7 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call 0
+      call 2
     end
     i64.const 5
   )
@@ -57,10 +57,10 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call 0
+      call 2
     end
     local.get 0
-    call 5
+    call 0
   )
   (func (;9;) (type 3) (param i32)
     global.get 0
@@ -71,7 +71,7 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call 0
+      call 2
     end
     local.get 0
     call_indirect (type 0)
@@ -94,7 +94,7 @@ expression: out
     i64.const 0
     i64.lt_s
     if ;; label = @1
-      call 0
+      call 2
     end
     local.get 0
   )

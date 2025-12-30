@@ -13,11 +13,11 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use candid::Principal;
+use futures::future::try_join_all;
 use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
-use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -25,12 +25,12 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::create_agent;
+use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{MessageCanister, block_on},
 };
-use ic_types::{ReplicaVersion, SubnetId};
+use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
@@ -55,7 +55,7 @@ pub fn bless_target_version(env: &TestEnv, nns_node: &IcNodeSnapshot) -> Replica
         &target_version,
         &logger,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(&logger, "Blessed target version");
@@ -102,53 +102,68 @@ pub fn upgrade(
     upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
-    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
-    let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
+    let (subnet_id, subnet_nodes, healthy_node, faulty_node, redundant_nodes) =
         if subnet_type == SubnetType::System {
             let subnet = env.topology_snapshot().root_subnet();
+            let subnet_nodes = subnet.nodes().collect::<Vec<_>>();
+
             let mut it = subnet.nodes();
             // We don't want to hit the node we're using for sending the proposals
             assert!(it.next().unwrap().node_id == nns_node.node_id);
-            let subnet_node = it.next().unwrap();
+            let healthy_node = it.next().unwrap();
             let faulty_node = it.next().unwrap();
             let mut redundant_nodes = Vec::new();
             for _ in 0..ALLOWED_FAILURES {
                 redundant_nodes.push(it.next().unwrap());
             }
-            (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
+            (
+                subnet.subnet_id,
+                subnet_nodes,
+                healthy_node,
+                faulty_node,
+                redundant_nodes,
+            )
         } else {
             let subnet = env
                 .topology_snapshot()
                 .subnets()
                 .find(|subnet| subnet.subnet_type() == SubnetType::Application)
                 .expect("there is no application subnet");
+            let subnet_nodes = subnet.nodes().collect::<Vec<_>>();
+
             let mut it = subnet.nodes();
-            let subnet_node = it.next().unwrap();
+            let healthy_node = it.next().unwrap();
             let faulty_node = it.next().unwrap();
             let mut redundant_nodes = Vec::new();
             for _ in 0..ALLOWED_FAILURES {
                 redundant_nodes.push(it.next().unwrap());
             }
-            (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
+            (
+                subnet.subnet_id,
+                subnet_nodes,
+                healthy_node,
+                faulty_node,
+                redundant_nodes,
+            )
         };
-    info!(logger, "upgrade: subnet_node = {:?}", subnet_node.node_id);
-    subnet_node.await_status_is_healthy().unwrap();
+    info!(logger, "upgrade: healthy_node = {:?}", healthy_node.node_id);
+    healthy_node.await_status_is_healthy().unwrap();
     faulty_node.await_status_is_healthy().unwrap();
 
     let msg = &format!("hello before upgrade to {upgrade_version}");
     info!(logger, "Storing message: '{}'", msg);
     let can_id = store_message(
-        &subnet_node.get_public_url(),
-        subnet_node.effective_canister_id(),
+        &healthy_node.get_public_url(),
+        healthy_node.effective_canister_id(),
         msg,
         &logger,
     );
     info!(logger, "Reading message: '{}'", msg);
     assert!(can_read_msg(
         &logger,
-        &subnet_node.get_public_url(),
+        &healthy_node.get_public_url(),
         can_id,
         msg
     ));
@@ -156,7 +171,7 @@ pub fn upgrade(
 
     info!(logger, "Creating canister snapshot before upgrading ...");
     block_on(async {
-        let agent = create_agent(subnet_node.get_public_url().as_str())
+        let agent = create_agent(healthy_node.get_public_url().as_str())
             .await
             .expect("Failed to create agent");
         let mgr = ManagementCanister::create(&agent);
@@ -167,14 +182,17 @@ pub fn upgrade(
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(
+    block_on(upgrade_to(
         nns_node,
         subnet_id,
-        &subnet_node,
+        subnet_nodes.len(),
+        subnet_nodes
+            .into_iter()
+            .filter(|n| n.node_id != faulty_node.node_id)
+            .collect(),
         upgrade_version,
-        assert_graceful_orchestrator_tasks_exits,
         &logger,
-    );
+    ));
 
     info!(logger, "Stopping redundant nodes ...");
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
@@ -245,36 +263,93 @@ pub fn upgrade(
     (faulty_node.clone(), can_id, msg.into())
 }
 
-fn upgrade_to(
+/// Deploys the target version to all nodes of the given subnet, and performs the necessary checks
+/// to ensure that the upgrade was successful. Those include:
+/// - Checking that all nodes produced a log indicating that the orchestrator has gracefully shut
+///   down the tasks.
+/// - Checking that at least n - f nodes produced a log displaying the latest computed root hash.
+///   This is useful for recoveries, in case we need to know the latest state hash but it is
+///   impossible to provision SSH keys.
+/// - Checking that all nodes have the target version assigned after the upgrade.
+async fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
-    subnet_node: &IcNodeSnapshot,
+    num_nodes: usize,
+    healthy_nodes: Vec<IcNodeSnapshot>,
     target_version: &ReplicaVersion,
-    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
+    let log_streams = LogStream::open(healthy_nodes.iter().cloned())
+        .await
+        .unwrap();
+
     info!(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
-    block_on(deploy_guestos_to_all_subnet_nodes(
-        nns_node,
-        target_version,
-        subnet_id,
-    ));
+    deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
-    if assert_graceful_orchestrator_tasks_exits {
-        info!(
-            logger,
-            "Checking if the node {} has produced a log \
-            indicating that the orchestrator has gracefully shut down the tasks",
-            subnet_node.get_ip_addr(),
-        );
-        block_on(assert_orchestrator_stopped_gracefully(subnet_node.clone()));
-        info!(logger, "The orchestrator shut down the tasks gracefully");
+    info!(
+        logger,
+        "Checking that all nodes produced a log indicating that the orchestrator has gracefully shut \
+        down the tasks, as well as at least n - f nodes producing a log displaying the latest computed \
+        root hash.",
+    );
+
+    // Concurrently assert that all orchestrators shut down gracefully and fetch the latest computed
+    // root hash from logs of each node
+    let graceful_stops_handle = try_join_all(healthy_nodes.iter().map(|node| {
+        let node_cl = node.clone();
+        tokio::spawn(async move {
+            assert_orchestrator_stopped_gracefully(&node_cl).await;
+        })
+    }));
+    let fetch_hashes_handle = {
+        let logger_cl = logger.clone();
+        tokio::spawn(async move {
+            fetch_latest_computed_root_hashes_from_logs(&logger_cl, log_streams).await
+        })
+    };
+
+    let (graceful_stops_result, fetch_hashes_result) =
+        tokio::join!(graceful_stops_handle, fetch_hashes_handle);
+
+    // Ensure that all nodes gracefully stopped
+    graceful_stops_result.unwrap();
+    info!(logger, "All orchestrators shut down the tasks gracefully");
+
+    let state_hashes_from_logs = fetch_hashes_result.unwrap();
+    // Find all nodes that logged the same latest computed root hash and pick the most common one
+    let mut state_hashes_counts = BTreeMap::new();
+    for (node_id, hash) in state_hashes_from_logs.iter() {
+        state_hashes_counts
+            .entry(hash.clone())
+            .or_insert_with(Vec::new)
+            .push(*node_id);
     }
+    let (most_common_hash, nodes_that_logged_hash) = state_hashes_counts
+        .into_iter()
+        .max_by_key(|(_, nodes)| nodes.len())
+        .expect("No state hashes found in logs");
 
-    assert_assigned_replica_version(subnet_node, target_version, logger.clone());
+    let n = num_nodes;
+    let f = (n - 1) / 3;
+    assert!(
+        nodes_that_logged_hash.len() >= n - f,
+        "{} < n - f nodes produced the same latest computed root hash in logs",
+        nodes_that_logged_hash.len()
+    );
+
+    info!(
+        logger,
+        "Extracted state hash from logs of {} nodes before they rebooted: {}",
+        nodes_that_logged_hash.len(),
+        most_common_hash
+    );
+
+    for node in healthy_nodes {
+        assert_assigned_replica_version(&node, target_version, logger.clone());
+    }
     info!(
         logger,
         "Successfully upgraded subnet {} to {}", subnet_id, target_version
@@ -307,14 +382,62 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     info!(logger, "Node started: {}", app_node.get_ip_addr());
 }
 
-async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
+/// Fetches the latest computed state root hash from the node logs by continously searching for
+/// matching log entries until the log stream ends (which indicates that all nodes rebooted).
+/// Returns the last computed root hash found in the logs for every node.
+///
+/// This function will never return if an upgrade is not scheduled.
+async fn fetch_latest_computed_root_hashes_from_logs(
+    logger: &Logger,
+    mut log_streams: LogStream,
+) -> BTreeMap<NodeId, String> {
+    let computed_root_hash_regex =
+        regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\) of state @(\d*)"#)
+            .unwrap();
+
+    let mut latest_root_hash_per_node = BTreeMap::new();
+    while let Ok((node, entry)) = log_streams
+        .find(|_, line| computed_root_hash_regex.is_match(line))
+        .await
+    {
+        let (computed_root_hash, height) = computed_root_hash_regex
+            .captures(&entry)
+            .and_then(|caps| {
+                let hash_group = caps.get(1)?.as_str().to_string();
+                let height_group = caps.get(2)?.as_str().parse::<u64>().ok()?;
+                Some((hash_group, height_group))
+            })
+            .expect("Failed to extract computed root hash from log entry");
+
+        info!(
+            logger,
+            "Found computed root hash log entry for node {} @{}: {}",
+            node.node_id,
+            height,
+            computed_root_hash
+        );
+
+        latest_root_hash_per_node.insert(node.node_id, computed_root_hash);
+    }
+
+    latest_root_hash_per_node
+}
+
+/// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
+/// Panics if the log entry is not found but the log stream ends (which indicates the node
+/// rebooted).
+///
+/// We use a bash script instead of connecting to the log stream endpoint because as the
+/// orchestrator is shutting down, the endpoint might close right away without letting us the
+/// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
+///
+/// This function will never return if an upgrade is not scheduled.
+async fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
     let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
-    let ssh_session = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
-
-    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
+    node.block_on_bash_script_async(&script)
+        .await
+        .expect("Orchestrator did not shut down gracefully");
 }
