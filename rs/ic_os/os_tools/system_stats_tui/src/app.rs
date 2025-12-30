@@ -92,7 +92,7 @@ fn format_prometheus_value(v: &Value) -> f64 {
         Value::Gauge(s) => *s,
         Value::Untyped(s) => *s,
         Value::Histogram(_) => panic!("histograms not formattable"),
-        Value::Summary(_) => panic!("histograms not formattable"),
+        Value::Summary(_) => panic!("summaries not formattable"),
     }
 }
 

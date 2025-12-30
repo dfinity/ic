@@ -137,14 +137,6 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
     fn does_not_match(label_query: IndexedScrapeLabelQuery<'a>, value: &Regex) -> Self {
         Self::new(label_query, ValueQuery::does_not_match(value))
     }
-
-    #[allow(dead_code)]
-    fn samples(&'a self) -> Vec<&'a Sample> {
-        self.indexes
-            .iter()
-            .map(|idx| &self.label_query.scrape.samples[*idx])
-            .collect()
-    }
 }
 
 impl<'a> BitOr for IndexedScrapeLabelValueQuery<'a> {
@@ -241,13 +233,11 @@ impl IndexedScrape {
         indexes.iter().map(|idx| &self.samples[*idx]).collect()
     }
 
+    /// Finds a sample in this scrape that exactly matches the metric name and labelset
+    /// of the provided sample. Returns None if no match or multiple matches are found.
     fn find_matching_sample(&self, other_sample: &Sample) -> Option<&Sample> {
-        // FIXME this needs tests, and it should find only matching samples that
-        // have the exact same labelset.
         let mut labelset: Vec<(&str, ValueQuery)> =
-            [("__name__", ValueQuery::equals(other_sample.metric.as_str()))]
-                .into_iter()
-                .collect();
+            vec![("__name__", ValueQuery::equals(other_sample.metric.as_str()))];
         labelset.extend(
             other_sample
                 .labels
@@ -255,11 +245,16 @@ impl IndexedScrape {
                 .map(|(k, v)| (k.as_str(), ValueQuery::equals(v))),
         );
         let res = self.search(labelset.iter().map(|(k, v)| (*k, v)));
-        // FIXME: only samples with the same label names and equal count of labels should be matched
-        match res.len() {
-            0 => None,
-            1 => Some(res[0]),
-            _ => None,
+
+        // Filter to only samples with exactly the same label count to ensure exact match
+        let exact_matches: Vec<_> = res
+            .into_iter()
+            .filter(|s| s.labels.len() == other_sample.labels.len())
+            .collect();
+
+        match exact_matches.len() {
+            1 => Some(exact_matches[0]),
+            _ => None, // Return None for 0 matches or ambiguous multiple matches
         }
     }
 
@@ -351,11 +346,6 @@ impl<'a> IndexedSeries {
 
     pub fn is_empty(&self) -> bool {
         self.1.is_empty()
-    }
-
-    #[allow(dead_code)]
-    pub fn clear(&mut self) {
-        self.1.clear();
     }
 
     pub fn search(
@@ -573,5 +563,66 @@ label_3{cpu="2",mode="nice"} 2
         assert!(metrics.contains(&"label_2"));
         assert!(metrics.contains(&"label_3"));
         assert!(!metrics.contains(&"label_1"));
+    }
+
+    /// Helper to parse a single sample from prometheus text format
+    fn parse_sample(text: &str) -> Sample {
+        let scrape: IndexedScrape =
+            prometheus_parse::Scrape::parse(text.lines().map(|l| Ok(l.to_owned())))
+                .unwrap()
+                .into();
+        scrape.samples.into_iter().next().unwrap()
+    }
+
+    #[test]
+    fn test_find_matching_sample_exact_match() {
+        let scrape_text = r#"metric_a{device="sda",mode="read"} 100
+metric_a{device="sda",mode="write"} 200
+metric_a{device="sdb",mode="read"} 300
+"#;
+        let scrape: IndexedScrape =
+            prometheus_parse::Scrape::parse(scrape_text.lines().map(|l| Ok(l.to_owned())))
+                .unwrap()
+                .into();
+
+        // Create a sample to search for (same as first sample in scrape)
+        let target = parse_sample(r#"metric_a{device="sda",mode="read"} 999"#);
+
+        let found = scrape.find_matching_sample(&target);
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found.metric, "metric_a");
+        assert_eq!(found.labels.get("device"), Some("sda"));
+        assert_eq!(found.labels.get("mode"), Some("read"));
+    }
+
+    #[test]
+    fn test_find_matching_sample_rejects_different_label_count() {
+        // This test verifies the fix: samples with different label counts should NOT match
+        let scrape_text = r#"metric_a{device="sda",mode="read"} 100
+metric_a{device="sda"} 200
+"#;
+        let scrape: IndexedScrape =
+            prometheus_parse::Scrape::parse(scrape_text.lines().map(|l| Ok(l.to_owned())))
+                .unwrap()
+                .into();
+
+        // Search for sample with 2 labels - should match only the 2-label sample
+        let target_two_labels = parse_sample(r#"metric_a{device="sda",mode="read"} 0"#);
+
+        let found = scrape.find_matching_sample(&target_two_labels);
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found.labels.len(), 2);
+        assert_eq!(found.labels.get("mode"), Some("read"));
+
+        // Search for sample with 1 label - should match only the 1-label sample
+        let target_one_label = parse_sample(r#"metric_a{device="sda"} 0"#);
+
+        let found_single = scrape.find_matching_sample(&target_one_label);
+        assert!(found_single.is_some());
+        let found_single = found_single.unwrap();
+        assert_eq!(found_single.labels.len(), 1);
+        assert!(found_single.labels.get("mode").is_none());
     }
 }
