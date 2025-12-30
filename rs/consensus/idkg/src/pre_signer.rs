@@ -642,7 +642,7 @@ impl IDkgPreSignerImpl {
                 .filter_map(|(_, transcript_state)| {
                     // Look up the transcript params
                     let transcript_params = self.resolve_ref(
-                        &transcript_state.params_ref,
+                        transcript_state.params_ref,
                         block_reader,
                         "build_transcripts",
                     )?;
