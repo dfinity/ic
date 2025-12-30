@@ -56,6 +56,7 @@ system_test_nns(
 
 system_test(
     name = "single_app_small_node",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",

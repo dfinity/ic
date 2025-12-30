@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fs::{self, File},
     net::Ipv6Addr,
     path::{Path, PathBuf},
@@ -9,7 +9,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use ic_crypto_sha2::Sha256;
-use maplit::hashmap;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -429,8 +428,8 @@ impl HasPrometheus for TestEnv {
             std::io::copy(&mut file, &mut hasher)?;
         }
         let new_hash = hex::encode(hasher.finish());
-
-        if let Ok(stored_hash) = PrometheusConfigHash::try_read_attribute(self)
+        let opt_stored_hash = PrometheusConfigHash::try_read_attribute(self);
+        if let Ok(stored_hash) = opt_stored_hash
             && stored_hash.hash == new_hash
         {
             info!(
@@ -505,7 +504,8 @@ sudo systemctl start prometheus.service
 #[derive(Serialize)]
 struct PrometheusStaticConfig {
     targets: Vec<String>,
-    labels: HashMap<String, String>,
+    // A BTreeMap is used to ensure a deterministic key ordering in JSON output.
+    labels: BTreeMap<String, String>,
 }
 
 fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -> Result<()> {
@@ -664,12 +664,11 @@ fn sync_prometheus_config_dir_with_ic_gateways(
         .collect::<Result<_>>()?;
 
     for (name, ipv6) in ic_gateways.iter() {
-        let labels: HashMap<String, String> = [
+        let labels: BTreeMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
             ("gateways".to_string(), name.to_string()),
         ]
-        .iter()
-        .cloned()
+        .into_iter()
         .collect();
         ic_gateways_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![format!("[{:?}]:{:?}", ipv6, IC_GATEWAY_METRICS_PORT)],
@@ -697,13 +696,12 @@ fn sync_prometheus_config_dir(
     let mut node_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     for subnet in topology_snapshot.subnets() {
         for node in subnet.nodes() {
-            let labels: HashMap<String, String> = [
+            let labels: BTreeMap<String, String> = [
                 ("ic".to_string(), group_name.clone()),
                 ("ic_node".to_string(), node.node_id.to_string()),
                 ("ic_subnet".to_string(), subnet.subnet_id.to_string()),
             ]
-            .iter()
-            .cloned()
+            .into_iter()
             .collect();
             replica_p8s_static_configs.push(PrometheusStaticConfig {
                 targets: vec![scraping_target_url(&node, REPLICA_METRICS_PORT)],
@@ -720,12 +718,11 @@ fn sync_prometheus_config_dir(
         }
     }
     for node in topology_snapshot.unassigned_nodes() {
-        let labels: HashMap<String, String> = [
+        let labels: BTreeMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
             ("ic_node".to_string(), node.node_id.to_string()),
         ]
-        .iter()
-        .cloned()
+        .into_iter()
         .collect();
         orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
@@ -738,13 +735,12 @@ fn sync_prometheus_config_dir(
     }
 
     for node in topology_snapshot.api_boundary_nodes() {
-        let labels: HashMap<String, String> = [
+        let labels: BTreeMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
             ("ic_node".to_string(), node.node_id.to_string()),
             ("ic_api_bn".to_string(), "1".to_string()),
         ]
-        .iter()
-        .cloned()
+        .into_iter()
         .collect();
         orchestrator_p8s_static_configs.push(PrometheusStaticConfig {
             targets: vec![scraping_target_url(&node, ORCHESTRATOR_METRICS_PORT)],
@@ -766,7 +762,10 @@ fn sync_prometheus_config_dir(
             &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
             &vec![PrometheusStaticConfig {
                 targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", domain)],
-                labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
+                labels: BTreeMap::from([
+                    ("ic".to_string(), group_name.clone()),
+                    ("token".to_string(), "icp".to_string()),
+                ]),
             }],
         )?;
         // Bitcoin and Dogecoin canisters
@@ -800,7 +799,7 @@ fn sync_prometheus_config_dir(
                 &File::create(prometheus_config_dir.join(prometheus_target))?,
                 &vec![PrometheusStaticConfig {
                     targets: vec![format!("{canister_id}.raw.{domain}")],
-                    labels: hashmap! {"ic".to_string() => group_name.clone()},
+                    labels: BTreeMap::from([("ic".to_string(), group_name.clone())]),
                 }],
             )?;
         }

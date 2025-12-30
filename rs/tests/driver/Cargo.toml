@@ -84,7 +84,6 @@ itertools = { workspace = true }
 json5 = "0.4.1"
 lazy_static = { workspace = true }
 macaddr = { workspace = true }
-maplit = "1.0.2"
 nix = { workspace = true }
 num_cpus = "1.13.1"
 on_wire = { path = "../../rust_canisters/on_wire" }
