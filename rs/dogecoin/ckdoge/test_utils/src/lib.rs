@@ -9,8 +9,10 @@ use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use bitcoin::TxOut;
+use bitcoin::dogecoin::Network as DogeNetwork;
 use candid::{Encode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
+use ic_btc_adapter_test_utils::bitcoind::Daemon;
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
     lifecycle::{
@@ -23,6 +25,7 @@ use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -50,43 +53,80 @@ pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 pub struct Setup {
     pub env: Arc<PocketIc>,
     doge_network: Network,
-    dogecoin: CanisterId,
+    dogecoin: Option<CanisterId>,
     minter: CanisterId,
     ledger: CanisterId,
+    dogecoind: Option<Daemon<DogeNetwork>>,
 }
 
 impl Setup {
     pub fn new(doge_network: Network) -> Self {
-        let env = Arc::new(
-            PocketIcBuilder::new()
-                .with_bitcoin_subnet()
-                .with_fiduciary_subnet()
-                .build(),
-        );
-
-        let dogecoin = env
-            .create_canister_with_id(
-                None,
-                Some(CanisterSettings {
-                    controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+        let dogecoind = match doge_network {
+            Network::Mainnet => None,
+            Network::Regtest => {
+                let dogecoind_path = std::env::var("DOGECOIND_BIN")
+                    .expect("Missing DOGECOIND_BIN (path to dogecoind executable) in env.");
+                Some(Daemon::new(
+                    &dogecoind_path,
+                    DogeNetwork::Regtest,
+                    ic_btc_adapter_test_utils::bitcoind::Conf {
+                        p2p: true,
+                        ..Default::default()
+                    },
+                ))
+            }
+        };
+        let env = match &dogecoind {
+            Some(daemon) => {
+                let icp_features = IcpFeatures {
+                    dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
                     ..Default::default()
-                }),
-                get_dogecoin_canister_id(&doge_network),
-            )
-            .unwrap();
-        env.install_canister(
-            dogecoin,
-            bitcoin_canister_mock_wasm(),
-            Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
-            Some(NNS_ROOT_PRINCIPAL),
-        );
-        env.update_call(
-            dogecoin,
-            NNS_ROOT_PRINCIPAL,
-            "set_tip_height",
-            Encode!(&MIN_CONFIRMATIONS).unwrap(),
-        )
-        .unwrap();
+                };
+                let pic = PocketIcBuilder::new()
+                    .with_bitcoin_subnet()
+                    .with_fiduciary_subnet()
+                    .with_dogecoind_addrs(vec![daemon.p2p_socket().unwrap().into()])
+                    .with_icp_features(icp_features)
+                    .build();
+                Arc::new(pic)
+            }
+            None => Arc::new(
+                PocketIcBuilder::new()
+                    .with_bitcoin_subnet()
+                    .with_fiduciary_subnet()
+                    .build(),
+            ),
+        };
+
+        let mock_dogecoin_canister = match &dogecoind {
+            Some(_) => None,
+            None => {
+                let dogecoin = env
+                    .create_canister_with_id(
+                        None,
+                        Some(CanisterSettings {
+                            controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+                            ..Default::default()
+                        }),
+                        get_dogecoin_canister_id(&doge_network),
+                    )
+                    .unwrap();
+                env.install_canister(
+                    dogecoin,
+                    bitcoin_canister_mock_wasm(),
+                    Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
+                    Some(NNS_ROOT_PRINCIPAL),
+                );
+                env.update_call(
+                    dogecoin,
+                    NNS_ROOT_PRINCIPAL,
+                    "set_tip_height",
+                    Encode!(&MIN_CONFIRMATIONS).unwrap(),
+                )
+                .unwrap();
+                Some(dogecoin)
+            }
+        };
 
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
 
@@ -172,16 +212,17 @@ impl Setup {
         Self {
             env,
             doge_network,
-            dogecoin,
+            dogecoin: mock_dogecoin_canister,
             minter,
             ledger,
+            dogecoind,
         }
     }
 
     pub fn dogecoin(&self) -> DogecoinCanister {
         DogecoinCanister {
             env: self.env.clone(),
-            id: self.dogecoin,
+            id: self.dogecoin.expect("BUG: mock not available for Regtest"),
         }
     }
 
