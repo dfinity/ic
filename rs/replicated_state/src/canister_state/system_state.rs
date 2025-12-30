@@ -114,7 +114,7 @@ enum ConsumingCycles {
     No,
 }
 
-/// The structure keeps track of messages, group by the type of messages, executed by a canister.
+/// Keeps track of the types of messages executed by the canister.
 /// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
 /// canisters contribute to heavy subnet load.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
