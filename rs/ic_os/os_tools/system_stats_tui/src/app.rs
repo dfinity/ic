@@ -178,8 +178,6 @@ struct TempInfo {
 /// Keys are chip and sensor.
 type HostOSTempInfo = BTreeMap<String, BTreeMap<String, TempInfo>>;
 
-// FIXME add filesystem errors
-
 #[derive(Debug)]
 struct HostOSNodeExporterSnapshot {
     network: HostOSNetworkInfo,
@@ -469,7 +467,6 @@ impl App {
         {
             let slot = metrics_layout[slot_index];
             let block = Block::bordered().title("Internet Computer node information");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &block,
                 slot.inner(Margin {
@@ -495,7 +492,6 @@ impl App {
             slot_index += 1;
             let slot = metrics_layout[slot_index];
             let cpu_block = Block::bordered().title("HostOS processor usage (s/s)");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &cpu_block,
                 slot.inner(Margin {
@@ -522,7 +518,6 @@ impl App {
             slot_index += 1;
             let slot = metrics_layout[slot_index];
             let psi_block = Block::bordered().title("HostOS pressure stall information (s/s)");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &psi_block,
                 slot.inner(Margin {
@@ -546,7 +541,6 @@ impl App {
             slot_index += 1;
             let slot = metrics_layout[slot_index];
             let block = Block::bordered().title("HostOS block devices");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &block,
                 slot.inner(Margin {
@@ -601,7 +595,6 @@ impl App {
             slot_index += 1;
             let slot = metrics_layout[slot_index];
             let block = Block::bordered().title("HostOS network devices");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &block,
                 slot.inner(Margin {
@@ -687,7 +680,6 @@ impl App {
             slot_index += 1;
             let slot = metrics_layout[slot_index];
             let block = Block::bordered().title("HostOS hardware monitoring");
-            // FIXME handle no data yet and error.
             frame.render_widget(
                 &block,
                 slot.inner(Margin {
