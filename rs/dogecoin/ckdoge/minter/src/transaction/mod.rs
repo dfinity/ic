@@ -118,7 +118,7 @@ fn into_bitcoin_transaction(
     use bitcoin::hashes::Hash;
 
     bitcoin::Transaction {
-        // Dogecoin transactions use Version 1 (BIP-68 is not supported)"
+        // Dogecoin transactions use Version 1 (BIP-68 is not supported)
         version: bitcoin::transaction::Version::ONE,
         lock_time: bitcoin::absolute::LockTime::ZERO,
         input: unsigned_tx
