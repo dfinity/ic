@@ -120,7 +120,7 @@ fn into_bitcoin_transaction(
     bitcoin::Transaction {
         // Dogecoin transactions use Version 1 (BIP-68 is not supported)
         version: bitcoin::transaction::Version::ONE,
-        lock_time: bitcoin::absolute::LockTime::ZERO,
+        lock_time: bitcoin::absolute::LockTime::from_consensus(unsigned_tx.lock_time),
         input: unsigned_tx
             .inputs
             .into_iter()
@@ -130,7 +130,7 @@ fn into_bitcoin_transaction(
                     vout: input.previous_output.vout,
                 },
                 script_sig: bitcoin::ScriptBuf::new(),
-                sequence: bitcoin::Sequence::ENABLE_RBF_NO_LOCKTIME,
+                sequence: bitcoin::Sequence(input.sequence),
                 witness: bitcoin::Witness::default(),
             })
             .collect(),
