@@ -918,7 +918,8 @@ impl IDkgMessage {
             IDkgMessage::Dealing(_)
             | IDkgMessage::DealingSupport(_)
             | IDkgMessage::Complaint(_)
-            | IDkgMessage::Opening(_) => None,
+            | IDkgMessage::Opening(_)
+            | IDkgMessage::Transcript(_) => None,
         }
     }
 }
