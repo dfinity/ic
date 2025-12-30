@@ -33,7 +33,7 @@ mod derivation {
             hex::decode("03e62317d6e4feb57c8d5face3f16d26abbc30609e9abd38fc8c7e3f04502f36cc")
                 .unwrap()
         );
-        let derived_address = DogecoinAddress::from_compressed_public_key(&derived_public_key);
+        let derived_address = DogecoinAddress::p2pkh_from_public_key(&derived_public_key);
         assert_eq!(
             derived_address.display(&Network::Mainnet),
             "DSdZym6ZBa4QNPnE7jpuryF6fRtVmvGgre"
@@ -59,7 +59,7 @@ mod derivation {
             hex::decode("02db987e631a12327a64695d96f7efaf355554633f8cdc37e1570a97b303cb8de8")
                 .unwrap()
         );
-        let derived_address = DogecoinAddress::from_compressed_public_key(&derived_public_key);
+        let derived_address = DogecoinAddress::p2pkh_from_public_key(&derived_public_key);
         assert_eq!(
             derived_address.display(&Network::Mainnet),
             "D7BZ4HNX9W1KSYv8gXi6yTSRg8Zwh6AFKw"

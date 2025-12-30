@@ -129,7 +129,8 @@ impl DogecoinAddress {
         }
     }
 
-    pub fn from_compressed_public_key(public_key: &[u8; 33]) -> Self {
+    /// Create a Dogecoin address from a **compressed** public key (33 bytes).
+    pub fn p2pkh_from_public_key(public_key: &[u8; 33]) -> Self {
         assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
         DogecoinAddress::P2pkh(ic_ckbtc_minter::tx::hash160(public_key))
     }

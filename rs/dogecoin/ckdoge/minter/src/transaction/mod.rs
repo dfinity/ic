@@ -43,7 +43,7 @@ impl DogecoinTransactionSigner {
                 &self.ecdsa_public_key,
                 &account,
             );
-            let address = DogecoinAddress::from_compressed_public_key(&public_key);
+            let address = DogecoinAddress::p2pkh_from_public_key(&public_key);
             let script_pubkey = match address {
                 DogecoinAddress::P2pkh(hash) => {
                     bitcoin::ScriptBuf::new_p2pkh(&bitcoin::PubkeyHash::from_byte_array(hash))
