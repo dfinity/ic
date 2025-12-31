@@ -8,19 +8,18 @@ use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;
 
-// This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.
+// This endpoint is used to determine whether ICRC Rosetta is ready to be queried for data.
 // It returns Status Code 200 if an initial sync of the blockchain has been done
 // This means that no gaps in the blockchain exist and the genesis block has already been fetched
 pub async fn ready(State(state): State<Arc<MultiTokenAppState>>) -> (StatusCode, Json<()>) {
-    if state
-        .token_states
-        .values()
-        .all(|state| initial_sync_is_completed(&state.storage, state.synched.clone()))
-    {
-        (StatusCode::OK, Json(()))
-    } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(()))
+    for token_state in state.token_states.values() {
+        let storage = Arc::clone(&token_state.storage);
+        let synched = Arc::clone(&token_state.synched);
+        if !initial_sync_is_completed(&storage, synched).await {
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(()));
+        }
     }
+    (StatusCode::OK, Json(()))
 }
 
 pub async fn health() -> (StatusCode, Json<()>) {
@@ -57,7 +56,7 @@ pub async fn network_status(
 ) -> Result<Json<NetworkStatusResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::network_status(&state.storage)?))
+    Ok(Json(services::network_status(&state.storage).await?))
 }
 
 pub async fn block(
@@ -66,12 +65,15 @@ pub async fn block(
 ) -> Result<Json<BlockResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::block(
-        &state.storage,
-        &request.0.block_identifier,
-        state.metadata.decimals,
-        state.metadata.symbol.clone(),
-    )?))
+    Ok(Json(
+        services::block(
+            &state.storage,
+            &request.0.block_identifier,
+            state.metadata.decimals,
+            state.metadata.symbol.clone(),
+        )
+        .await?,
+    ))
 }
 
 pub async fn block_transaction(
@@ -80,13 +82,16 @@ pub async fn block_transaction(
 ) -> Result<Json<BlockTransactionResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::block_transaction(
-        &state.storage,
-        &request.0.block_identifier,
-        &request.0.transaction_identifier,
-        state.metadata.decimals,
-        state.metadata.symbol.clone(),
-    )?))
+    Ok(Json(
+        services::block_transaction(
+            &state.storage,
+            &request.0.block_identifier,
+            &request.0.transaction_identifier,
+            state.metadata.decimals,
+            state.metadata.symbol.clone(),
+        )
+        .await?,
+    ))
 }
 
 pub async fn mempool(
@@ -113,14 +118,17 @@ pub async fn account_balance(
 ) -> Result<Json<AccountBalanceResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::account_balance_with_metadata(
-        &state.storage,
-        &request.account_identifier,
-        &request.block_identifier,
-        &request.metadata,
-        state.metadata.decimals,
-        state.metadata.symbol.clone(),
-    )?))
+    Ok(Json(
+        services::account_balance_with_metadata(
+            &state.storage,
+            &request.account_identifier,
+            &request.block_identifier,
+            &request.metadata,
+            state.metadata.decimals,
+            state.metadata.symbol.clone(),
+        )
+        .await?,
+    ))
 }
 
 pub async fn search_transactions(
@@ -129,12 +137,15 @@ pub async fn search_transactions(
 ) -> Result<Json<SearchTransactionsResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::search_transactions(
-        &state.storage,
-        request,
-        state.metadata.symbol.clone(),
-        state.metadata.decimals,
-    )?))
+    Ok(Json(
+        services::search_transactions(
+            &state.storage,
+            request,
+            state.metadata.symbol.clone(),
+            state.metadata.decimals,
+        )
+        .await?,
+    ))
 }
 
 pub async fn call(
@@ -143,13 +154,16 @@ pub async fn call(
 ) -> Result<Json<CallResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::call(
-        &state.storage,
-        &request.method_name,
-        request.parameters,
-        rosetta_core::objects::Currency::new(
-            state.metadata.symbol.clone(),
-            state.metadata.decimals.into(),
-        ),
-    )?))
+    Ok(Json(
+        services::call(
+            &state.storage,
+            &request.method_name,
+            request.parameters,
+            rosetta_core::objects::Currency::new(
+                state.metadata.symbol.clone(),
+                state.metadata.decimals.into(),
+            ),
+        )
+        .await?,
+    ))
 }
