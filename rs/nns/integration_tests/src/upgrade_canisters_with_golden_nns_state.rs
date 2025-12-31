@@ -451,13 +451,6 @@ mod sanity_check {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
         }
-
-        // This duration is picked so that node rewards will definitely be distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
-        for _ in 0..100 {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
-            state_machine.tick();
-        }
     }
 
     struct MetricsBeforeAndAfter {
