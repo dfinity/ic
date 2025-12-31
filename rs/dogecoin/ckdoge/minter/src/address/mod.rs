@@ -115,7 +115,14 @@ impl DogecoinAddress {
         version_and_hash_to_address(prefix, self.as_array())
     }
 
-    fn as_array(&self) -> &[u8; 20] {
+    pub fn as_array(&self) -> &[u8; 20] {
+        match self {
+            DogecoinAddress::P2pkh(data) => data,
+            DogecoinAddress::P2sh(data) => data,
+        }
+    }
+
+    pub fn into_array(self) -> [u8; 20] {
         match self {
             DogecoinAddress::P2pkh(data) => data,
             DogecoinAddress::P2sh(data) => data,
@@ -129,7 +136,8 @@ impl DogecoinAddress {
         }
     }
 
-    pub fn from_compressed_public_key(public_key: &[u8; 33]) -> Self {
+    /// Create a Dogecoin address from a **compressed** public key (33 bytes).
+    pub fn p2pkh_from_public_key(public_key: &[u8; 33]) -> Self {
         assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
         DogecoinAddress::P2pkh(ic_ckbtc_minter::tx::hash160(public_key))
     }
