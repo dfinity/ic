@@ -223,13 +223,6 @@ mod tests {
     #[test]
     #[cfg(feature = "dev")]
     fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
-        use config_types::{
-            DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
-            NetworkSettings,
-        };
-        use std::net::Ipv6Addr;
-        use std::str::FromStr;
-
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.tar");
 
@@ -237,31 +230,7 @@ mod tests {
         let test_files_dir = tmp_dir.path().join("test_files");
         fs::create_dir(&test_files_dir)?;
 
-        let guestos_config = GuestOSConfig {
-            config_version: "".to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
-                ipv4_config: None,
-                domain_name: None,
-            },
-            icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
-            },
-            guestos_settings: Default::default(),
-            guest_vm_type: GuestVMType::Default,
-            upgrade_config: GuestOSUpgradeConfig {
-                peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1")?),
-            },
-            trusted_execution_environment_config: None,
-            recovery_config: Default::default(),
-        };
+        let guestos_config = GuestOSConfig::test_config();
 
         let nns_key_override_path = test_files_dir.join("nns_public_key_override.pem");
         fs::write(&nns_key_override_path, "test_nns_key")?;

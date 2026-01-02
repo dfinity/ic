@@ -111,7 +111,7 @@ pub struct GuestOSConfig {
 }
 
 #[serde_as]
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct ICOSSettings {
     /// The node reward type determines node rewards
     pub node_reward_type: Option<String>,
@@ -240,10 +240,11 @@ pub struct BackupSpoolSettings {
     pub backup_purging_interval_seconds: Option<u64>,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
 #[non_exhaustive]
 pub enum DeploymentEnvironment {
     Mainnet,
+    #[default]
     Testnet,
 }
 
@@ -273,7 +274,7 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
     pub ipv4_config: Option<Ipv4Config>,
@@ -287,10 +288,11 @@ pub struct Ipv4Config {
     pub prefix_length: u8,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub enum Ipv6Config {
     Deterministic(DeterministicIpv6Config),
     Fixed(FixedIpv6Config),
+    #[default]
     RouterAdvertisement,
     /// Unknown variant for forward compatibility with future versions
     /// (used in case a newer HostOS sends a value that an older GuestOS does not understand)
@@ -310,6 +312,69 @@ pub struct FixedIpv6Config {
     // Fixed ipv6 address includes subnet mask /64
     pub address: String,
     pub gateway: Ipv6Addr,
+}
+
+// =============================================================================
+// Test Utilities
+// =============================================================================
+//
+// These functions create config objects with sensible defaults for testing.
+// We intentionally don't implement Default for GuestOSConfig/HostOSConfig/SetupOSConfig
+// to keep production code explicit about configuration values.
+//
+// Usage:
+// ```
+// // Simple case - all defaults
+// let config = GuestOSConfig::test_config();
+//
+// // Override specific fields using struct update syntax
+// let config = GuestOSConfig {
+//     icos_settings: ICOSSettings {
+//         enable_trusted_execution_environment: true,
+//         ..Default::default()
+//     },
+//     ..GuestOSConfig::test_config()
+// };
+// ```
+
+impl GuestOSConfig {
+    pub fn test_config() -> Self {
+        Self {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings: NetworkSettings::default(),
+            icos_settings: ICOSSettings::default(),
+            guestos_settings: GuestOSSettings::default(),
+            guest_vm_type: GuestVMType::default(),
+            upgrade_config: GuestOSUpgradeConfig::default(),
+            trusted_execution_environment_config: None,
+            recovery_config: None,
+        }
+    }
+}
+
+impl HostOSConfig {
+    pub fn test_config() -> Self {
+        Self {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings: NetworkSettings::default(),
+            icos_settings: ICOSSettings::default(),
+            hostos_settings: HostOSSettings::default(),
+            guestos_settings: GuestOSSettings::default(),
+        }
+    }
+}
+
+impl SetupOSConfig {
+    pub fn test_config() -> Self {
+        Self {
+            config_version: CONFIG_VERSION.to_string(),
+            network_settings: NetworkSettings::default(),
+            icos_settings: ICOSSettings::default(),
+            setupos_settings: SetupOSSettings,
+            hostos_settings: HostOSSettings::default(),
+            guestos_settings: GuestOSSettings::default(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -356,27 +421,7 @@ mod tests {
     fn test_no_reserved_field_paths_used() -> Result<(), Box<dyn std::error::Error>> {
         let reserved_field_paths: HashSet<&str> = RESERVED_FIELD_PATHS.iter().cloned().collect();
 
-        let setupos_config = SetupOSConfig {
-            config_version: CONFIG_VERSION.to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
-                ipv4_config: None,
-                domain_name: None,
-            },
-            icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: "00:00:00:00:00:00".parse()?,
-                deployment_environment: DeploymentEnvironment::Testnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: ICOSDevSettings::default(),
-            },
-            setupos_settings: SetupOSSettings,
-            hostos_settings: HostOSSettings::default(),
-            guestos_settings: GuestOSSettings::default(),
-        };
+        let setupos_config = SetupOSConfig::test_config();
 
         fn get_all_field_paths(prefix: &str, value: &Value, field_paths: &mut HashSet<String>) {
             match value {

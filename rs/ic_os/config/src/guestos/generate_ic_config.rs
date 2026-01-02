@@ -296,10 +296,7 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{
-        CONFIG_VERSION, FixedIpv6Config, GuestOSConfig, GuestOSSettings, GuestOSUpgradeConfig,
-        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings,
-    };
+    use config_types::{FixedIpv6Config, GuestOSConfig, Ipv6Config, NetworkSettings};
     use ic_config::{ConfigOptional, config_parser::ConfigSource};
 
     #[test]
@@ -375,30 +372,14 @@ mod tests {
 
     fn create_test_guestos_config() -> GuestOSConfig {
         GuestOSConfig {
-            config_version: CONFIG_VERSION.to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Fixed(FixedIpv6Config {
                     address: "2001:db8::1/64".to_string(),
                     gateway: "2001:db8::1".parse().unwrap(),
                 }),
-                ipv4_config: None,
-                domain_name: None,
+                ..Default::default()
             },
-            icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
-                deployment_environment: config_types::DeploymentEnvironment::Mainnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: config_types::ICOSDevSettings::default(),
-            },
-            guestos_settings: GuestOSSettings::default(),
-            guest_vm_type: GuestVMType::Default,
-            upgrade_config: GuestOSUpgradeConfig::default(),
-            trusted_execution_environment_config: None,
-            recovery_config: None,
+            ..GuestOSConfig::test_config()
         }
     }
 }

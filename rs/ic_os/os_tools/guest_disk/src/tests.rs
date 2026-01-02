@@ -1,8 +1,6 @@
 use crate::{Args, Partition, crypt_name, run};
 use anyhow::Result;
-use config_types::{
-    DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
-};
+use config_types::{GuestOSConfig, ICOSSettings};
 use guest_disk::crypt::{
     activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
 };
@@ -67,27 +65,11 @@ impl<'a> TestFixture<'a> {
 
     fn create_guestos_config(enable_trusted_execution_environment: bool) -> GuestOSConfig {
         GuestOSConfig {
-            config_version: "".to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
-                ipv4_config: None,
-                domain_name: None,
-            },
             icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
                 enable_trusted_execution_environment,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
-            guestos_settings: Default::default(),
-            guest_vm_type: Default::default(),
-            upgrade_config: Default::default(),
-            trusted_execution_environment_config: None,
-            recovery_config: Default::default(),
+            ..GuestOSConfig::test_config()
         }
     }
 
