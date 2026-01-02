@@ -34,8 +34,7 @@ const ABSURDLY_LARGE_NUMBER_OF_NODES_IN_A_SUBNET: usize = 1000;
 ///
 /// * node_ids - Must be nonempty.
 ///
-/// * replica_version_id - Must be a potential full git commit ID (hexidecimal strgint of length
-///   40).
+/// * replica_version_id - Must be a potential full git commit ID (hexidecimal string of length 40).
 ///
 /// Note that `ValidFulfillSubnetRentalRequest::execute()` is not guaranteed to succeed. E.g. if
 /// replica_version_id is not a blessed replica version, then the proposal will fail at execution.
