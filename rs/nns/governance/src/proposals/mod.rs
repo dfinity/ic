@@ -226,6 +226,9 @@ impl ValidProposalAction {
             ValidProposalAction::ManageNeuron(manage_neuron) => {
                 Ok(manage_neuron.to_self_describing_action())
             }
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
+                Ok(manage_network_economics.to_self_describing_action())
+            }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",
