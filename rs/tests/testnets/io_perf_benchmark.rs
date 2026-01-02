@@ -59,7 +59,6 @@ use ic_system_test_driver::driver::pot_dsl::PotSetupFn;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
@@ -211,12 +210,6 @@ impl Config {
 }
 
 pub fn setup(env: TestEnv, config: Config) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
@@ -303,5 +296,4 @@ pub fn setup(env: TestEnv, config: Config) {
             .start(&env)
             .expect("failed to setup ic-gateway");
     }
-    env.sync_with_prometheus();
 }

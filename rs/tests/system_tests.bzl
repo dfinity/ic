@@ -133,6 +133,7 @@ def system_test(
         flaky = False,
         enable_metrics = False,
         prometheus_vm_required_host_features = [],
+        prometheus_vm_resources = default_vm_resources,
         prometheus_vm_scrape_interval_secs = 10,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
@@ -163,6 +164,12 @@ def system_test(
       flaky: rerun in case of failure (up to 3 times).
       enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
       prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
+      prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
+        {
+          "vcpus": 32,
+          "memory_kibibytes": 125000000,
+          "boot_image_minimal_size_gibibytes": 500,
+        }
       prometheus_vm_scrape_interval_secs: the scrape interval in seconds for the PrometheusVm. Defaults to 10 seconds.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
@@ -368,6 +375,7 @@ def system_test(
 
     env |= {
         "PROMETHEUS_VM_REQUIRED_HOST_FEATURES": json.encode(prometheus_vm_required_host_features),
+        "PROMETHEUS_VM_RESOURCES": json.encode(prometheus_vm_resources),
         "PROMETHEUS_VM_SCRAPE_INTERVAL_SECS": json.encode(prometheus_vm_scrape_interval_secs),
     }
     for dep in _env_deps.values():

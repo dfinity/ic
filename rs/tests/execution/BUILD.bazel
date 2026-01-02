@@ -190,6 +190,8 @@ system_test(
 
 system_test(
     name = "fill_execution_rounds_workload",
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

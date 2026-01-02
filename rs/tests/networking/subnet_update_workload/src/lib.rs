@@ -26,7 +26,6 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -66,10 +65,6 @@ pub fn setup(
     required_host_features: Vec<HostFeature>,
 ) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(required_host_features.clone())
-        .start(&env)
-        .expect("failed to start prometheus VM");
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(16)),
         memory_kibibytes: None,
@@ -114,8 +109,6 @@ pub fn setup(
             .await_status_is_healthy()
             .expect("API boundary node did not come up healthy.");
     }
-
-    env.sync_with_prometheus();
 }
 
 // Run a test with configurable number of update requests per second,

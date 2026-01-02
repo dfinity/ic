@@ -17,7 +17,7 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
@@ -90,11 +90,6 @@ const MAX_CANISTERS_INSTALLING_IN_PARALLEL: usize = 10;
 
 pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
@@ -133,7 +128,6 @@ pub fn setup(env: TestEnv, subnet_size: usize, initial_notary_delay: Duration) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 
     // Await Replicas
     info!(&logger, "Checking readiness of all replica nodes...");

@@ -27,6 +27,7 @@ system_test(
 
 system_test(
     name = "single_app_large_node",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -41,6 +42,7 @@ system_test(
 
 system_test_nns(
     name = "single_app_large_node_with_nns",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -71,6 +73,7 @@ system_test(
 
 system_test_nns(
     name = "small",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -87,6 +90,7 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -104,6 +108,7 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -137,6 +142,7 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
+    enable_metrics = True,
     env = {
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
@@ -165,6 +171,7 @@ system_test_nns(
 
 system_test_nns(
     name = "small_with_query_stats",
+    enable_metrics = True,
     env = {
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
@@ -192,6 +199,7 @@ system_test_nns(
 
 system_test_nns(
     name = "sns_testing",
+    enable_metrics = True,
     env = SNS_CANISTER_ENV | {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
@@ -221,6 +229,7 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
+    enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -237,6 +246,7 @@ system_test_nns(
 
 system_test_nns(
     name = "large",
+    enable_metrics = True,
     env = SNS_CANISTER_ENV | {
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
@@ -265,6 +275,8 @@ system_test_nns(
 
 system_test_nns(
     name = "io_perf_benchmark",
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "dynamic_testnet",
         "manual",
@@ -283,6 +295,7 @@ system_test_nns(
 
 system_test_nns(
     name = "src_testing",
+    enable_metrics = True,
     env = SNS_CANISTER_ENV | {
         "XRC_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
         "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
@@ -318,6 +331,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
+    enable_metrics = True,
     guestos_update = "test",
     tags = [
         "dynamic_testnet",
@@ -339,6 +353,7 @@ system_test_nns(
 
 system_test_nns(
     name = "mainnet_nns",
+    enable_metrics = True,
     env = MAINNET_ENV | {
         # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
         "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
@@ -346,6 +361,12 @@ system_test_nns(
     },
     env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns",
+    # Requires more resources to scrape mainnet topology
+    prometheus_vm_resources = {
+        "vcpus": 32,
+        "memory_kibibytes": 125000000,
+        "boot_image_minimal_size_gibibytes": 500,
+    },
     tags = [
         "dynamic_testnet",
         "manual",
