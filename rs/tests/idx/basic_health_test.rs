@@ -35,7 +35,6 @@ use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
@@ -53,9 +52,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -69,7 +65,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    env.sync_with_prometheus();
 }
 
 const MSG: &[u8] = b"this beautiful prose should be persisted for future generations";

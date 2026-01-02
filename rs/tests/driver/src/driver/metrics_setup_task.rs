@@ -1,24 +1,21 @@
 use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::{
-    constants::{GROUP_SETUP_DIR, KEEPALIVE_INTERVAL},
-    context::GroupContext,
-    farm::HostFeature,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::TestEnv,
+    constants::GROUP_SETUP_DIR, context::GroupContext, farm::HostFeature,
+    prometheus_vm::PrometheusVm, test_env::TestEnv,
 };
-use slog::{debug, info, warn};
+use slog::{debug, info};
 use std::time::Duration;
 
-pub(crate) const METRICS_TASK_NAME: &str = "metrics";
+pub(crate) const METRICS_SETUP_TASK_NAME: &str = "metrics_setup";
 
-pub(crate) fn metrics_task(group_ctx: GroupContext) -> () {
+pub(crate) fn metrics_setup_task(group_ctx: GroupContext) {
     let logger = group_ctx.logger().clone();
-    debug!(logger, ">>> metrics_fn");
+    debug!(logger, ">>> metrics_setup_fn");
     let setup_dir = group_ctx.group_dir.join(GROUP_SETUP_DIR);
     let env = TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
     while !setup_dir.exists() || env.prep_dir("").is_none() {
         info!(logger, "Setup and/or prep directories not created yet.");
-        std::thread::sleep(KEEPALIVE_INTERVAL);
+        std::thread::sleep(Duration::from_secs(2));
     }
 
     let host_features: Vec<HostFeature> = std::env::var("PROMETHEUS_VM_REQUIRED_HOST_FEATURES")
@@ -39,11 +36,6 @@ pub(crate) fn metrics_task(group_ctx: GroupContext) -> () {
         .with_scrape_interval(prometheus_scrape_interval)
         .start(&env)
         .expect("failed to start prometheus VM");
-    loop {
-        if let Err(e) = env.sync_with_prometheus_result() {
-            warn!(logger, "Failed to sync with PrometheusVm due to: {:?}", e);
-        }
 
-        std::thread::sleep(KEEPALIVE_INTERVAL);
-    }
+    info!(logger, "PrometheusVm setup complete.");
 }

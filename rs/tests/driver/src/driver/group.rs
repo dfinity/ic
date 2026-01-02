@@ -16,7 +16,8 @@ use crate::driver::{
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
-    metrics_task::{METRICS_TASK_NAME, metrics_task},
+    metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
+    metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
@@ -33,6 +34,7 @@ use crate::driver::{
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, trace};
@@ -189,7 +191,8 @@ pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
         if task_name.ne(REPORT_TASK_NAME)
            && task_name.ne(KEEPALIVE_TASK_NAME)
            && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
-           && task_name.ne(METRICS_TASK_NAME)
+           && task_name.ne(METRICS_SETUP_TASK_NAME)
+           && task_name.ne(METRICS_SYNC_TASK_NAME)
            && task_name.ne(VECTOR_LOGGING_TASK_NAME)
            && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
            && !task_name.starts_with("dummy(")
@@ -221,24 +224,30 @@ fn subproc(
 }
 
 fn timed(
-    plan: Plan<Box<dyn Task>>,
+    children: Vec<Plan<Box<dyn Task>>>,
+    ordering: EvalOrder,
     timeout: Duration,
     descriptor: Option<String>,
     ctx: &mut ComposeContext,
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})", &plan, &timeout
+        "timed(children={:?}, timeout={:?})", &children, &timeout
     );
     let timeout_task = TimeoutTask::new(
         ctx.rh.clone(),
         timeout,
-        TaskId::Timeout(descriptor.unwrap_or_else(|| plan.root_task_id().name())),
+        TaskId::Timeout(descriptor.unwrap_or_else(|| {
+            children
+                .iter()
+                .map(|child| child.root_task_id().name())
+                .join(", ")
+        })),
     );
     Plan::Supervised {
         supervisor: Box::from(timeout_task) as Box<dyn Task>,
-        ordering: EvalOrder::Sequential, // the order is irrelevant since there is only one child
-        children: vec![plan],
+        ordering,
+        children,
     }
 }
 
@@ -389,9 +398,10 @@ impl SystemTestSubGroup {
                     }
                 };
                 timed(
-                    Plan::Leaf {
+                    vec![Plan::Leaf {
                         task: Box::from(subproc(task_id, closure, ctx, false)),
-                    },
+                    }],
+                    EvalOrder::Sequential,
                     ctx.timeout_per_test,
                     None,
                     ctx,
@@ -561,7 +571,8 @@ impl SystemTestGroup {
     }
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
-        debug!(group_ctx.log(), "SystemTestGroup.make_plan");
+        let logger = group_ctx.logger();
+        debug!(logger, "SystemTestGroup.make_plan");
         let start_time = Utc::now();
 
         let quiet = group_ctx.quiet;
@@ -570,7 +581,7 @@ impl SystemTestGroup {
             rh,
             group_ctx: group_ctx.clone(),
             empty_task_counter: 0,
-            logger: group_ctx.logger().clone(),
+            logger: logger.clone(),
             timeout_per_test: self.effective_timeout_per_test(),
         };
 
@@ -600,25 +611,40 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let metrics_task_id = TaskId::Test(String::from(METRICS_TASK_NAME));
+        let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
+        let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
         let metrics_enabled: bool = std::env::var("ENABLE_METRICS")
             .map(|v| v == "1" || v.to_lowercase() == "true")
             .unwrap_or(false);
-        let metrics_task = if metrics_enabled {
-            let metrics_task = subproc(
-                metrics_task_id,
+        let (metrics_setup_task, metrics_sync_task) = if metrics_enabled {
+            let metrics_setup_task = subproc(
+                metrics_setup_task_id,
                 {
                     let group_ctx = group_ctx.clone();
-                    move || metrics_task(group_ctx)
+                    move || metrics_setup_task(group_ctx)
                 },
                 &mut compose_ctx,
                 quiet,
             );
-
-            Box::from(metrics_task) as Box<dyn Task>
+            let metrics_sync_task = subproc(
+                metrics_sync_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_sync_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            (
+                Box::from(metrics_setup_task) as Box<dyn Task>,
+                Box::from(metrics_sync_task) as Box<dyn Task>,
+            )
         } else {
-            debug!(group_ctx.logger(), "Not spawning metrics task");
-            Box::from(EmptyTask::new(metrics_task_id)) as Box<dyn Task>
+            debug!(logger, "Not spawning metrics tasks");
+            (
+                Box::from(EmptyTask::new(metrics_setup_task_id)) as Box<dyn Task>,
+                Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>,
+            )
         };
 
         let vector_logging_task_id = TaskId::Test(String::from(VECTOR_LOGGING_TASK_NAME));
@@ -637,18 +663,18 @@ impl SystemTestGroup {
 
             Box::from(vector_logging_task) as Box<dyn Task>
         } else {
-            debug!(group_ctx.logger(), "Not spawning vector logging task");
+            debug!(logger, "Not spawning vector logging task");
             Box::from(EmptyTask::new(vector_logging_task_id)) as Box<dyn Task>
         };
 
-        let setup_plan = {
-            let logger = group_ctx.logger().clone();
-            let group_ctx = group_ctx.clone();
-            let setup_fn = self
-                .setup
-                .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
-            let setup_task = subproc(
-                TaskId::Test(String::from(SETUP_TASK_NAME)),
+        let setup_fn = self
+            .setup
+            .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
+        let setup_task = subproc(
+            TaskId::Test(String::from(SETUP_TASK_NAME)),
+            {
+                let group_ctx = group_ctx.clone();
+                let logger = logger.clone();
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let cli_arguments = CliArguments {
@@ -662,22 +688,14 @@ impl SystemTestGroup {
 
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
-                },
-                &mut compose_ctx,
-                false,
-            );
-            timed(
-                Plan::Leaf {
-                    task: Box::from(setup_task),
-                },
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
-        };
+                }
+            },
+            &mut compose_ctx,
+            false,
+        );
 
         let teardown_plan = self.teardown.map(|teardown_fn| {
-            let logger = group_ctx.logger().clone();
+            let logger = logger.clone();
             let group_ctx = group_ctx.clone();
             let teardown_task = subproc(
                 TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
@@ -690,14 +708,30 @@ impl SystemTestGroup {
                 false,
             );
             timed(
-                Plan::Leaf {
+                vec![Plan::Leaf {
                     task: Box::from(teardown_task),
-                },
+                }],
+                EvalOrder::Sequential,
                 compose_ctx.timeout_per_test,
                 None,
                 &mut compose_ctx,
             )
         });
+
+        let setup_plan = timed(
+            vec![
+                Plan::Leaf {
+                    task: Box::from(setup_task),
+                },
+                Plan::Leaf {
+                    task: metrics_setup_task,
+                },
+            ],
+            EvalOrder::Parallel,
+            compose_ctx.timeout_per_test,
+            None,
+            &mut compose_ctx,
+        );
 
         // normal case: no keepalive, overall timeout is active
         if !group_ctx.keepalive {
@@ -734,8 +768,8 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
-            let metrics_plan = compose(
-                Some(metrics_task),
+            let metrics_sync_plan = compose(
+                Some(metrics_sync_task),
                 EvalOrder::Sequential,
                 vec![logs_plan],
                 &mut compose_ctx,
@@ -748,13 +782,14 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        metrics_plan,
+                        vec![metrics_sync_plan],
+                        EvalOrder::Sequential,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    metrics_plan
+                    metrics_sync_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -784,8 +819,8 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
-        let metrics_plan = compose(
-            Some(metrics_task),
+        let metrics_sync_plan = compose(
+            Some(metrics_sync_task),
             EvalOrder::Sequential,
             vec![logs_plan],
             &mut compose_ctx,
@@ -815,7 +850,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, metrics_plan],
+            vec![report_plan, metrics_sync_plan],
             &mut compose_ctx,
         ))
     }
