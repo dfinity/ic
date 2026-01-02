@@ -394,6 +394,9 @@ pub struct Init {
     /// Whether Neurons' Fund participation is requested.
     #[prost(bool, optional, tag = "32")]
     pub neurons_fund_participation: ::core::option::Option<bool>,
+    /// Whether this is a testflight swap.
+    #[prost(bool, optional, tag = "33")]
+    pub testflight: ::core::option::Option<bool>,
 }
 /// Constraints for the Neurons' Fund participation in an SNS swap.
 #[derive(
