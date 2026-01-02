@@ -27,7 +27,6 @@ pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
-pub mod manage_network_economics;
 pub mod manage_neuron;
 pub mod register_known_neuron;
 pub mod self_describing;
