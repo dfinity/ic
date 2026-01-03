@@ -7691,6 +7691,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "bitcoin-dogecoin",
  "bs58 0.5.1",
  "candid",
  "candid_parser",
@@ -7704,12 +7705,14 @@ dependencies = [
  "ic-management-canister-types 0.5.0",
  "ic-secp256k1",
  "icrc-ledger-types",
+ "mockall",
  "pocket-ic",
  "proptest",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "test-strategy 0.4.0",
+ "tokio",
 ]
 
 [[package]]
@@ -16701,16 +16704,6 @@ dependencies = [
  "quick-xml 0.37.2",
  "rgb",
  "str_stack",
-]
-
-[[package]]
-name = "inject-files"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap 4.5.27",
- "partition_tools",
- "tempfile",
 ]
 
 [[package]]

@@ -33,11 +33,11 @@ use crate::{
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
-            CreateServiceNervousSystem, Followees, FulfillSubnetRentalRequest,
-            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
-            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
-            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+            CreateServiceNervousSystem, Followees, GetNeuronsFundAuditInfoRequest,
+            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
+            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
+            NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -73,6 +73,7 @@ use crate::{
         ValidProposalAction,
         call_canister::CallCanister,
         execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         sum_weighted_voting_power,
     },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
@@ -4236,7 +4237,7 @@ impl Governance {
     async fn perform_fulfill_subnet_rental_request(
         &mut self,
         proposal_id: u64,
-        fulfill_subnet_rental_request: FulfillSubnetRentalRequest,
+        fulfill_subnet_rental_request: ValidFulfillSubnetRentalRequest,
     ) {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
@@ -4754,7 +4755,8 @@ impl Governance {
             }
             ValidProposalAction::ApproveGenesisKyc(_)
             | ValidProposalAction::RewardNodeProvider(_)
-            | ValidProposalAction::RewardNodeProviders(_) => Ok(()),
+            | ValidProposalAction::RewardNodeProviders(_)
+            | ValidProposalAction::FulfillSubnetRentalRequest(_) => Ok(()),
             ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
                 register_known_neuron.validate(&self.neuron_store)
             }
@@ -4762,9 +4764,6 @@ impl Governance {
             ValidProposalAction::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
             ValidProposalAction::UpdateCanisterSettings(update_settings) => {
                 update_settings.validate()
-            }
-            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
-                fulfill_subnet_rental_request.validate()
             }
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
