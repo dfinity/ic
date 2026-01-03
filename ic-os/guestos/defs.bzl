@@ -58,7 +58,7 @@ def image_deps(mode, malicious = False):
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
-            "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//rs/ic_os/release:config_tool": "/opt/ic/bin/config_tool:0755",
         },
 
         # Set various configuration values
@@ -103,8 +103,8 @@ def image_deps(mode, malicious = False):
         })
 
         # Dev config tool
-        deps["rootfs"].pop("//rs/ic_os/release:config", None)
-        deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
+        deps["rootfs"].pop("//rs/ic_os/release:config_tool", None)
+        deps["rootfs"].update({"//rs/ic_os/release:config_tool_dev": "/opt/ic/bin/config_tool:0755"})
 
         # Dev guest_upgrade client
         deps["rootfs"].pop("//rs/ic_os/guest_upgrade/client", None)

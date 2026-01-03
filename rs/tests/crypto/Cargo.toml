@@ -18,7 +18,7 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../../crypto/internal/crypto_
 ic-crypto-internal-bls12-381-type = { path = "../../crypto/internal/crypto_lib/bls12_381/type" }
 ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
-ic-fstrim-tool = { path = "../../ic_os/fstrim_tool" }
+ic-fstrim-tool = { path = "../../ic_os/metrics/fstrim_tool" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }

@@ -1,6 +1,6 @@
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use config::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
+use config_tool::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};

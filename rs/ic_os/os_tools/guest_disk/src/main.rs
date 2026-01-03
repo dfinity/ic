@@ -3,7 +3,7 @@ mod tests;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
 use guest_disk::sev::SevDiskEncryption;

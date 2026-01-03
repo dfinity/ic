@@ -710,6 +710,7 @@ fn split_ips_by_address_family(ips: &BTreeSet<IpAddr>) -> (Vec<String>, Vec<Stri
 mod tests {
     use std::{io::Write, path::Path};
 
+    use config_tool::guestos::generate_ic_config;
     use ic_config::{ConfigOptional, ConfigSource};
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_logger::replica_logger::no_op_logger;
@@ -942,7 +943,7 @@ mod tests {
 
     /// Returns the `ic.json5` config filled with some dummy values.
     fn get_config() -> ConfigOptional {
-        let template = config::guestos::generate_ic_config::IcConfigTemplate {
+        let template = generate_ic_config::IcConfigTemplate {
             ipv6_address: "::".to_string(),
             ipv6_prefix: "::/64".to_string(),
             ipv4_address: "".to_string(),
@@ -957,7 +958,7 @@ mod tests {
             malicious_behavior: "null".to_string(),
         };
 
-        let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
+        let ic_json = generate_ic_config::render_ic_config(template)
             .expect("Failed to render config template");
         ConfigSource::Literal(ic_json)
             .load()

@@ -3,7 +3,7 @@
 Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initialized to be empty, except for SetupOS.
 
 In production, configuration is propagated from a partition on the USB installer through each of SetupOS, HostOS and GuestOS.
-This process is controlled by the (link:../../rs/ic_os/config/README.md[ic-os config tool]) and an assortment of bash scripts.
+This process is controlled by the (link:../../rs/ic_os/config/tool/README.md[ic-os config tool]) and an assortment of bash scripts.
 
 == User-facing configuration files
 
@@ -14,13 +14,13 @@ SetupOS constructs its config struct from the following user-facing configuratio
   deployment.json                 # Deployment-specific configurations
   nns_public_key_override.pem     # NNS public key override (only for dev variant)
 
-Refer to link:../../rs/ic_os/config/README.md[rs/ic_os/config] and link:../components/setupos/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
+Refer to link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool] and link:../components/setupos/setup-hostos-config.sh[setup-hostos-config.sh] for more details.
 
 == HostOS -> GuestOS
 
 HostOS creates a bootstrap config image containing a tar file with the GuestOS configuration files.
 
-Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/src/hostos/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
+Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/src/guest_vm_config.rs[guest_vm_config.rs] and link:../../rs/ic_os/config/tool/src/hostos/guestos_bootstrap_image.rs[guestos_bootstrap_image.rs] for more details.
 
 When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../../rs/ic_os/os_tools/guest_vm_runner/templates/guestos_vm_template.xml[guestos_vm_template.xml]
 
@@ -29,7 +29,7 @@ When the GuestOS boots, it checks for available removable media devices (i.e. th
 GuestOS then reads from `ic-bootstrap.tar` (link:../components/guestos/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
 
 On first boot, GuestOS then bootstraps the node by copying other config files from ic-bootstrap.tar. See
-link:../../rs/ic_os/config/README.md[rs/ic_os/config].
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool].
 
 * *System state:* Node initialization material (initial registry & keys) is copied directly into target directories for replica use.
 * *Config partition:* Only the SSH authorized keys (`accounts_ssh_authorized_keys`) from the injected config are copied into the `/boot/config` directory. These keys need to be available on subsequent boots (not just the first boot of the system), and need to be preserved across upgrades.
@@ -65,7 +65,7 @@ In the absence of a sealing key (which will be available in SEV-protected truste
 === Guidance for adding configuration bits
 
 To add or modify a configuration field within the icos config tool, see
-link:../../rs/ic_os/config/README.md[rs/ic_os/config].
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool].
 
 To add a new configuration file/directory:
 
@@ -90,7 +90,7 @@ Consider that values may be controlled by an attacker on boot. Bootstrapping a n
 === Testing
 
 For testing, to add new configuration bits, you can modify the config tool located at
-link:../../rs/ic_os/config/README.md[rs/ic_os/config]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap_ic_node.rs* directly,
+link:../../rs/ic_os/config/tool/README.md[rs/ic_os/config/tool]. Or, you may find it easier to update *guestos_bootstrap_image.rs* and *bootstrap_ic_node.rs* directly,
 particularly if you wish to add a new configuration file (as opposed to just a new configuration _field_).
 
 * *ic_os config tool* can be run stand-alone to verify that it produces the intended configuration object.

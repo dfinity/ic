@@ -4,7 +4,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config_types",
+    "//rs/ic_os/config/types:config_types",
     "@crate_index//:anyhow",
     "@crate_index//:macaddr",
     "@crate_index//:serde",
@@ -36,7 +36,7 @@ rust_binary(
     visibility = ["//rs:ic-os-pkg"],
     deps = [
         ":config_types_compatibility_lib",
-        "//rs/ic_os/config_types",
+        "//rs/ic_os/config/types:config_types",
         "@crate_index//:anyhow",
     ],
 )
@@ -49,7 +49,7 @@ rust_test(
     data = [":config_types_fixtures"],
     deps = [
         ":config_types_compatibility_lib",
-        "//rs/ic_os/config_types",
+        "//rs/ic_os/config/types:config_types",
         "@crate_index//:serde_json",
     ],
 )
