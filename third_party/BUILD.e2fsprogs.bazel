@@ -1,0 +1,29 @@
+# Build e2fsprogs for mkfs dependency which is used to build IC-OS filesystem images
+
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(
+        include = ["**"],
+    ),
+)
+
+configure_make(
+    name = "e2fsprogs",
+    lib_name = "e2fsprogs",
+    lib_source = ":all_srcs",
+    out_binaries = ["mke2fs"],
+    postfix_script = """
+        mv misc/mke2fs $INSTALLDIR/bin
+    """,
+    targets = ["progs"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "mke2fs",
+    srcs = [":e2fsprogs"],
+    output_group = "mke2fs",
+    visibility = ["//visibility:public"],
+)
