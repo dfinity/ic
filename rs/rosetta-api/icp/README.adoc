@@ -34,7 +34,7 @@ Loaded image: localhost/rosetta:image
 Finally run the image
 
 ```
-$ docker run localhost/rosetta:image
+$ docker run -it localhost/rosetta:image
 ```
 
 Remember to mount `/home/rosetta/log` and `/data` to persist logs and data after shutting down the docker container.
