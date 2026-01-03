@@ -188,11 +188,11 @@ fn derive_mixed_enum(name: &Ident, data_enum: &DataEnum) -> Result<TokenStream2,
                     })
                 }
                 Fields::Unit => {
-                    // Unit variant in mixed enum: map with variant name as key, empty array as value
+                    // Unit variant in mixed enum: map with variant name as key, null value as value
                     Ok(quote! {
                         #name::#variant_name => {
                             crate::proposals::self_describing::ValueBuilder::new()
-                                .add_empty_field(#variant_name_str)
+                                .add_null_field(#variant_name_str)
                                 .build()
                         }
                     })
