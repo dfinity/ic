@@ -904,46 +904,122 @@ impl Blocks {
             [],
         )?;
 
+        tx.commit()?;
+
         // Add account and operation type indexes if optimization is enabled
         if config.index_optimization == IndexOptimization::Enabled {
+            let num_blocks: u64 = connection
+                .query_row("SELECT count(*) FROM blocks", [], |row| row.get(0))
+                .unwrap_or(0);
+
+            if num_blocks > 0 {
+                info!(
+                    "Checking and creating additional search indexes. This may take a while as there are {} blocks in the store.",
+                    num_blocks
+                );
+            }
+
+            fn create_index_if_not_exists(
+                conn: &mut rusqlite::Connection,
+                name: &str,
+                sql: &str,
+                num_blocks: u64,
+            ) -> Result<(), rusqlite::Error> {
+                let exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM sqlite_master WHERE type='index' AND name=?",
+                        [name],
+                        |_| Ok(()),
+                    )
+                    .optional()?
+                    .is_some();
+
+                if !exists {
+                    if num_blocks > 0 {
+                        info!("Creating index '{}'...", name);
+                    }
+
+                    // Set progress handler to log every ~5 seconds
+                    // SQLite instructions are fast, so we set N to something reasonable like 10000
+                    // and check time.
+                    let start = std::time::Instant::now();
+                    let mut last_log = start;
+                    let index_name = name.to_string(); // Clone for closure
+
+                    conn.progress_handler(
+                        10000,
+                        Some(move || {
+                            let now = std::time::Instant::now();
+                            if now.duration_since(last_log).as_secs() >= 5 {
+                                info!(
+                                    "Still creating index '{}'... ({:?} elapsed)",
+                                    index_name,
+                                    now.duration_since(start)
+                                );
+                                last_log = now;
+                            }
+                            true // continue
+                        }),
+                    );
+
+                    let result = conn.execute(sql, []);
+
+                    conn.progress_handler(0, None::<fn() -> bool>);
+                    result?;
+
+                    if num_blocks > 0 {
+                        info!("Finished creating index '{}'", name);
+                    }
+                }
+                Ok(())
+            }
+
             // From account index
-            tx.execute(
+            create_index_if_not_exists(
+                &mut connection,
+                "from_account_index",
                 r#"
-            CREATE INDEX IF NOT EXISTS from_account_index 
+            CREATE INDEX from_account_index 
             ON blocks(from_account)
             "#,
-                [],
+                num_blocks,
             )?;
 
             // To account index
-            tx.execute(
+            create_index_if_not_exists(
+                &mut connection,
+                "to_account_index",
                 r#"
-            CREATE INDEX IF NOT EXISTS to_account_index 
+            CREATE INDEX to_account_index 
             ON blocks(to_account)
             "#,
-                [],
+                num_blocks,
             )?;
 
             // Spender account index
-            tx.execute(
+            create_index_if_not_exists(
+                &mut connection,
+                "spender_account_index",
                 r#"
-            CREATE INDEX IF NOT EXISTS spender_account_index 
+            CREATE INDEX spender_account_index 
             ON blocks(spender_account)
             "#,
-                [],
+                num_blocks,
             )?;
 
             // Operation type index for searching by transaction type
-            tx.execute(
+            create_index_if_not_exists(
+                &mut connection,
+                "operation_type_index",
                 r#"
-            CREATE INDEX IF NOT EXISTS operation_type_index 
+            CREATE INDEX operation_type_index 
             ON blocks(operation_type)
             "#,
-                [],
+                num_blocks,
             )?;
         }
 
-        tx.commit()
+        Ok(())
     }
 
     fn cache_rosetta_blocks_mode(&mut self) -> Result<(), rusqlite::Error> {
@@ -2056,5 +2132,67 @@ VALUES (:idx, :block_idx)"#,
         assert!(!index_names.contains(&"to_account_index".to_string()));
         assert!(!index_names.contains(&"spender_account_index".to_string()));
         assert!(!index_names.contains(&"operation_type_index".to_string()));
+    }
+
+    #[test]
+    fn test_search_indexes_creation_existing_db() {
+        let tmp_dir = ic_ledger_canister_blocks_synchronizer_test_utils::create_tmp_dir();
+        let config_disabled = RosettaDbConfig::default_disabled();
+
+        {
+            let mut blocks = Blocks::new_persistent(tmp_dir.path(), config_disabled).unwrap();
+
+            let to = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+            let transaction0 = Transaction {
+                operation: Operation::Mint {
+                    to,
+                    amount: Tokens::from_e8s(1),
+                },
+                memo: Memo(0),
+                created_at_time: None,
+                icrc1_memo: None,
+            };
+            let block0 = Block {
+                parent_hash: None,
+                transaction: transaction0.clone(),
+                timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+            };
+            let encoded_block0 = block0.clone().encode();
+            let hashed_block0 = crate::blocks::HashedBlock::hash_block(
+                encoded_block0.clone(),
+                block0.parent_hash,
+                0,
+                block0.timestamp,
+            );
+            blocks.push(&hashed_block0).unwrap();
+        }
+
+        // Re-open with optimization enabled
+        let config_enabled = RosettaDbConfig::default_enabled();
+        let blocks = Blocks::new_persistent(tmp_dir.path(), config_enabled).unwrap();
+        let connection = blocks.connection.lock().unwrap();
+
+        // Check indexes
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let mut stmt = connection.prepare(index_query).unwrap();
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(index_names.contains(&"from_account_index".to_string()));
+        assert!(index_names.contains(&"to_account_index".to_string()));
+        assert!(index_names.contains(&"spender_account_index".to_string()));
+        assert!(index_names.contains(&"operation_type_index".to_string()));
     }
 }
