@@ -5,7 +5,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Node, Subnet},
     node_software_version::NodeSoftwareVersion,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
 };
@@ -71,10 +70,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 .for_each(|un| ic = ic.clone().with_api_boundary_node(un)),
         }
     }
-
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     ic.setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
@@ -82,8 +77,6 @@ pub fn setup(env: TestEnv, config: IcConfig) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-
-    env.sync_with_prometheus();
 }
 
 #[derive(Deserialize, Debug)]

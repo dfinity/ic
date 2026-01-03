@@ -19,7 +19,6 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
@@ -53,9 +52,6 @@ pub fn setup(env: TestEnv) {
         memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
         boot_image_minimal_size_gibibytes: None,
     };
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -72,7 +68,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv) {
