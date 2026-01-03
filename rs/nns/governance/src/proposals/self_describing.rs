@@ -1,5 +1,5 @@
 use crate::pb::v1::{
-    Account, ApproveGenesisKyc, Motion, NetworkEconomics, SelfDescribingProposalAction,
+    Account, ApproveGenesisKyc, Empty, Motion, NetworkEconomics, SelfDescribingProposalAction,
     SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
@@ -90,28 +90,8 @@ impl ValueBuilder {
 
     /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
     /// payload (e.g., StartDissolving, StopDissolving).
-    pub fn add_empty_field(self, key: impl ToString) -> Self {
-        self.add_field(key, SelfDescribingValue::EMPTY)
-    }
-
-    /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
-    /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
-    /// is designed to be required, while we want to still add an empty field to the builder in case
-    /// of a bug.
-    pub fn add_field_with_empty_as_fallback(
-        self,
-        key: impl ToString,
-        value: Option<impl Into<SelfDescribingValue>>,
-    ) -> Self {
-        if let Some(value) = value {
-            self.add_field(key, value)
-        } else {
-            println!(
-                "A field {} is added with an empty value while we think it should be impossible",
-                key.to_string()
-            );
-            self.add_empty_field(key)
-        }
+    pub fn add_null_field(self, key: impl ToString) -> Self {
+        self.add_field(key, SelfDescribingValue::NULL)
     }
 
     pub fn build(self) -> SelfDescribingValue {
@@ -197,10 +177,10 @@ where
     SelfDescribingValue: From<T>,
 {
     fn from(value: Option<T>) -> Self {
-        SelfDescribingValue {
-            value: Some(Array(SelfDescribingValueArray {
-                values: value.into_iter().map(SelfDescribingValue::from).collect(),
-            })),
+        if let Some(value) = value {
+            SelfDescribingValue::from(value)
+        } else {
+            SelfDescribingValue::NULL
         }
     }
 }
@@ -285,15 +265,15 @@ impl From<Account> for SelfDescribingValue {
         let Account { owner, subaccount } = account;
         let subaccount = subaccount.map(|subaccount| subaccount.subaccount);
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("owner", owner)
+            .add_field("owner", owner)
             .add_field("subaccount", subaccount)
             .build()
     }
 }
 
 impl SelfDescribingValue {
-    pub const EMPTY: Self = Self {
-        value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+    pub const NULL: Self = Self {
+        value: Some(Value::Null(Empty {})),
     };
 
     pub fn singleton_map(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {

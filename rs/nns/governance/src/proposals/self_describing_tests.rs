@@ -96,42 +96,36 @@ fn test_network_economics_to_self_describing_all_fields() {
             "max_proposals_to_keep_per_topic".to_string() =>
                 Nat(candid::Nat::from(100_u32)),
             "neurons_fund_economics".to_string() =>
-                Array(vec![
-                    Map(hashmap! {
-                        "max_theoretical_neurons_fund_participation_amount_xdr".to_string() =>
-                            Array(vec![Text("750_000.0".to_string())]),
-                        "neurons_fund_matched_funding_curve_coefficients".to_string() =>
-                            Array(vec![
-                                Map(hashmap! {
-                                    "contribution_threshold_xdr".to_string() =>
-                                        Array(vec![Text("75_000.0".to_string())]),
-                                    "one_third_participation_milestone_xdr".to_string() =>
-                                        Array(vec![Text("225_000.0".to_string())]),
-                                    "full_participation_milestone_xdr".to_string() =>
-                                        Array(vec![Text("375_000.0".to_string())]),
-                                }),
-                            ]),
-                        "minimum_icp_xdr_rate".to_string() =>
-                            Array(vec![Map(hashmap! {
-                                "basis_points".to_string() => Nat(candid::Nat::from(10000_u64)),
-                            })]),
-                        "maximum_icp_xdr_rate".to_string() =>
-                            Array(vec![Map(hashmap! {
-                                "basis_points".to_string() => Nat(candid::Nat::from(1000000_u64)),
-                            })]),
-                    }),
-                ]),
+                Map(hashmap! {
+                    "max_theoretical_neurons_fund_participation_amount_xdr".to_string() =>
+                        Text("750_000.0".to_string()),
+                    "neurons_fund_matched_funding_curve_coefficients".to_string() =>
+                        Map(hashmap! {
+                            "contribution_threshold_xdr".to_string() =>
+                                Text("75_000.0".to_string()),
+                            "one_third_participation_milestone_xdr".to_string() =>
+                                Text("225_000.0".to_string()),
+                            "full_participation_milestone_xdr".to_string() =>
+                                Text("375_000.0".to_string()),
+                        }),
+                    "minimum_icp_xdr_rate".to_string() =>
+                        Map(hashmap! {
+                            "basis_points".to_string() => Nat(candid::Nat::from(10000_u64)),
+                        }),
+                    "maximum_icp_xdr_rate".to_string() =>
+                        Map(hashmap! {
+                            "basis_points".to_string() => Nat(candid::Nat::from(1000000_u64)),
+                        }),
+                }),
             "voting_power_economics".to_string() =>
-                Array(vec![
-                    Map(hashmap! {
-                        "start_reducing_voting_power_after_seconds".to_string() =>
-                            Array(vec![Nat(candid::Nat::from(15_778_800_u64))]),
-                        "clear_following_after_seconds".to_string() =>
-                            Array(vec![Nat(candid::Nat::from(2_629_800_u64))]),
-                        "neuron_minimum_dissolve_delay_to_vote_seconds".to_string() =>
-                            Array(vec![Nat(candid::Nat::from(15_778_800_u64))]),
-                    }),
-                ]),
+                Map(hashmap! {
+                    "start_reducing_voting_power_after_seconds".to_string() =>
+                        Nat(candid::Nat::from(15_778_800_u64)),
+                    "clear_following_after_seconds".to_string() =>
+                        Nat(candid::Nat::from(2_629_800_u64)),
+                    "neuron_minimum_dissolve_delay_to_vote_seconds".to_string() =>
+                        Nat(candid::Nat::from(15_778_800_u64)),
+                }),
         }),
     );
 }
@@ -167,9 +161,9 @@ fn test_network_economics_to_self_describing_minimal() {
             "max_proposals_to_keep_per_topic".to_string() =>
                 Nat(candid::Nat::from(100_u32)),
             "neurons_fund_economics".to_string() =>
-                Array(vec![]),
+                Null,
             "voting_power_economics".to_string() =>
-                Array(vec![]),
+                Null,
         }),
     );
 }
@@ -232,9 +226,7 @@ fn test_derive_named_struct() {
         },
         SelfDescribingValue::Map(hashmap! {
             "name".to_string() => SelfDescribingValue::Text("test".to_string()),
-            "count".to_string() => SelfDescribingValue::Array(
-                vec![SelfDescribingValue::Nat(candid::Nat::from(42u64))]
-            ),
+            "count".to_string() => SelfDescribingValue::Nat(candid::Nat::from(42u64)),
         }),
     );
 }
@@ -270,7 +262,7 @@ fn test_derive_mixed_enum_unit_variant() {
     assert_self_describing_value_is(
         TestMixedEnum::Empty,
         SelfDescribingValue::Map(hashmap! {
-            "Empty".to_string() => SelfDescribingValue::Array(vec![]),
+            "Empty".to_string() => SelfDescribingValue::Null,
         }),
     );
 }

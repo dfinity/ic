@@ -4202,6 +4202,7 @@ impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
                     .map(|(k, v)| (k, Self::from(v)))
                     .collect(),
             ),
+            pb::self_describing_value::Value::Null(_) => Self::Null,
         }
     }
 }
@@ -4230,6 +4231,9 @@ impl From<pb_api::SelfDescribingValue> for pb::SelfDescribingValue {
                 pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
                     values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
                 })
+            }
+            pb_api::SelfDescribingValue::Null => {
+                pb::self_describing_value::Value::Null(pb::Empty {})
             }
         };
         Self { value: Some(value) }

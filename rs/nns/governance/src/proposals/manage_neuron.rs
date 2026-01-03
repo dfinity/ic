@@ -51,13 +51,11 @@ impl LocallyDescribableProposalAction for ManageNeuron {
                     "A ManageNeuron proposal is created with an empty or conflicting \
                     values of id and neuron_id_or_subaccount. This should never happen."
                 );
-                builder.add_empty_field("neuron_id_or_subaccount")
+                builder.add_null_field("neuron_id_or_subaccount")
             }
         };
 
-        builder
-            .add_field_with_empty_as_fallback("command", self.command.clone())
-            .build()
+        builder.add_field("command", self.command.clone()).build()
     }
 }
 
@@ -99,13 +97,13 @@ impl From<Command> for SelfDescribingValue {
                 println!(
                     "A ManageNeuron proposal is created with a MergeMaturity command. This should never happen."
                 );
-                Self::singleton_map("MergeMaturity", Self::EMPTY)
+                Self::singleton_map("MergeMaturity", Self::NULL)
             }
             C::MakeProposal(_) => {
                 println!(
                     "A ManageNeuron proposal is created with a MakeProposal command. This should never happen."
                 );
-                Self::singleton_map("MakeProposal", Self::EMPTY)
+                Self::singleton_map("MakeProposal", Self::NULL)
             }
         }
     }
@@ -117,7 +115,7 @@ impl From<Configure> for SelfDescribingValue {
             println!(
                 "A ManageNeuron proposal is created with an empty operation. This should never happen."
             );
-            return Self::EMPTY;
+            return Self::NULL;
         };
 
         use Operation as O;
@@ -161,14 +159,14 @@ impl From<IncreaseDissolveDelay> for SelfDescribingValue {
 impl From<StartDissolving> for SelfDescribingValue {
     fn from(value: StartDissolving) -> Self {
         let StartDissolving {} = value;
-        SelfDescribingValue::EMPTY
+        SelfDescribingValue::NULL
     }
 }
 
 impl From<StopDissolving> for SelfDescribingValue {
     fn from(value: StopDissolving) -> Self {
         let StopDissolving {} = value;
-        SelfDescribingValue::EMPTY
+        SelfDescribingValue::NULL
     }
 }
 
@@ -198,14 +196,14 @@ impl From<SetDissolveTimestamp> for SelfDescribingValue {
 impl From<JoinCommunityFund> for SelfDescribingValue {
     fn from(value: JoinCommunityFund) -> Self {
         let JoinCommunityFund {} = value;
-        SelfDescribingValue::EMPTY
+        SelfDescribingValue::NULL
     }
 }
 
 impl From<LeaveCommunityFund> for SelfDescribingValue {
     fn from(value: LeaveCommunityFund) -> Self {
         let LeaveCommunityFund {} = value;
-        SelfDescribingValue::EMPTY
+        SelfDescribingValue::NULL
     }
 }
 
@@ -320,7 +318,7 @@ impl From<ClaimOrRefresh> for SelfDescribingValue {
             println!(
                 "A ManageNeuron proposal is created with an empty by. This should never happen."
             );
-            return Self::EMPTY;
+            return Self::NULL;
         };
 
         match by {
@@ -359,7 +357,7 @@ impl From<Merge> for SelfDescribingValue {
 impl From<RefreshVotingPower> for SelfDescribingValue {
     fn from(value: RefreshVotingPower) -> Self {
         let RefreshVotingPower {} = value;
-        SelfDescribingValue::EMPTY
+        SelfDescribingValue::NULL
     }
 }
 

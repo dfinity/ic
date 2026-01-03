@@ -4567,6 +4567,7 @@ pub enum SelfDescribingValue {
     Text(String),
     Nat(Nat),
     Int(Int),
+    Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
 }
