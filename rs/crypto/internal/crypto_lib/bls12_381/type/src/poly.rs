@@ -5,12 +5,10 @@ use rand::{CryptoRng, RngCore};
 ///
 /// The coefficients are stored in little-endian ordering, ie a_0 is
 /// self.coefficients\[0\]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Polynomial {
     coefficients: Vec<Scalar>,
 }
-
-impl Eq for Polynomial {}
 
 impl PartialEq for Polynomial {
     fn eq(&self, other: &Self) -> bool {
