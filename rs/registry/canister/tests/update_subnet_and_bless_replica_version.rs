@@ -36,13 +36,13 @@ fn guest_launch_measurements_for_test() -> Option<GuestLaunchMeasurements> {
     Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![
             GuestLaunchMeasurement {
-                measurement: vec![0x01, 0x02, 0x03],
+                measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("foo=bar".into()),
                 }),
             },
             GuestLaunchMeasurement {
-                measurement: vec![0x04, 0x05, 0x06],
+                measurement: vec![0x42; 48],
                 metadata: Some(GuestLaunchMeasurementMetadata {
                     kernel_cmdline: Some("hello=world".into()),
                 }),
