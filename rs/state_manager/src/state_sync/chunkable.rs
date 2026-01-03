@@ -267,7 +267,9 @@ impl IncompleteState {
             height,
             root_hash,
             state: DownloadState::Blank,
-            manifest_with_checkpoint_layout: state_sync.state_manager.latest_manifest(),
+            manifest_with_checkpoint_layout: state_sync
+                .state_manager
+                .latest_checkpoint_with_manifest(),
             metrics: state_sync.state_manager.metrics.clone(),
             started_at: Instant::now(),
             fetch_started_at: None,
