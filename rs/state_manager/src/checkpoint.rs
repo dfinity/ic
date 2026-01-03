@@ -5,6 +5,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
+use ic_replicated_state::canister_state::system_state::LoadMetrics;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
@@ -854,6 +855,15 @@ pub fn load_canister_state(
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,
         canister_state_bits.consumed_cycles_by_use_cases,
+        canister_state_bits.instructions_executed,
+        LoadMetrics {
+            ingress_messages_executed: canister_state_bits.ingress_messages_executed,
+            remote_subnet_messages_executed: canister_state_bits.xnet_messages_executed,
+            local_subnet_messages_executed: canister_state_bits.intranet_messages_executed,
+            http_outcalls_executed: canister_state_bits.http_outcalls_executed,
+            heartbeats_and_global_timers_executed: canister_state_bits
+                .heartbeats_and_global_timers_executed,
+        },
     );
 
     let starting_time = Instant::now();
