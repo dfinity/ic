@@ -1,5 +1,5 @@
 {
-  "checksum": "e9d5e9b93b2036cff0104e43b708a1a72d5337db5d7a3c6e13f62f25cb2ed4a9",
+  "checksum": "699be6e641cd5520a5c3127a916f0f23b672dda964f4916c183e976fe9aa61d7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21926,7 +21926,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-bigint-dig 0.8.4",
+              "id": "num-bigint-dig 0.9.1",
               "target": "num_bigint_dig"
             },
             {
@@ -51559,12 +51559,9 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "i128",
             "prime",
             "rand",
-            "serde",
-            "std",
             "u64_digit",
             "zeroize"
           ],
@@ -51605,10 +51602,6 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
               "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
@@ -51621,6 +51614,120 @@
         },
         "edition": "2021",
         "version": "0.8.4"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "num-bigint-dig 0.9.1": {
+      "name": "num-bigint-dig",
+      "version": "0.9.1",
+      "package_url": "https://github.com/dignifiedquire/num-bigint",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/num-bigint-dig/0.9.1/download",
+          "sha256": "a7f9a86e097b0d187ad0e65667c2f58b9254671e86e7dbb78036b16692eae099"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_bigint_dig",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "num_bigint_dig",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "prime",
+            "rand",
+            "serde",
+            "std",
+            "u64_digit"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libm 0.2.15",
+              "target": "libm"
+            },
+            {
+              "id": "num-bigint-dig 0.9.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "num-integer 0.1.46",
+              "target": "num_integer"
+            },
+            {
+              "id": "num-iter 0.1.45",
+              "target": "num_iter"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "smallvec 1.15.1",
+              "target": "smallvec"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -98686,7 +98793,7 @@
     "nftables 0.4.1",
     "nix 0.24.3",
     "num-bigint 0.4.6",
-    "num-bigint-dig 0.8.4",
+    "num-bigint-dig 0.9.1",
     "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",

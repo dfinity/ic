@@ -667,7 +667,7 @@ mod node_keys_errors_to_key_counts_conversions {
 
     #[test]
     fn should_collect_key_counts_for_single_external_malformed_key() {
-        let tests = vec![
+        let tests = [
             ParameterizedTest {
                 input: NodeKeysErrors {
                     node_signing_key_error: Some(NodeKeysError {

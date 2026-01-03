@@ -1,4 +1,4 @@
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ckbtc_minter::Network;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};

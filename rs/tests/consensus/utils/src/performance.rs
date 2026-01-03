@@ -69,7 +69,6 @@ pub fn test_with_rt_handle(
         join_all(
             nodes
                 .iter()
-                .cloned()
                 .map(|n| async move { n.build_canister_agent().await }),
         )
         .await

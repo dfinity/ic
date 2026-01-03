@@ -539,8 +539,7 @@ pub fn encode_metrics(
         .proposals
         .values()
         // Exclude ManageNeuron proposals.
-        .filter(|proposal_data| !proposal_data.is_manage_neuron())
-        .next_back();
+        .rfind(|proposal_data| !proposal_data.is_manage_neuron());
     let mut total_deciding_voting_power = 0.0;
     let mut total_potential_voting_power = 0.0;
     if let Some(most_recent_proposal) = &most_recent_proposal {
