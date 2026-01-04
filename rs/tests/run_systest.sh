@@ -7,8 +7,8 @@ set -euo pipefail
 export -n \
     RUN_SCRIPT_ICOS_IMAGES \
     RUN_SCRIPT_UPLOAD_SYSTEST_DEP \
-    RUN_SCRIPT_INFO_FILE_VARS \
     RUN_SCRIPT_TEST_EXECUTABLE \
+    RUN_SCRIPT_ENV_VAR_FILES \
     RUN_SCRIPT_DRIVER_EXTRA_ARGS
 
 # RUN_SCRIPT_ICOS_IMAGES:
@@ -35,22 +35,13 @@ if [ -n "${RUN_SCRIPT_ICOS_IMAGES:-}" ]; then
     done
 fi
 
-# RUN_SCRIPT_INFO_FILE_VARS:
-# For every var specified, pull the value from info_file, and
-# expose it to the test plus the given suffix.
-if [ -n "${RUN_SCRIPT_INFO_FILE_VARS:-}" ]; then
-    # split the ";"-delimited list of "env_var:info_var:suffix;env_var2:info_var2:suffix;..."
-    # into an array
-    IFS=';' read -ra vars <<<"$RUN_SCRIPT_INFO_FILE_VARS"
-    for var in "${vars[@]}"; do
-        # split "envvar:infovar:suffix"
-        IFS=':' read -ra parts <<<"$var"
-        env_var_name="${parts[0]}"
-        info_var_name="${parts[1]}"
-        suffix="${parts[2]:-}"
-
-        # Expose the variable to the test.
-        export "${env_var_name}"="$(grep <"${FARM_METADATA_PATH}" -e "${info_var_name}" | cut -d' ' -f2)${suffix}"
+# RUN_SCRIPT_ENV_VAR_FILES:
+# For every env var set via file, read the file and set the environment variable
+if [ -n "${RUN_SCRIPT_ENV_VAR_FILES:-}" ]; then
+    IFS=';' read -ra env_var_files <<<"$RUN_SCRIPT_ENV_VAR_FILES"
+    for env_var_file in "${env_var_files[@]}"; do
+        # split "<envvar>:<path-of-contents>"
+        export "${env_var_file%:*}=$(cat "${env_var_file#*:}")"
     done
 fi
 

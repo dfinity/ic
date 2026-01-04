@@ -70,8 +70,6 @@ type UpgradeArgs = record {
 type Network = variant {
     // The public Dogecoin mainnet.
     Mainnet;
-    // The public Dogecoin testnet.
-    Testnet;
     // A local Dogecoin regtest installation.
     Regtest;
 };

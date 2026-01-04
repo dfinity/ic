@@ -446,7 +446,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             });
 
             if cfg.sequential_np_actions {
-                handles.join_next().await;
+                handles
+                    .join_next()
+                    .await
+                    .unwrap()
+                    .expect("Node provider action failed");
             }
         }
 

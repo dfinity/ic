@@ -2,14 +2,15 @@ use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
         ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
-        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
-        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
+        DeregisterKnownNeuron, GovernanceError, InstallCode, KnownNeuron, ManageNeuron, Motion,
+        NetworkEconomics, ProposalData, RewardNodeProvider, RewardNodeProviders,
+        SelfDescribingProposalAction, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
+        governance_error::ErrorType, proposal::Action,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         self_describing::LocallyDescribableProposalAction,
     },
 };
@@ -54,7 +55,7 @@ pub(crate) enum ValidProposalAction {
     InstallCode(InstallCode),
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
-    FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    FulfillSubnetRentalRequest(ValidFulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
@@ -107,9 +108,10 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::UpdateCanisterSettings(update_canister_settings) => Ok(
                 ValidProposalAction::UpdateCanisterSettings(update_canister_settings),
             ),
-            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
-                ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
-            ),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                ValidFulfillSubnetRentalRequest::try_from(fulfill_subnet_rental_request)
+                    .map(ValidProposalAction::FulfillSubnetRentalRequest)
+            }
             Action::BlessAlternativeGuestOsVersion(bless_alternative_guest_os_version) => {
                 Ok(ValidProposalAction::BlessAlternativeGuestOsVersion(
                     bless_alternative_guest_os_version,
@@ -225,6 +227,12 @@ impl ValidProposalAction {
             }
             ValidProposalAction::ManageNeuron(manage_neuron) => {
                 Ok(manage_neuron.to_self_describing_action())
+            }
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
+                Ok(manage_network_economics.to_self_describing_action())
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                Ok(fulfill_subnet_rental_request.to_self_describing_action())
             }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
