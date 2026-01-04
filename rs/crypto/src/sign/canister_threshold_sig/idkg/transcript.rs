@@ -3,7 +3,7 @@ use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
     index_and_batch_signed_dealing_of_dealer, index_and_dealing_of_dealer,
-    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{
@@ -180,7 +180,7 @@ pub fn load_transcript(
         internal_dealings_bytes,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )?;
     let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
@@ -246,7 +246,7 @@ pub fn load_transcript_with_openings(
         internal_openings,
         transcript.context_data(),
         self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
     )
 }
@@ -292,7 +292,7 @@ pub fn open_transcript(
         dealer_index,
         context_data,
         opener_index,
-        key_id_from_mega_public_key_or_panic(&opener_public_key),
+        KeyId::from(&opener_public_key),
     )?;
     let internal_opening_raw =
         internal_opening

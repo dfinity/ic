@@ -22,11 +22,6 @@ use std::convert::TryFrom;
 #[cfg(test)]
 mod tests;
 
-// TODO remove this function
-pub fn key_id_from_mega_public_key_or_panic(public_key: &MEGaPublicKey) -> KeyId {
-    KeyId::from(public_key)
-}
-
 /// Query the registry for the MEGa public key of `node_id` receiver.
 pub fn retrieve_mega_public_key_from_registry(
     node_id: &NodeId,
