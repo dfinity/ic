@@ -6,6 +6,7 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
     retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::{
     BasicSignatureCspVault, CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
     IDkgTranscriptOperationInternalBytes,

@@ -3,7 +3,6 @@
 mod errors;
 pub use errors::*;
 
-use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::utils::{
     MEGaPublicKeyFromProtoError, mega_public_key_from_proto,
 };
