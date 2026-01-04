@@ -380,7 +380,7 @@ mod idkg_retain_active_keys {
         );
         assert!(
             vault
-                .sks_contains(KeyId::try_from(&public_key).expect("invalid key ID"))
+                .sks_contains(KeyId::from(&public_key))
                 .expect("error reading SKS")
         );
     }
