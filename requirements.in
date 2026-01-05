@@ -27,6 +27,7 @@ PyYAML>=6.0.2
 requests>=2.26.0
 sev-snp-measure
 simple-parsing
+toml>=0.10.2
 tqdm
 uuid
 PyGithub>=2.3.0

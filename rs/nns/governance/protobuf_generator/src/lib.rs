@@ -2,12 +2,29 @@ use prost_build::Config;
 use std::path::Path;
 
 pub struct ProtoPaths<'a> {
-    pub governance: &'a Path,
     pub base_types: &'a Path,
+    pub governance: &'a Path,
+    pub ic_protobuf: &'a Path,
+    pub ledger: &'a Path,
     pub nervous_system: &'a Path,
     pub nns_common: &'a Path,
-    pub ledger: &'a Path,
     pub sns_swap: &'a Path,
+    // When adding a new Path to this struct, also do the following:
+    //
+    // 1. Add a corrsponding extern_path line within generate_prost_files.
+    //
+    // 2. Keep this list sorted.
+    //
+    // 3. Update locations where ProtoPaths is constructed (rustc will point out
+    //    where this is necessary).
+    //
+    // 4. Re-run Prost: bazel run //rs/nns/governance/protobuf_generator
+    //
+    // 5. In the BUILD.bazel and Cargo.toml files that use the generated files,
+    //    add dependencies to get access to the generated code used by code
+    //    generated from governance.proto (by Prost in the previous step).
+    //
+    // Or maybe AI is smart enough to do this chore now.
 
     // Indirectly required by sns_swap
     pub sns_root: &'a Path,
@@ -22,6 +39,7 @@ impl ProtoPaths<'_> {
             nervous_system,
             nns_common,
             sns_root,
+            ic_protobuf,
             sns_swap,
         } = self;
 
@@ -33,6 +51,7 @@ impl ProtoPaths<'_> {
             nns_common,
             sns_root,
             sns_swap,
+            ic_protobuf,
         ]
     }
 }
@@ -56,6 +75,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         ".ic_nns_governance.pb.v1.Governance.neurons",
     ]);
 
+    // Map from Protocol Buffers package prefix to Rust module.
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::icp-ledger::protobuf");
     config.extern_path(
@@ -65,6 +85,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_sns_root.pb.v1", "::ic-sns-root::pb::v1");
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
+    config.extern_path(
+        ".registry.replica_version.v1",
+        "::ic-protobuf::registry::replica-version::v1",
+    );
 
     config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]");
 
@@ -121,6 +145,19 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "ic_nns_governance.pb.v1.KnownNeuronData",
         "#[compare_default]",
     );
+
+    let self_describing_types = vec![
+        "NetworkEconomics",
+        "NeuronsFundEconomics",
+        "NeuronsFundMatchedFundingCurveCoefficients",
+        "VotingPowerEconomics",
+    ];
+    for type_name in self_describing_types {
+        config.type_attribute(
+            format!(".ic_nns_governance.pb.v1.{type_name}"),
+            "#[derive(ic_nns_governance_derive_self_describing::SelfDescribing)]",
+        );
+    }
 
     // Add serde_bytes for efficiently parsing blobs.
     let blob_fields = vec![

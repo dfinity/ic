@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::anyhow;
 use arc_swap::ArcSwapOption;
+use derive_new::new;
 use ic_crypto_utils_tls::{NodeIdFromCertificateDerError, node_id_from_certificate_der};
 use rustls::{
     CertificateError, DigitallySignedStruct, Error as RustlsError,
@@ -16,19 +17,13 @@ use x509_parser::{
 
 use crate::snapshot::RegistrySnapshot;
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub struct TlsVerifier {
     rs: Arc<ArcSwapOption<RegistrySnapshot>>,
 }
 
-impl TlsVerifier {
-    pub fn new(rs: Arc<ArcSwapOption<RegistrySnapshot>>) -> Self {
-        Self { rs }
-    }
-}
-
 // Implement the certificate verifier which ensures that the certificate
-// that was provided by node during TLS handshake matches its public key from the registry
+// that was provided by node during TLS handshake matches its public key from the registry.
 // This trait is used by Rustls in reqwest under the hood
 impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
@@ -58,7 +53,8 @@ impl ServerCertVerifier for TlsVerifier {
                     )))
                 }
             })?;
-        // Load a routing table if we have one
+
+        // Load the routing table if we have one
         let rs = self
             .rs
             .load_full()
@@ -66,7 +62,7 @@ impl ServerCertVerifier for TlsVerifier {
 
         // Look up a node in the routing table based on the hostname provided by rustls
         let node = match server_name {
-            // Currently support only DnsName
+            // Currently we support only DnsName
             ServerName::DnsName(v) => {
                 // Check if certificate CommonName matches the DNS name
                 if node_id.to_string() != v.as_ref() {
@@ -93,13 +89,15 @@ impl ServerCertVerifier for TlsVerifier {
             ServerName::IpAddress(_) => return Err(RustlsError::UnsupportedNameType),
 
             // Enum is marked non_exhaustive
-            &_ => return Err(RustlsError::UnsupportedNameType),
+            _ => return Err(RustlsError::UnsupportedNameType),
         };
 
-        // Cert is parsed & checked when we read it from the registry - if we got here then it's correct
-        // It's a zero-copy view over byte array
-        // Storing X509Certificate directly in Node is problematic since it does not own the data
-        let (_, node_cert) = X509Certificate::from_der(&node.tls_certificate).unwrap();
+        // Cert is parsed & checked when we read it from the registry - it should be correct.
+        // Storing X509Certificate directly in Node is problematic since it does not own the data,
+        // it's a zero-copy view over byte array.
+        let (_, node_cert) = X509Certificate::from_der(&node.tls_certificate).map_err(|e| {
+            RustlsError::General(format!("unable to parse Node TLS certificate: {e:#}"))
+        })?;
 
         // Parse the certificate provided by server
         let (_, provided_cert) = X509Certificate::from_der(end_entity)

@@ -22,7 +22,7 @@ use axum::{
     routing::any,
 };
 use canister_test::{Canister, Runtime, Wasm};
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_nns_test_utils::itest_helpers::forward_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::install_registry_canister, registry::invariant_compliant_mutation_as_atomic_req,
@@ -69,8 +69,8 @@ pub fn test(env: TestEnv) {
         .unwrap()
         .root_public_key()
         .expect("failed to read threshold sig PK bytes");
-    let pk = threshold_sig_public_key_from_der(&pk_bytes[..])
-        .expect("failed to decode threshold sig PK");
+    let pk =
+        parse_threshold_sig_key_from_der(&pk_bytes[..]).expect("failed to decode threshold sig PK");
 
     let mitm = any(mitm_service)
         .with_state(root_node.get_public_url())

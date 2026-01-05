@@ -153,8 +153,9 @@ mod get_doge_address {
 }
 
 mod deposit {
+    use ic_ckdoge_minter::{OutPoint, Utxo};
     use ic_ckdoge_minter_test_utils::{
-        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, utxo_with_value,
+        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, txid, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -175,11 +176,45 @@ mod deposit {
             .minter_update_balance()
             .expect_mint();
     }
+
+    // DOGE total supply will overflow a u64 around 2030.
+    // However, the maximum output value in a single Dogecoin transaction is 10B DOGE,
+    // so that the value of a single UTXO is guaranteed to fit into a u64.
+    #[test]
+    fn should_handle_large_balances() {
+        let large_utxo_1 = utxo_with_value(u64::MAX);
+        let large_utxo_2 = Utxo {
+            outpoint: OutPoint {
+                txid: txid([43; 32]),
+                vout: 1,
+            },
+            ..large_utxo_1.clone()
+        };
+        assert_ne!(large_utxo_1, large_utxo_2);
+
+        let setup = Setup::default();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(vec![large_utxo_1, large_utxo_2])
+            .minter_update_balance()
+            .expect_mint();
+
+        assert_eq!(
+            setup.ledger().icrc1_balance_of(account),
+            (u64::MAX as u128) * 2
+        );
+    }
 }
 
 mod withdrawal {
     use ic_ckdoge_minter::{
-        InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION, UTXOS_COUNT_THRESHOLD,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
@@ -395,7 +430,7 @@ mod withdrawal {
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: too_large_num_inputs as usize,
-                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
     }
@@ -442,7 +477,7 @@ fn should_estimate_withdrawal_fee() {
 
     let expected_fee = WithdrawalFee {
         minter_fee: 180_000_000,
-        dogecoin_fee: 11_450_000,
+        dogecoin_fee: 11_350_000,
     };
     assert_eq!(
         estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
