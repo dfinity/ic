@@ -11,7 +11,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_types::{CanisterLog, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT};
+use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
@@ -26,15 +26,6 @@ const DELTA_LOG_SIZES_CAP: usize = 10_000;
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     page_map: PageMap,
-
-    /// Stores the log memory limit for the canister.
-    ///
-    /// This is important for the cases when the canister
-    /// is created without a Wasm module or after uninstall.
-    /// In these cases the canister should not be charged,
-    /// so the page_map must be empty, but we still need to
-    /// preserve the log_memory_limit.
-    //log_memory_limit: usize,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -61,7 +52,6 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            //log_memory_limit: DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
         }
     }
 
@@ -69,7 +59,6 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            //log_memory_limit,
         }
     }
 
@@ -113,10 +102,6 @@ impl LogMemoryStore {
             .map(|rb| rb.bytes_used())
             .unwrap_or(0)
     }
-
-    // pub fn log_memory_limit(&self) -> usize {
-    //     self.log_memory_limit
-    // }
 
     /// Sets the log memory limit for this canister.
     ///
