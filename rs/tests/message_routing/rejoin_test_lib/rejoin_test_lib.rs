@@ -267,9 +267,9 @@ async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId,
 
 pub async fn rejoin_test_long_rounds(
     env: TestEnv,
+    nodes: Vec<IcNodeSnapshot>,
     num_canisters: usize,
     dkg_interval: u64,
-    nodes: Vec<IcNodeSnapshot>,
 ) {
     let logger = env.logger();
     {
@@ -315,7 +315,7 @@ pub async fn rejoin_test_long_rounds(
         }
 
         // We deploy 8 "busy" canisters: this way,
-        // there are 2 canisters per each of the 4 scheduler cores
+        // there are 2 canisters per each of the 4 scheduler threads
         // and thus every thread executes 2 x 1.8B = 3.6B instructions.
         let num_busy_canisters = 8;
         info!(
@@ -335,19 +335,26 @@ pub async fn rejoin_test_long_rounds(
         join_all(create_busy_canisters_futs).await;
     }
 
-    let mut total_process_batch_durations = vec![];
+    // Sort nodes by their average duration to process a batch.
+    let mut average_process_batch_durations = vec![];
     for node in &nodes {
-        let duration = total_process_batch_duration(&logger, node.clone()).await;
-        total_process_batch_durations.push(duration);
+        let duration = average_process_batch_duration(&logger, node.clone()).await;
+        average_process_batch_durations.push(duration);
     }
-    let mut paired: Vec<_> = total_process_batch_durations
+    let mut paired: Vec<_> = average_process_batch_durations
         .into_iter()
         .zip(nodes.into_iter())
         .collect();
     paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
     let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
 
+    // The fastest node will be the reference node used to check
+    // the latest certified height of the subnet.
     let reference_node = sorted_nodes[0].clone();
+
+    // The restarted node will be the node with median batch processing time:
+    // this way, the restarted node cannot catch up with the subnet
+    // without additional measures (to be implemented in the future).
     let n = sorted_nodes.len();
     let rejoin_node = sorted_nodes[n / 2].clone();
 
@@ -469,7 +476,7 @@ pub async fn assert_state_sync_has_happened(
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
 }
 
-async fn total_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
+async fn average_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
     let label_sum = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_sum");
     let label_count = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_count");
     let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;

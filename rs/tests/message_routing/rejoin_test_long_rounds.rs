@@ -7,7 +7,7 @@ Runbook::
 . pick a random node and install 4 "seed" canisters through it (the state sync test canister is used as "seed")
 . create 100,000 canisters via the "seed" canisters (in parallel)
 . deploy 8 "busy" canisters (universal canister with heartbeats executing 1.8B instructions)
-. pick another random node and kill that node
+. pick the node with median batch processing time and kill that node
 . wait for the subnet producing a CUP
 . start the killed node
 
@@ -120,9 +120,9 @@ async fn test_async(env: TestEnv, config: Config) {
 
     rejoin_test_long_rounds(
         env,
+        app_subnet.nodes().collect(),
         config.num_canisters,
         DKG_INTERVAL,
-        app_subnet.nodes().collect(),
     )
     .await;
 }
