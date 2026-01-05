@@ -35,6 +35,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
 use icrc_ledger_types::{
@@ -70,13 +71,13 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
-const METADATA_DECIMALS: &str = "icrc1:decimals";
-const METADATA_NAME: &str = "icrc1:name";
-const METADATA_SYMBOL: &str = "icrc1:symbol";
-const METADATA_FEE: &str = "icrc1:fee";
-const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
-const METADATA_PUBLIC_ALLOWANCES: &str = "icrc103:public_allowances";
-const METADATA_MAX_TAKE_ALLOWANCES: &str = "icrc103:max_take_value";
+const METADATA_DECIMALS: &str = MetadataKey::ICRC1_DECIMALS;
+const METADATA_NAME: &str = MetadataKey::ICRC1_NAME;
+const METADATA_SYMBOL: &str = MetadataKey::ICRC1_SYMBOL;
+const METADATA_FEE: &str = MetadataKey::ICRC1_FEE;
+const METADATA_MAX_MEMO_LENGTH: &str = MetadataKey::ICRC1_MAX_MEMO_LENGTH;
+const METADATA_PUBLIC_ALLOWANCES: &str = MetadataKey::ICRC103_PUBLIC_ALLOWANCES;
+const METADATA_MAX_TAKE_ALLOWANCES: &str = MetadataKey::ICRC103_MAX_TAKE_VALUE;
 const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]

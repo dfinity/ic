@@ -40,6 +40,7 @@ use ic_types::Cycles;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
@@ -488,13 +489,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
 
@@ -540,13 +544,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
     // Not all ICRC-1 implementations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementations.
@@ -5101,11 +5108,11 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
 pub mod metadata {
     use super::*;
 
-    const METADATA_DECIMALS: &str = "icrc1:decimals";
-    const METADATA_NAME: &str = "icrc1:name";
-    const METADATA_SYMBOL: &str = "icrc1:symbol";
-    const METADATA_FEE: &str = "icrc1:fee";
-    const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+    const METADATA_DECIMALS: &str = MetadataKey::ICRC1_DECIMALS;
+    const METADATA_NAME: &str = MetadataKey::ICRC1_NAME;
+    const METADATA_SYMBOL: &str = MetadataKey::ICRC1_SYMBOL;
+    const METADATA_FEE: &str = MetadataKey::ICRC1_FEE;
+    const METADATA_MAX_MEMO_LENGTH: &str = MetadataKey::ICRC1_MAX_MEMO_LENGTH;
     const FORBIDDEN_METADATA: [&str; 5] = [
         METADATA_DECIMALS,
         METADATA_NAME,

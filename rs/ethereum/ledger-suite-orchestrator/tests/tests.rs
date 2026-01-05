@@ -15,6 +15,7 @@ use ic_ledger_suite_orchestrator_test_utils::{
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
@@ -57,35 +58,35 @@ fn should_spawn_ledger_with_correct_init_args() {
         })
         .assert_ledger_icrc1_metadata(vec![
             (
-                "icrc1:logo".to_string(),
+                MetadataKey::ICRC1_LOGO.to_string(),
                 LedgerMetadataValue::from(CKETH_TOKEN_LOGO),
             ),
             (
-                "icrc1:decimals".to_string(),
+                MetadataKey::ICRC1_DECIMALS.to_string(),
                 LedgerMetadataValue::from(6_u64),
             ),
             (
-                "icrc1:name".to_string(),
+                MetadataKey::ICRC1_NAME.to_string(),
                 LedgerMetadataValue::from("USD Coin"),
             ),
             (
-                "icrc1:symbol".to_string(),
+                MetadataKey::ICRC1_SYMBOL.to_string(),
                 LedgerMetadataValue::from("USDC"),
             ),
             (
-                "icrc1:fee".to_string(),
+                MetadataKey::ICRC1_FEE.to_string(),
                 LedgerMetadataValue::from(2_000_000_000_000_u64),
             ),
             (
-                "icrc1:max_memo_length".to_string(),
+                MetadataKey::ICRC1_MAX_MEMO_LENGTH.to_string(),
                 LedgerMetadataValue::from(80_u64),
             ),
             (
-                "icrc103:public_allowances".to_string(),
+                MetadataKey::ICRC103_PUBLIC_ALLOWANCES.to_string(),
                 LedgerMetadataValue::from("true"),
             ),
             (
-                "icrc103:max_take_value".to_string(),
+                MetadataKey::ICRC103_MAX_TAKE_VALUE.to_string(),
                 LedgerMetadataValue::from(500u64),
             ),
             (

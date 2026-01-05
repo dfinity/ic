@@ -6,6 +6,7 @@ use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use num_traits::ToPrimitive;
 use rosetta_core::objects::Currency;
@@ -64,8 +65,8 @@ impl From<Metadata> for Currency {
 }
 
 impl Metadata {
-    const METADATA_DECIMALS_KEY: &'static str = "icrc1:decimals";
-    const METADATA_SYMBOL_KEY: &'static str = "icrc1:symbol";
+    const METADATA_DECIMALS_KEY: &'static str = MetadataKey::ICRC1_DECIMALS;
+    const METADATA_SYMBOL_KEY: &'static str = MetadataKey::ICRC1_SYMBOL;
 
     pub fn from_args(symbol: String, decimals: u8) -> Self {
         Self { symbol, decimals }

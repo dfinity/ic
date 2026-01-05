@@ -907,6 +907,7 @@ fn icrc1_ledger_init_arg(
 ) -> LedgerInitArgs {
     use ic_icrc1_ledger::FeatureFlags as LedgerFeatureFlags;
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
+    use icrc_ledger_types::icrc::metadata_key::MetadataKey;
     use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 
     const LEDGER_FEE_SUBACCOUNT: [u8; 32] = [
@@ -928,7 +929,7 @@ fn icrc1_ledger_init_arg(
         token_name: ledger_init_arg.token_name,
         token_symbol: ledger_init_arg.token_symbol,
         metadata: vec![(
-            "icrc1:logo".to_string(),
+            MetadataKey::ICRC1_LOGO.to_string(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
         archive_options: icrc1_archive_options(

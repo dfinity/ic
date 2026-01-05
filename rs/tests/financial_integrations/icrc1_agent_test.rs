@@ -15,7 +15,8 @@ use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::{
-    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
+    icrc::generic_metadata_value::MetadataValue as Value, icrc::metadata_key::MetadataKey,
+    icrc3::blocks::GetBlocksRequest,
 };
 use on_wire::IntoWire;
 use std::env;
@@ -221,15 +222,15 @@ pub fn test(env: TestEnv) {
         // metadata
         let expected_metadata = vec![
             Value::entry(
-                "icrc1:decimals",
+                MetadataKey::ICRC1_DECIMALS,
                 ic_ledger_core::tokens::DECIMAL_PLACES as u64,
             ),
-            Value::entry("icrc1:name", init_args.token_name),
-            Value::entry("icrc1:symbol", init_args.token_symbol),
-            Value::entry("icrc1:fee", init_args.transfer_fee.clone()),
-            Value::entry("icrc1:max_memo_length", 32u64),
-            Value::entry("icrc103:public_allowances", "true"),
-            Value::entry("icrc103:max_take_value", 500u64),
+            Value::entry(MetadataKey::ICRC1_NAME, init_args.token_name),
+            Value::entry(MetadataKey::ICRC1_SYMBOL, init_args.token_symbol),
+            Value::entry(MetadataKey::ICRC1_FEE, init_args.transfer_fee.clone()),
+            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32u64),
+            Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true"),
+            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500u64),
         ];
         assert_eq!(
             expected_metadata,

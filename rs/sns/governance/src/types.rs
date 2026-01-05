@@ -58,6 +58,7 @@ use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
 use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use lazy_static::lazy_static;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -1964,7 +1965,7 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
         } = manage_ledger_parameters;
 
         let metadata = token_logo.map(|token_logo| {
-            let key = "icrc1:logo".to_string();
+            let key = MetadataKey::ICRC1_LOGO.to_string();
             let value = MetadataValue::Text(token_logo);
             vec![(key, value)]
         });

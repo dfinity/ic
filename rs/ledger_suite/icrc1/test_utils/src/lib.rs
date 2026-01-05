@@ -10,6 +10,7 @@ use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
 use ic_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -1343,9 +1344,12 @@ pub fn symbol_strategy() -> impl Strategy<Value = String> {
 pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
     (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
         vec![
-            ("icrc1:symbol".to_string(), MetadataValue::Text(symbol)),
             (
-                "icrc1:decimals".to_string(),
+                MetadataKey::ICRC1_SYMBOL.to_string(),
+                MetadataValue::Text(symbol),
+            ),
+            (
+                MetadataKey::ICRC1_DECIMALS.to_string(),
                 MetadataValue::Nat(candid::Nat::from(decimals)),
             ),
         ]

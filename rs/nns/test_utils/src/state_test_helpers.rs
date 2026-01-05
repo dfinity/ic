@@ -1857,10 +1857,11 @@ pub fn icrc1_token_symbol(machine: &StateMachine, ledger_id: CanisterId) -> Stri
 pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option<String> {
     let result = query(machine, ledger_id, "icrc1_metadata", Encode!(&()).unwrap()).unwrap();
     use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+    use icrc_ledger_types::icrc::metadata_key::MetadataKey;
     Decode!(&result, Vec<(String, MetadataValue)>)
         .unwrap()
         .into_iter()
-        .find(|(key, _)| key == "icrc1:logo")
+        .find(|(key, _)| key == MetadataKey::ICRC1_LOGO)
         .map(|(_key, value)| match value {
             MetadataValue::Text(s) => s,
             m => panic!("Unexpected metadata value {m:?}"),
