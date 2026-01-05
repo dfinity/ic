@@ -1983,7 +1983,7 @@ pub mod test {
         },
         crypto::{
             BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
-            CombinedThresholdSigOf, CryptoHash, crypto_hash,
+            CombinedThresholdSigOf, CryptoHash,
         },
         messages::CallbackId,
         replica_config::ReplicaConfig,
@@ -3400,7 +3400,7 @@ pub mod test {
                 .unwrap_or(fake_beacon);
             let catch_up_package = CatchUpPackage::fake(CatchUpContent::new(
                 HashedBlock::new(ic_types::crypto::crypto_hash, block),
-                HashedRandomBeacon::new(crypto_hash, beacon),
+                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, beacon),
                 CryptoHashOf::from(CryptoHash(vec![])),
                 None,
             ));
