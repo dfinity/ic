@@ -54,11 +54,11 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
-use ic_test_utilities_types::{
-    ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
-    messages::RequestBuilder,
+use ic_test_utilities_types::ids::{
+    SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id, subnet_test_id,
+    user_test_id,
 };
+use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::batch::{
     BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
     RawQueryStats, TotalQueryStats,
@@ -66,28 +66,24 @@ use ic_types::batch::{
 use ic_types::state_manager::StateManagerError;
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
+    QueryStatsEpoch, SubnetId, epoch_from_height,
+};
+use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
-use ic_types::{QueryStatsEpoch, SubnetId, epoch_from_height};
 use maplit::{btreemap, btreeset};
-use nix::sys::time::TimeValLike;
-use nix::sys::{
-    stat::{UtimensatFlags, utimensat},
-    time::TimeSpec,
-};
+use nix::sys::stat::{UtimensatFlags, utimensat};
+use nix::sys::time::{TimeSpec, TimeValLike};
 use proptest::prelude::*;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::SystemTime;
-use std::{
-    collections::HashSet,
-    convert::{TryFrom, TryInto},
-};
 
 pub mod common;
 use common::*;
