@@ -6,7 +6,9 @@ use crate::pb::v1::{
 
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
-use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
+use ic_nervous_system_proto::pb::v1::{
+    Canister, Countries, Decimal, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
+};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 use std::{collections::HashMap, marker::PhantomData};
@@ -313,6 +315,56 @@ where
     let mut bytes = Vec::new();
     i.encode(&mut bytes).expect("Failed to encode Int");
     Value::Int(bytes)
+}
+
+impl From<Duration> for SelfDescribingValue {
+    fn from(value: Duration) -> Self {
+        let Duration { seconds } = value;
+        ValueBuilder::new().add_field("seconds", seconds).build()
+    }
+}
+
+impl From<Tokens> for SelfDescribingValue {
+    fn from(value: Tokens) -> Self {
+        let Tokens { e8s } = value;
+        ValueBuilder::new().add_field("e8s", e8s).build()
+    }
+}
+
+impl From<Image> for SelfDescribingValue {
+    fn from(value: Image) -> Self {
+        let Image { base64_encoding } = value;
+        ValueBuilder::new()
+            .add_field("base64_encoding", base64_encoding)
+            .build()
+    }
+}
+
+impl From<Countries> for SelfDescribingValue {
+    fn from(value: Countries) -> Self {
+        let Countries { iso_codes } = value;
+        ValueBuilder::new()
+            .add_field("iso_codes", iso_codes)
+            .build()
+    }
+}
+
+impl From<GlobalTimeOfDay> for SelfDescribingValue {
+    fn from(value: GlobalTimeOfDay) -> Self {
+        let GlobalTimeOfDay {
+            seconds_after_utc_midnight,
+        } = value;
+        ValueBuilder::new()
+            .add_field("seconds_after_utc_midnight", seconds_after_utc_midnight)
+            .build()
+    }
+}
+
+impl From<Canister> for SelfDescribingValue {
+    fn from(value: Canister) -> Self {
+        let Canister { id } = value;
+        Self::from(id)
+    }
 }
 
 #[path = "self_describing_tests.rs"]
