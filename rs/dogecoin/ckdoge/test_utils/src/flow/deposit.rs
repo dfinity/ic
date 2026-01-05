@@ -4,7 +4,7 @@ use bitcoin::hashes::Hash;
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    MintMemo, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
     event::CkDogeMinterEventType, memo_encode,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -80,7 +80,10 @@ where
         UpdateBalanceFlow {
             setup: self.setup,
             account: self.account,
-            deposit_transactions: BTreeSet::default(),
+            deposit_transactions: deposit_utxos
+                .into_iter()
+                .map(|utxo| utxo.outpoint.txid)
+                .collect(),
         }
     }
 
@@ -96,7 +99,7 @@ where
                 &self.deposit_address,
                 amount,
             );
-            deposit_transactions.insert(txid);
+            deposit_transactions.insert(Txid::from(txid.to_byte_array()));
         }
 
         UpdateBalanceFlow {
@@ -111,7 +114,7 @@ where
 pub struct UpdateBalanceFlow<S> {
     setup: S,
     account: Account,
-    deposit_transactions: BTreeSet<bitcoin::Txid>,
+    deposit_transactions: BTreeSet<Txid>,
 }
 
 impl<S> UpdateBalanceFlow<S>
@@ -151,7 +154,7 @@ pub struct DepositFlowEnd<S> {
     setup: S,
     account: Account,
     balance_before: u128,
-    deposit_transactions: BTreeSet<bitcoin::Txid>,
+    deposit_transactions: BTreeSet<Txid>,
     result: Result<Vec<UtxoStatus>, UpdateBalanceError>,
 }
 
@@ -169,10 +172,7 @@ where
                     block_index,
                     minted_amount,
                     utxo,
-                } if self
-                    .deposit_transactions
-                    .contains(&bitcoin::Txid::from_byte_array(utxo.outpoint.txid.into())) =>
-                {
+                } if self.deposit_transactions.contains(&utxo.outpoint.txid) => {
                     Some((utxo, (block_index, minted_amount)))
                 }
                 _ => None,
@@ -182,7 +182,7 @@ where
         assert_eq!(
             deposit_utxos
                 .iter()
-                .map(|utxo| bitcoin::Txid::from_byte_array(utxo.outpoint.txid.into()))
+                .map(|utxo| utxo.outpoint.txid)
                 .collect::<BTreeSet<_>>(),
             self.deposit_transactions,
             "BUG: unexpected UTXOs with status UtxoStatus::Minted"
