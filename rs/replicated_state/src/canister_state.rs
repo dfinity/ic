@@ -586,7 +586,7 @@ impl CanisterState {
     }
 
     /// Clears the canister log.
-    pub fn clear_log(&mut self) {
+    pub fn clear_log_obsolete(&mut self) {
         self.system_state.canister_log.clear();
     }
 

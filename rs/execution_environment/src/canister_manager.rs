@@ -3156,7 +3156,7 @@ pub fn uninstall_canister(
     canister.execution_state = None;
 
     // Clear log.
-    canister.clear_log();
+    canister.clear_log_obsolete();
 
     // Clear the Wasm chunk store.
     canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);

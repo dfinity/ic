@@ -310,7 +310,8 @@ struct CheckpointRefData {
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
 /// │      │       ├── vmemory_0.bin
-/// │      │       └── wasm_chunk_store.bin
+/// │      │       ├── wasm_chunk_store.bin
+/// │      │       └── log_memory_store.bin
 /// │      ├── snapshots
 /// │      │   └── <hex(canister_id)>
 /// │      │       └──  <hex(snapshot_id)>
@@ -2214,6 +2215,7 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            self.log_memory_store(),
         ]
         .into_iter()
         {
@@ -2313,6 +2315,7 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             self.vmemory_0(),
             self.stable_memory(),
             self.wasm_chunk_store(),
+            // log_memory_store is not included in canister snapshots.
         ]
         .into_iter()
         {
@@ -2349,6 +2352,8 @@ impl<Permissions: AccessPolicy> SnapshotLayout<Permissions> {
             _checkpoint: self.checkpoint.clone(),
         }
     }
+
+    // log_memory_store is not included in canister snapshots.
 }
 
 impl<P> SnapshotLayout<P>

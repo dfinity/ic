@@ -302,6 +302,7 @@ impl WasmExecutor for WasmExecutorImpl {
 
         let mut wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
         let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
+        let log_memory_store = LogMemoryStore::new(Arc::clone(&self.fd_factory));
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
             &initial_state_data.data_segments,
@@ -322,7 +323,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 stable_memory_page_map,
                 ic_replicated_state::NumWasmPages::from(0),
             ),
-            log_memory_store: LogMemoryStore::new(Arc::clone(&self.fd_factory)),
+            log_memory_store,
             exported_globals: globals,
             metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
