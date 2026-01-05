@@ -87,10 +87,24 @@ fn verify_custom_data(
     let actual_report_data = attestation_report.report_data.as_slice();
     let expected_report_data = expected_custom_data.encode_for_sev().map_err(|e| {
         VerificationError::internal(format!("Could not encode expected custom data: {e}"))
-    })?;
-    if actual_report_data != expected_report_data {
+    });
+    // TODO: remove this once clients no longer send legacy custom data
+    #[allow(deprecated)]
+    let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy().map_err(|e| {
+        VerificationError::internal(format!(
+            "Could not encode expected custom data (legacy): {e}"
+        ))
+    });
+    if !expected_report_data
+        .as_ref()
+        .is_ok_and(|expected| actual_report_data == expected.to_bytes())
+        && !expected_report_data_legacy
+            .as_ref()
+            .is_ok_and(|expected| actual_report_data == expected)
+    {
         return Err(VerificationError::invalid_custom_data(format!(
             "Expected attestation report custom data: {expected_report_data:?}, \
+             legacy: {expected_report_data_legacy:?}, \
              actual: {actual_report_data:?} \
              Debug info: \
              expected: {expected_custom_data:?} \

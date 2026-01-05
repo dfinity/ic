@@ -1,6 +1,6 @@
 use anyhow::Context;
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::RawCustomData;
+use attestation::custom_data::{RawCustomData, SevCustomData, SevCustomDataNamespace};
 use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use config_types::TrustedExecutionEnvironmentConfig;
@@ -35,6 +35,36 @@ impl RemoteAttestationServiceImpl {
             trusted_execution_config: tee_config,
         }
     }
+
+    fn sev_custom_data_from_request(&self, req: &AttestRequest) -> Result<SevCustomData, Status> {
+        let custom_data: [u8; 64] = match req.custom_data {
+            Some(bytes) => {
+                if bytes.len() != 64 {
+                    return Err(Status::invalid_argument("custom_data must be 64 bytes"));
+                }
+                bytes.try_into().expect("Conversion to [u8; 64] failed")
+            }
+            None => {
+                let mut bytes = [0u8; 64];
+                bytes[0..4]
+                    .copy_from_slice(&SevCustomDataNamespace::RawRemoteAttestation.as_bytes());
+                bytes
+            }
+        };
+
+        let custom_data = SevCustomData::from_namespaced_data(
+            SevCustomDataNamespace::RawRemoteAttestation,
+            custom_data,
+        )
+        .map_err(|e| {
+            Status::invalid_argument(format!(
+                "The first 4 bytes of custom data must be {:?}",
+                SevCustomDataNamespace::RawRemoteAttestation.as_bytes()
+            ))
+        })?;
+
+        Ok(custom_data)
+    }
 }
 
 #[tonic::async_trait]
@@ -44,15 +74,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
         request: Request<AttestRequest>,
     ) -> Result<Response<AttestResponse>, Status> {
         let req = request.into_inner();
-        let custom_data: [u8; 64] = match req.custom_data {
-            Some(bytes) => {
-                if bytes.len() != 64 {
-                    return Err(Status::invalid_argument("custom_data must be 64 bytes"));
-                }
-                bytes.try_into().expect("Conversion to [u8; 64] failed")
-            }
-            None => [0u8; 64],
-        };
+        let custom_data = self.sev_custom_data_from_request(&req)?;
 
         let RemoteAttestationServiceImpl::SevEnabled {
             firmware,
@@ -63,12 +85,11 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
         };
 
         let mut guard = firmware.lock().expect("Failed to lock firmware mutex");
-        let attestation_package = generate_attestation_package(
-            guard.as_mut(),
-            trusted_execution_config,
-            &RawCustomData(custom_data),
-        )
-        .map_err(|e| Status::internal(format!("failed to generate attestation package: {e}")))?;
+        let attestation_package =
+            generate_attestation_package(guard.as_mut(), trusted_execution_config, &custom_data)
+                .map_err(|e| {
+                    Status::internal(format!("failed to generate attestation package: {e}"))
+                })?;
 
         Ok(Response::new(AttestResponse {
             attestation_package: Some(attestation_package),
