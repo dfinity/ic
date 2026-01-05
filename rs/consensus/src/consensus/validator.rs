@@ -1883,15 +1883,12 @@ impl Validator {
             .get()
             .saturating_sub(self.state_manager.latest_state_height().get())
             < Self::get_next_interval_length(catch_up_package).get() / 4
-            // Check that the finalized height is higher than this cup
-            // In order to validate the finalization of height `h` we need to have
-            // a valid random beacon of height `h-1` and a valid block of height `h`.
-            // In order to have a valid block of height `h` you need to have
-            // a valid block of height `h-1`.
-            // The same is true for the random beacon.
-            // Thus, if this condition is true, we know that we have all blocks and random beacons
-            // between the latest CUP height and finalized height and are therefore
-            // able to recompute.
+            // Check that our local finalized height has at least reached the MINIMUM_CHAIN_LENGTH
+            // below the new CUP height. MINIMUM_CHAIN_LENGTH is the number of blocks that all
+            // nodes keep below their latest CUP height. If we have not reached this height, then
+            // we *should* validate the CUP, as there is no guarantee that we can obtain all the
+            // necessary artifacts needed for recomputation from other nodes, as they may have
+            // already been purged.
             && pool_reader.get_finalized_height().get() >= cup_height.get().saturating_sub(MINIMUM_CHAIN_LENGTH)
             // If the state height exceeded the cup height, we can validate the cup, as it won't
             // trigger the state sync.
@@ -1986,7 +1983,7 @@ pub mod test {
         },
         crypto::{
             BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
-            CombinedThresholdSigOf, CryptoHash,
+            CombinedThresholdSigOf, CryptoHash, crypto_hash,
         },
         messages::CallbackId,
         replica_config::ReplicaConfig,
@@ -2066,13 +2063,21 @@ pub mod test {
         pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
         node_ids: &[NodeId],
     ) -> ValidatorAndDependencies {
+        setup_dependencies_with_dkg_interval_length(pool_config, node_ids, 9)
+    }
+
+    fn setup_dependencies_with_dkg_interval_length(
+        pool_config: ic_config::artifact_pool::ArtifactPoolConfig,
+        node_ids: &[NodeId],
+        dkg_interval_length: u64,
+    ) -> ValidatorAndDependencies {
         ValidatorAndDependencies::new(dependencies_with_subnet_params(
             pool_config,
             subnet_test_id(0),
             vec![(
                 1,
                 SubnetRecordBuilder::from(node_ids)
-                    .with_dkg_interval_length(9)
+                    .with_dkg_interval_length(dkg_interval_length)
                     .build(),
             )],
         ))
@@ -3285,6 +3290,17 @@ pub mod test {
     fn test_should_validate_catch_up_package_state_behind_the_cup_height() {
         test_validate_catch_up_package(
             /*state_height=*/ Height::new(1),
+            /*finalized_height=*/ Height::new(60),
+            /*held_back_duration*/ Duration::from_secs(0),
+            /*expected_to_validate*/ true,
+        );
+    }
+
+    #[test]
+    fn test_should_validate_cup_when_state_and_finalization_significantly_behind_the_cup_height() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(1),
+            /*finalized_height=*/ Height::new(1),
             /*held_back_duration*/ Duration::from_secs(0),
             /*expected_to_validate*/ true,
         );
@@ -3293,7 +3309,18 @@ pub mod test {
     #[test]
     fn test_should_not_validate_catch_up_package_when_state_close_to_the_cup_height() {
         test_validate_catch_up_package(
-            /*state_height=*/ Height::new(9),
+            /*state_height=*/ Height::new(59),
+            /*finalized_height=*/ Height::new(60),
+            /*held_back_duration*/ Duration::from_secs(0),
+            /*expected_to_validate*/ false,
+        );
+    }
+
+    #[test]
+    fn test_should_not_validate_catch_up_package_when_finalization_reached_minimum_chain_length() {
+        test_validate_catch_up_package(
+            /*state_height=*/ Height::new(50),
+            /*finalized_height=*/ Height::new(50),
             /*held_back_duration*/ Duration::from_secs(0),
             /*expected_to_validate*/ false,
         );
@@ -3302,7 +3329,8 @@ pub mod test {
     #[test]
     fn test_should_validate_catch_up_package_when_held_back_for_too_long() {
         test_validate_catch_up_package(
-            /*state_height=*/ Height::new(9),
+            /*state_height=*/ Height::new(59),
+            /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ CATCH_UP_HOLD_OF_TIME + Duration::from_secs(1),
             /*expected_to_validate*/ true,
         );
@@ -3311,15 +3339,17 @@ pub mod test {
     #[test]
     fn test_should_validate_catch_up_package_when_state_exceeds_the_cup_height() {
         test_validate_catch_up_package(
-            /*state_height=*/ Height::new(10),
+            /*state_height=*/ Height::new(60),
+            /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ Duration::from_secs(0),
             /*expected_to_validate=*/ true,
         );
     }
 
-    /// Tests whether we can validate a CUP at height `10`.
+    /// Tests whether we can validate a CUP at height `60`.
     fn test_validate_catch_up_package(
         state_height: Height,
+        finalized_height: Height,
         // How long has the CUP been in the pool
         held_back_duration: Duration,
         expected_to_validate: bool,
@@ -3332,14 +3362,48 @@ pub mod test {
                 mut pool,
                 time_source,
                 ..
-            } = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
+            } = setup_dependencies_with_dkg_interval_length(
+                pool_config,
+                &(0..4).map(node_test_id).collect::<Vec<_>>(),
+                59,
+            );
 
-            pool.advance_round_normal_operation_n(9);
-            // Create, notarize, and finalize a block at the CUP height, but don't create a CUP.
-            pool.prepare_round().dont_add_catch_up_package().advance();
+            pool.advance_round_normal_operation_no_cup_n(finalized_height.get());
 
-            let finalization = pool.validated().finalization().get_highest().unwrap();
-            let catch_up_package = pool.make_catch_up_package(finalization.height());
+            let cup_height = Height::from(60);
+            let fake_block = Block::new(
+                CryptoHashOf::from(CryptoHash(vec![])),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(SummaryPayload::fake()),
+                ),
+                cup_height,
+                Rank(0),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: ic_types::time::UNIX_EPOCH,
+                },
+            );
+            let fake_beacon = RandomBeacon::fake(RandomBeaconContent {
+                version: ReplicaVersion::default(),
+                height: cup_height,
+                parent: CryptoHashOf::from(CryptoHash(vec![])),
+            });
+            let pool_reader = PoolReader::new(&pool);
+
+            let block = pool_reader
+                .get_finalized_block(cup_height)
+                .unwrap_or(fake_block);
+            let beacon = pool_reader
+                .get_random_beacon(cup_height)
+                .unwrap_or(fake_beacon);
+            let catch_up_package = CatchUpPackage::fake(CatchUpContent::new(
+                HashedBlock::new(ic_types::crypto::crypto_hash, block),
+                HashedRandomBeacon::new(crypto_hash, beacon),
+                CryptoHashOf::from(CryptoHash(vec![])),
+                None,
+            ));
             pool.insert_unvalidated(catch_up_package.clone());
 
             state_manager
