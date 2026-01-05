@@ -1324,7 +1324,7 @@ crate.spec(
 crate.spec(
     features = ["bundled"],
     package = "rusqlite",
-    version = "^0.28.0",
+    version = "^0.37.0",
 )
 crate.spec(
     package = "rust_decimal",

@@ -41,7 +41,7 @@ rand = { workspace = true }
 reqwest = { workspace = true }
 rolling-file = "0.2.0"
 rosetta-core = { path = "../common/rosetta_core" }
-rusqlite = { version = "~0.28.0", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
