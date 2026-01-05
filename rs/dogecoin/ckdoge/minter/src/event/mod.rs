@@ -285,7 +285,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                     _ => Err(format!("BUG: unexpected KYT for ckDOGE {args:?}")),
                 }?;
                 Ok(CkDogeMinterEventType::Init(
-                    crate::lifecycle::init::InitArgs::from(args),
+                    crate::lifecycle::init::InitArgs::try_from(args)?,
                 ))
             }
             CkBtcMinterEventType::Upgrade(args) => {

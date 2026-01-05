@@ -85,6 +85,33 @@ passwd(
     ],
 )
 
+UBUNTU_PACKAGES = [
+    ":dpkg_status",
+    ":passwd",  # needed because we ssh in
+
+    # symlinks
+    ":awk",
+    ":mkfsvfat",
+    ":sh",
+] + PACKAGES
+
+# Squash all packages into a single tarball (there are too many to make each a separate layer)
+genrule(
+    name = "ubuntu_packages_tar",
+    srcs = UBUNTU_PACKAGES,
+    outs = ["ubuntu_packages.tar"],
+    cmd = """
+        mkdir -p squash_tmp
+        trap "rm -rf squash_tmp" EXIT
+
+        for f in $(SRCS); do
+            tar -xf $$f -C squash_tmp
+        done
+
+        tar -cf $@ -C squash_tmp .
+    """,
+)
+
 oci_image(
     name = "ubuntu_test_runtime_image_src",
     architecture = "amd64",
@@ -93,14 +120,8 @@ oci_image(
         "@platforms//os:linux",
     ],
     tars = [
-        ":dpkg_status",
-        ":passwd",  # needed because we ssh in
-
-        # symlinks
-        ":awk",
-        ":mkfsvfat",
-        ":sh",
-    ] + PACKAGES,
+        ":ubuntu_packages_tar",
+    ],
 )
 
 oci_tar(
@@ -287,4 +308,12 @@ sh_binary(
     name = "run_systest",
     srcs = ["run_systest.sh"],
     visibility = ["//visibility:public"],
+)
+
+# the STABLE_VERSION, suffixed with `-test`. Used in testing.
+genrule(
+    name = "version-test",
+    srcs = ["//bazel:version.txt"],
+    outs = ["version-test.txt"],
+    cmd = "sed < $< 's/$$/-test/' > $@",
 )
