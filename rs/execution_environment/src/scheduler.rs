@@ -353,7 +353,7 @@ impl SchedulerImpl {
         );
         let round_instructions_executed =
             as_num_instructions(instructions_before - round_limits.instructions());
-        let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
+        let messages = NumMessages::from(message_instructions.clone().map(|_| 1).unwrap_or(0));
         measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
         (new_state, message_instructions)
     }
