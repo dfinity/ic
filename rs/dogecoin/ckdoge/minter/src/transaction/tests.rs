@@ -173,7 +173,7 @@ async fn should_verify_signed_transaction() {
     );
 
     // Verify signature is correct.
-    let depositor_address = DogecoinAddress::from_compressed_public_key(&public_key);
+    let depositor_address = DogecoinAddress::p2pkh_from_public_key(&public_key);
     let cache = bitcoin::sighash::SighashCache::new(&transaction);
     let sighash = cache
         .legacy_signature_hash(

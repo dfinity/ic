@@ -947,6 +947,8 @@ pub async fn agent_with_client_identity(
         .with_url(url)
         .with_http_client(client)
         .with_identity(identity)
+        // Setting a large polling time for the sake of long-running update calls.
+        .with_max_polling_time(Duration::from_secs(3600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag

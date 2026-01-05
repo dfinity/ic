@@ -165,7 +165,6 @@ members = [
     "rs/ic_os/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
-    "rs/ic_os/build_tools/inject_files",
     "rs/ic_os/build_tools/partition_tools",
     "rs/ic_os/config",
     "rs/ic_os/config_types",
@@ -849,6 +848,7 @@ strum_macros = "0.26.4"
 subtle = "2.6.1"
 syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
+sysinfo = "0.37"
 systemd = "0.10"
 tar = "0.4.39"
 tempfile = "3.20"
