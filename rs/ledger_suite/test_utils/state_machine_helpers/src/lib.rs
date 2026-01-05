@@ -16,6 +16,7 @@ use ic_universal_canister::{call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -585,12 +586,12 @@ pub fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo>
     .expect("failed to decode archives response")
 }
 
-pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Value> {
+pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<MetadataKey, Value> {
     Decode!(
         &env.query(ledger, "icrc1_metadata", Encode!().unwrap())
             .expect("failed to query metadata")
             .bytes(),
-        Vec<(String, Value)>
+        Vec<(MetadataKey, Value)>
     )
     .expect("failed to decode metadata response")
     .into_iter()

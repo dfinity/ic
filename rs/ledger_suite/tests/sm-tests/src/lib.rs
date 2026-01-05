@@ -91,7 +91,7 @@ pub struct InitArgs {
     pub transfer_fee: Nat,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(String, Value)>,
+    pub metadata: Vec<(MetadataKey, Value)>,
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
     pub index_principal: Option<Principal>,
@@ -105,7 +105,7 @@ pub enum ChangeFeeCollector {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct UpgradeArgs {
-    pub metadata: Option<Vec<(String, Value)>>,
+    pub metadata: Option<Vec<(MetadataKey, Value)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<Nat>,

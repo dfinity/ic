@@ -1341,17 +1341,11 @@ pub fn symbol_strategy() -> impl Strategy<Value = String> {
     prop::string::string_regex("[A-Za-z0-9]{1,5}").expect("failed to make generator")
 }
 
-pub fn metadata_strategy() -> impl Strategy<Value = Vec<(String, MetadataValue)>> {
+pub fn metadata_strategy() -> impl Strategy<Value = Vec<(MetadataKey, MetadataValue)>> {
     (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
         vec![
-            (
-                MetadataKey::ICRC1_SYMBOL.to_string(),
-                MetadataValue::Text(symbol),
-            ),
-            (
-                MetadataKey::ICRC1_DECIMALS.to_string(),
-                MetadataValue::Nat(candid::Nat::from(decimals)),
-            ),
+            MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, symbol),
+            MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, candid::Nat::from(decimals)),
         ]
     })
 }

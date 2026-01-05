@@ -275,7 +275,7 @@ pub struct InitArgs {
     pub decimals: Option<u8>,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(String, Value)>,
+    pub metadata: Vec<(MetadataKey, Value)>,
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
@@ -341,7 +341,7 @@ impl ChangeArchiveOptions {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Vec<(String, Value)>>,
+    pub metadata: Option<Vec<(MetadataKey, Value)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -592,7 +592,7 @@ pub struct Ledger {
 
     token_symbol: String,
     token_name: String,
-    metadata: Vec<(String, StoredValue)>,
+    metadata: Vec<(MetadataKey, StoredValue)>,
     #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
 
@@ -648,7 +648,9 @@ pub fn wasm_token_type() -> String {
     Tokens::TYPE.to_string()
 }
 
-fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
+fn map_metadata_or_trap(
+    arg_metadata: Vec<(MetadataKey, Value)>,
+) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
@@ -916,11 +918,7 @@ impl Ledger {
             .metadata
             .clone()
             .into_iter()
-            .map(|(k, v)| {
-                let key = MetadataKey::parse(&k)
-                    .unwrap_or_else(|e| panic!("invalid metadata key '{k}': {e}"));
-                (key, StoredValue::into(v))
-            })
+            .map(|(k, v)| (k, StoredValue::into(v)))
             .collect();
         records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64));
         records.push(Value::entry(METADATA_NAME, self.token_name()));
