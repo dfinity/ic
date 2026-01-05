@@ -1512,8 +1512,7 @@ mod validate_pks_and_sks {
     }
 
     fn idkg_dealing_encryption_key_id_from(idkg_pk: &PublicKey) -> KeyId {
-        KeyId::try_from(&mega_public_key_from_proto(idkg_pk).expect("invalid public key"))
-            .expect("invalid public key")
+        KeyId::from(&mega_public_key_from_proto(idkg_pk).expect("invalid public key"))
     }
 
     fn invalid_public_key() -> PublicKey {
