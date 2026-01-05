@@ -7,28 +7,17 @@ It defines multiple *scenarios* and their expectations in terms of memory usage 
 and performs multiple *runs* of every scenarios with various initial parameters.
 
 The runs ensure the following properties for every scenario:
-- reserved cycles and subnet available memory are updated properly in both successful and failed executions;
+- subnet available memory is updated properly in both successful and failed executions;
 - the execution fails if the subnet memory capacity would be exceeded;
 - the execution fails if the reserved cycles limit would be exceeded;
 - the execution fails if the canister would become frozen;
 - the execution fails if the canister does not have sufficient balance to reserve storage cycles;
 - the execution does not allocate additional memory for canisters with memory allocation.
 
-Every memory matrix test has the following components:
-- a "setup" function takes `&mut ExecutionTest` and `CanisterId` of an empty canister in that `ExecutionTest`,
-  performs a setup of that canister, and returns arbitrary data of choice (could also be `()` if no data are needed)
-  that are relayed to the "operation" function;
-- an "operation" function takes `&mut ExecutionTest`, `CanisterId` of the canister set up before, and
-  the data produced by the "setup" function before;
-- an instance of `ScenarioParams` also containing `Scenario` and `MemoryUsageChange` describing
-  the kind of scenario and its expectations in terms of canister memory usage change;
-- an actual invokation of the matrix test suite implemented by the function `test_memory_suite`.
-
-The existing scenarios cover the following:
+The scenarios cover the following:
 - growing WASM/stable memory in canister (update) entry point;
 - growing WASM/stable memory in canister reply/cleanup callback;
 - taking a canister snapshot (both growing and shrinking canister memory usage);
-- taking a canister snapshot and uninstalling code atomically;
 - replacing a canister snapshot by a snapshot of the same size;
 - loading a canister snapshot (both growing and shrinking canister memory usage);
 - deleting a canister snapshot;
