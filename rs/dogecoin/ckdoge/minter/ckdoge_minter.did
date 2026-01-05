@@ -70,8 +70,6 @@ type UpgradeArgs = record {
 type Network = variant {
     // The public Dogecoin mainnet.
     Mainnet;
-    // The public Dogecoin testnet.
-    Testnet;
     // A local Dogecoin regtest installation.
     Regtest;
 };
@@ -326,6 +324,113 @@ type environment_variable = record {
     value: text;
 };
 
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type DogecoinAddress = variant {
+    P2pkh : blob;
+    P2sh : blob;
+};
+
+type RetrieveDogeRequest = record {
+    amount : nat64;
+    address : DogecoinAddress;
+    block_index : nat64;
+    received_at : nat64;
+    reimbursement_account : opt Account;
+};
+
+type ConsolidateUtxosRequest = record {
+    amount : nat64;
+    address : DogecoinAddress;
+    block_index : nat64;
+    received_at : nat64;
+};
+
+type ChangeOutput = record {
+    vout : nat32;
+    value : nat64;
+};
+
+type ReplacedReason = variant {
+    to_retry;
+    to_cancel : record {
+        reason : WithdrawalReimbursementReason;
+    };
+};
+
+type WithdrawalReimbursementReason = variant {
+    invalid_transaction : InvalidTransactionError;
+};
+
+type InvalidTransactionError = variant {
+    too_many_inputs : record {
+        num_inputs : nat64;
+        max_num_inputs : nat64;
+    };
+};
+
+type EventType = variant {
+    init : InitArgs;
+    upgrade : UpgradeArgs;
+    received_utxos : record {
+        mint_txid : opt nat64;
+        to_account : Account;
+        utxos : vec Utxo;
+    };
+    checked_utxo : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    accepted_retrieve_doge_request : RetrieveDogeRequest;
+    removed_retrieve_doge_request : record {
+        block_index : nat64;
+    };
+    sent_transaction : record {
+        requests : vec nat64;
+        txid : blob;
+        utxos : vec Utxo;
+        change_output : opt ChangeOutput;
+        submitted_at : nat64;
+        fee : opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        signed_tx : opt blob;
+    };
+    replaced_transaction : record {
+        old_txid : blob;
+        new_txid : blob;
+        change_output : ChangeOutput;
+        submitted_at : nat64;
+        fee : nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
+        new_utxos : opt vec Utxo;
+    };
+    confirmed_transaction : record {
+        txid : blob;
+    };
+    checked_utxo_mint_unknown : record {
+        account : Account;
+        utxo : Utxo;
+    };
+    schedule_withdrawal_reimbursement : record {
+        account : Account;
+        amount : nat64;
+        reason : WithdrawalReimbursementReason;
+        burn_block_index : nat64;
+    };
+    quarantined_withdrawal_reimbursement : record {
+        burn_block_index : nat64;
+    };
+    reimbursed_withdrawal : record {
+        burn_block_index : nat64;
+        mint_block_index : nat64;
+    };
+    created_consolidate_utxos_request : ConsolidateUtxosRequest;
+};
+
 service : (minter_arg : MinterArg) -> {
     // Returns the Dogecoin address to which the owner should send DOGE
     // before converting the amount to ckDOGE using the [update_balance]
@@ -380,4 +485,14 @@ service : (minter_arg : MinterArg) -> {
     // Returns the output of the IC method
     // [`canister_status`](https://internetcomputer.org/docs/references/ic-interface-spec#ic-canister_status)
     get_canister_status : () -> (CanisterStatusResponse);
+
+    // The minter keeps track of all state modifications in an internal event log.
+    //
+    // This method returns a list of events in the specified range.
+    // The minter can return fewer events than requested. The result is
+    // an empty vector if the start position is greater than the total
+    // number of events.
+    //
+    // NOTE: this method exists for debugging purposes and backwards-compatibility is **not** guaranteed.
+    get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
 }

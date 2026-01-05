@@ -35,7 +35,6 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
-    // TODO(CRP-2639): Adapt VetKdKeyShareCreationError so that clippy exception is no longer needed
     #[allow(clippy::result_large_err)]
     fn create_encrypted_key_share(
         &self,
@@ -190,7 +189,6 @@ impl<C: CryptoServiceProvider> VetKdProtocol for CryptoComponentImpl<C> {
     }
 }
 
-// TODO(CRP-2639): Adapt VetKdKeyShareCreationError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
 fn create_encrypted_key_share_internal(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
