@@ -359,11 +359,9 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 /// configuring its scraping targets based on the latest IC topology
 /// and finally downloading its data directory.
 pub trait HasPrometheus {
-    /// Same as `sync_with_prometheus_result` but panics in case it fails.
-    fn sync_with_prometheus(&self);
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
-    fn sync_with_prometheus_result(&self) -> Result<()>;
+    fn sync_with_prometheus(&self) -> Result<()>;
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -375,11 +373,7 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
-    fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_result().unwrap()
-    }
-
-    fn sync_with_prometheus_result(&self) -> Result<()> {
+    fn sync_with_prometheus(&self) -> Result<()> {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);

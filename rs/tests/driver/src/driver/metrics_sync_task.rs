@@ -18,7 +18,7 @@ pub(crate) fn metrics_sync_task(group_ctx: GroupContext) {
         std::thread::sleep(Duration::from_secs(2));
     }
     loop {
-        if let Err(e) = env.sync_with_prometheus_result() {
+        if let Err(e) = env.sync_with_prometheus() {
             warn!(
                 logger,
                 "Failed to sync with PrometheusVm due to: {}",
