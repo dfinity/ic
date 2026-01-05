@@ -7,7 +7,6 @@ use crate::{
         account::Account,
         transfer::{BlockIndex, Memo},
     },
-    icrc107::schema::BTYPE_107,
 };
 
 use super::{
@@ -20,7 +19,7 @@ pub const TRANSACTION_APPROVE: &str = "approve";
 pub const TRANSACTION_BURN: &str = "burn";
 pub const TRANSACTION_MINT: &str = "mint";
 pub const TRANSACTION_TRANSFER: &str = "transfer";
-pub const TRANSACTION_FEE_COLLECTOR: &str = BTYPE_107;
+pub const TRANSACTION_FEE_COLLECTOR: &str = "107feecol";
 
 pub type GenericTransaction = Value;
 
