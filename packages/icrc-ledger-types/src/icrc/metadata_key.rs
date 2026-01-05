@@ -64,7 +64,9 @@ impl std::error::Error for MetadataKeyError {}
 /// assert_eq!(key.namespace(), "myapp");
 /// assert_eq!(key.key(), "version");
 /// ```
-#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 pub struct MetadataKey(String);
 
 impl MetadataKey {
@@ -283,4 +285,3 @@ mod tests {
         assert_eq!(s, "icrc1:decimals");
     }
 }
-

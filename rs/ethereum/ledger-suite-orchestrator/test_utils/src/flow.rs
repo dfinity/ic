@@ -453,4 +453,7 @@ assert_ledger!("icrc1_decimals", u8);
 assert_ledger!("icrc1_total_supply", Nat);
 assert_ledger!("icrc1_fee", Nat);
 assert_ledger!("icrc1_minting_account", Option<LedgerAccount>);
-assert_ledger!("icrc1_metadata", Vec<(LedgerMetadataKey, LedgerMetadataValue)>);
+assert_ledger!(
+    "icrc1_metadata",
+    Vec<(LedgerMetadataKey, LedgerMetadataValue)>
+);
