@@ -112,6 +112,12 @@ pub struct CliArgs {
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
 
+    #[clap(
+        long = "enable-metrics",
+        help = "If set, the PrometheusVm, running Prometheus and Grafana, will be spawned."
+    )]
+    pub enable_metrics: bool,
+
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
 
@@ -611,12 +617,8 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let metrics_enabled: bool = std::env::var("ENABLE_METRICS")
-            .map(|v| v == "1" || v.to_lowercase() == "true")
-            .unwrap_or(false);
-
         let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
-        let metrics_sync_task = if metrics_enabled {
+        let metrics_sync_task = if group_ctx.enable_metrics {
             let metrics_sync_task = subproc(
                 metrics_sync_task_id,
                 {
@@ -706,7 +708,7 @@ impl SystemTestGroup {
             task: Box::from(setup_task),
         };
 
-        let setup_tasks = if metrics_enabled {
+        let setup_tasks = if group_ctx.enable_metrics {
             let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
             let metrics_setup_task = subproc(
                 metrics_setup_task_id,
@@ -876,6 +878,7 @@ impl SystemTestGroup {
             args.keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
+            args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
             args.quiet,
