@@ -548,6 +548,20 @@ type GetIndexPrincipalError = variant {
   }
 };
 
+type SetFeeCollectorArgs = record {
+  fee_collector : opt Account
+  created_at_time : Timestamp;
+};
+
+type SetFeeCollectorError = variant {
+  AccessDenied(text),
+  InvalidAccount(text),
+  Duplicate : record { duplicate_of : BlockIndex };
+  GenericError : record { error_code : nat; message : text }
+};
+
+type SetFeeCollectorResult = variant { Ok : BlockIndex; Err : SetFeeCollectorError };
+
 service : (ledger_arg : LedgerArg) -> {
   archives : () -> (vec ArchiveInfo) query;
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
@@ -580,6 +594,8 @@ service : (ledger_arg : LedgerArg) -> {
   icrc103_get_allowances : (GetAllowancesArgs) -> (icrc103_get_allowances_response) query;
 
   icrc106_get_index_principal : () -> (GetIndexPrincipalResult) query;
+
+  icrc107_set_fee_collector : (SetFeeCollectorArgs) -> (SetFeeCollectorResult);
 
   is_ledger_ready : () -> (bool) query
 }

@@ -32,8 +32,6 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
@@ -68,6 +66,11 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
+use icrc_ledger_types::{
+    icrc2::approve::{ApproveArgs, ApproveError},
+    icrc107::set_fee_collector::{SetFeeCollectorArgs, SetFeeCollectorError},
+};
+use icrc_ledger_types::{icrc3::blocks::DataCertificate, icrc107::schema::SET_FEE_COL_107};
 use num_traits::{ToPrimitive, bounds::Bounded};
 use serde_bytes::ByteBuf;
 use std::{
@@ -1152,6 +1155,41 @@ fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllow
         max_results,
         ic_cdk::api::time(),
     ))
+}
+
+#[update]
+async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetFeeCollectorError> {
+    let caller = ic_cdk::api::caller();
+    let tx = Transaction {
+        operation: Operation::FeeCollector {
+            fee_collector: arg.fee_collector,
+            caller: Some(caller),
+            op: Some(SET_FEE_COL_107.to_string()),
+        },
+        created_at_time: Some(arg.created_at_time),
+        memo: None,
+    };
+
+    let (block_idx, _) = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        apply_transaction(ledger, tx, now, Tokens::ZERO)
+            .map_err(convert_transfer_error)
+            .map_err(|err| match err.0 {
+                CoreTransferError::TxDuplicate { duplicate_of } => {
+                    SetFeeCollectorError::Duplicate {
+                        duplicate_of: Nat::from(duplicate_of),
+                    }
+                }
+                _ => ic_cdk::trap("unable to convert error"),
+            })
+    })?;
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
 }
 
 candid::export_service!();
