@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::common::constants::DEFAULT_BLOCKCHAIN;
@@ -546,7 +545,7 @@ pub async fn search_transactions(
 
 pub async fn initial_sync_is_completed(
     storage_client: &StorageClient,
-    sync_state: Arc<Mutex<Option<bool>>>,
+    sync_state: &Mutex<Option<bool>>,
 ) -> bool {
     // Check if already synced (without holding lock across await)
     {
