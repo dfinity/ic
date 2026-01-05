@@ -1,10 +1,13 @@
 use crate::attestation_package::generate_attestation_package;
 use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
 use crate::verification::{SevRootCertificateVerification, verify_attestation_package};
-use crate::{SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail};
+use crate::{
+    SevAttestationPackage, SevCertificateChain, VerificationErrorDescription,
+    VerificationErrorDetail,
+};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::custom_data::SevCustomDataNamespace;
-use ic_sev::guest::firmware::MockSevGuestFirmware;
+use ic_sev::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
 use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
@@ -270,4 +273,43 @@ fn test_invalid_root_certificate() {
         ),
         "Expected error about unexpected root certificate, got {error:?}",
     );
+}
+
+#[test]
+fn test_legacy_custom_data_accepted() {
+    let signer = FakeAttestationReportSigner::default();
+
+    #[allow(deprecated)]
+    let legacy_custom_data = CUSTOM_DATA
+        .encode_for_sev_legacy()
+        .expect("Failed to encode custom data in legacy format");
+
+    let mut sev_firmware = MockSevGuestFirmwareBuilder::new()
+        .with_chip_id(CHIP_ID)
+        .with_measurement(MEASUREMENT)
+        .with_signer(Some(signer.clone()))
+        .build();
+
+    let attestation_report_bytes = sev_firmware
+        .get_report(None, Some(legacy_custom_data), None)
+        .expect("Failed to get attestation report");
+
+    let attestation_package = SevAttestationPackage {
+        attestation_report: Some(attestation_report_bytes),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: None,
+    };
+
+    verify_attestation_package(
+        &attestation_package,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+        &[MEASUREMENT],
+        &CUSTOM_DATA,
+        Some(&CHIP_ID),
+    )
+    .expect("Failed to verify attestation package with legacy custom data format");
 }
