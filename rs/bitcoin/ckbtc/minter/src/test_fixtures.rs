@@ -174,14 +174,16 @@ pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
 }
 
 pub mod mock {
-    use crate::CkBtcMinterState;
     use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
+    use crate::state::eventlog::CkBtcEventLogger;
+    use crate::tx::{SignedRawTransaction, UnsignedTransaction};
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
-        GetUtxosRequest, GetUtxosResponse, Network, tx,
+        GetUtxosRequest, GetUtxosResponse, Network,
     };
+    use crate::{CkBtcMinterState, ECDSAPublicKey};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -198,6 +200,7 @@ pub mod mock {
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
             type Estimator = BitcoinFeeEstimator;
+            type EventLogger = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
@@ -209,12 +212,13 @@ pub mod mock {
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
+            fn event_logger(&self) -> CkBtcEventLogger;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
-            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+            async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
         }
@@ -222,6 +226,7 @@ pub mod mock {
 }
 
 pub mod arbitrary {
+    use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
     use crate::{
         WithdrawalFee,
@@ -230,7 +235,7 @@ pub mod arbitrary {
         signature::EncodedSignature,
         state::{
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
-            eventlog::{Event, EventType, ReplacedReason},
+            eventlog::{EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
@@ -452,9 +457,9 @@ pub mod arbitrary {
         })
     }
 
-    pub fn event() -> impl Strategy<Value = Event> {
+    pub fn event() -> impl Strategy<Value = CkBtcMinterEvent> {
         (any::<Option<u64>>(), event_type())
-            .prop_map(|(timestamp, payload)| Event { timestamp, payload })
+            .prop_map(|(timestamp, payload)| CkBtcMinterEvent { timestamp, payload })
     }
 
     // Some event types are deprecated, however we still want to use them in prop tests as we want

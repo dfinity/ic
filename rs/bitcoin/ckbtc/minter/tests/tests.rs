@@ -18,7 +18,7 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
-use ic_ckbtc_minter::state::eventlog::{Event, EventType};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{
@@ -889,7 +889,7 @@ impl CkBtcSetup {
             .entries
     }
 
-    pub fn get_events(&self) -> Vec<Event> {
+    pub fn get_events(&self) -> Vec<CkBtcMinterEvent> {
         const MAX_EVENTS_PER_QUERY: u64 = 2000;
         let mut events = Vec::new();
         loop {
@@ -902,7 +902,7 @@ impl CkBtcSetup {
         events
     }
 
-    fn get_events_batch(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events_batch(&self, start: u64, length: u64) -> Vec<CkBtcMinterEvent> {
         use ic_ckbtc_minter::state::eventlog::GetEventsArg;
 
         Decode!(
@@ -915,7 +915,7 @@ impl CkBtcSetup {
                     )
                     .expect("failed to query minter events")
             ),
-            Vec<Event>
+            Vec<CkBtcMinterEvent>
         )
         .expect("Failed to call get_events")
     }
@@ -1918,6 +1918,49 @@ fn test_transaction_resubmission_finalize_middle() {
 }
 
 #[test]
+fn test_transaction_resubmission_after_upgrade() {
+    let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    // Upgrade
+    let upgrade_args = UpgradeArgs::default();
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    // Upgrade should not trigger resubmission
+    ckbtc.assert_for_n_ticks("no resubmission before the delay", 20, |ckbtc| {
+        ckbtc.mempool().len() == 1
+    });
+
+    // Wait for the transaction resubmission
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
+        let mempool = ckbtc.mempool();
+        (mempool.len() > 1).then_some(mempool)
+    });
+
+    let new_txid = ckbtc.await_btc_transaction(block_index, 10);
+    let new_tx = mempool
+        .get(&new_txid)
+        .expect("the pool does not contain the new transaction");
+
+    assert_replacement_transaction(&tx, new_tx);
+
+    // Finalize the new transaction
+    ckbtc.finalize_transaction(new_tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
+    ckbtc.minter_self_check();
+}
+
+#[test]
 fn test_utxo_consolidation_burn_failure() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 100;
@@ -2019,6 +2062,13 @@ fn test_utxo_consolidation_multiple() {
     );
     let transfer_index = result.0.to_u64().unwrap();
 
+    // Set fee percentiles so that the 25th percentile is 2000 and the median (50th) is 5000.
+    // We set the first 40 percentiles to 2000 and the rest to 5000.
+    let fees: Vec<u64> = std::iter::repeat_n(2000, 40)
+        .chain(std::iter::repeat_n(5000, 60))
+        .collect();
+    ckbtc.set_fee_percentiles(&fees);
+
     // Test two consolidations
     for i in 1..=2 {
         // Upgrade to trigger consolidation task by setting a lower threshold.
@@ -2071,6 +2121,18 @@ fn test_utxo_consolidation_multiple() {
         let new_fee_account_balance = ckbtc.get_ledger_account_balance(&fee_account);
         assert_eq!(fee_account_balance, new_fee_account_balance + burn_amount);
         fee_account_balance = new_fee_account_balance;
+
+        // Verify that the fee rate corresponds to the 25th percentile (2000).
+        // Since signatures length vary slightly, we check if the rate is close to 2000.
+        // It definitely shouldn't be close to 5000 (the median).
+        let tx_fee = total_input - total_output;
+        let vsize = tx.vsize();
+        let fee_rate = tx_fee * 1000 / vsize as u64;
+        assert!(
+            (1900..2100).contains(&fee_rate),
+            "Fee rate {} should be around 2000 (25th percentile), not 5000 (median)",
+            fee_rate
+        );
 
         // Finalize the new transaction.
         ckbtc.finalize_transaction(tx);

@@ -10,7 +10,6 @@ use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReaso
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::storage::record_event;
 use crate::{CanisterRuntime, Timestamp};
-use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -234,24 +233,6 @@ pub fn replace_transaction<R: CanisterRuntime>(
         runtime,
     );
     state.replace_transaction(&old_txid, new_tx);
-}
-
-pub fn distributed_kyt_fee<R: CanisterRuntime>(
-    state: &mut CkBtcMinterState,
-    kyt_provider: Principal,
-    amount: u64,
-    block_index: u64,
-    runtime: &R,
-) -> Result<(), super::Overdraft> {
-    record_event(
-        EventType::DistributedKytFee {
-            kyt_provider,
-            amount,
-            block_index,
-        },
-        runtime,
-    );
-    state.distribute_kyt_fee(kyt_provider, amount)
 }
 
 pub fn reimburse_withdrawal<R: CanisterRuntime>(

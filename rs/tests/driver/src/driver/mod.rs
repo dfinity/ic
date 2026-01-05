@@ -11,6 +11,8 @@ pub mod farm;
 pub mod group;
 pub mod ic;
 pub mod ic_gateway_vm;
+pub mod keepalive_task;
+pub mod uvms_logs_stream_task;
 // Re-exported through test_env_api
 mod ic_images;
 pub mod log_events;
@@ -34,4 +36,5 @@ pub mod test_env_api;
 pub mod test_setup;
 pub mod timeout;
 pub mod universal_vm;
+pub mod vector_logging_task;
 pub mod vector_vm;
