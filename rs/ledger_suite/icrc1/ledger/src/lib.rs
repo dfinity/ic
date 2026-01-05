@@ -939,7 +939,7 @@ impl Ledger {
         // the entry being set using init or upgrade arguments.
         if let Some(index_principal) = self.index_principal() {
             records.push(Value::entry(
-                "icrc106:index_principal",
+                MetadataKey::ICRC106_INDEX_PRINCIPAL,
                 index_principal.to_text(),
             ));
         }

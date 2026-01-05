@@ -2,6 +2,7 @@
 
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
+use std::borrow::Borrow;
 use std::fmt;
 
 /// Error type for invalid metadata key format.
@@ -98,6 +99,11 @@ impl MetadataKey {
     /// The maximum value for the take operation.
     pub const ICRC103_MAX_TAKE_VALUE: &'static str = "icrc103:max_take_value";
 
+    // ==================== ICRC-106 Keys ====================
+
+    /// The principal of the index canister associated with this ledger.
+    pub const ICRC106_INDEX_PRINCIPAL: &'static str = "icrc106:index_principal";
+
     /// Creates a new metadata key from namespace and key parts.
     ///
     /// # Errors
@@ -179,6 +185,12 @@ impl fmt::Display for MetadataKey {
 
 impl AsRef<str> for MetadataKey {
     fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Borrow<str> for MetadataKey {
+    fn borrow(&self) -> &str {
         &self.0
     }
 }
