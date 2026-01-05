@@ -4,31 +4,6 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-// use crate::wasmtime_embedder::system_api::{
-//     ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, ModificationTracking,
-//     SystemApiImpl,
-//     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
-// };
-// use ic_management_canister_types_private::Global;
-// use ic_replicated_state::{
-//     ExportedFunctions, Memory, NumWasmPages, PageMap, canister_state::execution_state::WasmBinary,
-//     canister_state::execution_state::WasmExecutionMode,
-//     canister_state::system_state::log_memory_store::LogMemoryStore,
-//     page_map::PageAllocatorFileDescriptor,
-// };
-// use ic_types::NumOsPages;
-// use ic_types::methods::{FuncRef, WasmMethod};
-// use prometheus::IntCounter;
-// use serde::{Deserialize, Serialize};
-// use wasmtime::Module;
-
-// use crate::OnDiskSerializedModule;
-// use crate::wasmtime_embedder::CanisterMemoryType;
-// use crate::{
-//     CompilationCache, CompilationResult, WasmExecutionInput, WasmtimeEmbedder,
-//     wasm_utils::{Segments, WasmImportsDetails, compile, decoding::decode_wasm},
-//     wasmtime_embedder::WasmtimeInstance,
-// };
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, InstanceStats, MessageMemoryUsage, OutOfInstructionsHandler,
@@ -41,7 +16,9 @@ use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_replicated_state::{
     ExportedFunctions, Memory, NumWasmPages, PageMap, canister_state::execution_state::WasmBinary,
-    canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
+    canister_state::execution_state::WasmExecutionMode,
+    canister_state::system_state::log_memory_store::LogMemoryStore,
+    page_map::PageAllocatorFileDescriptor,
 };
 use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
 use ic_types::ExecutionRound;
