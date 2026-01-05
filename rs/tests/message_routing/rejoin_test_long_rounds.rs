@@ -24,7 +24,6 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -80,10 +79,6 @@ impl Config {
 }
 
 fn setup(env: TestEnv, config: Config) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     // VM resources are as for the "large" testnet.
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
@@ -106,8 +101,6 @@ fn setup(env: TestEnv, config: Config) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-
-    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, config: Config) {
