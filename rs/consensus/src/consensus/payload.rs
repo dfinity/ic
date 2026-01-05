@@ -46,6 +46,12 @@ pub(crate) enum BatchPayloadSectionBuilder {
     VetKd(Arc<dyn BatchPayloadBuilder>),
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Slot {
+    Ingress,
+    Rest,
+}
+
 impl BatchPayloadSectionBuilder {
     /// Called to build the payload.
     ///
@@ -94,6 +100,17 @@ impl BatchPayloadSectionBuilder {
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
             Self::VetKd(_) => "vetkd",
+        }
+    }
+
+    pub(crate) fn slot(&self) -> Slot {
+        match self {
+            BatchPayloadSectionBuilder::Ingress(_) => Slot::Ingress,
+            BatchPayloadSectionBuilder::XNet(_)
+            | BatchPayloadSectionBuilder::SelfValidating(_)
+            | BatchPayloadSectionBuilder::CanisterHttp(_)
+            | BatchPayloadSectionBuilder::QueryStats(_)
+            | BatchPayloadSectionBuilder::VetKd(_) => Slot::Rest,
         }
     }
 
