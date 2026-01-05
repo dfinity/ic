@@ -899,7 +899,7 @@ pub(crate) fn finish_err(
         canister: new_canister,
         message: original.message,
         call_id: original.call_id,
-        instructions_used: MessageExecutionInstructions::from_dts_execution(instructions_used),
+        instructions_used,
         result: Err(err),
     }
 }

@@ -267,8 +267,7 @@ pub struct RoundLimits {
 }
 
 /// Token representing a decrease of `round_limits.instructions` by a message execution cost,
-/// excluding instructions for compilation and others.
-
+/// excluding instructions for compilation and installation.
 #[derive(Clone, Debug)]
 #[must_use]
 pub struct MessageExecutionInstructions {
@@ -284,10 +283,9 @@ impl MessageExecutionInstructions {
     pub fn amount(self) -> NumInstructions {
         self.instructions
     }
-    /// Creates a token for instructions that were already charged elsewhere.
-    /// This should only be used when instructions were charged outside of
-    /// `charge_message_execution_cost()` (e.g., during DTS execution).
-    pub fn from_dts_execution(instructions: NumInstructions) -> Self {
+    /// Creates a token for instructions that were already charged during
+    /// a mutli-round code installation.
+    pub fn from_install_code(instructions: NumInstructions) -> Self {
         Self { instructions }
     }
 }
@@ -4009,7 +4007,7 @@ impl ExecutionEnvironment {
                 // Instructions were already charged during DTS execution, so we create
                 // a token representing those instructions without charging again.
                 let instructions_token =
-                    MessageExecutionInstructions::from_dts_execution(instructions_used);
+                    MessageExecutionInstructions::from_install_code(instructions_used);
                 let (state, _) = self.finish_subnet_message_execution(
                     state,
                     message,
