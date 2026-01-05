@@ -611,21 +611,12 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
-        let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
-        let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
         let metrics_enabled: bool = std::env::var("ENABLE_METRICS")
             .map(|v| v == "1" || v.to_lowercase() == "true")
             .unwrap_or(false);
-        let (metrics_setup_task, metrics_sync_task) = if metrics_enabled {
-            let metrics_setup_task = subproc(
-                metrics_setup_task_id,
-                {
-                    let group_ctx = group_ctx.clone();
-                    move || metrics_setup_task(group_ctx)
-                },
-                &mut compose_ctx,
-                quiet,
-            );
+
+        let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
+        let metrics_sync_task = if metrics_enabled {
             let metrics_sync_task = subproc(
                 metrics_sync_task_id,
                 {
@@ -635,16 +626,9 @@ impl SystemTestGroup {
                 &mut compose_ctx,
                 quiet,
             );
-            (
-                Box::from(metrics_setup_task) as Box<dyn Task>,
-                Box::from(metrics_sync_task) as Box<dyn Task>,
-            )
+            Box::from(metrics_sync_task) as Box<dyn Task>
         } else {
-            debug!(logger, "Not spawning metrics tasks");
-            (
-                Box::from(EmptyTask::new(metrics_setup_task_id)) as Box<dyn Task>,
-                Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>,
-            )
+            Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>
         };
 
         let vector_logging_task_id = TaskId::Test(String::from(VECTOR_LOGGING_TASK_NAME));
@@ -718,15 +702,32 @@ impl SystemTestGroup {
             )
         });
 
+        let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::from(setup_task),
+        };
+
+        let setup_tasks = if metrics_enabled {
+            let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
+            let metrics_setup_task = subproc(
+                metrics_setup_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_setup_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            let metrics_setup_task = Box::from(metrics_setup_task) as Box<dyn Task>;
+            let metrics_setup_plan = Plan::Leaf {
+                task: metrics_setup_task,
+            };
+            vec![setup_plan, metrics_setup_plan]
+        } else {
+            vec![setup_plan]
+        };
+
         let setup_plan = timed(
-            vec![
-                Plan::Leaf {
-                    task: Box::from(setup_task),
-                },
-                Plan::Leaf {
-                    task: metrics_setup_task,
-                },
-            ],
+            setup_tasks,
             EvalOrder::Parallel,
             compose_ctx.timeout_per_test,
             None,
