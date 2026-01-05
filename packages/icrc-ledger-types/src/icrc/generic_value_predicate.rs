@@ -283,6 +283,18 @@ pub fn is(expected: Value) -> ValuePredicate {
     })
 }
 
+pub fn is_not(value: Value) -> ValuePredicate {
+    use ValuePredicateFailures as Fail;
+
+    Arc::new(move |v: Cow<Value>| {
+        if v.as_ref() == &value {
+            Err(Fail::new(format!("should not be {value}")))
+        } else {
+            Ok(())
+        }
+    })
+}
+
 fn value_to_num(v: Value) -> Option<BigInt> {
     match v {
         Value::Blob(_) | Value::Text(_) | Value::Array(_) | Value::Map(_) => None,

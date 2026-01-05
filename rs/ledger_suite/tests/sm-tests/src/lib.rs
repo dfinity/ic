@@ -62,6 +62,7 @@ use icrc_ledger_types::icrc21::responses::{ConsentMessage, FieldsDisplay, Value 
 use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc107;
+use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -1661,6 +1662,58 @@ pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
         .unwrap();
 }
 
+pub fn arb_nonendpoint_fee_collector_tx_params() -> impl Strategy<
+    Value = (
+        Option<Account>,
+        Option<Principal>,
+        Option<u64>,
+        Option<String>,
+    ),
+> {
+    (
+        proptest::option::of(any::<u64>()),
+        proptest::option::of(arb_account()),
+        proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
+        prop_oneof![
+            Just(None),
+            Just(Some(BTYPE_107.to_string())),
+            Just(Some("random_str".to_string()))
+        ],
+    )
+        .prop_map(|(ts, fee_collector, caller, op)| {
+            let caller = caller.map(|mut c| {
+                c.push(0x00);
+                Principal::try_from_slice(&c[..]).unwrap()
+            });
+            (fee_collector, caller, ts, op)
+        })
+}
+
+pub fn arb_endpoint_fee_collector_tx_params() -> impl Strategy<
+    Value = (
+        Option<Account>,
+        Option<Principal>,
+        Option<u64>,
+        Option<String>,
+    ),
+> {
+    (
+        any::<u64>(),
+        proptest::option::of(arb_account()),
+        proptest::collection::vec(any::<u8>(), 28),
+    )
+        .prop_map(|(ts, fee_collector, caller)| {
+            let mut caller = caller;
+            caller.push(0x00);
+            (
+                fee_collector,
+                Some(Principal::try_from_slice(&caller[..]).unwrap()),
+                Some(ts),
+                Some(SET_FEE_COL_107.to_string()),
+            )
+        })
+}
+
 pub fn arb_fee_collector_block<Tokens>() -> impl Strategy<Value = ICRC3Value>
 where
     Tokens: TokensType,
@@ -1669,28 +1722,20 @@ where
         any::<u64>(),
         any::<u64>(),
         any::<Option<[u8; 32]>>(),
-        proptest::option::of(arb_account()),
-        proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
-        any::<Option<u64>>(),
-        prop_oneof![Just(None), Just(Some("107set_fee_collector".to_string()))],
+        prop_oneof![
+            arb_nonendpoint_fee_collector_tx_params(),
+            arb_endpoint_fee_collector_tx_params()
+        ],
     )
-        .prop_map(
-            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts, op_name)| {
-                let caller = caller.map(|mut c| {
-                    c.push(0x00);
-                    Principal::try_from_slice(&c[..]).unwrap()
-                });
-                let builder = BlockBuilder::<Tokens>::new(block_id, block_ts)
-                    .with_btype("107feecol".to_string());
-                let builder = match parent_hash {
-                    Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
-                    None => builder,
-                };
-                builder
-                    .fee_collector(fee_collector, caller, tx_ts, op_name)
-                    .build()
-            },
-        )
+        .prop_map(|(block_id, block_ts, parent_hash, tx)| {
+            let builder =
+                BlockBuilder::<Tokens>::new(block_id, block_ts).with_btype(BTYPE_107.to_string());
+            let builder = match parent_hash {
+                Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
+                None => builder,
+            };
+            builder.fee_collector(tx.0, tx.1, tx.2, tx.3).build()
+        })
 }
 
 pub fn block_encoding_agreed_with_the_icrc107_schema<Tokens: TokensType>() {
