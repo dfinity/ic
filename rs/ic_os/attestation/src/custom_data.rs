@@ -1,8 +1,12 @@
 use der::Encode;
-use ic_sev::guest::custom_data::{SevCustomData, SevCustomDataNamespace};
+use ic_sev::guest::custom_data::SevCustomData;
 use std::error::Error;
 use std::fmt::Debug;
 use thiserror::Error;
+
+// Re-export SevCustomDataNamespace so DerEncodedCustomData implementors don't need to directly
+// depend on the ic_sev crate.
+pub use ic_sev::guest::custom_data::SevCustomDataNamespace;
 
 #[derive(Debug, Error)]
 #[error("EncodingError({0})")]
