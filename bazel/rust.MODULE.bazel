@@ -1834,7 +1834,7 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-encoder",
-    version = "^0.240.0",
+    version = "^0.243.0",
 )
 crate.spec(
     default_features = False,
@@ -1842,15 +1842,15 @@ crate.spec(
         "wasmparser",
     ],
     package = "wasm-smith",
-    version = "^0.240.0",
+    version = "^0.243.0",
 )
 crate.spec(
     package = "wasmparser",
-    version = "^0.240.0",
+    version = "^0.243.0",
 )
 crate.spec(
     package = "wasmprinter",
-    version = "^0.240.0",
+    version = "^0.243.0",
 )
 crate.spec(
     default_features = False,
@@ -1866,11 +1866,11 @@ crate.spec(
 )
 crate.spec(
     package = "wast",
-    version = "^240.0.0",
+    version = "^243.0.0",
 )
 crate.spec(
     package = "wat",
-    version = "^1.240.0",
+    version = "^1.243.0",
 )
 crate.spec(
     package = "wee_alloc",

@@ -53,6 +53,11 @@ mod convert {
                     )
                 }
             },
+            HeapType::Exact(_) => {
+                panic!(
+                    "Unable to handle heap type {heap_type:?}. The custom descriptors proposal isn't supported"
+                )
+            }
             HeapType::Concrete(_) => {
                 panic!("Unable to handle heap type {heap_type:?}. The GC proposal isn't supported")
             }
