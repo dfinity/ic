@@ -519,7 +519,8 @@ table ip6 filter {\n\
         node_reward_type: "{{ node_reward_type }}",
         nns_url: "{{ nns_urls }}",
         nns_pub_key_pem: "/run/config/nns_public_key.pem",
-        node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
+        node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem",
+        enable_beta_registration_feature: {{ enable_beta_registration_feature }}
     },
 
     malicious_behavior: {{ malicious_behavior }},

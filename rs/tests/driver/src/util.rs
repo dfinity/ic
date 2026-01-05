@@ -1529,6 +1529,7 @@ pub fn get_config() -> ConfigOptional {
         domain_name: "".to_string(),
         node_reward_type: "".to_string(),
         malicious_behavior: "null".to_string(),
+        enable_beta_registration_feature: false,
     };
 
     let ic_json = config::guestos::generate_ic_config::render_ic_config(template)

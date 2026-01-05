@@ -34,6 +34,7 @@ pub struct IcConfigTemplate {{
     pub domain_name: String,
     pub node_reward_type: String,
     pub malicious_behavior: String,
+    pub enable_beta_registration_feature: bool,
 }}
     "#,
             std::fs::read_to_string("templates/ic.json5.template").unwrap()

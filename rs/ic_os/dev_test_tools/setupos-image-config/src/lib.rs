@@ -75,10 +75,18 @@ pub fn write_config(path: &Path, cfg: &ConfigIniSettings) -> Result<(), Error> {
         enable_trusted_execution_environment,
         domain_name,
         verbose,
+        enable_beta_registration_feature,
     } = cfg;
 
     if let Some(node_reward_type) = node_reward_type {
         writeln!(&mut f, "node_reward_type={node_reward_type}")?;
+    }
+
+    if let Some(enable_beta_registration_feature) = enable_beta_registration_feature {
+        writeln!(
+            &mut f,
+            "enable_beta_registration_feature={enable_beta_registration_feature}"
+        )?;
     }
 
     // Always write 4 segments, even if our prefix is less.

@@ -79,6 +79,7 @@ pub fn main() -> Result<()> {
                 verbose,
                 node_reward_type,
                 enable_trusted_execution_environment,
+                enable_beta_registration_feature,
             } = get_config_ini_settings(&config_ini_path)?;
 
             // get deployment.json variables
@@ -142,6 +143,7 @@ pub fn main() -> Result<()> {
                 use_ssh_authorized_keys,
                 verbose,
                 network_settings,
+                enable_beta_registration_feature,
             );
 
             // SetupOSConfig is safe to log; it does not contain any secret material
@@ -220,6 +222,7 @@ pub fn assemble_setupos_config(
     use_ssh_authorized_keys: bool,
     verbose: bool,
     network_settings: NetworkSettings,
+    enable_beta_registration_feature: Option<bool>,
 ) -> SetupOSConfig {
     let icos_settings = ICOSSettings {
         node_reward_type,
@@ -230,6 +233,7 @@ pub fn assemble_setupos_config(
         enable_trusted_execution_environment,
         use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
+        enable_beta_registration_feature,
     };
 
     let setupos_settings = SetupOSSettings;

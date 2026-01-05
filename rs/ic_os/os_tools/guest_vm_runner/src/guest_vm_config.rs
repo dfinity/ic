@@ -219,6 +219,7 @@ mod tests {
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
+                enable_beta_registration_feature: None,
             },
             hostos_settings: HostOSSettings {
                 verbose: false,
