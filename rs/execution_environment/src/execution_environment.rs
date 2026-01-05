@@ -284,6 +284,12 @@ impl MessageExecutionInstructions {
     pub fn amount(self) -> NumInstructions {
         self.instructions
     }
+    /// Creates a token for instructions that were already charged elsewhere.
+    /// This should only be used when instructions were charged outside of
+    /// `charge_message_execution_cost()` (e.g., during DTS execution).
+    pub fn from_dts_execution(instructions: NumInstructions) -> Self {
+        Self { instructions }
+    }
 }
 
 impl RoundLimits {
@@ -664,7 +670,7 @@ impl ExecutionEnvironment {
             && let Err(err) = permissions.verify(&msg, &state)
         {
             let refund = msg.take_cycles();
-            let state = self.finish_subnet_message_execution(
+            return self.finish_subnet_message_execution(
                 state,
                 msg,
                 ExecuteSubnetMessageResult::Finished {
@@ -674,7 +680,6 @@ impl ExecutionEnvironment {
                 },
                 since,
             );
-            return (state, Some(MessageExecutionInstructions::none()));
         }
 
         let result: ExecuteSubnetMessageResult = match method {
@@ -1744,8 +1749,7 @@ impl ExecutionEnvironment {
                         instructions_used: instructions_token.clone(),
                     };
 
-                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
-                    return (state, Some(instructions_token));
+                    return self.finish_subnet_message_execution(state, msg, msg_result, since);
                 }
             },
 
@@ -1775,8 +1779,9 @@ impl ExecutionEnvironment {
                         instructions_used: instructions_token.clone(),
                     };
 
-                    let state = self.finish_subnet_message_execution(state, msg, msg_result, since);
-                    return (state, Some(instructions_token));
+                    let (state, instructions_used) =
+                        self.finish_subnet_message_execution(state, msg, msg_result, since);
+                    return (state, instructions_used);
                 }
             },
 
@@ -1843,9 +1848,8 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                                 instructions_used: instructions_token.clone(),
                             };
-                            let state =
-                                self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_token));
+                            return self
+                                .finish_subnet_message_execution(state, msg, msg_result, since);
                         }
                     },
                     Err(e) => ExecuteSubnetMessageResult::Finished {
@@ -1890,9 +1894,8 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                                 instructions_used: instructions_token.clone(),
                             };
-                            let state =
-                                self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_token));
+                            return self
+                                .finish_subnet_message_execution(state, msg, msg_result, since);
                         }
                     },
                 }
@@ -1928,9 +1931,9 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                                 instructions_used: instructions_token.clone(),
                             };
-                            let state =
+                            let (state, instructions_used) =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_token));
+                            return (state, instructions_used);
                         }
                     },
                 }
@@ -1966,9 +1969,9 @@ impl ExecutionEnvironment {
                                 refund: msg.take_cycles(),
                                 instructions_used: instructions_token.clone(),
                             };
-                            let state =
+                            let (state, instructions_used) =
                                 self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_token));
+                            return (state, instructions_used);
                         }
                     },
                 }
@@ -2009,8 +2012,7 @@ impl ExecutionEnvironment {
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
-        let state = self.finish_subnet_message_execution(state, msg, result, since);
-        (state, Some(MessageExecutionInstructions::none()))
+        self.finish_subnet_message_execution(state, msg, result, since)
     }
 
     fn try_add_http_context_to_replicated_state(
@@ -2087,10 +2089,14 @@ impl ExecutionEnvironment {
         message: CanisterCall,
         result: ExecuteSubnetMessageResult,
         since: Instant,
-    ) -> ReplicatedState {
-        match &result {
-            ExecuteSubnetMessageResult::Processing => {}
-            ExecuteSubnetMessageResult::Finished { response, .. } => {
+    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
+        let instructions_used = match &result {
+            ExecuteSubnetMessageResult::Processing => None,
+            ExecuteSubnetMessageResult::Finished {
+                response,
+                instructions_used,
+                ..
+            } => {
                 // Request has been executed. Observe metrics and respond.
                 let method_name = String::from(message.method_name());
 
@@ -2111,9 +2117,11 @@ impl ExecutionEnvironment {
                     since.elapsed().as_secs_f64(),
                     &res,
                 );
+                Some(instructions_used.clone())
             }
-        }
-        self.output_subnet_response(message, state, result)
+        };
+        let state = self.output_subnet_response(message, state, result);
+        (state, instructions_used)
     }
 
     /// Executes a replicated message sent to a canister or a canister task.
@@ -3826,7 +3834,7 @@ impl ExecutionEnvironment {
                 Ok(result) => result,
                 Err(err) => {
                     let refund = msg.take_cycles();
-                    let state = self.finish_subnet_message_execution(
+                    return self.finish_subnet_message_execution(
                         state,
                         msg,
                         ExecuteSubnetMessageResult::Finished {
@@ -3836,7 +3844,6 @@ impl ExecutionEnvironment {
                         },
                         since,
                     );
-                    return (state, Some(MessageExecutionInstructions::none()));
                 }
             };
 
@@ -3940,7 +3947,7 @@ impl ExecutionEnvironment {
         dts_result: DtsInstallCodeResult,
         dts_status: DtsInstallCodeStatus,
         since: Instant,
-    ) -> (ReplicatedState, Option<NumInstructions>) {
+    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
         let execution_duration = since.elapsed().as_secs_f64();
         match dts_result {
             DtsInstallCodeResult::Finished {
@@ -3999,17 +4006,21 @@ impl ExecutionEnvironment {
                             canister_id,
                         );
                 }
-                let state = self.finish_subnet_message_execution(
+                // Instructions were already charged during DTS execution, so we create
+                // a token representing those instructions without charging again.
+                let instructions_token =
+                    MessageExecutionInstructions::from_dts_execution(instructions_used);
+                let (state, _) = self.finish_subnet_message_execution(
                     state,
                     message,
                     ExecuteSubnetMessageResult::Finished {
                         response: result,
                         refund,
-                        instructions_used: MessageExecutionInstructions::none(),
+                        instructions_used: instructions_token.clone(),
                     },
                     since,
                 );
-                (state, Some(instructions_used))
+                (state, Some(instructions_token))
             }
             DtsInstallCodeResult::Paused {
                 mut canister,
@@ -4058,7 +4069,7 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-    ) -> (ReplicatedState, Option<NumInstructions>) {
+    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
         let task = state
             .canister_state_mut(canister_id)
             .unwrap()

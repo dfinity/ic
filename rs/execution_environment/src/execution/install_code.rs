@@ -3,7 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::execution::common::log_dirty_pages;
+use crate::{
+    execution::common::log_dirty_pages, execution_environment::MessageExecutionInstructions,
+};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
@@ -897,7 +899,7 @@ pub(crate) fn finish_err(
         canister: new_canister,
         message: original.message,
         call_id: original.call_id,
-        instructions_used,
+        instructions_used: MessageExecutionInstructions::from_dts_execution(instructions_used),
         result: Err(err),
     }
 }

@@ -560,11 +560,11 @@ impl SchedulerImpl {
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            round_limits.charge_other_instruction_cost(as_num_instructions(
+            round_limits.charge_other_instruction_cost(
                 self.config
                     .instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
-            ));
+            );
             scheduler_round_limits.update_canister_round_limits(&round_limits);
             debug_assert_le!(
                 scheduler_round_limits.subnet_available_callbacks,
@@ -1468,10 +1468,17 @@ impl Scheduler for SchedulerImpl {
             // However, we would like to make progress with other subnet
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 0 if it is not positive.
-            subnet_round_limits.instructions = subnet_round_limits
+            let clamped_instructions = subnet_round_limits
                 .instructions()
                 .max(RoundInstructions::from(0));
-            scheduler_round_limits.update_subnet_round_limits(&subnet_round_limits);
+            let clamped_round_limits = RoundLimits::new(
+                clamped_instructions,
+                subnet_round_limits.subnet_available_memory,
+                subnet_round_limits.subnet_available_callbacks,
+                subnet_round_limits.compute_allocation_used,
+                subnet_round_limits.subnet_memory_reservation,
+            );
+            scheduler_round_limits.update_subnet_round_limits(&clamped_round_limits);
         };
 
         // Scheduling.
@@ -1878,9 +1885,7 @@ fn execute_canisters_on_thread(
             }
             total_slices_executed.inc_assign();
             canister = new_canister;
-            round_limits.charge_other_instruction_cost(as_num_instructions(
-                config.instruction_overhead_per_execution,
-            ));
+            round_limits.charge_other_instruction_cost(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
@@ -1923,9 +1928,7 @@ fn execute_canisters_on_thread(
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
-            round_limits.charge_other_instruction_cost(as_num_instructions(
-                config.instruction_overhead_per_canister,
-            ));
+            round_limits.charge_other_instruction_cost(config.instruction_overhead_per_canister);
         }
     }
 
