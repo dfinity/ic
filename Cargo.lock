@@ -21412,7 +21412,11 @@ dependencies = [
  "chrono",
  "dfn_candid",
  "futures",
+ "ic-agent 0.40.1",
  "ic-system-test-driver",
+ "ic-types",
+ "ic-universal-canister",
+ "ic-utils 0.40.1",
  "slog",
  "tokio",
 ]
@@ -23546,6 +23550,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "canister-test",
+ "futures",
  "ic-cdk",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",

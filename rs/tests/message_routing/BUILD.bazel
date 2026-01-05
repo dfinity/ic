@@ -95,6 +95,29 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "rejoin_test_long_rounds",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    env = UNIVERSAL_CANISTER_ENV | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
+    },
+    tags = [
+        "manual",  # this test does not pass currently (it serves as a baseline for future work)
+        "system_test_large",
+    ],
+    test_timeout = "eternal",
+    runtime_deps =
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = [
+        "//rs/registry/subnet_type",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
     name = "state_sync_malicious_chunk_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     env = UNIVERSAL_CANISTER_ENV | {
