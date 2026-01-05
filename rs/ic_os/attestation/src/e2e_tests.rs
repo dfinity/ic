@@ -7,8 +7,10 @@ use crate::{
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::custom_data::SevCustomDataNamespace;
-use ic_sev::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
-use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use ic_sev::guest::firmware::MockSevGuestFirmware;
+use ic_sev::guest::testing::{
+    AttestationReportBuilder, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 
@@ -284,18 +286,16 @@ fn test_legacy_custom_data_accepted() {
         .encode_for_sev_legacy()
         .expect("Failed to encode custom data in legacy format");
 
-    let mut sev_firmware = MockSevGuestFirmwareBuilder::new()
-        .with_chip_id(CHIP_ID)
+    let attestation_report_bytes = AttestationReportBuilder::new()
+        .with_custom_data(legacy_custom_data)
         .with_measurement(MEASUREMENT)
-        .with_signer(Some(signer.clone()))
-        .build();
-
-    let attestation_report_bytes = sev_firmware
-        .get_report(None, Some(legacy_custom_data), None)
-        .expect("Failed to get attestation report");
+        .with_chip_id(CHIP_ID)
+        .build_signed(&signer)
+        .to_bytes()
+        .unwrap();
 
     let attestation_package = SevAttestationPackage {
-        attestation_report: Some(attestation_report_bytes),
+        attestation_report: Some(attestation_report_bytes.to_vec()),
         certificate_chain: Some(SevCertificateChain {
             vcek_pem: Some(signer.get_vcek_pem()),
             ask_pem: Some(signer.get_ask_pem()),
