@@ -7785,7 +7785,7 @@ fn can_split_with_inflight_restore_snapshot() {
         subnet_id: SubnetId,
         certification_scope: CertificationScope,
     ) {
-        state_manager_test(|metrics, state_manager| {
+        state_manager_restart_test_with_metrics(|metrics, state_manager, restart_fn| {
             let (_height, mut state) = state_manager.take_tip();
             state.metadata.own_subnet_id = SUBNET_A;
 
@@ -7876,9 +7876,18 @@ fn can_split_with_inflight_restore_snapshot() {
             expected.metadata.unflushed_checkpoint_ops = Default::default();
             // The "previous state hash" has changed. Update it.
             expected.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
-            assert_eq!(expected, state);
 
+            assert_eq!(expected, state);
             assert_error_counters(metrics);
+
+            // Restart the State Manager, forcing a checkpoint load.
+            state_manager.flush_tip_channel();
+            let (metrics, state_manager) = restart_fn(state_manager, None);
+            state = state_manager.take_tip().1;
+
+            // Check the loaded state and critical error counters.
+            assert_eq!(expected, state);
+            assert_error_counters(&metrics);
         });
     }
 
