@@ -1,10 +1,17 @@
+use candid::{Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
+use ic_agent::Agent;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_types::PrincipalId;
+use ic_types::messages::ReplicaHealthStatus;
+use ic_universal_canister::wasm;
+use ic_utils::interfaces::management_canister::ManagementCanister;
+use slog::Logger;
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -212,6 +219,171 @@ pub async fn rejoin_test_large_state(
     store_and_read_stable(&logger, message, &universal_canister).await;
 
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+}
+
+async fn deploy_seed_canister(
+    ic00: &ManagementCanister<'_>,
+    effective_canister_id: PrincipalId,
+) -> Principal {
+    let seed_canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id.0)
+        .call_and_wait()
+        .await
+        .expect("Failed to create a seed canister")
+        .0;
+    let seed_canister_wasm_path = get_dependency_path(
+        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    );
+    let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
+        .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
+    ic00.install(&seed_canister_id, &seed_canister_wasm)
+        .await
+        .expect("Failed to install a seed canister");
+    seed_canister_id
+}
+
+async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId, logger: &Logger) {
+    let universal_canister =
+        UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
+    universal_canister
+        .update(
+            wasm()
+                .set_heartbeat(
+                    wasm()
+                        .instruction_counter_is_at_least(1_800_000_000)
+                        .build(),
+                )
+                .reply()
+                .build(),
+        )
+        .await
+        .expect("Failed to set up a busy canister.");
+}
+
+pub async fn rejoin_test_long_rounds(
+    env: TestEnv,
+    num_canisters: usize,
+    dkg_interval: u64,
+    rejoin_node: IcNodeSnapshot,
+    agent_node: IcNodeSnapshot,
+) {
+    let logger = env.logger();
+    let agent = agent_node.build_default_agent_async().await;
+    let ic00 = ManagementCanister::create(&agent);
+
+    let num_seed_canisters = 4;
+    info!(
+        logger,
+        "Deploying {} seed canisters on a node {} ...",
+        num_seed_canisters,
+        agent_node.get_public_url()
+    );
+    let mut create_seed_canisters_futs = vec![];
+    for _ in 0..num_seed_canisters {
+        create_seed_canisters_futs.push(deploy_seed_canister(
+            &ic00,
+            agent_node.effective_canister_id(),
+        ));
+    }
+    let seed_canisters = join_all(create_seed_canisters_futs).await;
+
+    let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
+    info!(
+        logger,
+        "Creating {} canisters via the seed canisters ...",
+        num_canisters_per_seed_canister * num_seed_canisters,
+    );
+    let mut create_many_canisters_futs = vec![];
+    for seed_canister_id in seed_canisters {
+        let bytes = Encode!(&num_canisters_per_seed_canister)
+            .expect("Failed to candid encode argument for a seed canister");
+        let fut = agent
+            .update(&seed_canister_id, "create_many_canisters")
+            .with_arg(bytes)
+            .call_and_wait();
+        create_many_canisters_futs.push(fut);
+    }
+    let res = join_all(create_many_canisters_futs).await;
+    for r in res {
+        r.expect("Failed to create canisters via a seed canister");
+    }
+
+    // We deploy 8 "busy" canisters: this way,
+    // there are 2 canisters per each of the 4 scheduler cores
+    // and thus every thread executes 2 x 1.8B = 3.6B instructions.
+    let num_busy_canisters = 8;
+    info!(
+        logger,
+        "Deploying {} busy canisters on a node {} ...",
+        num_busy_canisters,
+        agent_node.get_public_url()
+    );
+    let mut create_busy_canisters_futs = vec![];
+    for _ in 0..num_busy_canisters {
+        create_busy_canisters_futs.push(deploy_busy_canister(
+            &agent,
+            agent_node.effective_canister_id(),
+            &logger,
+        ));
+    }
+    join_all(create_busy_canisters_futs).await;
+
+    info!(
+        logger,
+        "Killing a node: {} ...",
+        rejoin_node.get_public_url()
+    );
+    rejoin_node.vm().kill();
+    rejoin_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
+
+    // Wait for the subnet to produce a CUP and then restart the rejoin_node.
+    // This way, the restarted node starts from that CUP
+    // and we can assert it to catch up until the next CUP.
+    info!(logger, "Waiting for a CUP ...");
+    let agent_node_status = agent_node
+        .status_async()
+        .await
+        .expect("Failed to get status of agent_node");
+    let latest_certified_height = agent_node_status
+        .certified_height
+        .expect("Failed to get certified height of agent_node")
+        .get();
+    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+
+    info!(logger, "Start the killed node again ...");
+    rejoin_node.vm().start();
+
+    info!(logger, "Waiting for the next CUP ...");
+    let last_cup_height = wait_for_cup(
+        &logger,
+        latest_certified_height + dkg_interval + 1,
+        agent_node.clone(),
+    )
+    .await;
+
+    let rejoin_node_status = rejoin_node
+        .status_async()
+        .await
+        .expect("Failed to get status of rejoin_node");
+    let rejoin_node_certified_height = rejoin_node_status
+        .certified_height
+        .expect("Failed to get certified height of rejoin_node")
+        .get();
+    assert!(
+        rejoin_node_certified_height >= last_cup_height,
+        "The rejoin_node certified height {} is less than the last CUP height {}.",
+        rejoin_node_certified_height,
+        last_cup_height
+    );
+    let rejoin_node_health_status = rejoin_node_status
+        .replica_health_status
+        .expect("Failed to get replica health status of rejoin_node");
+    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 }
 
 pub async fn assert_state_sync_has_happened(
