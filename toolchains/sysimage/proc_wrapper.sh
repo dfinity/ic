@@ -7,5 +7,5 @@
 set -euo pipefail
 
 tmpdir=$(mktemp -d --tmpdir "icosbuildXXXX")
-trap 'sudo rm -rf "$tmpdir"' INT TERM EXIT
+trap 'sudo ls -lahR "$tmpdir" && sudo rm -rf "$tmpdir"' INT TERM EXIT
 TMPDIR="$tmpdir" "$@"
