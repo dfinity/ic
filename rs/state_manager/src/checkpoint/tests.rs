@@ -249,7 +249,7 @@ fn can_recover_from_a_checkpoint() {
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory.clone(),
             stable_memory,
-            LogMemoryStore::from_checkpoint(PageMap::from(&[1, 2, 3, 4][..]), 4096),
+            LogMemoryStore::from_checkpoint(PageMap::from(&[1, 2, 3, 4][..])),
             vec![],
             WasmMetadata::default(),
         );

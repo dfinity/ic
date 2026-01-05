@@ -830,7 +830,7 @@ pub fn load_canister_state(
                     height,
                     Arc::clone(&fd_factory),
                 )?,
-                canister_state_bits.log_memory_limit.get() as usize,
+                //canister_state_bits.log_memory_limit.get() as usize,
             );
             durations.insert("log_memory_store", starting_time.elapsed());
 

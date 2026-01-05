@@ -34,7 +34,7 @@ pub struct LogMemoryStore {
     /// In these cases the canister should not be charged,
     /// so the page_map must be empty, but we still need to
     /// preserve the log_memory_limit.
-    log_memory_limit: usize,
+    //log_memory_limit: usize,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -61,15 +61,15 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            log_memory_limit: DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+            //log_memory_limit: DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
         }
     }
 
-    pub fn from_checkpoint(page_map: PageMap, log_memory_limit: usize) -> Self {
+    pub fn from_checkpoint(page_map: PageMap) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            log_memory_limit,
+            //log_memory_limit,
         }
     }
 
@@ -114,9 +114,9 @@ impl LogMemoryStore {
             .unwrap_or(0)
     }
 
-    pub fn log_memory_limit(&self) -> usize {
-        self.log_memory_limit
-    }
+    // pub fn log_memory_limit(&self) -> usize {
+    //     self.log_memory_limit
+    // }
 
     /// Sets the log memory limit for this canister.
     ///
@@ -124,30 +124,34 @@ impl LogMemoryStore {
     /// limit changes its byte capacity. This avoids creating a ring buffer
     /// for canisters without a Wasm module or after uninstall, preventing
     /// unnecessary log-memory charges.
-    pub fn set_log_memory_limit(&mut self, new_log_memory_limit: usize) {
-        // Enforce a safe minimum for data capacity.
-        let new_log_memory_limit = new_log_memory_limit.max(DATA_CAPACITY_MIN);
-        self.log_memory_limit = new_log_memory_limit;
+    pub fn set_log_memory_limit(&mut self, limit: usize) {
+        // Enforce safe minimum for data capacity.
+        let target_limit = limit.max(DATA_CAPACITY_MIN);
 
-        // Only resize on an existing ring buffer.
-        if let Some(old) = self.load_ring_buffer() {
-            // Only resize when the capacity actually changes.
-            if old.byte_capacity() != new_log_memory_limit {
-                // NOTE — PageMap cannot be shrunk today. Reducing capacity keeps
-                // allocated pages in place; in practice the ring buffer max is
-                // currently ~55 MB. Future improvement — allocate a new PageMap
-                // with the desired capacity, refeed records, then drop the old
-                // map or add a `PageMap::shrink` API to reclaim pages.
-                //
-                // Recreate a ring buffer with the new capacity and restore records.
-                let mut new = RingBuffer::new(
-                    self.page_map.clone(),
-                    MemorySize::new(new_log_memory_limit as u64),
-                );
-                new.append_log(old.all_records());
-                self.page_map = new.to_page_map();
+        // Only resize when the capacity actually changes.
+        if let Some(current_buffer) = self.load_ring_buffer() {
+            if current_buffer.byte_capacity() == target_limit {
+                return;
             }
         }
+
+        let preserved_records = self.load_ring_buffer().map(|b| b.all_records());
+
+        // NOTE — PageMap cannot be shrunk today. Reducing capacity keeps
+        // allocated pages in place; in practice the ring buffer max is
+        // currently ~55 MB. Future improvement — allocate a new PageMap
+        // with the desired capacity, refeed records, then drop the old
+        // map or add a `PageMap::shrink` API to reclaim pages.
+        //
+        // Recreate a ring buffer with the new capacity and restore records.
+        let mut new_buffer =
+            RingBuffer::new(self.page_map.clone(), MemorySize::new(target_limit as u64));
+        // Restore records if they existed.
+        if let Some(records) = preserved_records {
+            new_buffer.append_log(records);
+        }
+        // Update the state.
+        self.page_map = new_buffer.to_page_map();
     }
 
     /// Returns the next log record `idx`.
@@ -175,21 +179,16 @@ impl LogMemoryStore {
             .unwrap_or_default()
     }
 
-    /// Appends a delta log to the ring buffer.
-    /// If the ring buffer does not exist, it is created with the current log memory limit.
+    /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
+        let mut ring_buffer = match self.load_ring_buffer() {
+            Some(rb) => rb,
+            None => return, // No ring buffer exists.
+        };
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
-        let records: Vec<CanisterLogRecord> = delta_log
-            .records_mut()
-            .iter_mut()
-            .map(std::mem::take)
-            .collect();
-        let mut ring_buffer = self.load_ring_buffer().unwrap_or(RingBuffer::new(
-            self.page_map.clone(),
-            MemorySize::new(self.log_memory_limit as u64),
-        ));
-        ring_buffer.append_log(records);
+        // Append the delta records and persist the ring buffer.
+        ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
         self.page_map = ring_buffer.to_page_map();
     }
 
@@ -264,7 +263,7 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
     }
@@ -278,7 +277,7 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
 
@@ -296,7 +295,7 @@ mod tests {
         assert!(s.bytes_used() > 0);
         assert!(s.bytes_used() < DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
-        assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert!(s.total_allocated_bytes() > DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
     }
@@ -590,7 +589,7 @@ mod tests {
         store.set_log_memory_limit(1);
 
         // Verify log memory limit was clamped to minimum.
-        assert_eq!(store.log_memory_limit(), 4096);
+        //assert_eq!(store.log_memory_limit(), 4096);
         assert_eq!(store.byte_capacity(), 0); // Actual capacity is 0 because no records were added.
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
@@ -614,7 +613,7 @@ mod tests {
         let capacity = 4096;
         store.set_log_memory_limit(capacity);
 
-        assert_eq!(store.log_memory_limit(), capacity);
+        //assert_eq!(store.log_memory_limit(), capacity);
         assert_eq!(store.byte_capacity(), 0); // Actual capacity is 0 because no records were added.
 
         // Fill the buffer with records until we're close to capacity.
