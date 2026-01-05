@@ -230,7 +230,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
     let pk_g2 = G2Affine::deserialize(&pk.into_bytes()).expect("Invalid public key point");
     let sig_g1 = G1Affine::deserialize(&signature_bytes).expect("Invalid signature point");
 
-    let dst = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
+    let dst = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
     let msg_g1 = G1Affine::hash(dst, &test_message);
 
     assert!(verify_bls_signature(&sig_g1, &pk_g2, &msg_g1));

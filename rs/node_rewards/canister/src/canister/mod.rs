@@ -121,7 +121,7 @@ impl NodeRewardsCanister {
         });
         let registry_querier = RegistryQuerier::new(registry_client.clone());
         let version = registry_client.get_latest_version();
-        let subnets_list = registry_querier.subnets_list(version);
+        let subnets_list = registry_querier.subnets_list(version)?;
         let last_day_synced: NaiveDate =
             metrics_manager.update_subnets_metrics(subnets_list).await?;
         canister.with_borrow(|canister| {

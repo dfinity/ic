@@ -22,6 +22,7 @@ rust_library(
         "//packages/ic-secp256k1",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:bs58",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
@@ -50,9 +51,13 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
+        "//rs/types/base_types",
         "@crate_index//:assert_matches",
+        "@crate_index//:mockall",
         "@crate_index//:proptest",
         "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )
 
@@ -112,11 +117,11 @@ rust_ic_test(
     data = [
         ":ckdoge_minter_debug.wasm.gz",
         "//rs/bitcoin/mock:bitcoin_canister_mock",
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256",
     ],
     env = {
         "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256)",
         "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },

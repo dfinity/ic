@@ -9,10 +9,10 @@
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
+//   $ NUM_PERF_HOSTS=1 ict testnet create io_perf_benchmark --verbose --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir
 //
 // Note: The `./test_tmpdir` directory is included in `.gitignore`.
 //

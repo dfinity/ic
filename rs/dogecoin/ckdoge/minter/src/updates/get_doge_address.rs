@@ -18,7 +18,8 @@ pub async fn get_doge_address(
     );
     ic_ckbtc_minter::updates::get_btc_address::init_ecdsa_public_key().await;
     read_state(|s| {
-        account_to_p2pkh_address_from_state(s, &account).display(&Network::from(s.btc_network))
+        account_to_p2pkh_address_from_state(s, &account)
+            .display(&Network::try_from(s.btc_network).expect("BUG: unsupported network"))
     })
 }
 
@@ -31,16 +32,12 @@ pub fn account_to_p2pkh_address_from_state(
         .as_ref()
         .cloned()
         .expect("bug: the ECDSA public key must be initialized");
-    let public_key: [u8; 33] = derive_public_key(&ecdsa_public_key, account)
-        .public_key
-        .try_into()
-        .expect("BUG: invalid ECDSA compressed public key");
-    DogecoinAddress::from_compressed_public_key(&public_key)
+    DogecoinAddress::p2pkh_from_public_key(&derive_public_key(&ecdsa_public_key, account))
 }
 
 /// Returns the derivation path that should be used to sign a message from a
 /// specified account.
-fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
+pub fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     const SCHEMA_V1: u8 = 1;
     const PREFIX: [u8; 4] = *b"doge";
 
@@ -52,7 +49,7 @@ fn derivation_path(account: &Account) -> Vec<Vec<u8>> {
     ]
 }
 
-fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
+pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> [u8; 33] {
     use ic_secp256k1::{DerivationIndex, DerivationPath};
 
     let path = DerivationPath::new(
@@ -62,4 +59,7 @@ fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> EC
             .collect(),
     );
     ic_ckbtc_minter::address::derive_public_key(ecdsa_public_key, &path)
+        .public_key
+        .try_into()
+        .expect("BUG: invalid ECDSA compressed public key")
 }
