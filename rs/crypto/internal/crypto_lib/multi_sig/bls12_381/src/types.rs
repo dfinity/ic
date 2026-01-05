@@ -9,6 +9,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(test)]
 pub mod arbitrary;
 
+#[cfg(test)]
+pub mod tests;
+
 pub mod conversions;
 
 /// A BLS secret key is a field element.
