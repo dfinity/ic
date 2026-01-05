@@ -15,8 +15,8 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
+use icrc_ledger_types::{icrc1::account::Account, icrc107::schema::BTYPE_107};
 use serde::{Deserialize, Serialize};
 
 use std::collections::BTreeMap;
@@ -153,7 +153,7 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
         let memo = value.memo.clone();
 
         let operation = match btype_str {
-            Some("107feecol") => Operation::FeeCollector {
+            Some(BTYPE_107) => Operation::FeeCollector {
                 fee_collector: value.fee_collector,
                 caller: value.caller,
                 op: value.op,

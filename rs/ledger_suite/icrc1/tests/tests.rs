@@ -204,6 +204,7 @@ mod block_encoding_stability {
     use ic_ledger_core::Tokens;
     use icrc_ledger_types::icrc::generic_value::ICRC3Value;
     use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 
     #[test]
     fn test_approve_block() {
@@ -247,13 +248,13 @@ mod block_encoding_stability {
             subaccount: Some([37u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(1, 12345678)
-            .with_btype("107feecol".to_string())
+            .with_btype(BTYPE_107.to_string())
             .with_parent_hash(vec![67u8; 32])
             .fee_collector(
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
                 Some(22334455u64),
-                Some("107set_fee_collector".to_string()),
+                Some(SET_FEE_COL_107.to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }

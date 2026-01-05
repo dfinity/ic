@@ -606,7 +606,7 @@ pub fn check_icrc3_supported_block_types(
     block_types.sort();
     let mut expected_block_types = vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"];
     if supports_107 {
-        expected_block_types.push("107feecol");
+        expected_block_types.push(BTYPE_107);
         expected_block_types.sort();
     }
     assert_eq!(block_types, expected_block_types);
