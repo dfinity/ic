@@ -196,6 +196,9 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
+    use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
+
+    const DEFAULT_LOG_MEMORY_LIMIT: usize = 4096;
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
@@ -248,7 +251,6 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
     }
@@ -262,7 +264,6 @@ mod tests {
         assert!(s.is_empty());
         assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.byte_capacity(), 0);
-        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
 
@@ -271,7 +272,9 @@ mod tests {
         delta.add_record(100, b"a".to_vec());
         delta.add_record(200, b"bb".to_vec());
         delta.add_record(300, b"ccc".to_vec());
+
         let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
         // Assert memory usage.
@@ -280,7 +283,6 @@ mod tests {
         assert!(s.bytes_used() > 0);
         assert!(s.bytes_used() < DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
-        //assert_eq!(s.log_memory_limit(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert!(s.total_allocated_bytes() > DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
     }
@@ -294,6 +296,7 @@ mod tests {
         delta.add_record(300, b"ccc".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
         assert_eq!(s.next_idx(), 3);
@@ -318,6 +321,7 @@ mod tests {
         delta.add_record(30, b"c".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
         // By index — inclusive range.
@@ -465,20 +469,20 @@ mod tests {
 
     #[test]
     fn test_increasing_capacity_preserves_records() {
-        let mut store = LogMemoryStore::new_for_testing();
-        store.set_log_memory_limit(1_000_000); // 1 MB
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(1_000_000); // 1 MB
 
         // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-        append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
+        append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
 
-        let records_before = store.records(None);
-        let bytes_used_before = store.bytes_used();
+        let records_before = s.records(None);
+        let bytes_used_before = s.bytes_used();
 
         // Increase capacity.
-        store.set_log_memory_limit(2_000_000); // 2 MB
+        s.set_log_memory_limit(2_000_000); // 2 MB
 
-        let records_after = store.records(None);
-        let bytes_used_after = store.bytes_used();
+        let records_after = s.records(None);
+        let bytes_used_after = s.bytes_used();
 
         // Verify all records are preserved.
         assert_eq!(records_before, records_after);
@@ -487,35 +491,35 @@ mod tests {
 
     #[test]
     fn test_decreasing_capacity_drops_oldest_records_but_preserves_recent() {
-        let mut store = LogMemoryStore::new_for_testing();
-        store.set_log_memory_limit(500_000); // 500 KB
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(500_000); // 500 KB
 
         // Append 200 KB records in batches of 100 KB deltas of ~1KB record each.
-        append_deltas(&mut store, 0, 200_000, 100_000, 1_000);
+        append_deltas(&mut s, 0, 200_000, 100_000, 1_000);
 
-        let records_before = store.records(None);
-        let bytes_used_before = store.bytes_used();
-        let next_idx_before = store.next_idx();
+        let records_before = s.records(None);
+        let bytes_used_before = s.bytes_used();
+        let next_idx_before = s.next_idx();
 
         // Decrease capacity.
-        store.set_log_memory_limit(100_000); // 100 KB
+        s.set_log_memory_limit(100_000); // 100 KB
 
-        let records_after = store.records(None);
-        let bytes_used_after = store.bytes_used();
+        let records_after = s.records(None);
+        let bytes_used_after = s.bytes_used();
 
         // Verify some records are dropped.
         assert!(records_after.len() < records_before.len());
         assert!(bytes_used_after < bytes_used_before);
         // Verify recent records are preserved.
-        assert_eq!(next_idx_before, store.next_idx());
+        assert_eq!(next_idx_before, s.next_idx());
     }
 
     #[test]
     fn test_small_capacity_indexing() {
-        let mut store = LogMemoryStore::new_for_testing();
+        let mut s = LogMemoryStore::new_for_testing();
         // Set a very small capacity, smaller than 146 bytes (INDEX_ENTRY_COUNT_MAX).
         // 146 entries. If capacity is 100. 100 / 146 = 0.
-        store.set_log_memory_limit(100);
+        s.set_log_memory_limit(100);
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100);
         // Add multiple records.
@@ -525,14 +529,14 @@ mod tests {
         delta.add_record(0, b"a".to_vec());
         delta.add_record(1, b"b".to_vec());
 
-        store.append_delta_log(&mut delta);
+        s.append_delta_log(&mut delta);
 
-        assert!(!store.is_empty());
+        assert!(!s.is_empty());
         // 21 * 2 = 42 bytes used.
-        assert_eq!(store.bytes_used(), 42);
+        assert_eq!(s.bytes_used(), 42);
 
         // Try to read it back.
-        let records = store.records(None);
+        let records = s.records(None);
         assert_eq!(records.len(), 2, "Should return 2 records");
         assert_eq!(records[0].content, b"a");
         assert_eq!(records[1].content, b"b");
@@ -540,19 +544,19 @@ mod tests {
 
     #[test]
     fn test_multiple_records_in_same_segment() {
-        let mut store = LogMemoryStore::new_for_testing();
+        let mut s = LogMemoryStore::new_for_testing();
         // Capacity 100KB. Segment size ~685 bytes.
-        store.set_log_memory_limit(100_000);
+        s.set_log_memory_limit(100_000);
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
         // Add 10 records, each ~21 bytes. All should fit in segment 0.
         for i in 0..10 {
             delta.add_record(i, vec![i as u8]);
         }
-        store.append_delta_log(&mut delta);
+        s.append_delta_log(&mut delta);
 
         // Verify we can retrieve all of them.
-        let records = store.records(None);
+        let records = s.records(None);
         assert_eq!(records.len(), 10);
         for (i, r) in records.iter().enumerate() {
             assert_eq!(r.idx, i as u64);
@@ -560,7 +564,7 @@ mod tests {
 
         // Verify filtering works.
         // Filter for record 5. Range is [5, 6).
-        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 5, end: 6 },
         )));
         assert_eq!(records.len(), 1);
@@ -569,37 +573,35 @@ mod tests {
 
     #[test]
     fn test_very_small_capacity_single_byte() {
-        let mut store = LogMemoryStore::new_for_testing();
+        let mut s = LogMemoryStore::new_for_testing();
         // Set capacity to 1 byte - this will be clamped to DATA_CAPACITY_MIN (4096 bytes).
-        store.set_log_memory_limit(1);
+        s.set_log_memory_limit(1);
 
-        // Verify log memory limit was clamped to minimum.
-        //assert_eq!(store.log_memory_limit(), 4096);
-        assert_eq!(store.byte_capacity(), 0); // Actual capacity is 0 because no records were added.
+        // Verify byte capacity was clamped to minimum.
+        assert_eq!(s.byte_capacity(), 4096);
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 4096);
         // Add a record - it should fit within the minimum capacity.
         delta.add_record(0, b"a".to_vec());
 
-        store.append_delta_log(&mut delta);
+        s.append_delta_log(&mut delta);
 
         // The record should be stored.
-        assert_eq!(store.byte_capacity(), 4096);
-        assert_eq!(store.next_idx(), 1);
-        assert_eq!(store.bytes_used(), 21);
-        let records = store.records(None);
+        assert_eq!(s.byte_capacity(), 4096);
+        assert_eq!(s.next_idx(), 1);
+        assert_eq!(s.bytes_used(), 21);
+        let records = s.records(None);
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].content, b"a");
     }
 
     #[test]
     fn test_small_capacity_with_eviction() {
-        let mut store = LogMemoryStore::new_for_testing();
+        let mut s = LogMemoryStore::new_for_testing();
         let capacity = 4096;
-        store.set_log_memory_limit(capacity);
+        s.set_log_memory_limit(capacity);
 
-        //assert_eq!(store.log_memory_limit(), capacity);
-        assert_eq!(store.byte_capacity(), 0); // Actual capacity is 0 because no records were added.
+        assert_eq!(s.byte_capacity(), capacity);
 
         // Fill the buffer with records until we're close to capacity.
         // Each record is ~21 bytes (8+8+4+1), so we can fit ~195 records.
@@ -610,23 +612,23 @@ mod tests {
         for i in 0..max_records {
             let mut delta = CanisterLog::new_delta_with_next_index(i as u64, capacity);
             delta.add_record(i as u64, vec![i as u8]);
-            store.append_delta_log(&mut delta);
+            s.append_delta_log(&mut delta);
         }
 
         // Verify all records fit.
-        assert_eq!(store.byte_capacity(), capacity);
-        assert_eq!(store.next_idx(), max_records as u64);
-        let records = store.records(None);
+        assert_eq!(s.byte_capacity(), capacity);
+        assert_eq!(s.next_idx(), max_records as u64);
+        let records = s.records(None);
         assert_eq!(records.len(), max_records);
 
         // Add one more record - this should evict the oldest one.
         let mut delta = CanisterLog::new_delta_with_next_index(max_records as u64, capacity);
         delta.add_record(max_records as u64, vec![255]);
-        store.append_delta_log(&mut delta);
+        s.append_delta_log(&mut delta);
 
         // Verify the oldest record was evicted.
-        assert_eq!(store.next_idx(), (max_records + 1) as u64);
-        let records = store.records(None);
+        assert_eq!(s.next_idx(), (max_records + 1) as u64);
+        let records = s.records(None);
         assert_eq!(records.len(), max_records);
         assert_eq!(records[0].idx, 1); // First record (idx=0) was evicted.
         assert_eq!(records.last().unwrap().idx, max_records as u64);
@@ -634,19 +636,19 @@ mod tests {
 
     #[test]
     fn test_filtering_with_multiple_records_in_same_segment() {
-        let mut store = LogMemoryStore::new_for_testing();
+        let mut s = LogMemoryStore::new_for_testing();
         // Capacity 100KB. Segment size ~685 bytes.
-        store.set_log_memory_limit(100_000);
+        s.set_log_memory_limit(100_000);
 
         let mut delta = CanisterLog::new_delta_with_next_index(0, 100_000);
         // Add 20 records, each ~21 bytes. All should fit in segment 0.
         for i in 0..20 {
             delta.add_record(i * 1000, vec![i as u8]);
         }
-        store.append_delta_log(&mut delta);
+        s.append_delta_log(&mut delta);
 
         // Filter for records in the middle: [5000, 15000).
-        let records = store.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+        let records = s.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
             FetchCanisterLogsRange {
                 start: 5000,
                 end: 15000,
@@ -658,7 +660,7 @@ mod tests {
         assert_eq!(records[9].idx, 14);
 
         // Filter by idx: [10, 15).
-        let records = store.records(Some(FetchCanisterLogsFilter::ByIdx(
+        let records = s.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 10, end: 15 },
         )));
         // Should return records 10-14 (5 records).
