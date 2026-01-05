@@ -342,7 +342,7 @@ fn get_blocks_for_request(blocks: &BlockStorage, request: GetBlocksRequest) -> B
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, MetadataValue)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, MetadataValue)> {
     vec![
         MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, 0u64),
         MetadataValue::entry(MetadataKey::ICRC1_NAME, ""),

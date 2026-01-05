@@ -19,27 +19,27 @@ pub enum MetadataValue {
 }
 
 impl MetadataValue {
-    /// Create a `(String, MetadataValue)` tuple for use in metadata maps.
+    /// Create a `(MetadataKey, MetadataValue)` tuple for use in metadata maps.
     ///
-    /// This method accepts any string-like key. For validated keys, use
-    /// [`MetadataValue::entry_validated`] instead.
-    pub fn entry(key: impl ToString, val: impl Into<MetadataValue>) -> (String, Self) {
-        (key.to_string(), val.into())
-    }
-
-    /// Create a `(String, MetadataValue)` tuple using a validated [`MetadataKey`].
+    /// The key must be a valid metadata key in the format `<namespace>:<key>`.
+    /// This is typically used with the predefined constants like `MetadataKey::ICRC1_NAME`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the key is not a valid metadata key format.
     ///
     /// # Example
     ///
     /// ```
     /// use icrc_ledger_types::icrc::generic_metadata_value::{MetadataKey, MetadataValue};
     ///
-    /// let key = MetadataKey::new("icrc1", "name").unwrap();
-    /// let entry = MetadataValue::entry_validated(key, "My Token");
-    /// assert_eq!(entry.0, "icrc1:name");
+    /// let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token");
+    /// assert_eq!(entry.0.as_str(), "icrc1:name");
     /// ```
-    pub fn entry_validated(key: MetadataKey, val: impl Into<MetadataValue>) -> (String, Self) {
-        (key.into_string(), val.into())
+    pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey, Self) {
+        let metadata_key = MetadataKey::parse(key)
+            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        (metadata_key, val.into())
     }
 }
 
@@ -102,10 +102,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_metadata_value_entry_validated() {
-        let key = MetadataKey::new("icrc1", "name").unwrap();
-        let entry = MetadataValue::entry_validated(key, "My Token");
-        assert_eq!(entry.0, "icrc1:name");
+    fn test_metadata_value_entry() {
+        let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token");
+        assert_eq!(entry.0.as_str(), "icrc1:name");
         assert_eq!(entry.1, MetadataValue::Text("My Token".to_string()));
     }
 }

@@ -1,7 +1,7 @@
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    LedgerAccount, LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL, assert_reply,
-    ledger_wasm, out_of_band_upgrade, stop_canister,
+    LedgerAccount, LedgerMetadataKey, LedgerMetadataValue, LedgerSuiteOrchestrator,
+    MINTER_PRINCIPAL, assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -453,4 +453,4 @@ assert_ledger!("icrc1_decimals", u8);
 assert_ledger!("icrc1_total_supply", Nat);
 assert_ledger!("icrc1_fee", Nat);
 assert_ledger!("icrc1_minting_account", Option<LedgerAccount>);
-assert_ledger!("icrc1_metadata", Vec<(String, LedgerMetadataValue)>);
+assert_ledger!("icrc1_metadata", Vec<(LedgerMetadataKey, LedgerMetadataValue)>);

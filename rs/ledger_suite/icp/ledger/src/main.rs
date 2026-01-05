@@ -487,7 +487,7 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, Value)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     vec![
         Value::entry(MetadataKey::ICRC1_DECIMALS, DECIMAL_PLACES as u64),
         Value::entry(

@@ -911,12 +911,16 @@ impl Ledger {
         MAX_TAKE_ALLOWANCES
     }
 
-    pub fn metadata(&self) -> Vec<(String, Value)> {
-        let mut records: Vec<(String, Value)> = self
+    pub fn metadata(&self) -> Vec<(MetadataKey, Value)> {
+        let mut records: Vec<(MetadataKey, Value)> = self
             .metadata
             .clone()
             .into_iter()
-            .map(|(k, v)| (k, StoredValue::into(v)))
+            .map(|(k, v)| {
+                let key = MetadataKey::parse(&k)
+                    .unwrap_or_else(|e| panic!("invalid metadata key '{k}': {e}"));
+                (key, StoredValue::into(v))
+            })
             .collect();
         records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64));
         records.push(Value::entry(METADATA_NAME, self.token_name()));
