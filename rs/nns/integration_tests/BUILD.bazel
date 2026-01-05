@@ -260,6 +260,7 @@ rust_ic_test_suite_with_extra_srcs(
             # mostly due to long running times.
             "src/canister_playground.rs",
             "src/upgrade_canisters_with_golden_nns_state.rs",
+            "src/node_provider_remuneration_with_golden_nns_state.rs",
         ],
     ),
     aliases = ALIASES,
@@ -352,6 +353,27 @@ rust_ic_test(
     ],
     aliases = ALIASES,
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = [
+        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
+        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
+        "requires-network",  # Because mainnet state is downloaded (and used).
+    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "node_provider_remuneration_with_golden_nns_state",
+    # This uses on the order of 10 GB of disk space.
+    # Therefore, size = "large" is not large enough.
+    size = "enormous",
+    srcs = [
+        "src/node_provider_remuneration_with_golden_nns_state.rs",
+    ],
+    aliases = ALIASES,
+    crate_root = "src/node_provider_remuneration_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
