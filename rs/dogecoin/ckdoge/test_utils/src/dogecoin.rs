@@ -251,6 +251,8 @@ pub enum DogecoinUsers {
     Miner2,
     /// User with initially zero balance.
     DepositUser,
+    /// User with initially zero balance.
+    WithdrawalRecipientUser,
 }
 
 impl DogecoinUsers {
@@ -260,6 +262,9 @@ impl DogecoinUsers {
             Self::Miner1 => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
             Self::Miner2 => "cQsMeW4Jpxi6Mcrn6gxWzfBbGeECjRPQpY6q9SMKXCus93rNaKK6",
             Self::DepositUser => "cVJe3RYJyTgwPFr7KeKpSJ6PTiwpFqynWXp9MYmjfctmrVQKPDXb",
+            DogecoinUsers::WithdrawalRecipientUser => {
+                "cVo2Sckkd8DuXvLD9cANSgTjaMfviBynKBFu5UikQf99nNwME5KH"
+            }
         }
     }
 
@@ -268,6 +273,7 @@ impl DogecoinUsers {
             DogecoinUsers::Miner1 => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
             DogecoinUsers::Miner2 => "mjoDCYdX7YqtQPYpCD4Zxsa3aMDmttvqbj",
             DogecoinUsers::DepositUser => "n3zDWiJxzMzH1w8mXjruGeyzXdCKuqSk7R",
+            DogecoinUsers::WithdrawalRecipientUser => "mzm3fSWxQBgBYLMxTzbhwdHheiH7iUCpVj",
         };
         address
             .parse::<dogecoin::Address<_>>()
@@ -280,7 +286,8 @@ impl DogecoinUsers {
         match self {
             DogecoinUsers::Miner1 => "miner1",
             DogecoinUsers::Miner2 => "miner2",
-            DogecoinUsers::DepositUser => "user1",
+            DogecoinUsers::DepositUser => "deposit_user",
+            DogecoinUsers::WithdrawalRecipientUser => "recipient_user",
         }
     }
 }

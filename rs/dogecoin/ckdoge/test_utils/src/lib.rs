@@ -7,7 +7,7 @@ mod minter;
 use crate::dogecoin::{DogecoinCanister, DogecoinDaemon};
 use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
-pub use crate::minter::MinterCanister;
+pub use crate::{dogecoin::DogecoinUsers, minter::MinterCanister};
 use bitcoin::TxOut;
 use bitcoin::dogecoin::Network as DogeNetwork;
 use candid::{Encode, Principal};

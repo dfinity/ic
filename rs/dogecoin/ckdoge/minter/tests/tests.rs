@@ -1,22 +1,24 @@
 use candid::Principal;
-use ic_ckdoge_minter::candid_api::{
-    EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
-    RetrieveDogeWithApprovalError, WithdrawalFee,
+use ic_ckdoge_minter::{
+    candid_api::{
+        EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError, WithdrawalFee,
+    },
+    lifecycle::init::Network,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
-    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxo_with_value,
-    utxos_with_value,
+    DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
+    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxos_with_value,
 };
 use ic_management_canister_types::CanisterStatusType;
 
 #[test]
 fn should_fail_withdrawal() {
-    let setup = Setup::default();
+    let setup = Setup::new(Network::Regtest);
     let minter = setup.minter();
     let correct_withdrawal_args = RetrieveDogeWithApprovalArgs {
         amount: RETRIEVE_DOGE_MIN_AMOUNT,
-        address: DOGECOIN_ADDRESS_1.to_string(),
+        address: DogecoinUsers::WithdrawalRecipientUser.address().to_string(),
         from_subaccount: None,
     };
 
@@ -52,10 +54,12 @@ fn should_fail_withdrawal() {
         Err(RetrieveDogeWithApprovalError::InsufficientAllowance { allowance: 0 })
     );
 
+    setup.dogecoind().setup_user_with_balance();
     setup
         .deposit_flow()
         .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
-        .dogecoin_simulate_transaction(vec![utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT)])
+        .dogecoin_send_transaction(vec![RETRIEVE_DOGE_MIN_AMOUNT])
+        .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
         .minter_update_balance()
         .expect_mint();
     let _ledger_approval_index = setup
