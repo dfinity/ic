@@ -28,7 +28,7 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         item("phash", Optional, is_parent_hash),
         item("btype", Required, is(Value::text(BTYPE_107))),
         item("ts", Required, is_timestamp),
-        item("tx", Optional, is_icrc107_transaction),
+        item("tx", Required, is_icrc107_transaction),
     ]);
 
     is_icrc107_block(Cow::Borrowed(block))
