@@ -236,10 +236,12 @@ impl Scalar {
     ///
     /// Uses the same mechanism as RFC 9380's hash_to_field except
     /// targeting the scalar group.
-    pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+    pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
         let mut s = [ic_bls12_381::Scalar::zero()];
         <ic_bls12_381::Scalar as HashToField>::hash_to_field::<ExpandMsgXmd<sha2::Sha256>>(
-            input, domain_sep, &mut s,
+            input,
+            domain_sep.as_bytes(),
+            &mut s,
         );
         Self::new(s[0])
     }
@@ -958,9 +960,14 @@ macro_rules! define_affine_and_projective_types {
                 fn mul(&self, scalar: &Scalar) -> $projective {
                     let s = scalar.serialize();
 
-                    let mut accum = <ic_bls12_381::$projective>::identity();
+                    let mut accum = {
+                        let i = 0;
+                        let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
+                        let b = Self::get_window(&s, Self::WINDOW_BITS*i);
+                        <ic_bls12_381::$projective>::from(Self::ct_select(tbl_for_i, b as usize))
+                    };
 
-                    for i in 0..Self::WINDOWS {
+                    for i in 1..Self::WINDOWS {
                         let tbl_for_i = &self.tbl[Self::WINDOW_ELEMENTS*i..Self::WINDOW_ELEMENTS*(i+1)];
 
                         let b = Self::get_window(&s, Self::WINDOW_BITS*i);
@@ -1147,7 +1154,7 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
                 $projective::hash(domain_sep, input).into()
             }
 
@@ -1160,7 +1167,7 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash_with_precomputation(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash_with_precomputation(domain_sep: &'static str, input: &[u8]) -> Self {
                 let mut pt = Self::hash(domain_sep, input);
                 pt.precompute();
                 pt
@@ -1302,6 +1309,15 @@ macro_rules! define_affine_and_projective_types {
                 let v = scalars.clone().map(|s| self * s);
                 $projective::batch_normalize_array(&v)
             }
+
+            /// Sum some points
+            pub fn sum(pts: &[Self]) -> $projective {
+                let mut sum = ic_bls12_381::$projective::identity();
+                for pt in pts {
+                    sum += pt.inner();
+                }
+                $projective::new(sum)
+            }
         }
 
         paste! {
@@ -1336,14 +1352,14 @@ macro_rules! define_affine_and_projective_types {
 
             /// Constant time selection
             ///
-            /// Equivalent to from[index] except avoids leaking the index
-            /// through side channels.
-            ///
-            /// If index is out of range, returns the identity element
+            /// Equivalent to from[index - 1] except avoids leaking the index
+            /// through side channels. If index is zero or out of range,
+            /// returns the identity element
             pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
                 use subtle::{ConditionallySelectable, ConstantTimeEq};
                 let mut val = ic_bls12_381::$projective::identity();
 
+                let index = index.wrapping_sub(1);
                 for v in 0..from.len() {
                     val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
                 }
@@ -1365,33 +1381,12 @@ macro_rules! define_affine_and_projective_types {
                 Self::new(sum)
             }
 
-            /// Deserialize a point (compressed format only)
-            ///
-            /// This version verifies that the decoded point is within the prime order
-            /// subgroup, and is safe to call on untrusted inputs.
-            pub fn deserialize<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize(bytes)?;
-                Ok(pt.into())
-            }
-
-            /// Serialize a point in compressed format in some specific type
-            pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
-                T::from(self.serialize())
-            }
-
-            /// Deserialize a point (compressed format only), trusted bytes edition
-            ///
-            /// As only compressed format is accepted, it is not possible to
-            /// create a point which is not on the curve. However it is possible
-            /// using this function to create a point which is not within the
-            /// prime-order subgroup. This can be detected by calling is_torsion_free
-            pub fn deserialize_unchecked<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
-                let pt = $affine::deserialize_unchecked(bytes)?;
-                Ok(pt.into())
-            }
-
             /// Serialize this point in compressed format
-            pub fn serialize(&self) -> [u8; Self::BYTES] {
+            ///
+            /// This exists for implementing Debug but is intentionally pub(crate)
+            /// since it hides the expensive affine conversion so should be avoided
+            /// in production code.
+            pub(crate) fn serialize(&self) -> [u8; Self::BYTES] {
                 $affine::from(self).serialize()
             }
 
@@ -1423,10 +1418,10 @@ macro_rules! define_affine_and_projective_types {
             /// # Arguments
             /// * `domain_sep` - some protocol specific domain separator
             /// * `input` - the input which will be hashed
-            pub fn hash(domain_sep: &[u8], input: &[u8]) -> Self {
+            pub fn hash(domain_sep: &'static str, input: &[u8]) -> Self {
                 let pt =
                     <ic_bls12_381::$projective as HashToCurve<ExpandMsgXmd<sha2::Sha256>>>::hash_to_curve(
-                        input, domain_sep,
+                        input, domain_sep.as_bytes(),
                     );
                 Self::new(pt)
             }
@@ -1519,6 +1514,12 @@ macro_rules! define_affine_and_projective_types {
             }
         }
 
+        impl std::convert::From<&$projective> for $projective {
+            fn from(pt: &$projective) -> Self {
+                Self::new(*pt.inner())
+            }
+        }
+
         impl std::convert::From<$projective> for $affine {
             fn from(pt: $projective) -> Self {
                 Self::new(pt.inner().into())
@@ -1577,14 +1578,16 @@ macro_rules! declare_mul2_table_impl {
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = <$projective>::identity();
+                let mut accum = {
+                    let w1 = Window::extract(&s1, 0);
+                    let w2 = Window::extract(&s2, 0);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
+                    <$projective>::ct_select(&self.0, window)
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w1 = Window::extract(&s1, i);
@@ -1621,22 +1624,31 @@ macro_rules! declare_mul2_table_impl {
                 let s1 = a.serialize();
                 let s2 = b.serialize();
 
-                let mut accum = <$projective>::identity();
+                let mut accum = {
+                    let w1 = Window::extract(&s1, 0);
+                    let w2 = Window::extract(&s2, 0);
+                    let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
+                    // Variable time lookup
+                    if window > 0 {
+                        self.0[window - 1].clone()
+                    } else {
+                        <$projective>::identity()
+                    }
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w1 = Window::extract(&s1, i);
                     let w2 = Window::extract(&s2, i);
                     let window = $tbl_typ::col(w1 as usize) + $tbl_typ::row(w2 as usize);
 
-                    // This is the only difference from the constant time version:
-                    accum += &self.0[window];
+                    // Variable time lookup
+                    if window > 0 {
+                        accum += &self.0[window - 1];
+                    }
                 }
 
                 accum
@@ -1661,8 +1673,8 @@ macro_rules! declare_compute_mul2_table_inline {
         // Configurable window size: can be in 1..=8
         type Window = WindowInfo<$window_size>;
 
-        // Derived constants
-        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS;
+        // The size of the table (the identity element is omitted thus the -1)
+        const TABLE_SIZE: usize = Window::ELEMENTS * Window::ELEMENTS - 1;
 
         /*
         A table which can be viewed as a 2^WINDOW_SIZE x 2^WINDOW_SIZE matrix
@@ -1676,25 +1688,60 @@ macro_rules! declare_compute_mul2_table_inline {
 
         We build up the table incrementally using additions and doubling, to
         avoid the cost of full scalar mul.
-         */
-        let mut tbl = <$projective>::identities(TABLE_SIZE);
 
-        // Precompute the table (tbl[0] is left as the identity)
-        for i in 1..TABLE_SIZE {
+        The 0:0 entry is omitted because it is the identity element and not needed.
+
+        This complicates the indexing in the loop below, but simplifies and
+        optimizes the online multiplication step as it is not necessary to read
+        the identity element out of the table in the constant-time table lookup.
+         */
+        let mut tbl: Vec<$projective> = Vec::with_capacity(TABLE_SIZE);
+
+        // Precompute the table
+        for idx in 0..TABLE_SIZE {
             // The indexing here depends just on i, which is a public loop index
 
+            let i = (idx + 1);
             let xi = i % Window::ELEMENTS;
             let yi = (i >> Window::SIZE) % Window::ELEMENTS;
 
-            if xi % 2 == 0 && yi % 2 == 0 {
-                tbl[i] = tbl[i / 2].double();
-            } else if xi > 0 && yi > 0 {
-                tbl[i] = &tbl[$tbl_typ::col(xi)] + &tbl[$tbl_typ::row(yi)];
-            } else if xi > 0 {
-                tbl[i] = &tbl[$tbl_typ::col(xi - 1)] + $x;
-            } else if yi > 0 {
-                tbl[i] = &tbl[$tbl_typ::row(yi - 1)] + $y;
-            }
+            let next = {
+                // Here each access of previous elements of the table is offset
+                // by one to handle the omission of the identity element which
+                // would typically be at tbl[0]
+
+                if xi % 2 == 0 && yi % 2 == 0 {
+                    // Here the table is just the double of an existing element
+                    tbl[(i / 2) - 1].double()
+                } else if xi > 0 && yi > 0 {
+                    // A combination of x and y
+                    if xi == 1 {
+                        &tbl[$tbl_typ::row(yi) - 1] + $x
+                    } else if yi == 1 {
+                        &tbl[$tbl_typ::col(xi) - 1] + $y
+                    } else {
+                        &tbl[$tbl_typ::col(xi) - 1] + &tbl[$tbl_typ::row(yi) - 1]
+                    }
+                } else if xi > 0 && yi == 0 {
+                    // A multiple of x with no y component
+                    if xi == 1 {
+                        <$projective>::from($x)
+                    } else {
+                        &tbl[$tbl_typ::col(xi - 1) - 1] + $x
+                    }
+                } else if yi > 0 && xi == 0 {
+                    // A multiple of y with no x component
+                    if yi == 1 {
+                        <$projective>::from($y)
+                    } else {
+                        &tbl[$tbl_typ::row(yi - 1) - 1] + $y
+                    }
+                } else {
+                    unreachable!();
+                }
+            };
+
+            tbl.push(next);
         }
 
         $tbl_typ(tbl)
@@ -2030,13 +2077,18 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
                 // Configurable window size: can be in 1..=8
                 type Window = WindowInfo<$window>;
 
-                // Derived constants
-                const TABLE_SIZE: usize = Window::ELEMENTS;
+                /*
+                 * An implicit element of the table is the identity element -
+                 * we skip actually including it in the table since that avoids
+                 * having to read it during each iteration of the loop.
+                 */
+                const TABLE_SIZE: usize = Window::ELEMENTS - 1;
 
                 let mut tbl = Self::identities(TABLE_SIZE);
 
+                tbl[0] = self.clone();
                 for i in 1..TABLE_SIZE {
-                    tbl[i] = if i % 2 == 0 {
+                    tbl[i] = if i % 2 == 1 {
                         tbl[i / 2].double()
                     } else {
                         &tbl[i - 1] + self
@@ -2045,14 +2097,14 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let s = scalar.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = {
+                    let w = Window::extract(&s, 0);
+                    Self::ct_select(&tbl, w as usize)
+                };
 
-                for i in 0..Window::WINDOWS {
-                    // skip on first iteration: doesn't leak secrets as index is public
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w = Window::extract(&s, i);
@@ -2081,13 +2133,11 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 
                 let s = scalar.serialize();
 
-                let mut accum = Self::identity();
+                let mut accum = tbl[Window::extract(&s, 0) as usize].clone();
 
-                for i in 0..Window::WINDOWS {
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
+                for i in 1..Window::WINDOWS {
+                    for _ in 0..Window::SIZE {
+                        accum = accum.double();
                     }
 
                     let w = Window::extract(&s, i);
@@ -2183,7 +2233,7 @@ impl_debug_using_serialize_for!(G1Projective);
 impl G1Affine {
     /// See draft-irtf-cfrg-bls-signature-05 §4.2.2 for details on BLS augmented signatures
     pub fn augmented_hash(pk: &G2Affine, data: &[u8]) -> Self {
-        let domain_sep = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
+        let domain_sep = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_AUG_";
 
         let mut signature_input = vec![];
         signature_input.extend_from_slice(&pk.serialize());
@@ -2273,14 +2323,14 @@ impl Gt {
 
     /// Constant time selection
     ///
-    /// Equivalent to from[index] except avoids leaking the index
-    /// through side channels.
-    ///
-    /// If index is out of range, returns the identity element
+    /// Equivalent to from[index - 1] except avoids leaking the index
+    /// through side channels. If index is zero or out of range,
+    /// returns the identity element
     pub(crate) fn ct_select(from: &[Self], index: usize) -> Self {
         use subtle::{ConditionallySelectable, ConstantTimeEq};
         let mut val = ic_bls12_381::Gt::identity();
 
+        let index = index.wrapping_sub(1);
         for v in 0..from.len() {
             val.conditional_assign(from[v].inner(), usize::ct_eq(&v, &index));
         }
@@ -2443,11 +2493,23 @@ impl G2Prepared {
     pub fn neg_generator() -> &'static Self {
         &G2PREPARED_NEG_G
     }
+
+    /// Return statistics related to the G2Prepared cache
+    pub fn cache_statistics() -> crate::cache::G2PreparedCacheStatistics {
+        crate::cache::G2PreparedCache::global().cache_statistics()
+    }
 }
 
 impl From<&G2Affine> for G2Prepared {
     fn from(v: &G2Affine) -> Self {
-        Self::new((*v.inner()).into())
+        let bytes = v.serialize();
+        if let Some(prep) = crate::cache::G2PreparedCache::global().get(&bytes) {
+            prep
+        } else {
+            let prep = Self::new((*v.inner()).into());
+            crate::cache::G2PreparedCache::global().insert(bytes, prep.clone());
+            prep
+        }
     }
 }
 

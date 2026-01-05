@@ -4,7 +4,6 @@
 
 # [Misc]
 /.devcontainer/           @dfinity/idx
-.rclone*                  @dfinity/idx
 /buf.yaml                 @dfinity/team-dsm
 /cpp/                     @dfinity/node
 /licenses/                @dfinity/idx
@@ -32,7 +31,6 @@ clippy.toml               @dfinity/ic-interface-owners
 # [Golang]
 go.mod                    @dfinity/idx
 go.sum                    @dfinity/idx
-go_deps.bzl               @dfinity/idx
 
 # [DevEnv]
 .vscode/                  @dfinity/idx
@@ -77,8 +75,10 @@ go_deps.bzl               @dfinity/idx
 # [GitHub-Ci]
 /.github/                                                                @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
+/.github/workflows/bazel-dependency-submission.yml                       @dfinity/idx @dfinity/product-security
 /.github/workflows/ledger-suite-release.yml                              @dfinity/defi-team @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/defi-team @dfinity/idx
+/.github/workflows/security-checks.yml                                   @dfinity/idx @dfinity/product-security
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
 .github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
 /ci/                                                                     @dfinity/idx
@@ -88,7 +88,6 @@ go_deps.bzl               @dfinity/idx
 /ci/scripts/repro-check                                                  @dfinity/dre
 /.pre-commit-config.yaml                                                 @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
-/.mergify.yaml                                                           @dfinity/idx
 
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
@@ -246,6 +245,8 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/                                              @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
+/rs/tests/testnets/mainnet_nns/                         @dfinity/consensus
+/rs/tests/testnets/mainnet_nns.rs                       @dfinity/consensus
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/node

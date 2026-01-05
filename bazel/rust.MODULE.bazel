@@ -10,6 +10,7 @@ archive_override(
     patches = [
         "//bazel:rules_rust_strip_level.patch",
         "//bazel:rules_rust_package_alias.patch",
+        "//bazel:rules_rust_rust_test.patch",
     ],
     urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
@@ -170,9 +171,8 @@ crate.spec(
         "rand",
         "serde",
     ],
-    git = "https://github.com/dfinity/rust-dogecoin",
-    package = "bitcoin",
-    rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd",
+    package = "bitcoin-dogecoin",
+    version = "^0.32.5-doge.1",
 )
 crate.spec(
     features = [
@@ -619,7 +619,7 @@ crate.spec(
         "acme-alpn",
     ],
     package = "ic-bn-lib",
-    version = "0.1",
+    version = "0.1.7",
 )
 crate.spec(
     package = "ic-bn-lib-common",
@@ -671,9 +671,8 @@ crate.spec(
     version = "3.0.3",
 )
 crate.spec(
-    git = "https://github.com/dfinity/dogecoin-canister",
     package = "ic-doge-interface",
-    rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f",
+    version = "^0.1.0",
 )
 crate.spec(
     default_features = False,
@@ -1463,6 +1462,10 @@ crate.spec(
     version = "^0.10.8",
 )
 crate.spec(
+    package = "shell-escape",
+    version = "^0.1.5",
+)
+crate.spec(
     features = [
         "iterator",
     ],
@@ -1570,6 +1573,10 @@ crate.spec(
 crate.spec(
     package = "syscalls",
     version = "^0.6.18",
+)
+crate.spec(
+    package = "sysinfo",
+    version = "0.37",
 )
 crate.spec(
     package = "systemd",
@@ -1858,10 +1865,6 @@ crate.spec(
     version = "^39.0.1",
 )
 crate.spec(
-    package = "wasmtime-environ",
-    version = "^39.0.1",
-)
-crate.spec(
     package = "wast",
     version = "^240.0.0",
 )
@@ -1968,7 +1971,7 @@ crate.annotation_select(
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )
 crate.annotation_select(
-    crate = "bitcoin",
+    crate = "bitcoin-dogecoin",
     rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
     triples = ["@@//bazel:fuzzing_code_enabled"],
 )

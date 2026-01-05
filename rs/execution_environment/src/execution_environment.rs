@@ -1586,7 +1586,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
@@ -3273,7 +3273,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },

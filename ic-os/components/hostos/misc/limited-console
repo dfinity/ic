@@ -16,7 +16,12 @@ show_menu() {
     echo "  service-status          - Show service status (usage: service-status <service-name>)" 
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
+    echo "  guestos-console-logs    - Show GuestOS Serial Console Logs"
     echo "  network-config-settings - Show network settings from config"
+    echo "  network-interfaces      - Show network interface status"
+    echo "  ip-addresses            - Show all IP addresses"
+    echo "  ping-gateway            - Test connectivity to IPv6 gateway"
+    echo "  routes                  - Show routing table"
     echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
@@ -68,6 +73,14 @@ execute_command() {
                 PATH="$RESTRICTED_PATH" \
                 /usr/bin/less /boot/config/config.json
             ;;
+        "guestos-console-logs")
+            echo "=== GuestOS Serial Console Logs ==="
+            env -i \
+                TERM="$TERM" \
+                LESSSECURE=1 \
+                PATH="$RESTRICTED_PATH" \
+                /usr/bin/less -f /var/log/libvirt/qemu/guestos-serial.log
+            ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
             local network_settings=$(get_config_value '.network_settings' 2>/dev/null)
@@ -76,6 +89,35 @@ execute_command() {
             else
                 echo "No network settings found in config"
             fi
+            ;;
+        "network-interfaces")
+            echo "=== Network Interface Status ==="
+            /bin/ip link show
+            ;;
+        "ip-addresses")
+            echo "=== IP Addresses ==="
+            /bin/ip addr show
+            ;;
+        "ping-gateway")
+            echo "=== Testing IPv6 Gateway Connectivity ==="
+            local gateway=$(/bin/ip -6 route show | awk '/^default/ {print $3}' | head -1)
+            if [ -n "$gateway" ]; then
+                echo "Gateway: $gateway"
+                echo ""
+                /bin/ping6 -c 4 "$gateway" 2>&1
+            else
+                echo "No IPv6 gateway found in routing table"
+                echo "IPv6 routes:"
+                /bin/ip -6 route show
+            fi
+            ;;
+        "routes")
+            echo "=== Routing Table ==="
+            echo "IPv4 routes:"
+            /bin/ip -4 route show
+            echo ""
+            echo "IPv6 routes:"
+            /bin/ip -6 route show
             ;;
         "manual-recovery")
             echo "=== Manual Node Recovery ==="
@@ -89,12 +131,21 @@ execute_command() {
             if [ "$confirm" == "y" ]; then
                 # Launch the NNS recovery TUI tool via hostos_tool
 
-                # Fix for serial console where size might be reported as 0 0
-                if size=$(stty size 2>/dev/null); then
-                     read -r rows cols <<< "$size"
-                     if [ "${rows:-0}" -eq 0 ] || [ "${cols:-0}" -eq 0 ]; then
-                         stty rows 36 cols 120
-                     fi
+                # Fix for serial/remote consoles where window size may be missing or tiny
+                if ! size=$(stty size 2>/dev/null); then
+                    echo "Error: could not determine terminal size. The manual-recovery TUI requires a TTY."
+                    echo "Please see \"Manual Recovery Fallback\" in the Manual Node Recovery Guide for further direction."
+                    exit 1
+                fi
+
+                read -r rows cols <<< "$size"
+                # Treat anything smaller than the Manual Recovery TUI minimum as unusable
+                min_rows=15
+                min_cols=10
+                if [ "${rows:-0}" -lt "$min_rows" ] || [ "${cols:-0}" -lt "$min_cols" ]; then
+                    echo "Terminal size (${rows}x${cols}) is too small or invalid, setting to 24x80"
+                    stty rows 24 cols 80
+                    sleep 5 # Give the user a chance to see the message
                 fi
 
                 /opt/ic/bin/hostos_tool manual-recovery

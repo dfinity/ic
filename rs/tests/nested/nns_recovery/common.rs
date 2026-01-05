@@ -38,9 +38,9 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
+use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command;
 use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
-use sha2::{Digest, Sha256};
 use slog::{Logger, info};
 use tokio::task::JoinSet;
 
@@ -189,12 +189,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
-    let recovery_img =
-        std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
-    let recovery_img_hash = Sha256::digest(&recovery_img)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
 
     let AdminAndUserKeys {
         ssh_admin_priv_key_path,
@@ -385,8 +379,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             .unwrap()
             .trim()
             .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
-        .expect("Failed to serve recovery artifacts from UVM");
+    let recovery_hash_prefix = &artifacts_hash[..6.min(artifacts_hash.len())];
+    impersonate_upstreams::uvm_serve_recovery_artifacts(
+        &env,
+        &artifacts_path,
+        recovery_hash_prefix,
+    )
+    .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_recovery_image(
@@ -431,8 +430,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
-            let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_hash = artifacts_hash.clone();
+            let recovery_hash_prefix = recovery_hash_prefix.to_string();
             let upgrade_version = upgrade_version.clone();
 
             handles.spawn(async move {
@@ -441,15 +439,18 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &env,
                     &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash,
-                    &artifacts_hash,
+                    &recovery_hash_prefix,
                     &upgrade_version,
                 )
                 .await
             });
 
             if cfg.sequential_np_actions {
-                handles.join_next().await;
+                handles
+                    .join_next()
+                    .await
+                    .unwrap()
+                    .expect("Node provider action failed");
             }
         }
 
@@ -473,8 +474,7 @@ async fn simulate_node_provider_action(
     env: &TestEnv,
     host: &NestedVm,
     img_version: &str,
-    img_version_hash: &str,
-    artifacts_hash: &str,
+    recovery_hash_prefix: &str,
     upgrade_version: &ReplicaVersion,
 ) {
     // Spoof the HostOS DNS such that it downloads the GuestOS image from the UVM
@@ -492,16 +492,13 @@ async fn simulate_node_provider_action(
     // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
     info!(
         logger,
-        "Running guestos-recovery-upgrader on GuestOS {} with version={}, version-hash={}, recovery-hash={}",
+        "Running guestos-recovery-upgrader on GuestOS {} with version={}, recovery-hash-prefix={}",
         host.vm_name(),
         img_version,
-        img_version_hash,
-        artifacts_hash
+        recovery_hash_prefix,
     );
-    let recovery_upgrader_command = format!(
-        "sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh version={} version-hash={} recovery-hash={}",
-        img_version, img_version_hash, artifacts_hash
-    );
+    let recovery_upgrader_command =
+        build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
     host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
         .expect("Failed to run guestos-recovery-upgrader");
