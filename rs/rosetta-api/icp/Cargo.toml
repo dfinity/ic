@@ -42,7 +42,7 @@ registry-canister = { path = "../../registry/canister" }
 reqwest = { workspace = true }
 rolling-file = { workspace = true }
 rosetta-core = { path = "../common/rosetta_core" }
-rusqlite = { version = "0.29", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }

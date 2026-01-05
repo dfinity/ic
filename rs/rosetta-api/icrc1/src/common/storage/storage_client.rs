@@ -165,7 +165,7 @@ impl StorageClient {
                 // Create tables
                 to_rusqlite_result(super::schema::create_tables(conn))?;
 
-                Ok(())
+                Ok::<(), rusqlite::Error>(())
             })
             .await?;
 
