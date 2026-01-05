@@ -1,6 +1,6 @@
 use anyhow::Context;
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::{RawCustomData, SevCustomData, SevCustomDataNamespace};
+use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
 use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use config_types::TrustedExecutionEnvironmentConfig;
@@ -37,12 +37,15 @@ impl RemoteAttestationServiceImpl {
     }
 
     fn sev_custom_data_from_request(&self, req: &AttestRequest) -> Result<SevCustomData, Status> {
-        let custom_data: [u8; 64] = match req.custom_data {
+        let custom_data: [u8; 64] = match &req.custom_data {
             Some(bytes) => {
                 if bytes.len() != 64 {
                     return Err(Status::invalid_argument("custom_data must be 64 bytes"));
                 }
-                bytes.try_into().expect("Conversion to [u8; 64] failed")
+                bytes
+                    .as_slice()
+                    .try_into()
+                    .expect("Conversion to [u8; 64] failed")
             }
             None => {
                 let mut bytes = [0u8; 64];
@@ -56,7 +59,7 @@ impl RemoteAttestationServiceImpl {
             SevCustomDataNamespace::RawRemoteAttestation,
             custom_data,
         )
-        .map_err(|e| {
+        .map_err(|_e| {
             Status::invalid_argument(format!(
                 "The first 4 bytes of custom data must be {:?}",
                 SevCustomDataNamespace::RawRemoteAttestation.as_bytes()

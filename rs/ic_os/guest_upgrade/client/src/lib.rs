@@ -1,7 +1,6 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::GuestOSConfig;

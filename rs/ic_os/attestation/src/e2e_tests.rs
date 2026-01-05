@@ -1,8 +1,9 @@
 use crate::attestation_package::generate_attestation_package;
-use crate::custom_data::{DerEncodedCustomData, SevCustomDataNamespace, encode_with_namespace};
+use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
 use crate::verification::{SevRootCertificateVerification, verify_attestation_package};
 use crate::{SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail};
 use config_types::TrustedExecutionEnvironmentConfig;
+use ic_sev::guest::custom_data::SevCustomDataNamespace;
 use ic_sev::guest::firmware::MockSevGuestFirmware;
 use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use sev::firmware::guest::AttestationReport;
@@ -60,7 +61,10 @@ fn test_valid_attestation_package() {
     assert_eq!(attestation_report.measurement.as_slice(), MEASUREMENT);
     assert_eq!(
         attestation_report.report_data.as_slice(),
-        encode_with_namespace(&CUSTOM_DATA).expect("Failed to encode custom data for SEV"),
+        CUSTOM_DATA
+            .encode_for_sev()
+            .expect("Failed to encode custom data for SEV")
+            .to_bytes(),
     );
 
     verify_attestation_package(

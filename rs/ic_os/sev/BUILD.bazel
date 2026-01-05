@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:sev",
     "@crate_index//:sha2",
     "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
     "@crate_index//:tokio",
     "@crate_index//:x509-cert",
 ]
