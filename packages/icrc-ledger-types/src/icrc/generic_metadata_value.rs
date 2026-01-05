@@ -37,8 +37,8 @@ impl MetadataValue {
     /// assert_eq!(entry.0.as_str(), "icrc1:name");
     /// ```
     pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey, Self) {
-        let metadata_key = MetadataKey::parse(key)
-            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        let metadata_key =
+            MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
         (metadata_key, val.into())
     }
 }
