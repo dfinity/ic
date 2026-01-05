@@ -9,7 +9,8 @@ use crate::consensus::{
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg::{self as idkg};
 use ic_consensus_utils::{
-    RoundRobin, active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
+    MINIMUM_CHAIN_LENGTH, RoundRobin, active_high_threshold_nidkg_id,
+    active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
@@ -1891,7 +1892,7 @@ impl Validator {
             // Thus, if this condition is true, we know that we have all blocks and random beacons
             // between the latest CUP height and finalized height and are therefore
             // able to recompute.
-            && pool_reader.get_finalized_height() >= cup_height
+            && pool_reader.get_finalized_height().get() >= cup_height.get().saturating_sub(MINIMUM_CHAIN_LENGTH)
             // If the state height exceeded the cup height, we can validate the cup, as it won't
             // trigger the state sync.
             && self.state_manager.latest_state_height() < cup_height
