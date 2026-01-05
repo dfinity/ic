@@ -118,15 +118,11 @@ async fn test_async(env: TestEnv, config: Config) {
     let topology_snapshot = env.topology_snapshot();
     let (app_subnet, _) = get_app_subnet_and_node(&topology_snapshot);
 
-    let mut nodes = app_subnet.nodes();
-    let rejoin_node = nodes.next().unwrap();
-    let agent_node = nodes.next().unwrap();
     rejoin_test_long_rounds(
         env,
         config.num_canisters,
         DKG_INTERVAL,
-        rejoin_node.clone(),
-        agent_node.clone(),
+        app_subnet.nodes().collect(),
     )
     .await;
 }

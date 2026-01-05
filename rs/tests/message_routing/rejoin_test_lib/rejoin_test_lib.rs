@@ -36,6 +36,8 @@ const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 
+const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
+
 const GIB: u64 = 1 << 30;
 
 pub async fn rejoin_test(
@@ -267,69 +269,87 @@ pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     num_canisters: usize,
     dkg_interval: u64,
-    rejoin_node: IcNodeSnapshot,
-    agent_node: IcNodeSnapshot,
+    nodes: Vec<IcNodeSnapshot>,
 ) {
     let logger = env.logger();
-    let agent = agent_node.build_default_agent_async().await;
-    let ic00 = ManagementCanister::create(&agent);
+    {
+        let init_node = nodes[0].clone();
+        let agent = init_node.build_default_agent_async().await;
+        let ic00 = ManagementCanister::create(&agent);
 
-    let num_seed_canisters = 4;
-    info!(
-        logger,
-        "Deploying {} seed canisters on a node {} ...",
-        num_seed_canisters,
-        agent_node.get_public_url()
-    );
-    let mut create_seed_canisters_futs = vec![];
-    for _ in 0..num_seed_canisters {
-        create_seed_canisters_futs.push(deploy_seed_canister(
-            &ic00,
-            agent_node.effective_canister_id(),
-        ));
-    }
-    let seed_canisters = join_all(create_seed_canisters_futs).await;
+        let num_seed_canisters = 4;
+        info!(
+            logger,
+            "Deploying {} seed canisters on a node {} ...",
+            num_seed_canisters,
+            init_node.get_public_url()
+        );
+        let mut create_seed_canisters_futs = vec![];
+        for _ in 0..num_seed_canisters {
+            create_seed_canisters_futs.push(deploy_seed_canister(
+                &ic00,
+                init_node.effective_canister_id(),
+            ));
+        }
+        let seed_canisters = join_all(create_seed_canisters_futs).await;
 
-    let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
-    info!(
-        logger,
-        "Creating {} canisters via the seed canisters ...",
-        num_canisters_per_seed_canister * num_seed_canisters,
-    );
-    let mut create_many_canisters_futs = vec![];
-    for seed_canister_id in seed_canisters {
-        let bytes = Encode!(&num_canisters_per_seed_canister)
-            .expect("Failed to candid encode argument for a seed canister");
-        let fut = agent
-            .update(&seed_canister_id, "create_many_canisters")
-            .with_arg(bytes)
-            .call_and_wait();
-        create_many_canisters_futs.push(fut);
-    }
-    let res = join_all(create_many_canisters_futs).await;
-    for r in res {
-        r.expect("Failed to create canisters via a seed canister");
+        let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
+        info!(
+            logger,
+            "Creating {} canisters via the seed canisters ...",
+            num_canisters_per_seed_canister * num_seed_canisters,
+        );
+        let mut create_many_canisters_futs = vec![];
+        for seed_canister_id in seed_canisters {
+            let bytes = Encode!(&num_canisters_per_seed_canister)
+                .expect("Failed to candid encode argument for a seed canister");
+            let fut = agent
+                .update(&seed_canister_id, "create_many_canisters")
+                .with_arg(bytes)
+                .call_and_wait();
+            create_many_canisters_futs.push(fut);
+        }
+        let res = join_all(create_many_canisters_futs).await;
+        for r in res {
+            r.expect("Failed to create canisters via a seed canister");
+        }
+
+        // We deploy 8 "busy" canisters: this way,
+        // there are 2 canisters per each of the 4 scheduler cores
+        // and thus every thread executes 2 x 1.8B = 3.6B instructions.
+        let num_busy_canisters = 8;
+        info!(
+            logger,
+            "Deploying {} busy canisters on a node {} ...",
+            num_busy_canisters,
+            init_node.get_public_url()
+        );
+        let mut create_busy_canisters_futs = vec![];
+        for _ in 0..num_busy_canisters {
+            create_busy_canisters_futs.push(deploy_busy_canister(
+                &agent,
+                init_node.effective_canister_id(),
+                &logger,
+            ));
+        }
+        join_all(create_busy_canisters_futs).await;
     }
 
-    // We deploy 8 "busy" canisters: this way,
-    // there are 2 canisters per each of the 4 scheduler cores
-    // and thus every thread executes 2 x 1.8B = 3.6B instructions.
-    let num_busy_canisters = 8;
-    info!(
-        logger,
-        "Deploying {} busy canisters on a node {} ...",
-        num_busy_canisters,
-        agent_node.get_public_url()
-    );
-    let mut create_busy_canisters_futs = vec![];
-    for _ in 0..num_busy_canisters {
-        create_busy_canisters_futs.push(deploy_busy_canister(
-            &agent,
-            agent_node.effective_canister_id(),
-            &logger,
-        ));
+    let mut total_process_batch_durations = vec![];
+    for node in &nodes {
+        let duration = total_process_batch_duration(&logger, node.clone()).await;
+        total_process_batch_durations.push(duration);
     }
-    join_all(create_busy_canisters_futs).await;
+    let mut paired: Vec<_> = total_process_batch_durations
+        .into_iter()
+        .zip(nodes.into_iter())
+        .collect();
+    paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
+    let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
+
+    let reference_node = sorted_nodes[0].clone();
+    let n = sorted_nodes.len();
+    let rejoin_node = sorted_nodes[n / 2].clone();
 
     info!(
         logger,
@@ -345,15 +365,15 @@ pub async fn rejoin_test_long_rounds(
     // This way, the restarted node starts from that CUP
     // and we can assert it to catch up until the next CUP.
     info!(logger, "Waiting for a CUP ...");
-    let agent_node_status = agent_node
+    let reference_node_status = reference_node
         .status_async()
         .await
-        .expect("Failed to get status of agent_node");
-    let latest_certified_height = agent_node_status
+        .expect("Failed to get status of reference_node");
+    let latest_certified_height = reference_node_status
         .certified_height
-        .expect("Failed to get certified height of agent_node")
+        .expect("Failed to get certified height of reference_node")
         .get();
-    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+    wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
 
     info!(logger, "Start the killed node again ...");
     rejoin_node.vm().start();
@@ -362,7 +382,7 @@ pub async fn rejoin_test_long_rounds(
     let last_cup_height = wait_for_cup(
         &logger,
         latest_certified_height + dkg_interval + 1,
-        agent_node.clone(),
+        reference_node.clone(),
     )
     .await;
 
@@ -449,6 +469,37 @@ pub async fn assert_state_sync_has_happened(
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
 }
 
+async fn total_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
+    let label_sum = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_sum");
+    let label_count = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_count");
+    let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;
+    let sums: Vec<_> = metrics
+        .iter()
+        .filter_map(|(k, v)| {
+            if k.starts_with(&label_sum) {
+                Some(v)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let counts: Vec<_> = metrics
+        .iter()
+        .filter_map(|(k, v)| {
+            if k.starts_with(&label_count) {
+                Some(v)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(sums.len(), counts.len());
+    sums.iter()
+        .zip(counts.iter())
+        .map(|(x, y)| x[0] / y[0])
+        .sum()
+}
+
 pub async fn fetch_metrics<T>(
     log: &slog::Logger,
     node: IcNodeSnapshot,
@@ -468,7 +519,10 @@ where
         let metrics_result = metrics.fetch::<T>().await;
         match metrics_result {
             Ok(result) => {
-                if labels.iter().all(|&label| result.contains_key(label)) {
+                if labels
+                    .iter()
+                    .all(|&label| result.iter().any(|(k, _)| k.starts_with(label)))
+                {
                     info!(log, "Metrics successfully scraped {:?}.", result);
                     return result;
                 } else {
