@@ -1,8 +1,10 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
+use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
+use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
@@ -11,7 +13,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     event::CkDogeMinterEvent,
-    lifecycle::init::MinterArg,
+    lifecycle::MinterArg,
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
@@ -38,7 +40,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic(true), &DOGECOIN_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &DOGECOIN_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
 }
 
@@ -215,16 +217,12 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
     .expect("failed to fetch canister status")
 }
 
-// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
-// both types of events:
-// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
-// 2) Some events, related to KYT are not applicable to Dogecoin.
-// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
-#[query(hidden = true)]
+#[query]
 fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
-    ic_ckbtc_minter::storage::events()
+    CkDogeEventLogger
+        .events_iter()
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()

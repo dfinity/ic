@@ -189,6 +189,7 @@ mod event {
 
         /// Indicates that the given KYT provider received owed fees.
         #[serde(rename = "distributed_kyt_fee")]
+        #[deprecated]
         DistributedKytFee {
             /// The beneficiary.
             #[serde(rename = "kyt_provider")]
@@ -221,6 +222,7 @@ mod event {
 
         /// Indicates a reimbursement.
         #[serde(rename = "schedule_deposit_reimbursement")]
+        #[deprecated]
         ScheduleDepositReimbursement {
             /// The beneficiary.
             account: Account,
@@ -234,6 +236,7 @@ mod event {
 
         /// Indicates that a reimbursement has been executed.
         #[serde(rename = "reimbursed_failed_deposit")]
+        #[deprecated]
         ReimbursedFailedDeposit {
             /// The burn block on the ledger.
             burn_block_index: u64,

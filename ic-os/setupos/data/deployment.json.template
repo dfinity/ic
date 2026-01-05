@@ -3,7 +3,6 @@
     "deployment_environment": "DEPLOYMENT_ENVIRONMENT",
     "mgmt_mac": null
   },
-  "logging": {},
   "nns": {
     "urls": NNS_URLS
   },

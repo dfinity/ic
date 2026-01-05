@@ -6248,6 +6248,92 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
     assert!(test.state().subnet_queues().has_output());
 }
 
+#[test]
+fn subnet_split_cleans_in_progress_raw_rand_requests() {
+    let canister_id = canister_test_id(2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::from(1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    test.advance_to_round(ExecutionRound::new(2));
+    let last_round = test.last_round();
+
+    // Inject fake request to be able to create a response.
+    let canister = get_running_canister(canister_id);
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::new(0),
+        canister_id,
+        InputQueueType::LocalSubnet,
+    );
+    let state = test.state_mut();
+    state.put_canister_state(canister);
+    state.pop_subnet_input();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(
+            RequestBuilder::new().sender(canister_id).build(),
+            last_round,
+            UNIX_EPOCH,
+        );
+    // `SubnetCallContextManager` contains one `RawRandContext`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert!(own_subnet_id != other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `RawRandContext` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates the canister to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `RawRandContext` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+}
+
 fn scheduled_heap_delta_limit_corner_values() -> BoxedStrategy<u64> {
     prop_oneof!(Just(0), Just(5), Just(10), Just(100), Just(u64::MAX)).boxed()
 }

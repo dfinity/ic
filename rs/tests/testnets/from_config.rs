@@ -21,10 +21,10 @@
 // }
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 500 GiB disk, but can be configured in the file.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create --lifetime-mins=180 --from-ic-config-path <(cat <<EOF
+//   $ ict testnet create --from-ic-config-path <(cat <<EOF
 // {
 //   "subnets": [
 //     {

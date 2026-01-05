@@ -1,7 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@rules_python//python:defs.bzl", "py_test")
-load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "write_info_file_var")
 
@@ -140,10 +139,4 @@ sh_test(
         "external",  # force test to be unconditionally executed.
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
     ],
-)
-
-sh_binary(
-    name = "upload_systest_dep",
-    srcs = ["upload_systest_dep.sh"],
-    visibility = ["//visibility:public"],
 )

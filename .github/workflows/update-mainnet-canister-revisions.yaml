@@ -9,6 +9,10 @@ on:
   schedule:
     - cron: "0 */2 * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/update-mainnet-canister-revisions.yaml'
+
 
 defaults:
   run:
@@ -21,9 +25,9 @@ jobs:
       labels: dind-small
     environment: CREATE_PR
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:0f2cb83ac752aaa9e91ac8a983dde46e9af4d5f8dfb5d7577c3c5592a150e649
+      image: ghcr.io/dfinity/ic-build@sha256:cb3a6693a10777d16c301d98f5b67e23db405bf962d0eb8cec74082916c17bc7
       options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+        -e NODE_NAME --privileged --cgroupns host -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -35,9 +39,14 @@ jobs:
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup python3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Setup gh cli
         env:
@@ -60,6 +69,7 @@ jobs:
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           set -eEuxo pipefail
 
@@ -71,4 +81,5 @@ jobs:
             --delay=1,2,4,8,15,30,60,120,300,600 \
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
+            $DRY_RUN \
             canisters
