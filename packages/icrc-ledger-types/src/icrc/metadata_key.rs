@@ -2,7 +2,6 @@
 
 use candid::{CandidType, Deserialize};
 use serde::Serialize;
-use std::borrow::Borrow;
 use std::fmt;
 
 /// Error type for invalid metadata key format.
@@ -187,12 +186,6 @@ impl fmt::Display for MetadataKey {
 
 impl AsRef<str> for MetadataKey {
     fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-impl Borrow<str> for MetadataKey {
-    fn borrow(&self) -> &str {
         &self.0
     }
 }

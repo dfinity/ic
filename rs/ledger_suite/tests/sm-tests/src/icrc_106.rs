@@ -175,7 +175,8 @@ fn assert_index_not_set(
     }
     assert_eq!(
         None,
-        metadata(env, ledger_canister_id).get(MetadataKey::ICRC106_INDEX_PRINCIPAL)
+        metadata(env, ledger_canister_id)
+            .get(&MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap())
     );
 }
 
@@ -192,7 +193,7 @@ fn assert_index_set(
     assert_eq!(
         &Value::Text(index_principal.to_text()),
         metadata(env, ledger_canister_id)
-            .get(MetadataKey::ICRC106_INDEX_PRINCIPAL)
+            .get(&MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap())
             .expect("should have index principal metadata")
     );
 }
