@@ -49,12 +49,12 @@ impl SevCustomData {
         namespace: SevCustomDataNamespace,
         data: [u8; 64],
     ) -> Result<Self, InvalidNamespace> {
-        if data[0..4] != namespace.as_bytes() {
-            return Err(InvalidNamespace);
-        }
+        let data = data
+            .strip_prefix(&namespace.as_bytes())
+            .ok_or(InvalidNamespace)?;
         Ok(Self {
             namespace,
-            data: data[4..].try_into().unwrap(),
+            data: data.try_into().unwrap(),
         })
     }
 

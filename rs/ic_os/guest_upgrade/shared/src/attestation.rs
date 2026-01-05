@@ -34,8 +34,10 @@ mod tests {
             server_tls_public_key,
         };
 
+        #[allow(deprecated)]
+        let result = custom_data.encode_for_sev_legacy().unwrap();
         assert_eq!(
-            &custom_data.encode_for_sev_legacy().unwrap().as_slice(),
+            &result,
             // The numbers below don't have any special meaning, but they should stay stable.
             // If the encoding below has to be changed, the attestation report verification will
             // probably fail because the old GuestOS version will still derive the previous

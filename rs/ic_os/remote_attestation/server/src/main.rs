@@ -36,6 +36,7 @@ impl RemoteAttestationServiceImpl {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     fn sev_custom_data_from_request(&self, req: &AttestRequest) -> Result<SevCustomData, Status> {
         let custom_data: [u8; 64] = match &req.custom_data {
             Some(bytes) => bytes
