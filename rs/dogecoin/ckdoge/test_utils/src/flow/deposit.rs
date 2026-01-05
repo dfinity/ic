@@ -2,14 +2,12 @@ use crate::dogecoin::DogecoinUsers;
 use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
-use ic_ckdoge_minter::{
-    MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
-    event::CkDogeMinterEventType, memo_encode,
-};
+use ic_ckdoge_minter::{MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus, event::CkDogeMinterEventType, memo_encode, Txid};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Mint;
 use std::collections::{BTreeMap, BTreeSet};
+use bitcoin::hashes::Hash;
 
 /// Entry point in the deposit flow.
 ///
@@ -45,7 +43,7 @@ impl<S> DepositFlowStart<S> {
         let deposit_address = bitcoin::dogecoin::Address::from_str(&deposit_address)
             .expect("BUG: invalid Dogecoin address")
             .require_network(into_rust_dogecoin_network(network))
-            .unwrap_or_else(|e| panic!("BUG: address is not valid for network {network}: {e}",));
+            .unwrap_or_else(|e| panic!("BUG: address is not valid for network {network}: {e}", ));
 
         DogecoinDepositTransactionFlow {
             setup: self.setup,
@@ -66,7 +64,7 @@ impl<S> DogecoinDepositTransactionFlow<S>
 where
     S: AsRef<Setup>,
 {
-    pub fn dogecoin_simulate_transaction<I: IntoIterator<Item = Utxo>>(
+    pub fn dogecoin_simulate_transaction<I: IntoIterator<Item=Utxo>>(
         self,
         deposit_utxos: I,
     ) -> UpdateBalanceFlow<S> {
@@ -80,24 +78,27 @@ where
             setup: self.setup,
             account: self.account,
             deposit_utxos,
+            deposit_transactions: BTreeSet::default(),
         }
     }
 
-    pub fn dogecoin_send_transaction<I: IntoIterator<Item = u64>>(
+    pub fn dogecoin_send_transaction<I: IntoIterator<Item=u64>>(
         self,
         amounts: I,
     ) -> UpdateBalanceFlow<S> {
         let dogecoind = self.setup.as_ref().dogecoind();
-        let mut deposit_utxos = BTreeSet::new();
+        let mut deposit_transactions = BTreeSet::new();
         for amount in amounts {
             let txid =
-                dogecoind.send_transaction(&DogecoinUsers::Miner, &self.deposit_address, amount);
+                dogecoind.send_transaction(&DogecoinUsers::DepositUser, &self.deposit_address, amount);
+            deposit_transactions.insert(txid);
         }
 
         UpdateBalanceFlow {
             setup: self.setup,
             account: self.account,
-            deposit_utxos,
+            deposit_utxos: BTreeSet::default(),
+            deposit_transactions,
         }
     }
 }
@@ -106,6 +107,7 @@ where
 pub struct UpdateBalanceFlow<S> {
     setup: S,
     account: Account,
+    deposit_transactions: BTreeSet<bitcoin::Txid>,
     deposit_utxos: BTreeSet<Utxo>,
 }
 
@@ -113,6 +115,11 @@ impl<S> UpdateBalanceFlow<S>
 where
     S: AsRef<Setup>,
 {
+    pub fn dogecoin_mine_blocks(self, num_blocks: impl Into<u64>) -> Self {
+        self.setup.as_ref().dogecoind().mine_blocks(num_blocks.into());
+        self
+    }
+
     pub fn minter_update_balance(self) -> DepositFlowEnd<S> {
         let balance_before = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
         let result = self.setup.as_ref().minter().update_balance(
@@ -126,7 +133,7 @@ where
         DepositFlowEnd {
             setup: self.setup,
             account: self.account,
-            deposit_utxos: self.deposit_utxos,
+            deposit_transactions: self.deposit_transactions,
             balance_before,
             result,
         }
@@ -138,7 +145,7 @@ pub struct DepositFlowEnd<S> {
     setup: S,
     account: Account,
     balance_before: u128,
-    deposit_utxos: BTreeSet<Utxo>,
+    deposit_transactions: BTreeSet<bitcoin::Txid>,
     result: Result<Vec<UtxoStatus>, UpdateBalanceError>,
 }
 
@@ -156,15 +163,16 @@ where
                     block_index,
                     minted_amount,
                     utxo,
-                } if self.deposit_utxos.contains(&utxo) => {
+                } if self.deposit_transactions.contains(&bitcoin::Txid::from_byte_array(utxo.outpoint.txid.into())) => {
                     Some((utxo, (block_index, minted_amount)))
                 }
                 _ => None,
             })
             .collect();
+        let deposit_utxos = minted_status.keys().cloned().collect::<BTreeSet<_>>();
         assert_eq!(
-            minted_status.keys().cloned().collect::<BTreeSet<_>>(),
-            self.deposit_utxos,
+            deposit_utxos.iter().map(|utxo| bitcoin::Txid::from_byte_array(utxo.outpoint.txid.into())).collect::<BTreeSet<_>>(),
+            self.deposit_transactions,
             "BUG: unexpected UTXOs with status UtxoStatus::Minted"
         );
 
@@ -181,9 +189,9 @@ where
             .into_iter()
             .collect();
         assert!(
-            self.deposit_utxos.is_subset(&known_utxos),
+            deposit_utxos.is_subset(&known_utxos),
             "BUG: missing deposit utxo {:?} in {known_utxos:?}",
-            self.deposit_utxos
+            deposit_utxos
         );
 
         let expected_events: Vec<_> = minted_status
@@ -218,7 +226,7 @@ where
         let last_mint_index = *mint_indexes.last_key_value().unwrap().0;
         assert_eq!(
             last_mint_index,
-            first_mint_index + self.deposit_utxos.len() as u64 - 1,
+            first_mint_index + self.deposit_transactions.len() as u64 - 1,
             "Range of mint indexes on ledger is not continuous"
         );
         let expected_mints: Vec<_> = mint_indexes

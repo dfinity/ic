@@ -12,6 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use crate::DOGE;
 
+const BLOCK_REWARD: u64 = 500_000 * DOGE;
+
 pub type Mempool = BTreeMap<Txid, bitcoin::Transaction>;
 
 pub struct DogecoinCanister {
@@ -129,15 +131,25 @@ pub struct DogecoinDaemon {
 }
 
 impl DogecoinDaemon {
-    pub fn mine_to_wallet(&self) {
+    pub fn setup_user_with_balance(&self) {
         // See https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L423
         const COINBASE_MATURITY_REGTEST: u64 = 60;
-        const BLOCK_REWARD: u64 = 500_000 * DOGE;
+
+        self.mine_blocks_to(&DogecoinUsers::Miner1, COINBASE_MATURITY_REGTEST + 1);
+        let _txid = self.send_transaction(&DogecoinUsers::Miner1, &DogecoinUsers::DepositUser.address(), BLOCK_REWARD);
+        self.mine_blocks_to(&DogecoinUsers::Miner2, 1);
+    }
+
+    pub fn mine_blocks(&self, num_blocks: u64) {
+        self.mine_blocks_to(&DogecoinUsers::Miner1, num_blocks)
+    }
+
+    fn mine_blocks_to(&self, miner: &DogecoinUsers, num_blocks: u64) {
         const MAX_TICKS: u64 = 1000;
 
         let dogecoin_canister = DogecoinCanister2::new(self.env.clone());
         let miner_balance_request = GetBalanceRequest {
-            address: DogecoinUsers::Miner.address().to_string(),
+            address: miner.address().to_string(),
             network: NetworkInRequest::Regtest,
             min_confirmations: None,
         };
@@ -145,10 +157,11 @@ impl DogecoinDaemon {
 
         let mined_blocks = self.await_ok(|dogecoind| {
             dogecoind.generate_to_address(
-                COINBASE_MATURITY_REGTEST + 1,
-                &DogecoinUsers::Miner.address(),
+                num_blocks,
+                &miner.address(),
             )
         });
+        assert_eq!(mined_blocks.len() as u64, num_blocks);
         let expected_balance_diff = mined_blocks.len() as u128 * BLOCK_REWARD as u128;
 
         for _ in 0..MAX_TICKS {
@@ -230,24 +243,28 @@ pub enum NetworkInRequest {
 
 pub enum DogecoinUsers {
     /// Receive block rewards.
-    Miner,
+    Miner1,
+    /// Receive block rewards.
+    Miner2,
     /// User with initially zero balance.
-    User1,
+    DepositUser,
 }
 
 impl DogecoinUsers {
     /// Output of `dogecoin-cli dumpprivkey`
     pub fn private_key(&self) -> &str {
         match self {
-            Self::Miner => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
-            Self::User1 => "cVJe3RYJyTgwPFr7KeKpSJ6PTiwpFqynWXp9MYmjfctmrVQKPDXb",
+            Self::Miner1 => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
+            Self::Miner2 => "cQsMeW4Jpxi6Mcrn6gxWzfBbGeECjRPQpY6q9SMKXCus93rNaKK6",
+            Self::DepositUser => "cVJe3RYJyTgwPFr7KeKpSJ6PTiwpFqynWXp9MYmjfctmrVQKPDXb",
         }
     }
 
     pub fn address(&self) -> dogecoin::Address {
         let address = match self {
-            DogecoinUsers::Miner => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
-            DogecoinUsers::User1 => "n3zDWiJxzMzH1w8mXjruGeyzXdCKuqSk7R",
+            DogecoinUsers::Miner1 => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
+            DogecoinUsers::Miner2 => "mjoDCYdX7YqtQPYpCD4Zxsa3aMDmttvqbj",
+            DogecoinUsers::DepositUser => "n3zDWiJxzMzH1w8mXjruGeyzXdCKuqSk7R",
         };
         address
             .parse::<dogecoin::Address<_>>()
@@ -258,8 +275,9 @@ impl DogecoinUsers {
 
     pub fn label(&self) -> &str {
         match self {
-            DogecoinUsers::Miner => "miner",
-            DogecoinUsers::User1 => "user1",
+            DogecoinUsers::Miner1 => "miner1",
+            DogecoinUsers::Miner2 => "miner2",
+            DogecoinUsers::DepositUser => "user1",
         }
     }
 }

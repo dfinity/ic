@@ -155,42 +155,23 @@ mod get_doge_address {
 mod deposit {
     use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter::{OutPoint, Utxo};
-    use ic_ckdoge_minter_test_utils::{
-        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, txid, utxo_with_value,
-    };
+    use ic_ckdoge_minter_test_utils::{LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, txid, utxo_with_value, MIN_CONFIRMATIONS};
     use icrc_ledger_types::icrc1::account::Account;
 
     #[test]
-    fn should_mint_ckdoge_mock() {
-        let setup = Setup::default();
-        let account = Account {
-            owner: USER_PRINCIPAL,
-            subaccount: Some([42_u8; 32]),
-        };
-
-        setup
-            .deposit_flow()
-            .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(vec![utxo_with_value(
-                RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
-            )])
-            .minter_update_balance()
-            .expect_mint();
-    }
-
-    #[test]
-    fn should_mint_ckdoge_regtest() {
+    fn should_mint_ckdoge() {
         let setup = Setup::new(Network::Regtest);
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
-        let _ = setup.dogecoind().mine_to_wallet();
+        let _ = setup.dogecoind().setup_user_with_balance();
 
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
             .dogecoin_send_transaction(vec![RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE])
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_update_balance()
             .expect_mint();
     }
