@@ -17,7 +17,7 @@ use ic_management_canister_types_private::{
     TakeCanisterSnapshotArgs, UploadChunkArgs,
 };
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -54,6 +54,7 @@ use ic_test_utilities_metrics::{
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::RequestBuilder,
@@ -71,7 +72,7 @@ use ic_types::{
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
 };
-use ic_types::{QueryStatsEpoch, epoch_from_height};
+use ic_types::{QueryStatsEpoch, SubnetId, epoch_from_height};
 use maplit::{btreemap, btreeset};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
@@ -7772,6 +7773,126 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
     env.checkpointed_tick();
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
+}
+
+#[test]
+fn can_split_with_inflight_restore_snapshot() {
+    // We will be splitting subnet A into A' and B.
+    const SUBNET_A: SubnetId = SUBNET_1;
+    const SUBNET_B: SubnetId = SUBNET_2;
+
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2: CanisterId = CanisterId::from_u64(2);
+    const CANISTER_3: CanisterId = CanisterId::from_u64(3);
+
+    fn can_split_with_inflight_restore_snapshot_impl(
+        subnet_id: SubnetId,
+        certification_scope: CertificationScope,
+    ) {
+        state_manager_test(|metrics, state_manager| {
+            let (_height, mut state) = state_manager.take_tip();
+            state.metadata.own_subnet_id = SUBNET_A;
+
+            // Install `CANISTER_1` and give it some initial state.
+            insert_dummy_canister(&mut state, CANISTER_1);
+            let canister_state = state.canister_state_mut(&CANISTER_1).unwrap();
+            let execution_state = canister_state.execution_state.as_mut().unwrap();
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+
+            // Install `CANISTER_2`.
+            insert_dummy_canister(&mut state, CANISTER_2);
+
+            // Take a snapshot of `CANISTER_1`.
+            let new_snapshot = CanisterSnapshot::from_canister(
+                state.canister_state(&CANISTER_1).unwrap(),
+                state.time(),
+            )
+            .unwrap();
+            let snapshot_id = SnapshotId::from((CANISTER_1, 0));
+            state.take_snapshot(snapshot_id, Arc::new(new_snapshot));
+
+            // Commit (and optionally checkpoint) the state.
+            state_manager.commit_and_certify(state, height(1), certification_scope, None);
+            let (_height, mut state) = state_manager.take_tip();
+
+            // Restore the snapshot of `CANISTER_1` to `CANISTER_2`.
+            restore_snapshot(snapshot_id, CANISTER_2, &mut state);
+            // Sanity check.
+            let canister_state = state.canister_state(&CANISTER_2).unwrap();
+            let execution_state = canister_state.execution_state.as_ref().unwrap();
+            assert_eq!(
+                execution_state
+                    .wasm_memory
+                    .page_map
+                    .get_page(PageIndex::new(0)),
+                &[1u8; PAGE_SIZE]
+            );
+
+            // Commit the state without checkpointing, so there is an unflushed "load
+            // snapshot" checkpoint op.
+            state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata, None);
+            let (_height, mut state) = state_manager.take_tip();
+
+            // Retain `CANISTER_1` on `SUBNET_A`, migrate `CANISTER_2` to `SUBNET_B`.
+            let routing_table = RoutingTable::try_from(btreemap! {
+                CanisterIdRange {start: CanisterId::from_u64(0), end: CANISTER_1} => SUBNET_A,
+                CanisterIdRange {start: CANISTER_2, end: CANISTER_2} => SUBNET_B,
+                CanisterIdRange {start: CANISTER_3, end: CanisterId::from_u64(CANISTER_IDS_PER_SUBNET - 1)} => SUBNET_A,
+            })
+            .unwrap();
+            state.metadata.network_topology.routing_table = Arc::new(routing_table.clone());
+
+            // Expected state after splitting.
+            let mut expected = state.clone();
+            // New subnet ID.
+            expected.metadata.own_subnet_id = subnet_id;
+            // Split marker should be set.
+            expected.metadata.subnet_split_from = Some(SUBNET_A);
+            let other_subnet_id;
+            if subnet_id == SUBNET_A {
+                other_subnet_id = SUBNET_B;
+                // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
+                expected.canister_states.remove(&CANISTER_2);
+            } else if subnet_id == SUBNET_B {
+                other_subnet_id = SUBNET_A;
+                // `SUBNET_B` should only host `CANISTER_2`.
+                expected.canister_states.remove(&CANISTER_1);
+                // And the snapshot of `CANISTER_1` should be deleted.
+                expected.canister_snapshots = Default::default();
+            } else {
+                unreachable!("Unexpected subnet ID: {:?}", subnet_id);
+            }
+
+            // Split the subnet.
+            let mut state = state.online_split(subnet_id, other_subnet_id).unwrap();
+
+            // Check the output before checkpointing.
+            assert_eq!(expected, state);
+
+            // Checkpoint the state.
+            state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+            state = state_manager.take_tip().1;
+
+            // Checkpointing should have additionally flushed / dropped all checkpoint ops.
+            expected.metadata.unflushed_checkpoint_ops = Default::default();
+            // The "previous state hash" has changed. Update it.
+            expected.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
+            assert_eq!(expected, state);
+
+            assert_error_counters(metrics);
+        });
+    }
+
+    // Test with both brand new and already persisted snapshots.
+    can_split_with_inflight_restore_snapshot_impl(SUBNET_B, CertificationScope::Metadata);
+    can_split_with_inflight_restore_snapshot_impl(SUBNET_B, CertificationScope::Full);
+
+    // And, for completeness, also test (the more trivial) splitting of `SUBNET_A`.
+    can_split_with_inflight_restore_snapshot_impl(SUBNET_A, CertificationScope::Metadata);
+    can_split_with_inflight_restore_snapshot_impl(SUBNET_A, CertificationScope::Full);
 }
 
 /// Simplified version of canister migration that only does the parts relevant to the state manager.
