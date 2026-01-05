@@ -6,7 +6,9 @@ mod tests;
 
 use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
-use crate::canister_state::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::system_state::{
+    ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
+};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -591,8 +593,14 @@ impl CanisterState {
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, other: CanisterLog) {
-        self.system_state.canister_log = other;
+    pub fn set_log(
+        &mut self,
+        (canister_log, log_memory_store): (CanisterLog, Option<LogMemoryStore>),
+    ) {
+        self.system_state.canister_log = canister_log;
+        if let (Some(store), Some(exec_state)) = (log_memory_store, self.execution_state.as_mut()) {
+            exec_state.log_memory_store = store;
+        }
     }
 
     /// Returns the cumulative amount of heap delta represented by this canister's state.
