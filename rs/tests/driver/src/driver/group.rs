@@ -617,6 +617,7 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
         let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
         let metrics_sync_task = if group_ctx.enable_metrics {
             let metrics_sync_task = subproc(
@@ -708,6 +709,9 @@ impl SystemTestGroup {
             task: Box::from(setup_task),
         };
 
+        // The setup_tasks always includes the setup_task which executes the setup function.
+        // In case metrics is enabled it also includes the metrics_setup_task which sets up the PrometheusVm.
+        // These tasks are executed in parallel as part of the setup_plan below.
         let setup_tasks = if group_ctx.enable_metrics {
             let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
             let metrics_setup_task = subproc(

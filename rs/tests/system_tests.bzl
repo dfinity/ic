@@ -70,7 +70,8 @@ def _run_system_test(ctx):
     extra_args = []
 
     # we enable metrics _if_ the ENABLE_METRICS env var is set to "1" or "true" but only if it's _not_ a colocated test
-    # Since the colocated driver will --enable-metrics itself based on the ENABLE_METRICS env var.
+    # Since the colocated driver will --enable-metrics itself based on the ENABLE_METRICS env var
+    # we should not enable it in the outer driver since you would end up with two Prometheus VMs.
     if ctx.attr.env.get("ENABLE_METRICS", "0") in ("1", "true") and ctx.executable.colocated_test_bin == None:
         extra_args.append("--enable-metrics")
 

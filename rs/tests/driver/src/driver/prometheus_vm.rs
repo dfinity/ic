@@ -91,6 +91,7 @@ pub struct PrometheusVm {
     scrape_interval: Duration,
 }
 
+/// Stores a hash of the Prometheus scraping target JSON files
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PrometheusConfigHash {
     hash: String,
