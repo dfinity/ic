@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* New TakeCanisterSnapshot proposal type. Disabled for now, but will be enabled
+  in the not too distant future. For now, the declarations are in place (in
+  governance.did), which helps clients to get ready for this new proposal type.
+
 ## Changed
 
 ## Deprecated
