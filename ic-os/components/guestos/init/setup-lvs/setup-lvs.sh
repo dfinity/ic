@@ -31,9 +31,9 @@ function retry() {
     return 1
 }
 
-pvs /dev/mapper/vda10-crypt >/dev/null 2>&1 || (
+pvs /dev/mapper/sda10-crypt >/dev/null 2>&1 || (
     echo "Volume group 'store' does not exist yet (first boot?), creating it."
-    retry vgcreate --force store /dev/mapper/vda10-crypt
+    retry vgcreate --force store /dev/mapper/sda10-crypt
     retry vgchange --force -a y
 )
 
@@ -48,12 +48,12 @@ lvs /dev/store/shared-crypto >/dev/null 2>&1 || (
 lvs /dev/store/shared-data >/dev/null 2>&1 || (
     echo "Logical volume 'shared-data' does not exist yet (first boot?), creating it."
     # For now, only use 25% of available capacity.
-    TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
+    TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/sda10-crypt) * 512 / 1024 / 1024))
     LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
     retry lvcreate --yes -L "$LV_SIZE_MB"M -n shared-data store
 )
 
-TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
+TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/sda10-crypt) * 512 / 1024 / 1024))
 # Limit to 500G or 25% of capacity, whichever is lower.
 LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
 LV_SIZE_LIMIT_MB=500000
@@ -79,7 +79,7 @@ fi
 # Set up swap space if it does not exist yet.
 lvs /dev/store/shared-swap >/dev/null 2>&1 || (
     echo "Logical volume 'shared-swap' does not exist yet (first boot?), creating it."
-    TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
+    TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/sda10-crypt) * 512 / 1024 / 1024))
     # Limit to 128G or 1% of capacity, whichever is lower.
     LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 100))
     LV_SIZE_LIMIT_MB=128000

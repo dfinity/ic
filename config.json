@@ -1,0 +1,45 @@
+{
+    "config_version": "1.11.0",
+    "guest_vm_type": "default",
+    "guestos_settings": {
+        "guestos_dev_settings": {
+            "backup_spool": null,
+            "bitcoind_addr": null,
+            "dogecoind_addr": null,
+            "generate_ic_boundary_tls_cert": null,
+            "hostname": null,
+            "jaeger_addr": null,
+            "malicious_behavior": null,
+            "query_stats_epoch_length": null,
+            "socks_proxy": null
+        },
+        "inject_ic_crypto": false,
+        "inject_ic_registry_local_store": false,
+        "inject_ic_state": false
+    },
+    "icos_settings": {
+        "deployment_environment": "mainnet",
+        "enable_trusted_execution_environment": false,
+        "icos_dev_settings": {},
+        "mgmt_mac": "00:00:00:00:00:01",
+        "nns_urls": [],
+        "node_reward_type": null,
+        "use_node_operator_private_key": false,
+        "use_ssh_authorized_keys": false
+    },
+    "network_settings": {
+        "domain_name": null,
+        "ipv4_config": null,
+        "ipv6_config": {
+            "Fixed": {
+                "address": "2001:db8::1/64",
+                "gateway": "2001:db8::1"
+            }
+        }
+    },
+    "recovery_config": null,
+    "trusted_execution_environment_config": null,
+    "upgrade_config": {
+        "peer_guest_vm_address": null
+    }
+}

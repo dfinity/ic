@@ -315,6 +315,7 @@ mod tests {
     #[test]
     fn test_template_substitution_with_default_config() {
         let guestos_config = create_test_guestos_config();
+        std::fs::write("config.json", &serde_json::to_vec(&guestos_config).unwrap());
         let template = get_config_vars(&guestos_config).unwrap();
         let output_content = render_ic_config(template).unwrap();
 

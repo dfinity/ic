@@ -29,12 +29,12 @@ swap_alternative() {
 }
 
 declare -A GUESTOS_PARTITIONS=(
-    [A_boot]="/dev/vda4"
-    [B_boot]="/dev/vda7"
-    [A_root]="/dev/vda5"
-    [B_root]="/dev/vda8"
-    [A_var]="/dev/vda6"
-    [B_var]="/dev/vda9"
+    [A_boot]="/dev/sda4"
+    [B_boot]="/dev/sda7"
+    [A_root]="/dev/sda5"
+    [B_root]="/dev/sda8"
+    [A_var]="/dev/sda6"
+    [B_var]="/dev/sda9"
 )
 
 declare -A HOSTOS_PARTITIONS=(

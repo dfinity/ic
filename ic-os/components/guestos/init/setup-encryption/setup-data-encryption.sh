@@ -2,15 +2,15 @@
 
 set -e
 
-if [ -e /dev/vda10 ]; then
-    /opt/ic/bin/guest_disk crypt-open store /dev/vda10
+if [ -e /dev/sda10 ]; then
+    /opt/ic/bin/guest_disk crypt-open store /dev/sda10
     exit 0
 fi
 
-echo "- - L" | sfdisk --force --no-reread -a /dev/vda
+echo "- - L" | sfdisk --force --no-reread -a /dev/sda
 
 # Initialize and open encrypted store.
-partprobe /dev/vda
+partprobe /dev/sda
 
-/opt/ic/bin/guest_disk crypt-format store /dev/vda10
-/opt/ic/bin/guest_disk crypt-open store /dev/vda10
+/opt/ic/bin/guest_disk crypt-format store /dev/sda10
+/opt/ic/bin/guest_disk crypt-open store /dev/sda10

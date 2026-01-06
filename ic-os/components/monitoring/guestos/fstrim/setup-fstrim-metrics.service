@@ -5,7 +5,7 @@ Before=node_exporter.service
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --metrics /run/node_exporter/collector_textfile/fstrim.prom --initialize_metrics_only
-DeviceAllow=/dev/vda
+DeviceAllow=/dev/sda
 IPAddressDeny=any
 LockPersonality=yes
 MemoryDenyWriteExecute=yes

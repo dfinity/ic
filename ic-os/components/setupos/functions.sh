@@ -60,8 +60,8 @@ function log_end() {
 }
 
 function find_first_drive() {
-    if [ -e "/dev/vda" ]; then
-        echo "vda"
+    if [ -e "/dev/sda" ]; then
+        echo "sda"
         return 0
     fi
 

@@ -182,7 +182,8 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
     }
 }
 
-#[cfg(all(test, not(feature = "skip_default_tests")))]
+//#[cfg(all(test, not(feature = "skip_default_tests")))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use config_types::{
@@ -389,6 +390,8 @@ mod tests {
             result
         );
         assert!(media_path.exists(), "Config media file was not created");
+        std::fs::copy(&media_path, "/ic/config.img");
+
         assert!(
             media_path.metadata().unwrap().size() > 0,
             "Config media file is empty"

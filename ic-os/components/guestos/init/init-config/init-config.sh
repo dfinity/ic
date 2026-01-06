@@ -13,30 +13,26 @@ source /opt/ic/bin/metrics.sh
 function find_config_devices() {
     for DEV in $(ls -C /sys/class/block); do
         echo "Consider device $DEV" >&2
-        if [ -e /sys/class/block/"${DEV}"/removable ]; then
-            # In production, a removable device is used to pass configuration
-            # into the VM.
-            # In some test environments where this is not available, the
-            # configuration device is identified by the serial "config".
-            local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
-            local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config" || true)
-            local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}" 2>/dev/null || true)
-            if [ "$IS_REMOVABLE" == 1 ] || [ "$CONFIG_SERIAL" != "" ] || [ "$FS_LABEL" == "CONFIG" ]; then
-                # If this is a partitioned device (and it usually is), then
-                # the first partition is of relevance.
-                # return first partition for use instead.
-                if [ -e /sys/class/block/"${DEV}1" ]; then
-                    local TGT="/dev/${DEV}1"
-                elif [ -e /sys/class/block/"${DEV}p1" ]; then
-                    local TGT="/dev/${DEV}p1"
-                else
-                    local TGT="/dev/${DEV}"
-                fi
-                # Sanity check whether device is usable (it could be a
-                # CD drive with no medium in)
-                if blockdev "$TGT" 2>/dev/null; then
-                    echo "$TGT"
-                fi
+        # In production, a removable device is used to pass configuration
+        # into the VM.
+        # In some test environments where this is not available, the
+        # configuration device is identified by the serial "config".
+        local FS_LABEL=$(lsblk --fs --noheadings --output LABEL /dev/"${DEV}" 2>/dev/null || true)
+        if [ "$FS_LABEL" == "CONFIG" ]; then
+            # If this is a partitioned device (and it usually is), then
+            # the first partition is of relevance.
+            # return first partition for use instead.
+            if [ -e /sys/class/block/"${DEV}1" ]; then
+                local TGT="/dev/${DEV}1"
+            elif [ -e /sys/class/block/"${DEV}p1" ]; then
+                local TGT="/dev/${DEV}p1"
+            else
+                local TGT="/dev/${DEV}"
+            fi
+            # Sanity check whether device is usable (it could be a
+            # CD drive with no medium in)
+            if blockdev "$TGT" 2>/dev/null; then
+                echo "$TGT"
             fi
         fi
     done
