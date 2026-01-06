@@ -803,7 +803,7 @@ struct CertificationMetadata {
     hash_tree: Option<Arc<HashTree>>,
     /// Root hash of the tree above. It's stored even if the hash tree is
     /// dropped.
-    certified_state_hash: CryptoHash,
+    certified_state_hash: Option<CryptoHash>,
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
@@ -1825,7 +1825,7 @@ impl StateManagerImpl {
 
         Ok(CertificationMetadata {
             hash_tree: Some(Arc::new(hash_tree)),
-            certified_state_hash,
+            certified_state_hash: Some(certified_state_hash),
             certification: None,
             certification_requested_at: Instant::now(),
         })
@@ -1919,12 +1919,12 @@ impl StateManagerImpl {
 
         let states = self.states.read();
         if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            assert_eq!(
-                state.metadata.prev_state_hash,
-                Some(CryptoHashOfPartialState::from(
-                    metadata.certified_state_hash.clone(),
-                ))
-            );
+            if let Some(ref hash) = metadata.certified_state_hash {
+                assert_eq!(
+                    state.metadata.prev_state_hash,
+                    Some(CryptoHashOfPartialState::from(hash.clone()))
+                );
+            }
         } else {
             info!(
                 self.log,
@@ -1987,7 +1987,7 @@ impl StateManagerImpl {
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
-            certified_state_hash: crypto_hash_of_tree(&hash_tree),
+            certified_state_hash: Some(crypto_hash_of_tree(&hash_tree)),
             hash_tree: Some(Arc::new(hash_tree)),
             certification: None,
             certification_requested_at: Instant::now(),
@@ -2635,9 +2635,10 @@ impl StateManager for StateManagerImpl {
 
                 // Since the state machine will use this tip to compute the *next* state,
                 // we populate the prev_state_hash with the hash of the current tip.
-                Some(CryptoHashOfPartialState::from(
-                    tip_metadata.certified_state_hash.clone(),
-                ))
+                tip_metadata
+                    .certified_state_hash
+                    .as_ref()
+                    .map(|hash| CryptoHashOfPartialState::from(hash.clone()))
             } else {
                 // This code is executed at most once per subnet, no need to
                 // optimize this.
@@ -2903,13 +2904,11 @@ impl StateManager for StateManagerImpl {
         let mut heights_with_certifications = HashSet::new();
 
         for (height, metadata) in self.states.read().certifications_metadata.iter() {
-            if metadata.certification.is_none() {
-                heights_without_certifications.push((
-                    *height,
-                    Some(CryptoHashOfPartialState::from(
-                        metadata.certified_state_hash.clone(),
-                    )),
-                ));
+            if let Some(hash) = &metadata.certified_state_hash
+                && metadata.certification.is_none()
+            {
+                heights_without_certifications
+                    .push((*height, Some(CryptoHashOfPartialState::from(hash.clone()))));
             } else {
                 heights_with_certifications.insert(height.get());
             }
@@ -2942,8 +2941,9 @@ impl StateManager for StateManagerImpl {
             .certifications_metadata
             .get_mut(&certification.height)
         {
-            let hash = metadata.certified_state_hash.clone();
-            if certification.signed.content.hash.get_ref() != &hash {
+            if let Some(ref hash) = metadata.certified_state_hash
+                && certification.signed.content.hash.get_ref() != hash
+            {
                 if let Err(err) = self
                     .state_layout
                     .create_diverged_state_marker(certification_height)
