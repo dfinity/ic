@@ -88,6 +88,7 @@ jobs:
           elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
+              release_build="false"
               diff_only="false"
               skip_long_tests="false"
           elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
