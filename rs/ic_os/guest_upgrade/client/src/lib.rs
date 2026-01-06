@@ -12,7 +12,7 @@ use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
@@ -184,7 +184,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             self.sev_root_certificate_verification,
             &blessed_measurements,
             &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
+            Some(&[my_attestation_report.chip_id]),
         )
         .context("Server attestation report verification failed")?;
 
@@ -293,7 +293,7 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
 }
 
 pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key(Path::new(NNS_PUBLIC_KEY_PATH))
+    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
         .context("Cannot read NNS public key")?;
 
     let client = RegistryClientImpl::new(

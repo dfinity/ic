@@ -4,7 +4,7 @@ use crate::pb::v1::{AddOrRemoveNodeProvider, NodeProvider, add_or_remove_node_pr
 
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_nns_governance_api::SelfDescribingValue as ApiValue;
+use ic_nns_governance_api::SelfDescribingValue;
 use icp_ledger::{
     AccountIdentifier, Subaccount, protobuf::AccountIdentifier as AccountIdentifierProto,
 };
@@ -273,16 +273,16 @@ fn test_to_self_describing_value() {
     };
 
     assert_eq!(
-        ApiValue::from(
+        SelfDescribingValue::from(
             ValidAddOrRemoveNodeProvider::try_from(add_node_provider)
                 .unwrap()
                 .to_self_describing_value()
         ),
-        ApiValue::Map(hashmap! {
-            "to_add".to_string() => ApiValue::Map(hashmap! {
-                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
-                "reward_account".to_string() => ApiValue::Array(vec![
-                    ApiValue::Text(account.to_hex())
+        SelfDescribingValue::Map(hashmap! {
+            "ToAdd".to_string() => SelfDescribingValue::Map(hashmap! {
+                "id".to_string() => SelfDescribingValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
+                "reward_account".to_string() => SelfDescribingValue::Array(vec![
+                    SelfDescribingValue::Text(account.to_hex())
                 ])
             })
         })
@@ -296,14 +296,14 @@ fn test_to_self_describing_value() {
     };
 
     assert_eq!(
-        ApiValue::from(
+        SelfDescribingValue::from(
             ValidAddOrRemoveNodeProvider::try_from(remove_node_provider)
                 .unwrap()
                 .to_self_describing_value()
         ),
-        ApiValue::Map(hashmap! {
-            "to_remove".to_string() => ApiValue::Map(hashmap! {
-                "id".to_string() => ApiValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string())
+        SelfDescribingValue::Map(hashmap! {
+            "ToRemove".to_string() => SelfDescribingValue::Map(hashmap! {
+                "id".to_string() => SelfDescribingValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string())
             })
         })
     );

@@ -252,6 +252,7 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
+        max_logs_age_to_keep_days: None,
         hot_disk_resource_threshold_percentage: 75,
         cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
@@ -390,28 +391,32 @@ pub fn test(env: TestEnv) {
     let mut hash_mismatch = false;
     for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
-        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
-            for en in dirs {
-                info!(log, "DirEntry in logs: {:?}", en);
-                match en {
-                    Ok(d) => {
-                        let contents = fs::read_to_string(d.path())
-                            .expect("Should have been able to read the log file");
-                        if i == 15 {
-                            println!("{}", contents);
-                        }
+        match fs::read_dir(backup_dir.join("logs")) {
+            Ok(dirs) => {
+                for en in dirs {
+                    info!(log, "DirEntry in logs: {:?}", en);
+                    match en {
+                        Ok(d) => {
+                            let contents = fs::read_to_string(d.path())
+                                .expect("Should have been able to read the log file");
+                            if i == 15 {
+                                println!("{}", contents);
+                            }
 
-                        if contents.contains(DIVERGENCE_LOG_STR) {
-                            hash_mismatch = true;
-                            break;
+                            if contents.contains(DIVERGENCE_LOG_STR) {
+                                hash_mismatch = true;
+                                break;
+                            }
                         }
+                        Err(e) => error!(log, "Error opening log file: {:?}", e),
                     }
-                    Err(e) => error!(log, "Error opening log file: {:?}", e),
                 }
             }
-        } else {
-            error!(log, "Error reading log file directory")
+            Err(err) => {
+                error!(log, "Error reading log file directory: {err}");
+            }
         }
+
         if hash_mismatch {
             break;
         }

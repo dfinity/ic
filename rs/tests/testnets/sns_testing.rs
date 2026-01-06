@@ -2,10 +2,10 @@
 //   one 1-node System and two 1-node Application subnets, one unassigned node, one API boundary node, one ic-gateway, and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24GiB of RAM, and 50 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create sns_testing --lifetime-mins=180 --output-dir=./sns_testing -- --test_tmpdir=./sns_testing
+//   $ ict testnet create sns_testing --output-dir=./sns_testing -- --test_tmpdir=./sns_testing
 //
 // The --output-dir=./sns_testing will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./sns_testing will store the remaining test output in the specified directory.

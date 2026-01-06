@@ -255,11 +255,8 @@ impl AdminHelper {
 
         ic_admin
             .add_positional_argument("propose-to-create-subnet")
-            .add_argument("unit-delay-millis", 2000)
-            .add_argument("subnet-handler-id", "unused")
             .add_argument("replica-version-id", replica_version)
             .add_argument("subnet-id-override", subnet_id_override)
-            .add_argument("dkg-interval-length", 12)
             .add_positional_argument("--is-halted")
             .add_argument("subnet-type", "system")
             .add_argument(
@@ -402,11 +399,8 @@ mod tests {
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-create-subnet \
-            --unit-delay-millis 2000 \
-            --subnet-handler-id unused \
             --replica-version-id fake_replica_version \
             --subnet-id-override gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
-            --dkg-interval-length 12 \
             --is-halted \
             --subnet-type system \
             --summary Create subnet with id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe \
