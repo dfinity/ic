@@ -45,22 +45,19 @@ impl BootstrapOptions {
     ///
     /// Takes all the configuration options specified in BootstrapOptions and packages them into
     /// a disk image that can be mounted by the GuestOS. The image contains a FAT filesystem with
-    /// a single file named 'ic-bootstrap.tar' that includes all configuration files.
+    /// the configuration files.
     pub fn build_bootstrap_config_image(&self, out_file: &Path) -> Result<()> {
         let tmp_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
 
-        // Create bootstrap tar
-        let tar_path = tmp_dir.path().join("ic-bootstrap.tar");
-        self.build_bootstrap_tar(&tar_path)?;
+        // Create bootstrap directory with all files
+        let bootstrap_dir = tmp_dir.path().join("bootstrap");
+        fs::create_dir(&bootstrap_dir).context("Failed to create bootstrap directory")?;
+        self.populate_bootstrap_dir(&bootstrap_dir)?;
 
-        let tar_size = fs::metadata(&tar_path)
-            .context("Failed to get tar file metadata")?
-            .len();
+        let dir_size = fs_extra::dir::get_size(&bootstrap_dir)?;
+        // image size = 2 * directory size + 1 MB
+        let image_size = dir_size * 2 + 1024 * 1024;
 
-        // Calculate the disk image size (2 * tar_size + 1MB)
-        let image_size = 2 * tar_size + 1_048_576;
-
-        // Create an empty file of the calculated size
         let file = File::create(out_file).context("Failed to create output file")?;
         file.set_len(image_size)
             .context("Failed to set output file size")?;
@@ -77,57 +74,43 @@ impl BootstrapOptions {
             bail!("Failed to format disk image");
         }
 
-        // Copy the tar file to the disk image
-        if !Command::new("mcopy")
-            .arg("-i")
-            .arg(out_file)
-            .arg("-o")
-            .arg(&tar_path)
-            .arg("::")
-            .status()
-            .context("Failed to execute mcopy command")?
-            .success()
-        {
-            bail!("Failed to copy tar to disk image");
-        }
+        // Copy all files from bootstrap directory to the disk image
+        Self::copy_dir_to_vfat(&bootstrap_dir, out_file)?;
 
         Ok(())
     }
 
-    /// Build a bootstrap tar file with this configuration.
-    fn build_bootstrap_tar(&self, out_file: &Path) -> Result<()> {
-        // Create temporary directory for bootstrap files
-        let bootstrap_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
-
+    /// Populate a directory with bootstrap files.
+    fn populate_bootstrap_dir(&self, bootstrap_dir: &Path) -> Result<()> {
         if let Some(guestos_config) = &self.guestos_config {
-            serialize_and_write_config(&bootstrap_dir.path().join("config.json"), guestos_config)
+            serialize_and_write_config(&bootstrap_dir.join("config.json"), guestos_config)
                 .context("Failed to write guestos config to config.json")?;
         }
 
         if let Some(node_operator_private_key) = &self.node_operator_private_key {
             fs::copy(
                 node_operator_private_key,
-                bootstrap_dir.path().join("node_operator_private_key.pem"),
+                bootstrap_dir.join("node_operator_private_key.pem"),
             )
             .context("Failed to copy node operator private key")?;
         }
 
         if let Some(ic_crypto) = &self.ic_crypto {
-            Self::copy_dir_recursively(ic_crypto, &bootstrap_dir.path().join("ic_crypto"))
+            Self::copy_dir_recursively(ic_crypto, &bootstrap_dir.join("ic_crypto"))
                 .context("Failed to copy IC crypto directory")?;
         }
 
         if let Some(ic_state) = &self.ic_state
             && ic_state.exists()
         {
-            Self::copy_dir_recursively(ic_state, &bootstrap_dir.path().join("ic_state"))
+            Self::copy_dir_recursively(ic_state, &bootstrap_dir.join("ic_state"))
                 .context("Failed to copy IC state directory")?;
         }
 
         if let Some(ic_registry_local_store) = &self.ic_registry_local_store {
             Self::copy_dir_recursively(
                 ic_registry_local_store,
-                &bootstrap_dir.path().join("ic_registry_local_store"),
+                &bootstrap_dir.join("ic_registry_local_store"),
             )
             .context("Failed to copy registry local store")?;
         }
@@ -137,33 +120,39 @@ impl BootstrapOptions {
             if let Some(nns_public_key_override) = &self.nns_public_key_override {
                 fs::copy(
                     nns_public_key_override,
-                    bootstrap_dir.path().join("nns_public_key_override.pem"),
+                    bootstrap_dir.join("nns_public_key_override.pem"),
                 )
                 .context("Failed to copy NNS public key override")?;
             }
 
             if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
-                let target_dir = bootstrap_dir.path().join("accounts_ssh_authorized_keys");
+                let target_dir = bootstrap_dir.join("accounts_ssh_authorized_keys");
                 Self::copy_dir_recursively(accounts_ssh_authorized_keys, &target_dir)
                     .context("Failed to copy SSH authorized keys")?;
             }
         }
 
-        if !Command::new("tar")
-            .arg("cf")
-            .arg(out_file)
-            .arg("--sort=name")
-            .arg("--owner=root:0")
-            .arg("--group=root:0")
-            .arg("--mtime=UTC 1970-01-01 00:00:00")
-            .arg("-C")
-            .arg(bootstrap_dir.path())
-            .arg(".")
-            .status()
-            .context("Failed to execute tar command")?
-            .success()
-        {
-            bail!("Failed to create tar file");
+        Ok(())
+    }
+
+    /// Copy all files from a directory to a vfat image using mcopy.
+    fn copy_dir_to_vfat(src_dir: &Path, vfat_image: &Path) -> Result<()> {
+        let all_files = fs::read_dir(src_dir)?
+            .map(|entry| Ok(entry?.path()))
+            .collect::<Result<Vec<_>>>()
+            .context("Failed to collect config directory entries")?;
+
+        let output = Command::new("/usr/bin/mcopy")
+            .arg("-i")
+            .arg(vfat_image)
+            .arg("-s")
+            .args(all_files)
+            .arg("::/")
+            .output()
+            .context("Failed to execute mcopy")?;
+
+        if !output.status.success() {
+            bail!("Failed to copy directory contents to vfat image. {output:?}");
         }
 
         Ok(())
@@ -191,28 +180,14 @@ impl BootstrapOptions {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_build_bootstrap_config_image_succeeds_with_default_options() {
-        let tmp_dir = tempfile::tempdir().unwrap();
-        let out_file = tmp_dir.path().join("bootstrap.tar");
-
-        assert!(
-            BootstrapOptions::default()
-                .build_bootstrap_config_image(&out_file)
-                .is_ok()
-        );
-    }
+    use config_types::{DeploymentEnvironment, ICOSSettings, Ipv6Config, NetworkSettings};
 
     #[test]
     fn test_build_bootstrap_image() -> Result<()> {
         let tmp_dir = tempfile::tempdir()?;
         let out_file = tmp_dir.path().join("bootstrap.img");
 
-        BootstrapOptions {
-            ..Default::default()
-        }
-        .build_bootstrap_config_image(&out_file)?;
+        BootstrapOptions::default().build_bootstrap_config_image(&out_file)?;
 
         assert!(out_file.exists());
         assert!(fs::metadata(&out_file)?.len() > 0);
@@ -222,7 +197,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "dev")]
-    fn test_build_bootstrap_tar_with_all_options() -> Result<()> {
+    fn test_populate_bootstrap_dir_with_all_options() -> Result<()> {
         use config_types::{
             DeploymentEnvironment, GuestOSUpgradeConfig, GuestVMType, ICOSSettings, Ipv6Config,
             NetworkSettings,
@@ -231,7 +206,8 @@ mod tests {
         use std::str::FromStr;
 
         let tmp_dir = tempfile::tempdir()?;
-        let out_file = tmp_dir.path().join("bootstrap.tar");
+        let bootstrap_dir = tmp_dir.path().join("bootstrap");
+        fs::create_dir(&bootstrap_dir)?;
 
         // Create test files and directories
         let test_files_dir = tmp_dir.path().join("test_files");
@@ -297,44 +273,36 @@ mod tests {
             ic_registry_local_store: Some(registry_dir),
         };
 
-        // Build and extract tar
-        bootstrap_options.build_bootstrap_tar(&out_file)?;
-        let extract_dir = tmp_dir.path().join("extract");
-        fs::create_dir(&extract_dir)?;
-        Command::new("tar")
-            .arg("xf")
-            .arg(&out_file)
-            .arg("-C")
-            .arg(&extract_dir)
-            .status()?;
+        // Populate bootstrap directory
+        bootstrap_options.populate_bootstrap_dir(&bootstrap_dir)?;
 
         // Verify all copied files and directories
         assert_eq!(
-            fs::read_to_string(extract_dir.join("config.json"))?,
+            fs::read_to_string(bootstrap_dir.join("config.json"))?,
             serde_json::to_string_pretty(&guestos_config)?
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("nns_public_key_override.pem"))?,
+            fs::read_to_string(bootstrap_dir.join("nns_public_key_override.pem"))?,
             "test_nns_key"
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("node_operator_private_key.pem"))?,
+            fs::read_to_string(bootstrap_dir.join("node_operator_private_key.pem"))?,
             "test_node_key"
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("accounts_ssh_authorized_keys/key1"))?,
+            fs::read_to_string(bootstrap_dir.join("accounts_ssh_authorized_keys/key1"))?,
             "ssh_key1"
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("ic_crypto/test"))?,
+            fs::read_to_string(bootstrap_dir.join("ic_crypto/test"))?,
             "crypto_data"
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("ic_state/test"))?,
+            fs::read_to_string(bootstrap_dir.join("ic_state/test"))?,
             "state_data"
         );
         assert_eq!(
-            fs::read_to_string(extract_dir.join("ic_registry_local_store/test"))?,
+            fs::read_to_string(bootstrap_dir.join("ic_registry_local_store/test"))?,
             "registry_data"
         );
 
