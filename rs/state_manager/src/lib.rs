@@ -899,6 +899,7 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     latest_subnet_certified_height: AtomicU64,
+    tip_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1466,6 +1467,7 @@ impl StateManagerImpl {
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let latest_subnet_certified_height = AtomicU64::new(0);
+        let tip_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1581,6 +1583,7 @@ impl StateManagerImpl {
             latest_state_height,
             latest_certified_height,
             latest_subnet_certified_height,
+            tip_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -2202,9 +2205,11 @@ impl StateManagerImpl {
             }
         }
 
+        let tip_height = self.tip_height.load(Ordering::Relaxed);
+        let last_certification_height_to_keep = min(last_height_to_keep, Height::new(tip_height));
         let mut certifications_metadata = states
             .certifications_metadata
-            .split_off(&last_height_to_keep);
+            .split_off(&last_certification_height_to_keep);
 
         for h in inmemory_heights_to_keep.iter() {
             if let Some(cert_metadata) = states.certifications_metadata.remove(h) {
@@ -2922,11 +2927,10 @@ impl StateManager for StateManagerImpl {
             }
         }
 
-        let latest_state_height = self.latest_state_height.load(Ordering::Relaxed);
+        let tip_height = self.tip_height.load(Ordering::Relaxed);
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
-        let extra_heights =
-            latest_state_height..min(latest_state_height, latest_subnet_certified_height);
+        let extra_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
         let mut filtered_extra_heights: Vec<_> = extra_heights
             .into_iter()
             .filter(|h| !heights_with_certifications.contains(h))
@@ -3224,6 +3228,7 @@ impl StateManager for StateManagerImpl {
                 });
 
             states.tip = Some((height, state));
+            self.tip_height.store(height.get(), Ordering::Relaxed);
             return;
         }
 
@@ -3360,6 +3365,7 @@ impl StateManager for StateManagerImpl {
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip = next_tip;
+        self.tip_height.store(height.get(), Ordering::Relaxed);
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
