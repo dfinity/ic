@@ -719,13 +719,13 @@ fn test_scalarbytes_deserialization_with_old_cbor_format() {
 
 #[test]
 fn test_scalarbytes_deserialization_compact_cbor_format() {
-    let old_ser = [
+    let compact_ser = [
         (EccCurveType::K256, hex!("a1644b3235365820b5ebe6143c8a7f7f459413a69c34ffce7227ea0e37f3524e67283b1e99fd8194").to_vec()),
         (EccCurveType::P256, hex!("a164503235365820eadb7e4360365ce1a417d9fdddda706296e367053e14136f57b4a69b00494c06").to_vec()),
         (EccCurveType::Ed25519, hex!("a1674564323535313958207f7096a7e536695c1ecce3d6b3ba75e81bd910a79cb2e33f1e60cc4df292e404").to_vec()),
     ];
 
-    for (curve, bytes) in &old_ser {
+    for (curve, bytes) in &compact_ser {
         let sb: EccScalarBytes =
             serde_cbor::from_slice(bytes).expect("Failed to deserialize CBOR encoding");
 

@@ -600,7 +600,6 @@ impl<'de> Deserialize<'de> for EccScalarBytes {
             }
         }
 
-        /// DeserializeScalar to use deserialize_any for the inner value
         struct BytesOrArrayScalar;
         impl<'de> de::DeserializeSeed<'de> for BytesOrArrayScalar {
             type Value = Box<[u8; 32]>;
@@ -623,7 +622,7 @@ impl<'de> Deserialize<'de> for EccScalarBytes {
                 let curve_str: String = map
                     .next_key()?
                     .ok_or_else(|| de::Error::custom("Expected curve name"))?;
-                // Use deserialize_any to handle both bytes and seq
+                // Use BytesOrArrayScalar, which uses deserialize_any, to handle both bytes and seq
                 let bytes: Box<[u8; 32]> = map.next_value_seed(BytesOrArrayScalar)?;
                 match curve_str.as_str() {
                     "K256" => Ok(EccScalarBytes::K256(bytes)),
