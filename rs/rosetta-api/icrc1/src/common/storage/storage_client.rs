@@ -502,9 +502,7 @@ impl StorageClient {
     pub async fn get_block_count(&self) -> anyhow::Result<u64> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_count(conn).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_count(conn).map_err(StorageError::from))
             .await?)
     }
 
