@@ -55,6 +55,7 @@ fakeroot
 faketime
 grub-efi-amd64-bin
 iasl # to build OVMF
+ipmitool # to connect to baremetal test instances
 iputils-ping
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
