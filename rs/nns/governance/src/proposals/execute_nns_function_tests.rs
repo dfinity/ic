@@ -6,7 +6,7 @@ use crate::{
     },
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
-use candid::Encode;
+use candid::{Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -183,6 +183,50 @@ service : {
         self_describing_value,
         SelfDescribingValue::Map(hashmap! {
             "Add".to_string() => SelfDescribingValue::Text("application".to_string()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_uninstall_code() {
+    // Create the uninstall_code_args payload
+    #[derive(candid::CandidType)]
+    struct UninstallCodeArgs {
+        canister_id: CanisterId,
+        sender_canister_version: Option<u64>,
+    }
+
+    let target_canister = CanisterId::from_u64(123);
+    let arg = UninstallCodeArgs {
+        canister_id: target_canister,
+        sender_canister_version: Some(42),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UninstallCode,
+        payload,
+    };
+
+    // No canister_metadata call expected a hard-coded DID file is used instead.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Uninstall Code");
+    assert!(
+        result
+            .type_description
+            .contains("Uninstall code of a canister")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "canister_id".to_string() => SelfDescribingValue::Text(target_canister.to_string()),
+            "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::Nat(Nat::from(42_u64)),
+            ]),
         })
     );
 }
