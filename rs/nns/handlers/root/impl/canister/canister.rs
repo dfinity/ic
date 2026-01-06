@@ -30,7 +30,8 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -222,6 +223,20 @@ async fn update_canister_settings(
     check_caller_is_governance();
     canister_management::update_canister_settings(
         update_settings,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Takes a snapshot of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[update]
+async fn take_canister_snapshot(
+    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
+) -> TakeCanisterSnapshotResponse {
+    check_caller_is_governance();
+    canister_management::take_canister_snapshot(
+        take_canister_snapshot_request,
         &mut new_management_canister_client(),
     )
     .await

@@ -37,6 +37,7 @@ rust_library(
         "@crate_index//:anyhow",
         "@crate_index//:candid",
         "@crate_index//:der",
+        "@crate_index//:hex",
         "@crate_index//:itertools",
         "@crate_index//:pem",
         "@crate_index//:prost",
