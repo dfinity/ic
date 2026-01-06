@@ -596,6 +596,11 @@ impl SystemStateModifications {
             ..Default::default()
         }
     }
+
+    /// Returns collected canister log records.
+    pub fn canister_log(&self) -> CanisterLog {
+        self.canister_log.clone()
+    }
 }
 
 /// A version of the `SystemState` that can be used in a sandboxed process.

@@ -473,6 +473,12 @@ pub fn apply_canister_state_changes(
         system_state_modifications,
     } = canister_state_changes;
 
+    // Preserve delta canister logs.
+    let mut canister_logs = system_state_modifications.canister_log();
+    execution_state
+        .log_memory_store
+        .append_delta_log(&mut canister_logs);
+
     let clean_system_state = system_state.clone();
     let clean_subnet_available_memory = round_limits.subnet_available_memory;
     let callbacks_created = system_state_modifications.callbacks_created();
