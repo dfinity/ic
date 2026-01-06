@@ -795,26 +795,13 @@ mod test {
     )]
     fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
         let mut registry = invariant_compliant_registry(0);
-        let payload = CreateSubnetPayload {
-            replica_version_id: ReplicaVersion::default().into(),
-            chain_key_config: Some(InitialChainKeyConfig {
-                key_configs: vec![KeyConfigRequest {
-                    key_config: Some(KeyConfig {
-                        key_id: Some(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                            curve: EcdsaCurve::Secp256k1,
-                            name: "some_key_name".to_string(),
-                        })),
-                        pre_signatures_to_create_in_advance: None,
-                        max_queue_size: Some(155),
-                    }),
-                    subnet_id: Some(*TEST_USER1_PRINCIPAL),
-                }],
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-                max_parallel_pre_signature_transcripts_in_creation: None,
+        let payload = create_subnet_payload_with_key_config(
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "some_key_name".to_string(),
             }),
-            ..Default::default()
-        };
+            None,
+        );
 
         futures::executor::block_on(registry.do_create_subnet(payload));
     }
@@ -825,16 +812,28 @@ mod test {
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
         let mut registry = invariant_compliant_registry(0);
-        let payload = CreateSubnetPayload {
+        let payload = create_subnet_payload_with_key_config(
+            MasterPublicKeyId::VetKd(VetKdKeyId {
+                curve: VetKdCurve::Bls12_381_G2,
+                name: "some_key_name".to_string(),
+            }),
+            Some(99),
+        );
+
+        futures::executor::block_on(registry.do_create_subnet(payload));
+    }
+
+    fn create_subnet_payload_with_key_config(
+        key_id: MasterPublicKeyId,
+        pre_signatures_to_create_in_advance: Option<u32>,
+    ) -> CreateSubnetPayload {
+        CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
             chain_key_config: Some(InitialChainKeyConfig {
                 key_configs: vec![KeyConfigRequest {
                     key_config: Some(KeyConfig {
-                        key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
-                            curve: VetKdCurve::Bls12_381_G2,
-                            name: "some_key_name".to_string(),
-                        })),
-                        pre_signatures_to_create_in_advance: Some(99),
+                        key_id: Some(key_id),
+                        pre_signatures_to_create_in_advance,
                         max_queue_size: Some(155),
                     }),
                     subnet_id: Some(*TEST_USER1_PRINCIPAL),
@@ -844,8 +843,6 @@ mod test {
                 max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
-        };
-
-        futures::executor::block_on(registry.do_create_subnet(payload));
+        }
     }
 }
