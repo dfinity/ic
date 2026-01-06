@@ -13,8 +13,30 @@ use tracing::warn;
 
 const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
 
-fn to_rusqlite_result<T>(result: anyhow::Result<T>) -> std::result::Result<T, rusqlite::Error> {
-    result.map_err(|e| rusqlite::Error::ToSqlConversionFailure(e.into()))
+/// Wrapper around `anyhow::Error` that implements `std::error::Error`.
+///
+/// This is needed because `anyhow::Error` deliberately does not implement
+/// `std::error::Error`, but `tokio_rusqlite::Connection::call` requires the
+/// closure's error type to implement it for the outer error to be convertible.
+#[derive(Debug)]
+struct StorageError(anyhow::Error);
+
+impl std::fmt::Display for StorageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::error::Error for StorageError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.0.source()
+    }
+}
+
+impl From<anyhow::Error> for StorageError {
+    fn from(e: anyhow::Error) -> Self {
+        StorageError(e)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -134,38 +156,41 @@ impl StorageClient {
     ) -> anyhow::Result<Self> {
         connection
             .call(move |conn| {
-                conn.pragma_update(None, "foreign_keys", 1)?;
+                (|| -> anyhow::Result<()> {
+                    conn.pragma_update(None, "foreign_keys", 1)?;
 
-                match cache_size_kb {
-                    None => {
-                        tracing::info!("No cache size configured");
+                    match cache_size_kb {
+                        None => {
+                            tracing::info!("No cache size configured");
+                        }
+                        Some(cache_kb) => {
+                            let cache_size = -cache_kb; // Negative to specify KB
+                            conn.pragma_update(None, "cache_size", cache_size)?;
+                            tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+                        }
                     }
-                    Some(cache_kb) => {
-                        let cache_size = -cache_kb; // Negative to specify KB
-                        conn.pragma_update(None, "cache_size", cache_size)?;
-                        tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+
+                    match flush_cache_and_shrink_memory {
+                        true => {
+                            tracing::info!(
+                                "Flushing cache and shrinking memory after updating balances."
+                            )
+                        }
+                        false => {
+                            tracing::info!(
+                                "Not flushing cache and shrinking memory after updating balances."
+                            )
+                        }
                     }
-                }
 
-                match flush_cache_and_shrink_memory {
-                    true => {
-                        tracing::info!(
-                            "Flushing cache and shrinking memory after updating balances."
-                        )
-                    }
-                    false => {
-                        tracing::info!(
-                            "Not flushing cache and shrinking memory after updating balances."
-                        )
-                    }
-                }
+                    tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
 
-                tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
+                    // Create tables
+                    super::schema::create_tables(conn)?;
 
-                // Create tables
-                to_rusqlite_result(super::schema::create_tables(conn))?;
-
-                Ok::<(), rusqlite::Error>(())
+                    Ok(())
+                })()
+                .map_err(StorageError::from)
             })
             .await?;
 
@@ -220,7 +245,7 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_block_at_idx(conn, block_idx))
+                storage_operations::get_block_at_idx(conn, block_idx).map_err(StorageError::from)
             })
             .await?)
     }
@@ -229,7 +254,9 @@ impl StorageClient {
     pub async fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_block_by_hash(conn, hash)))
+            .call(move |conn| {
+                storage_operations::get_block_by_hash(conn, hash).map_err(StorageError::from)
+            })
             .await?)
     }
 
@@ -238,7 +265,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_block_with_highest_block_idx(conn))
+                storage_operations::get_block_with_highest_block_idx(conn)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -248,7 +276,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_block_with_lowest_block_idx(conn))
+                storage_operations::get_block_with_lowest_block_idx(conn)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -264,11 +293,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_blocks_by_index_range(
-                    conn,
-                    start_index,
-                    end_index,
-                ))
+                storage_operations::get_blocks_by_index_range(conn, start_index, end_index)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -279,7 +305,9 @@ impl StorageClient {
     pub async fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_blockchain_gaps(conn)))
+            .call(move |conn| {
+                storage_operations::get_blockchain_gaps(conn).map_err(StorageError::from)
+            })
             .await?)
     }
 
@@ -287,9 +315,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_highest_block_idx_in_blocks_table(
-                    conn,
-                ))
+                storage_operations::get_highest_block_idx_in_blocks_table(conn)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -321,11 +348,12 @@ impl StorageClient {
                     .iter()
                     .map(|(k, v)| (k.as_str(), v as &dyn rusqlite::ToSql))
                     .collect();
-                to_rusqlite_result(storage_operations::get_blocks_by_custom_query(
+                storage_operations::get_blocks_by_custom_query(
                     conn,
                     sql_query,
                     params_refs.as_slice(),
-                ))
+                )
+                .map_err(StorageError::from)
             })
             .await?)
     }
@@ -337,9 +365,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_blocks_by_transaction_hash(
-                    conn, hash,
-                ))
+                storage_operations::get_blocks_by_transaction_hash(conn, hash)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -358,7 +385,7 @@ impl StorageClient {
     pub async fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_metadata(conn)))
+            .call(move |conn| storage_operations::get_metadata(conn).map_err(StorageError::from))
             .await?)
     }
 
@@ -366,7 +393,7 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::store_metadata(conn, metadata))
+                storage_operations::store_metadata(conn, metadata).map_err(StorageError::from)
             })
             .await?)
     }
@@ -374,7 +401,9 @@ impl StorageClient {
     pub async fn reset_blocks_counter(&self) -> Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::reset_blocks_counter(conn)))
+            .call(move |conn| {
+                storage_operations::reset_blocks_counter(conn).map_err(StorageError::from)
+            })
             .await?)
     }
 
@@ -383,7 +412,9 @@ impl StorageClient {
     pub async fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::store_blocks(conn, blocks)))
+            .call(move |conn| {
+                storage_operations::store_blocks(conn, blocks).map_err(StorageError::from)
+            })
             .await?)
     }
 
@@ -398,11 +429,12 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::update_account_balances(
+                storage_operations::update_account_balances(
                     conn,
                     flush_cache_and_shrink_memory,
                     balance_sync_batch_size,
-                ))
+                )
+                .map_err(StorageError::from)
             })
             .await?)
     }
@@ -413,9 +445,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(
-                    storage_operations::get_highest_block_idx_in_account_balance_table(conn),
-                )
+                storage_operations::get_highest_block_idx_in_account_balance_table(conn)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -431,9 +462,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::get_account_balance_at_block_idx(
-                    conn, &account, block_idx,
-                ))
+                storage_operations::get_account_balance_at_block_idx(conn, &account, block_idx)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -445,9 +475,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(
-                    storage_operations::get_account_balance_at_highest_block_idx(conn, &account),
-                )
+                storage_operations::get_account_balance_at_highest_block_idx(conn, &account)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -462,11 +491,10 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(
-                    storage_operations::get_aggregated_balance_for_principal_at_block_idx(
-                        conn, &principal, block_idx,
-                    ),
+                storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+                    conn, &principal, block_idx,
                 )
+                .map_err(StorageError::from)
             })
             .await?)
     }
@@ -474,7 +502,9 @@ impl StorageClient {
     pub async fn get_block_count(&self) -> anyhow::Result<u64> {
         Ok(self
             .storage_connection
-            .call(move |conn| to_rusqlite_result(storage_operations::get_block_count(conn)))
+            .call(move |conn| {
+                storage_operations::get_block_count(conn).map_err(StorageError::from)
+            })
             .await?)
     }
 
@@ -492,10 +522,8 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call(move |conn| {
-                to_rusqlite_result(storage_operations::repair_fee_collector_balances(
-                    conn,
-                    balance_sync_batch_size,
-                ))
+                storage_operations::repair_fee_collector_balances(conn, balance_sync_batch_size)
+                    .map_err(StorageError::from)
             })
             .await?)
     }
