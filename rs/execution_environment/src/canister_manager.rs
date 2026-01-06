@@ -1618,6 +1618,7 @@ impl CanisterManager {
         {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
             ChunkValidationResult::AlreadyExists(hash) => {
+                round_limits.instructions -= as_round_instructions(instructions);
                 return Ok(UploadChunkResult {
                     reply: UploadChunkReply {
                         hash: hash.to_vec(),
