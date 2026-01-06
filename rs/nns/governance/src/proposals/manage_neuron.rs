@@ -51,7 +51,7 @@ impl LocallyDescribableProposalAction for ManageNeuron {
                     "A ManageNeuron proposal is created with an empty or conflicting \
                     values of id and neuron_id_or_subaccount. This should never happen."
                 );
-                builder.add_null_field("neuron_id_or_subaccount")
+                builder.add_field("neuron_id_or_subaccount", SelfDescribingValue::NULL)
             }
         };
 

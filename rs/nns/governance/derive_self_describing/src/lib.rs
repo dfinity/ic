@@ -192,7 +192,7 @@ fn derive_mixed_enum(name: &Ident, data_enum: &DataEnum) -> Result<TokenStream2,
                     Ok(quote! {
                         #name::#variant_name => {
                             crate::proposals::self_describing::ValueBuilder::new()
-                                .add_null_field(#variant_name_str)
+                                .add_field(#variant_name_str, crate::proposals::self_describing::SelfDescribingValue::NULL)
                                 .build()
                         }
                     })

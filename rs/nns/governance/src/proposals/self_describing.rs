@@ -88,12 +88,6 @@ impl ValueBuilder {
         self
     }
 
-    /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
-    /// payload (e.g., StartDissolving, StopDissolving).
-    pub fn add_null_field(self, key: impl ToString) -> Self {
-        self.add_field(key, SelfDescribingValue::NULL)
-    }
-
     pub fn build(self) -> SelfDescribingValue {
         let Self { fields } = self;
         SelfDescribingValue {
