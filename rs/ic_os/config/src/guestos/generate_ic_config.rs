@@ -379,7 +379,7 @@ mod tests {
                 }),
                 ..Default::default()
             },
-            ..GuestOSConfig::test_config()
+            ..GuestOSConfig::default()
         }
     }
 }

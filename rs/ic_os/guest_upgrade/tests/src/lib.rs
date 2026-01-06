@@ -140,7 +140,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
             trusted_execution_environment_config: Some(
                 trusted_execution_environment_config.clone(),
             ),
-            ..GuestOSConfig::test_config()
+            ..GuestOSConfig::default()
         };
 
         let previous_key = NamedTempFile::new().unwrap();

@@ -208,7 +208,7 @@ mod tests {
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 ..Default::default()
             },
-            ..HostOSConfig::test_config()
+            ..HostOSConfig::default()
         }
     }
 

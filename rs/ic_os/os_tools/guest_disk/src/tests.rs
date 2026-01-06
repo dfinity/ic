@@ -69,7 +69,7 @@ impl<'a> TestFixture<'a> {
                 enable_trusted_execution_environment,
                 ..Default::default()
             },
-            ..GuestOSConfig::test_config()
+            ..GuestOSConfig::default()
         }
     }
 

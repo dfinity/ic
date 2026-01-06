@@ -230,7 +230,7 @@ mod tests {
         let test_files_dir = tmp_dir.path().join("test_files");
         fs::create_dir(&test_files_dir)?;
 
-        let guestos_config = GuestOSConfig::test_config();
+        let guestos_config = GuestOSConfig::default();
 
         let nns_key_override_path = test_files_dir.join("nns_public_key_override.pem");
         fs::write(&nns_key_override_path, "test_nns_key")?;

@@ -46,7 +46,7 @@ pub type ConfigMap = HashMap<String, String>;
 
 /// SetupOS configuration. User-facing configuration files
 /// (e.g., `config.ini`, `deployment.json`) are transformed into `SetupOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct SetupOSConfig {
     /// Tracks the config version, set to CONFIG_VERSION at runtime.
     pub config_version: String,
@@ -58,7 +58,7 @@ pub struct SetupOSConfig {
 }
 
 /// HostOS configuration. In production, this struct inherits settings from `SetupOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct HostOSConfig {
     /// Tracks the config version, set to CONFIG_VERSION at runtime.
     pub config_version: String,
@@ -91,7 +91,7 @@ pub struct TrustedExecutionEnvironmentConfig {
 }
 
 /// GuestOS configuration. In production, this struct inherits settings from `HostOSConfig`.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct GuestOSConfig {
     /// Tracks the config version, set to CONFIG_VERSION at runtime.
     pub config_version: String,
@@ -149,7 +149,7 @@ pub struct ICOSSettings {
 pub struct ICOSDevSettings {}
 
 /// Placeholder for SetupOS-specific settings.
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct SetupOSSettings;
 
 /// HostOS-specific settings.
@@ -314,69 +314,6 @@ pub struct FixedIpv6Config {
     pub gateway: Ipv6Addr,
 }
 
-// =============================================================================
-// Test Utilities
-// =============================================================================
-//
-// These functions create config objects with sensible defaults for testing.
-// We intentionally don't implement Default for GuestOSConfig/HostOSConfig/SetupOSConfig
-// to keep production code explicit about configuration values.
-//
-// Usage:
-// ```
-// // Simple case - all defaults
-// let config = GuestOSConfig::test_config();
-//
-// // Override specific fields using struct update syntax
-// let config = GuestOSConfig {
-//     icos_settings: ICOSSettings {
-//         enable_trusted_execution_environment: true,
-//         ..Default::default()
-//     },
-//     ..GuestOSConfig::test_config()
-// };
-// ```
-
-impl GuestOSConfig {
-    pub fn test_config() -> Self {
-        Self {
-            config_version: CONFIG_VERSION.to_string(),
-            network_settings: NetworkSettings::default(),
-            icos_settings: ICOSSettings::default(),
-            guestos_settings: GuestOSSettings::default(),
-            guest_vm_type: GuestVMType::default(),
-            upgrade_config: GuestOSUpgradeConfig::default(),
-            trusted_execution_environment_config: None,
-            recovery_config: None,
-        }
-    }
-}
-
-impl HostOSConfig {
-    pub fn test_config() -> Self {
-        Self {
-            config_version: CONFIG_VERSION.to_string(),
-            network_settings: NetworkSettings::default(),
-            icos_settings: ICOSSettings::default(),
-            hostos_settings: HostOSSettings::default(),
-            guestos_settings: GuestOSSettings::default(),
-        }
-    }
-}
-
-impl SetupOSConfig {
-    pub fn test_config() -> Self {
-        Self {
-            config_version: CONFIG_VERSION.to_string(),
-            network_settings: NetworkSettings::default(),
-            icos_settings: ICOSSettings::default(),
-            setupos_settings: SetupOSSettings,
-            hostos_settings: HostOSSettings::default(),
-            guestos_settings: GuestOSSettings::default(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -421,7 +358,7 @@ mod tests {
     fn test_no_reserved_field_paths_used() -> Result<(), Box<dyn std::error::Error>> {
         let reserved_field_paths: HashSet<&str> = RESERVED_FIELD_PATHS.iter().cloned().collect();
 
-        let setupos_config = SetupOSConfig::test_config();
+        let setupos_config = SetupOSConfig::default();
 
         fn get_all_field_paths(prefix: &str, value: &Value, field_paths: &mut HashSet<String>) {
             match value {

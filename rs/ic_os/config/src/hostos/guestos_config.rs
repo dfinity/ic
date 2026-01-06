@@ -141,7 +141,7 @@ mod tests {
                 }),
                 ..Default::default()
             },
-            ..HostOSConfig::test_config()
+            ..HostOSConfig::default()
         }
     }
     #[test]
