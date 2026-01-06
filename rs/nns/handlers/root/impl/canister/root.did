@@ -151,6 +151,27 @@ type CallCanisterRequest = record {
   payload : blob;
 };
 
+type TakeCanisterSnapshotArgs = record {
+  canister_id : principal;
+  replace_snapshot : opt blob;
+};
+
+type TakeCanisterSnapshotResponse = variant {
+  Ok : TakeCanisterSnapshotOk;
+  Err : TakeCanisterSnapshotError;
+};
+
+type TakeCanisterSnapshotOk = record {
+  id : blob;
+  taken_at_timestamp : nat64;
+  total_size : nat64;
+};
+
+type TakeCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
 service : () -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   get_build_metadata : () -> (text) query;
@@ -166,4 +187,7 @@ service : () -> {
       UpdateCanisterSettingsResponse,
     );
   call_canister : (CallCanisterRequest) -> ();
+  take_canister_snapshot : (TakeCanisterSnapshotArgs) -> (
+      TakeCanisterSnapshotResponse,
+    );
 }

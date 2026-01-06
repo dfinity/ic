@@ -48,15 +48,12 @@ fish
 node-json5
 
 # IC-OS
-fdisk
 cryptsetup-bin
-dosfstools
-fakeroot
+dosfstools # provides mkfs.vfat
 faketime
-grub-efi-amd64-bin
+fdisk
 iasl # to build OVMF
 ipmitool # to connect to baremetal test instances
-iputils-ping
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
  # Linked in by IC-OS binaries for creating mapped devices.
@@ -65,12 +62,9 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
-lsb-release
-lvm2
-mtools
+mtools # used for mcopy and mmd
 nasm # to build OVMF
 zstd
-qemu-system-x86 # used for guestos
 
 # Unknown
 containernetworking-plugins
