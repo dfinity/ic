@@ -272,6 +272,10 @@ pub enum BurnMemo {
         kyt_fee: Option<u64>,
         status: Option<Status>,
     },
+    Consolidate {
+        value: u64,
+        inputs: u64,
+    },
 }
 
 impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
@@ -286,6 +290,9 @@ impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
                 kyt_fee,
                 status: status.map(Status::from),
             },
+            memo::BurnMemo::Consolidate { value, inputs } => {
+                BurnMemo::Consolidate { value, inputs }
+            }
         }
     }
 }

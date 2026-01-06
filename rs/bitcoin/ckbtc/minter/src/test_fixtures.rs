@@ -234,8 +234,9 @@ pub mod arbitrary {
         reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            ChangeOutput, LedgerBurnIndex, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
-            eventlog::{Event, EventType, ReplacedReason},
+            ChangeOutput, LedgerBurnIndex, Mode, ReimbursementReason, RetrieveBtcRequest,
+            SuspendedReason,
+            eventlog::{EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
@@ -268,6 +269,15 @@ pub mod arbitrary {
     }
 
     pub(crate) fn burn_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        prop_oneof![burn_convert_memo(), burn_consolidate_memo()]
+    }
+
+    pub(crate) fn burn_consolidate_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (any::<u64>(), any::<u64>())
+            .prop_map(|(value, inputs)| BurnMemo::Consolidate { value, inputs })
+    }
+
+    pub(crate) fn burn_convert_memo() -> impl Strategy<Value = BurnMemo<'static>> {
         (
             option::of("[a-z0-9]{20,62}"),
             option::of(any::<u64>()),

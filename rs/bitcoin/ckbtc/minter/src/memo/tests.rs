@@ -1,8 +1,8 @@
 use crate::memo::{BurnMemo, MintMemo, Status};
 use crate::state::LedgerBurnIndex;
 use crate::test_fixtures::arbitrary::{
-    burn_memo, mint_convert_memo, mint_kyt_fail_memo, mint_kyt_memo, mint_memo,
-    mint_reimburse_withdrawal_memo,
+    burn_consolidate_memo, burn_convert_memo, burn_memo, mint_convert_memo, mint_kyt_fail_memo,
+    mint_kyt_memo, mint_memo, mint_reimburse_withdrawal_memo,
 };
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
@@ -120,6 +120,7 @@ fn should_have_a_strategy_for_each_burn_memo_variant() {
     };
 
     let _ = match memo_to_match {
-        BurnMemo::Convert { .. } => burn_memo().boxed(),
+        BurnMemo::Convert { .. } => burn_convert_memo().boxed(),
+        BurnMemo::Consolidate { .. } => burn_consolidate_memo().boxed(),
     };
 }

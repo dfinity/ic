@@ -572,6 +572,13 @@ type BurnMemo = variant {
         // The status of the Bitcoin check.
         status : opt Status;
     };
+    // The minter consolidated UTXOs.
+    Consolidate : record {
+        // The total value of the consolidated UTXOs.
+        value : nat64;
+        // The number of input UTXOs that were consolidated.
+        inputs : nat64;
+    };
 };
 
 type DecodedMemo = variant {
