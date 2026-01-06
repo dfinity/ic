@@ -3,8 +3,18 @@
 FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
 ENV TZ=UTC
 
+# copy config files
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
+COPY ./ci/container/files/gitconfig /etc/gitconfig
+COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+
+# Create user groups needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
@@ -91,14 +101,6 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
 ARG motoko_version=0.14.7
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
-# Add gitconfig
-COPY ./ci/container/files/gitconfig /etc/gitconfig
-
 # Install AFLplusplus
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.21c
 RUN mkdir -p /afl && \
@@ -120,10 +122,7 @@ COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-
 USER ubuntu
-
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 
@@ -148,9 +147,6 @@ ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
-
-# Read in the build-ci script
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
 WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden
