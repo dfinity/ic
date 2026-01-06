@@ -386,10 +386,12 @@ impl HasPrometheus for TestEnv {
             None
         };
 
+        let topology_snapshot = self.safe_topology_snapshot()?;
+
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),
-            self.topology_snapshot(),
+            topology_snapshot,
             &playnet_domain,
         )?;
         sync_prometheus_config_dir_with_ic_gateways(
