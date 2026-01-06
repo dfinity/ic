@@ -265,6 +265,73 @@ async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId,
         .expect("Failed to set up a busy canister.");
 }
 
+async fn deploy_canisters_for_long_rounds(
+    logger: &slog::Logger,
+    nodes: Vec<IcNodeSnapshot>,
+    num_canisters: usize,
+) {
+    let init_node = nodes[0].clone();
+    let agent = init_node.build_default_agent_async().await;
+    let ic00 = ManagementCanister::create(&agent);
+
+    let num_seed_canisters = 4;
+    info!(
+        logger,
+        "Deploying {} seed canisters on a node {} ...",
+        num_seed_canisters,
+        init_node.get_public_url()
+    );
+    let mut create_seed_canisters_futs = vec![];
+    for _ in 0..num_seed_canisters {
+        create_seed_canisters_futs.push(deploy_seed_canister(
+            &ic00,
+            init_node.effective_canister_id(),
+        ));
+    }
+    let seed_canisters = join_all(create_seed_canisters_futs).await;
+
+    let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
+    info!(
+        logger,
+        "Creating {} canisters via the seed canisters ...",
+        num_canisters_per_seed_canister * num_seed_canisters,
+    );
+    let mut create_many_canisters_futs = vec![];
+    for seed_canister_id in seed_canisters {
+        let bytes = Encode!(&num_canisters_per_seed_canister)
+            .expect("Failed to candid encode argument for a seed canister");
+        let fut = agent
+            .update(&seed_canister_id, "create_many_canisters")
+            .with_arg(bytes)
+            .call_and_wait();
+        create_many_canisters_futs.push(fut);
+    }
+    let res = join_all(create_many_canisters_futs).await;
+    for r in res {
+        r.expect("Failed to create canisters via a seed canister");
+    }
+
+    // We deploy 8 "busy" canisters: this way,
+    // there are 2 canisters per each of the 4 scheduler threads
+    // and thus every thread executes 2 x 1.8B = 3.6B instructions.
+    let num_busy_canisters = 8;
+    info!(
+        logger,
+        "Deploying {} busy canisters on a node {} ...",
+        num_busy_canisters,
+        init_node.get_public_url()
+    );
+    let mut create_busy_canisters_futs = vec![];
+    for _ in 0..num_busy_canisters {
+        create_busy_canisters_futs.push(deploy_busy_canister(
+            &agent,
+            init_node.effective_canister_id(),
+            logger,
+        ));
+    }
+    join_all(create_busy_canisters_futs).await;
+}
+
 pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
@@ -272,68 +339,7 @@ pub async fn rejoin_test_long_rounds(
     dkg_interval: u64,
 ) {
     let logger = env.logger();
-    {
-        let init_node = nodes[0].clone();
-        let agent = init_node.build_default_agent_async().await;
-        let ic00 = ManagementCanister::create(&agent);
-
-        let num_seed_canisters = 4;
-        info!(
-            logger,
-            "Deploying {} seed canisters on a node {} ...",
-            num_seed_canisters,
-            init_node.get_public_url()
-        );
-        let mut create_seed_canisters_futs = vec![];
-        for _ in 0..num_seed_canisters {
-            create_seed_canisters_futs.push(deploy_seed_canister(
-                &ic00,
-                init_node.effective_canister_id(),
-            ));
-        }
-        let seed_canisters = join_all(create_seed_canisters_futs).await;
-
-        let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
-        info!(
-            logger,
-            "Creating {} canisters via the seed canisters ...",
-            num_canisters_per_seed_canister * num_seed_canisters,
-        );
-        let mut create_many_canisters_futs = vec![];
-        for seed_canister_id in seed_canisters {
-            let bytes = Encode!(&num_canisters_per_seed_canister)
-                .expect("Failed to candid encode argument for a seed canister");
-            let fut = agent
-                .update(&seed_canister_id, "create_many_canisters")
-                .with_arg(bytes)
-                .call_and_wait();
-            create_many_canisters_futs.push(fut);
-        }
-        let res = join_all(create_many_canisters_futs).await;
-        for r in res {
-            r.expect("Failed to create canisters via a seed canister");
-        }
-
-        // We deploy 8 "busy" canisters: this way,
-        // there are 2 canisters per each of the 4 scheduler threads
-        // and thus every thread executes 2 x 1.8B = 3.6B instructions.
-        let num_busy_canisters = 8;
-        info!(
-            logger,
-            "Deploying {} busy canisters on a node {} ...",
-            num_busy_canisters,
-            init_node.get_public_url()
-        );
-        let mut create_busy_canisters_futs = vec![];
-        for _ in 0..num_busy_canisters {
-            create_busy_canisters_futs.push(deploy_busy_canister(
-                &agent,
-                init_node.effective_canister_id(),
-                &logger,
-            ));
-        }
-        join_all(create_busy_canisters_futs).await;
-    }
+    deploy_canisters_for_long_rounds(&logger, nodes.clone(), num_canisters).await;
 
     // Sort nodes by their average duration to process a batch.
     let mut average_process_batch_durations = vec![];
