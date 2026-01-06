@@ -92,7 +92,6 @@ use ic_cdk::println;
 use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
-use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
 use ic_nervous_system_common::{
     NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
 };
@@ -117,6 +116,7 @@ use ic_nns_governance_api::{
     },
     subnet_rental::SubnetRentalRequest,
 };
+use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
