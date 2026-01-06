@@ -93,6 +93,42 @@ fn test_decode_burn_consolidate_memo_is_stable() {
 }
 
 #[test]
+fn test_decode_mint_kyt_memo_is_stable() {
+    let encoded_memo = vec![130, 1, 128];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo,
+    });
+
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(MintMemo::Kyt))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn test_decode_mint_kyt_fail_memo_is_stable() {
+    let encoded_memo = vec![130, 2, 131, 25, 3, 232, 1, 24, 42];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo,
+    });
+
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(MintMemo::KytFail {
+        kyt_fee: Some(1000),
+        status: Some(Status::Rejected),
+        associated_burn_index: Some(42),
+    }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
 fn test_decode_empty_array() {
     for memo_type in &[MemoType::Burn, MemoType::Mint] {
         let encoded_memo = vec![];

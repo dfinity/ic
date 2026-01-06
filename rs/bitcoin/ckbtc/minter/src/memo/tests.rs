@@ -77,6 +77,30 @@ fn encode_mint_reimburse_withdrawal_memo_is_stable() {
 }
 
 #[test]
+#[allow(deprecated)]
+fn encode_mint_kyt_memo_is_stable() {
+    let mint_memo = MintMemo::Kyt;
+    let encoded = crate::memo::encode(&mint_memo);
+    let memo = Memo::from(encoded);
+
+    assert_eq!(memo.0, [130, 1, 128]);
+}
+
+#[test]
+#[allow(deprecated)]
+fn encode_mint_kyt_fail_memo_is_stable() {
+    let mint_memo = MintMemo::KytFail {
+        kyt_fee: Some(1000),
+        status: Some(Status::Rejected),
+        associated_burn_index: Some(42),
+    };
+    let encoded = crate::memo::encode(&mint_memo);
+    let memo = Memo::from(encoded);
+
+    assert_eq!(memo.0, [130, 2, 131, 25, 3, 232, 1, 24, 42]);
+}
+
+#[test]
 fn encode_burn_memo_is_stable() {
     let burn_memo = BurnMemo::Convert {
         address: Some("bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c"),
