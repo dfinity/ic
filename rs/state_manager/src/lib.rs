@@ -2102,6 +2102,9 @@ impl StateManagerImpl {
             "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
         );
 
+        self.latest_subnet_certified_height
+            .store(last_height_to_keep.get(), Ordering::Relaxed);
+
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
         #[cfg(debug_assertions)]
