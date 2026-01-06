@@ -2987,6 +2987,15 @@ impl StateManager for StateManagerImpl {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
+        } else {
+            let height = certification.height;
+            let metadata = CertificationMetadata {
+                hash_tree: None,
+                certified_state_hash: Some(certification.signed.content.hash.clone().get()),
+                certification: Some(certification),
+                certification_requested_at: Instant::now(),
+            };
+            states.certifications_metadata.insert(height, metadata);
         }
     }
 
