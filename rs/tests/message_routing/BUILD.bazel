@@ -101,7 +101,6 @@ system_test_nns(
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
     },
     tags = [
-        "manual",  # this test does not pass currently (it serves as a baseline for future work)
         "system_test_large",
     ],
     test_timeout = "eternal",
