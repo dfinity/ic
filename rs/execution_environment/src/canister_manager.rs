@@ -2978,6 +2978,7 @@ impl CanisterManager {
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         // In this case, we spent instructions calculating the chunk hash, so we charge them.
+                        round_limits.instructions -= as_round_instructions(instructions);
                         return (
                             Err(CanisterManagerError::WasmChunkStoreError { message: err }),
                             instructions,

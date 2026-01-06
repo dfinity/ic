@@ -1880,6 +1880,7 @@ impl ExecutionEnvironment {
         //   - `TakeCanisterSnapshot`
         //   - `LoadCanisterSnapshot`
         //   - `ReadCanisterSnapshotData`
+        //   - `ReadCanisterSnapshotMetadata`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
