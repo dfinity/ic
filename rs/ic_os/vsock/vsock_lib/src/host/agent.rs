@@ -52,7 +52,7 @@ fn get_hostos_vsock_version() -> Response {
 
 fn is_manual_recovery_running() -> bool {
     match procfs::process::all_processes() {
-        Ok(processes) => processes.into_iter().any(|process| {
+        Ok(processes) => processes.into_iter().filter_map(Result::ok).any(|process| {
             process.cmdline().is_ok_and(|args| {
                 let cmd = args.join(" ");
                 cmd.contains("hostos_tool") && cmd.contains("manual-recovery")
