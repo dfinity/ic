@@ -1,6 +1,6 @@
 use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, IntoStaticStr};
+use strum::{AsRefStr, IntoEnumIterator};
+use strum_macros::EnumIter;
 
 pub(crate) const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
@@ -20,7 +20,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_task_failed: IntCounterVec,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
 pub(crate) enum KeyRotationStatus {
     Disabled,
     TooRecent,
@@ -110,7 +110,7 @@ impl OrchestratorMetrics {
             .filter(|s| !status.is_transient() || !s.is_error())
             .for_each(|s| {
                 self.key_rotation_status
-                    .with_label_values(&[s.into()])
+                    .with_label_values(&[s.as_ref()])
                     .set((s == status) as i64);
             });
     }
@@ -118,7 +118,7 @@ impl OrchestratorMetrics {
     /// Set the error status to '1'.
     pub fn observe_key_rotation_error(&self) {
         self.key_rotation_status
-            .with_label_values(&[KeyRotationStatus::Error.into()])
+            .with_label_values(&[KeyRotationStatus::Error.as_ref()])
             .set(1);
     }
 }
