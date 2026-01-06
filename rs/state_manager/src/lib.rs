@@ -2102,8 +2102,7 @@ impl StateManagerImpl {
             "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
         );
 
-        self.latest_subnet_certified_height
-            .store(last_height_to_keep.get(), Ordering::Relaxed);
+        update_latest_height(&self.latest_subnet_certified_height, last_height_to_keep);
 
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
@@ -3110,8 +3109,7 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_inmemory_states_below"])
             .start_timer();
 
-        self.latest_subnet_certified_height
-            .store(requested_height.get(), Ordering::Relaxed);
+        update_latest_height(&self.latest_subnet_certified_height, requested_height);
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
