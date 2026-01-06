@@ -549,13 +549,13 @@ type GetIndexPrincipalError = variant {
 };
 
 type SetFeeCollectorArgs = record {
-  fee_collector : opt Account
-  created_at_time : Timestamp;
+  fee_collector : opt Account;
+  created_at_time : Timestamp
 };
 
 type SetFeeCollectorError = variant {
-  AccessDenied(text),
-  InvalidAccount(text),
+  AccessDenied : text;
+  InvalidAccount : text;
   Duplicate : record { duplicate_of : BlockIndex };
   GenericError : record { error_code : nat; message : text }
 };
