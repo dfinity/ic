@@ -1,6 +1,6 @@
-use crate::BLOCK_TIME;
 use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
+use crate::{BLOCK_TIME, DogecoinUsers};
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
 use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
@@ -212,13 +212,13 @@ impl<S> DogecoinWithdrawalTransactionFlow<S>
 where
     S: AsRef<Setup>,
 {
-    pub fn dogecoin_await_transaction(self) -> WithdrawalFlowEnd<S> {
+    pub fn dogecoin_await_transaction_in_mempool(self) -> WithdrawalFlowEnd<S> {
         let minter = self.setup.as_ref().minter();
         let txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
-        let mut mempool = self.setup.as_ref().dogecoin().mempool();
-        let tx = mempool
-            .remove(&txid)
-            .expect("the mempool does not contain the withdrawal transaction");
+        let dogecoin = self.setup.as_ref().dogecoind();
+        let tx = dogecoin.await_ok(|daemon| {
+            daemon.get_raw_transaction_from_mempool(&bitcoin::Txid::from_byte_array(txid.into()))
+        });
 
         let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
             let sent_tx_event = minter
@@ -438,17 +438,6 @@ where
             .env
             .advance_time(MIN_CONFIRMATIONS * BLOCK_TIME + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = txid.to_byte_array();
-        self.setup.as_ref().dogecoin().push_utxo(
-            Utxo {
-                value: self.change_amount,
-                height: 0,
-                outpoint: OutPoint {
-                    txid: txid_bytes.into(),
-                    vout: 1,
-                },
-            },
-            self.minter_address.to_string(),
-        );
 
         assert_eq!(
             minter.await_finalized_doge_transaction(self.retrieve_doge_id.block_index),
@@ -492,6 +481,14 @@ where
             .expect("BUG: did not find resubmit transaction");
         assert_replacement_transaction(old_transaction, &new_tx);
         self.sent_transactions.push(new_tx);
+        self
+    }
+
+    pub fn dogecoin_mine_blocks(self, num_blocks: impl Into<u64>) -> Self {
+        self.setup
+            .as_ref()
+            .dogecoind()
+            .mine_blocks(num_blocks.into());
         self
     }
 }

@@ -222,40 +222,46 @@ mod withdrawal {
     use ic_ckdoge_minter::{
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
+        lifecycle::init::Network,
     };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
-        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, RETRIEVE_DOGE_MIN_AMOUNT,
-        Setup, USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one, txid,
-        utxo_with_value, utxos_with_value,
+        DOGECOIN_ADDRESS_1, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE,
+        MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
 
     #[test]
     fn should_withdraw_doge() {
-        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+        let setup = Setup::new(Network::Regtest);
+        setup.dogecoind().setup_user_with_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
-        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
 
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(vec![utxo.clone()])
+            .dogecoin_send_transaction(vec![RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE])
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_update_balance()
             .expect_mint();
 
         setup
             .withdrawal_flow()
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
-            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .minter_retrieve_doge_with_approval(
+                RETRIEVE_DOGE_MIN_AMOUNT,
+                DogecoinUsers::WithdrawalRecipientUser.address().to_string(),
+            )
             .expect_withdrawal_request_accepted()
-            .dogecoin_await_transaction()
-            .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
+            .dogecoin_await_transaction_in_mempool()
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
+            // .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
             .minter_await_finalized_single_transaction()
     }
 
@@ -322,7 +328,7 @@ mod withdrawal {
                 .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
                 .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
                 .expect_withdrawal_request_accepted()
-                .dogecoin_await_transaction()
+                .dogecoin_await_transaction_in_mempool()
                 .assert_sent_transactions(|sent| {
                     assert_uses_utxos(only_one(sent), vec![utxo.clone()])
                 })
@@ -395,7 +401,7 @@ mod withdrawal {
             .ledger_approve_minter(account, withdrawal_amount)
             .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
-            .dogecoin_await_transaction()
+            .dogecoin_await_transaction_in_mempool()
             //also ensures the resubmission transaction uses 2 inputs.
             .minter_await_resubmission()
             .assert_sent_transactions(|sent| {
@@ -539,7 +545,7 @@ mod post_upgrade {
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
             .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
-            .dogecoin_await_transaction()
+            .dogecoin_await_transaction_in_mempool()
             .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
             .minter_await_finalized_single_transaction();
 

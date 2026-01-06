@@ -522,6 +522,13 @@ impl<T: RpcClientType> RpcClient<T> {
         self.call("getmempoolentry", &[into_json(txid)?])
     }
 
+    pub fn get_raw_transaction_from_mempool(&self, txid: &Txid) -> Result<Transaction> {
+        let result: String = self.call("getrawtransaction", &[into_json(txid)?])?;
+        let tx_hex = hex::decode(result).expect("BUG: invalid hex string");
+        Ok(bitcoin::consensus::deserialize(&tx_hex)
+            .expect("BUG: Failed to deserialize transaction"))
+    }
+
     pub fn add_node(&self, addr: &str) -> Result<()> {
         self.call("addnode", &[into_json(addr)?, into_json("add")?])
     }

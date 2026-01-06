@@ -113,7 +113,8 @@ impl<T> MetricsAssert<T> {
         self
     }
 
-    fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
+    /// Find metrics matching the given pattern.
+    pub fn find_metrics_matching(&self, pattern: &str) -> Vec<String> {
         let regex = Regex::new(pattern).unwrap_or_else(|_| panic!("Invalid regex: {pattern}"));
         self.metrics
             .iter()
