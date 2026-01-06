@@ -1541,7 +1541,7 @@ fn test_block_with_no_btype_but_with_mthd() {
     let expected_log_msg =
         "Failed to deserialize transaction: No operation specified and/or unknown btype None";
     assert!(
-        index_err_logs.contains(&expected_log_msg),
+        index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
         expected_log_msg,
         index_err_logs
