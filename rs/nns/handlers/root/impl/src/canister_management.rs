@@ -293,7 +293,7 @@ pub async fn take_canister_snapshot(
     {
         Ok(result) => {
             let result =
-                convert_from_canister_snapshot_resposne_to_take_canister_snapshot_ok(result);
+                convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(result);
             TakeCanisterSnapshotResponse::Ok(result)
         }
 
@@ -304,7 +304,7 @@ pub async fn take_canister_snapshot(
     }
 }
 
-fn convert_from_canister_snapshot_resposne_to_take_canister_snapshot_ok(
+fn convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(
     response: CanisterSnapshotResponse,
 ) -> TakeCanisterSnapshotOk {
     let CanisterSnapshotResponse {
