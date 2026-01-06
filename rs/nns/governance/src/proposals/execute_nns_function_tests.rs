@@ -223,9 +223,9 @@ async fn test_to_self_describing_uninstall_code() {
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
         SelfDescribingValue::Map(hashmap! {
-            "canister_id".to_string() => SelfDescribingValue::Text("2uzo4-eaaaa-aaaaa-aab5q-cai".to_string()),
+            "canister_id".to_string() => SelfDescribingValue::Text(target_canister.to_string()),
             "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
-                SelfDescribingValue::Nat(Nat::from(42u64)),
+                SelfDescribingValue::Nat(Nat::from(42_u64)),
             ]),
         })
     );
