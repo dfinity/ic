@@ -358,11 +358,16 @@ pub async fn rejoin_test_long_rounds(
     // the latest certified height of the subnet.
     let reference_node = sorted_nodes[0].clone();
 
-    // The restarted node will be the node with median batch processing time:
+    // The restarted node will be the slowest node
+    // required for consensus in terms of batch processing time:
     // this way, the restarted node cannot catch up with the subnet
     // without additional measures (to be implemented in the future).
+    // E.g., for `n = 13`, we have `f = 4` and the nodes at indices
+    // `0`, `1`, ..., `n - (f + 1)` are required for consensus,
+    // i.e., we restart the node at (0-based) index
+    // `n - (f + 1) = n - (n / 3 + 1)`.
     let n = sorted_nodes.len();
-    let rejoin_node = sorted_nodes[n / 2].clone();
+    let rejoin_node = sorted_nodes[n - (n / 3 + 1)].clone();
 
     info!(
         logger,
