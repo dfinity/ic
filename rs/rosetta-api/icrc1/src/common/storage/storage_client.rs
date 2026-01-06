@@ -386,7 +386,9 @@ impl StorageClient {
 
     /// Retrieves the highest block index in the account balance table.
     /// Returns None if the account balance table is empty.
-    pub async fn get_highest_block_idx_in_account_balance_table(&self) -> anyhow::Result<Option<u64>> {
+    pub async fn get_highest_block_idx_in_account_balance_table(
+        &self,
+    ) -> anyhow::Result<Option<u64>> {
         Ok(self
             .storage_connection
             .call(move |conn| {

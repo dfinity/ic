@@ -52,4 +52,3 @@ impl From<anyhow::Error> for StorageError {
 
 /// Result type alias for storage operations.
 pub type Result<T> = std::result::Result<T, StorageError>;
-

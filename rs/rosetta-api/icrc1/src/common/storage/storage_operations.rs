@@ -21,10 +21,7 @@ pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
-pub fn get_counter_value(
-    connection: &Connection,
-    counter: &RosettaCounter,
-) -> Result<Option<i64>> {
+pub fn get_counter_value(connection: &Connection, counter: &RosettaCounter) -> Result<Option<i64>> {
     let mut stmt = connection.prepare_cached("SELECT value FROM counters WHERE name = ?1")?;
     let mut rows = stmt.query(params![counter.name()])?;
 
@@ -91,7 +88,10 @@ pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> Re
 
 /// Initializes a counter with its default value if it doesn't exist.
 /// For SyncedBlocks, this sets it to the current block count.
-pub fn initialize_counter_if_missing(connection: &Connection, counter: &RosettaCounter) -> Result<()> {
+pub fn initialize_counter_if_missing(
+    connection: &Connection,
+    counter: &RosettaCounter,
+) -> Result<()> {
     match counter {
         RosettaCounter::SyncedBlocks => {
             // Set to current block count if not exists
@@ -136,8 +136,7 @@ pub fn get_fee_collector_from_block(
         } else {
             return Err(StorageError::DataIntegrity(format!(
                 "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
-                rosetta_block.index,
-                fee_collector_block_index
+                rosetta_block.index, fee_collector_block_index
             )));
         }
     }
@@ -219,8 +218,9 @@ pub fn update_account_balances(
                     .map(|(_, balance)| balance.clone())
             }) {
                 Some(balance) => Ok(balance),
-                None => get_account_balance_at_block_idx(connection, account, index)
-                    .map_err(Into::into),
+                None => {
+                    get_account_balance_at_block_idx(connection, account, index).map_err(Into::into)
+                }
             }
         }
 
@@ -792,12 +792,9 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
     let mut total_balance = Nat(BigUint::zero());
     for balance_result in rows {
         let balance = balance_result?;
-        total_balance = Nat(
-            total_balance
-                .0
-                .checked_add(&balance.0)
-                .ok_or_else(|| StorageError::DataIntegrity("Overflow while aggregating balances".to_string()))?,
-        );
+        total_balance = Nat(total_balance.0.checked_add(&balance.0).ok_or_else(|| {
+            StorageError::DataIntegrity("Overflow while aggregating balances".to_string())
+        })?);
     }
 
     Ok(total_balance)
