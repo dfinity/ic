@@ -184,7 +184,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             self.sev_root_certificate_verification,
             &blessed_measurements,
             &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
+            Some(&[my_attestation_report.chip_id]),
         )
         .context("Server attestation report verification failed")?;
 
