@@ -2627,7 +2627,10 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let hash_at = |tip_height: Height, certifications_metadata: &CertificationsMetadata| {
+        let mut states = self.states.write();
+        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
+
+        let hash_at = |tip_height: Height, certifications_metadata: &mut CertificationsMetadata| {
             if tip_height > Self::INITIAL_STATE_HEIGHT {
                 let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
                     fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
@@ -2635,10 +2638,18 @@ impl StateManager for StateManagerImpl {
 
                 // Since the state machine will use this tip to compute the *next* state,
                 // we populate the prev_state_hash with the hash of the current tip.
-                tip_metadata
-                    .certified_state_hash
-                    .as_ref()
-                    .map(|hash| CryptoHashOfPartialState::from(hash.clone()))
+                if let Some(hash) = &tip_metadata.certified_state_hash {
+                    Some(CryptoHashOfPartialState::from(hash.clone()))
+                } else {
+                    let certification_metadata =
+                        Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
+                            .unwrap_or_else(|err| {
+                                fatal!(self.log, "Failed to compute hash tree: {:?}", err)
+                            });
+                    let hash = certification_metadata.certified_state_hash.clone().unwrap();
+                    certifications_metadata.insert(tip_height, certification_metadata);
+                    Some(CryptoHashOfPartialState::from(hash))
+                }
             } else {
                 // This code is executed at most once per subnet, no need to
                 // optimize this.
@@ -2653,16 +2664,14 @@ impl StateManager for StateManagerImpl {
             }
         };
 
-        let mut states = self.states.write();
-        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
-
         let (target_snapshot, target_hash) = match states.snapshots.back() {
             Some(snapshot) if snapshot.height > tip_height => (
                 snapshot.clone(),
-                hash_at(snapshot.height, &states.certifications_metadata),
+                hash_at(snapshot.height, &mut states.certifications_metadata),
             ),
             _ => {
-                tip.metadata.prev_state_hash = hash_at(tip_height, &states.certifications_metadata);
+                tip.metadata.prev_state_hash =
+                    hash_at(tip_height, &mut states.certifications_metadata);
                 return (tip_height, tip);
             }
         };
