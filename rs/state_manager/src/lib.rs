@@ -2632,9 +2632,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let mut states = self.states.write();
-        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
-
         let hash_at = |tip_height: Height, certifications_metadata: &mut CertificationsMetadata| {
             if tip_height > Self::INITIAL_STATE_HEIGHT {
                 let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
@@ -2667,6 +2664,9 @@ impl StateManager for StateManagerImpl {
                 )))
             }
         };
+
+        let mut states = self.states.write();
+        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
 
         let (target_snapshot, target_hash) = match states.snapshots.back() {
             Some(snapshot) if snapshot.height > tip_height => (
@@ -3205,6 +3205,7 @@ impl StateManager for StateManagerImpl {
             let mut states = self.states.write();
             #[cfg(debug_assertions)]
             check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+
             // The following assert validates that we don't have two clients
             // modifying TIP at the same time and that each commit_and_certify()
             // is preceded by a call to take_tip().
