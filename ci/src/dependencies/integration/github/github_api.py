@@ -1,3 +1,4 @@
+import itertools
 import logging
 import os
 import traceback
@@ -7,6 +8,7 @@ from parser.bazel_toml_parser import parse_bazel_toml_to_gh_manifest
 import requests
 from github import Github
 from github.GithubException import GithubException
+from integration.github.github_dependabot import GHDependabotAlert, GHDependabotSearchQuery
 from integration.github.github_dependency_submission import GHSubDetector, GHSubJob, GHSubRequest
 from integration.github.github_workflow_config import GithubWorklow
 
@@ -68,6 +70,20 @@ class GithubApi:
             logging.error(f"Could not run workflow {workflow}.")
             logging.debug(f"Could not run workflow {workflow}.\nReason: {traceback.format_exc()}")
             return False
+
+    def get_dependabot_alerts(self, query: GHDependabotSearchQuery) -> typing.List[GHDependabotAlert]:
+        repo = self.github.get_repo(f"{query.owner}/{query.repo}", lazy=True)
+
+        alerts = []
+        # unfortunately the SDK doesn't support retrieving alerts for multiple values at once, so we have to do it for each tuple separately
+        for state, severity, ecosystem in itertools.product(
+            query.get_states(), query.get_severities(), query.get_ecosystems()
+        ):
+            # pagination is handled by the SDK
+            for alert in repo.get_dependabot_alerts(state, severity, ecosystem):
+                alerts.append(GHDependabotAlert(alert.html_url, alert.security_vulnerability.severity))
+
+        return alerts
 
     @staticmethod
     def submit_dependencies(toml_lock_filenames: typing.List[typing.Tuple[str, str]]) -> None:
