@@ -1,6 +1,7 @@
+use super::error::StorageError;
 use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
-use anyhow::{Result, bail};
+use anyhow::bail;
 use candid::Nat;
 use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -12,32 +13,6 @@ use tokio_rusqlite::Connection;
 use tracing::warn;
 
 const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
-
-/// Wrapper around `anyhow::Error` that implements `std::error::Error`.
-///
-/// This is needed because `anyhow::Error` deliberately does not implement
-/// `std::error::Error`, but `tokio_rusqlite::Connection::call` requires the
-/// closure's error type to implement it for the outer error to be convertible.
-#[derive(Debug)]
-struct StorageError(anyhow::Error);
-
-impl std::fmt::Display for StorageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::error::Error for StorageError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
-
-impl From<anyhow::Error> for StorageError {
-    fn from(e: anyhow::Error) -> Self {
-        StorageError(e)
-    }
-}
 
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
@@ -156,41 +131,38 @@ impl StorageClient {
     ) -> anyhow::Result<Self> {
         connection
             .call(move |conn| {
-                (|| -> anyhow::Result<()> {
-                    conn.pragma_update(None, "foreign_keys", 1)?;
+                conn.pragma_update(None, "foreign_keys", 1)?;
 
-                    match cache_size_kb {
-                        None => {
-                            tracing::info!("No cache size configured");
-                        }
-                        Some(cache_kb) => {
-                            let cache_size = -cache_kb; // Negative to specify KB
-                            conn.pragma_update(None, "cache_size", cache_size)?;
-                            tracing::info!("SQLite cache_size set to {} KB", cache_kb);
-                        }
+                match cache_size_kb {
+                    None => {
+                        tracing::info!("No cache size configured");
                     }
-
-                    match flush_cache_and_shrink_memory {
-                        true => {
-                            tracing::info!(
-                                "Flushing cache and shrinking memory after updating balances."
-                            )
-                        }
-                        false => {
-                            tracing::info!(
-                                "Not flushing cache and shrinking memory after updating balances."
-                            )
-                        }
+                    Some(cache_kb) => {
+                        let cache_size = -cache_kb; // Negative to specify KB
+                        conn.pragma_update(None, "cache_size", cache_size)?;
+                        tracing::info!("SQLite cache_size set to {} KB", cache_kb);
                     }
+                }
 
-                    tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
+                match flush_cache_and_shrink_memory {
+                    true => {
+                        tracing::info!(
+                            "Flushing cache and shrinking memory after updating balances."
+                        )
+                    }
+                    false => {
+                        tracing::info!(
+                            "Not flushing cache and shrinking memory after updating balances."
+                        )
+                    }
+                }
 
-                    // Create tables
-                    super::schema::create_tables(conn)?;
+                tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
 
-                    Ok(())
-                })()
-                .map_err(StorageError::from)
+                // Create tables
+                super::schema::create_tables(conn)?;
+
+                Ok::<_, StorageError>(())
             })
             .await?;
 
@@ -244,9 +216,7 @@ impl StorageClient {
     pub async fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_at_idx(conn, block_idx).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_at_idx(conn, block_idx))
             .await?)
     }
 
@@ -254,9 +224,7 @@ impl StorageClient {
     pub async fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_by_hash(conn, hash).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_by_hash(conn, hash))
             .await?)
     }
 
@@ -264,10 +232,7 @@ impl StorageClient {
     pub async fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_with_highest_block_idx(conn)
-                    .map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_with_highest_block_idx(conn))
             .await?)
     }
 
@@ -275,10 +240,7 @@ impl StorageClient {
     pub async fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_with_lowest_block_idx(conn)
-                    .map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_with_lowest_block_idx(conn))
             .await?)
     }
 
@@ -294,7 +256,6 @@ impl StorageClient {
             .storage_connection
             .call(move |conn| {
                 storage_operations::get_blocks_by_index_range(conn, start_index, end_index)
-                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -305,19 +266,14 @@ impl StorageClient {
     pub async fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_blockchain_gaps(conn).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_blockchain_gaps(conn))
             .await?)
     }
 
-    pub async fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+    pub async fn get_highest_block_idx(&self) -> anyhow::Result<Option<u64>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_highest_block_idx_in_blocks_table(conn)
-                    .map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_highest_block_idx_in_blocks_table(conn))
             .await?)
     }
 
@@ -353,7 +309,6 @@ impl StorageClient {
                     sql_query,
                     params_refs.as_slice(),
                 )
-                .map_err(StorageError::from)
             })
             .await?)
     }
@@ -364,10 +319,7 @@ impl StorageClient {
     ) -> anyhow::Result<Vec<RosettaBlock>> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_blocks_by_transaction_hash(conn, hash)
-                    .map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_blocks_by_transaction_hash(conn, hash))
             .await?)
     }
 
@@ -385,25 +337,21 @@ impl StorageClient {
     pub async fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
         Ok(self
             .storage_connection
-            .call(move |conn| storage_operations::get_metadata(conn).map_err(StorageError::from))
+            .call(move |conn| storage_operations::get_metadata(conn))
             .await?)
     }
 
     pub async fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::store_metadata(conn, metadata).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::store_metadata(conn, metadata))
             .await?)
     }
 
-    pub async fn reset_blocks_counter(&self) -> Result<()> {
+    pub async fn reset_blocks_counter(&self) -> anyhow::Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::reset_blocks_counter(conn).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::reset_blocks_counter(conn))
             .await?)
     }
 
@@ -412,9 +360,7 @@ impl StorageClient {
     pub async fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::store_blocks(conn, blocks).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::store_blocks(conn, blocks))
             .await?)
     }
 
@@ -434,19 +380,17 @@ impl StorageClient {
                     flush_cache_and_shrink_memory,
                     balance_sync_batch_size,
                 )
-                .map_err(StorageError::from)
             })
             .await?)
     }
 
     /// Retrieves the highest block index in the account balance table.
     /// Returns None if the account balance table is empty.
-    pub async fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
+    pub async fn get_highest_block_idx_in_account_balance_table(&self) -> anyhow::Result<Option<u64>> {
         Ok(self
             .storage_connection
             .call(move |conn| {
                 storage_operations::get_highest_block_idx_in_account_balance_table(conn)
-                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -463,7 +407,6 @@ impl StorageClient {
             .storage_connection
             .call(move |conn| {
                 storage_operations::get_account_balance_at_block_idx(conn, &account, block_idx)
-                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -476,7 +419,6 @@ impl StorageClient {
             .storage_connection
             .call(move |conn| {
                 storage_operations::get_account_balance_at_highest_block_idx(conn, &account)
-                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -494,7 +436,6 @@ impl StorageClient {
                 storage_operations::get_aggregated_balance_for_principal_at_block_idx(
                     conn, &principal, block_idx,
                 )
-                .map_err(StorageError::from)
             })
             .await?)
     }
@@ -502,9 +443,7 @@ impl StorageClient {
     pub async fn get_block_count(&self) -> anyhow::Result<u64> {
         Ok(self
             .storage_connection
-            .call(move |conn| {
-                storage_operations::get_block_count(conn).map_err(StorageError::from)
-            })
+            .call(move |conn| storage_operations::get_block_count(conn))
             .await?)
     }
 
@@ -523,7 +462,6 @@ impl StorageClient {
             .storage_connection
             .call(move |conn| {
                 storage_operations::repair_fee_collector_balances(conn, balance_sync_batch_size)
-                    .map_err(StorageError::from)
             })
             .await?)
     }
@@ -739,7 +677,7 @@ mod tests {
                let rt = tokio::runtime::Runtime::new().unwrap();
                rt.block_on(async {
                let storage_client_memory = StorageClient::new_in_memory().await.unwrap();
-               let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<Result<Vec<MetadataEntry>>>().unwrap();
+               let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<anyhow::Result<Vec<MetadataEntry>>>().unwrap();
                let metadata_write = Metadata::from_metadata_entries(&entries_write).unwrap();
                storage_client_memory.write_metadata(entries_write).await.unwrap();
                let entries_read = storage_client_memory.read_metadata().await.unwrap();

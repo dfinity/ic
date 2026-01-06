@@ -1,6 +1,6 @@
 use crate::MetadataEntry;
+use crate::common::storage::error::StorageError;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
-use anyhow::{Context, bail};
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
@@ -14,6 +14,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
 
+/// Result type alias for storage operations.
+pub type Result<T> = std::result::Result<T, StorageError>;
+
 pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
 
 /// Gets the current value of a counter from the database.
@@ -21,7 +24,7 @@ pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
 pub fn get_counter_value(
     connection: &Connection,
     counter: &RosettaCounter,
-) -> anyhow::Result<Option<i64>> {
+) -> Result<Option<i64>> {
     let mut stmt = connection.prepare_cached("SELECT value FROM counters WHERE name = ?1")?;
     let mut rows = stmt.query(params![counter.name()])?;
 
@@ -37,7 +40,7 @@ pub fn set_counter_value(
     connection: &Connection,
     counter: &RosettaCounter,
     value: i64,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     connection
         .prepare_cached("INSERT OR REPLACE INTO counters (name, value) VALUES (?1, ?2)")?
         .execute(params![counter.name(), value])?;
@@ -50,7 +53,7 @@ pub fn increment_counter(
     connection: &Connection,
     counter: &RosettaCounter,
     increment: i64,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     connection
         .prepare_cached(
             "INSERT INTO counters (name, value) VALUES (?1, ?2)
@@ -62,12 +65,12 @@ pub fn increment_counter(
 
 /// Checks if a counter flag is set (value > 0).
 /// Returns false if the counter doesn't exist.
-pub fn is_counter_flag_set(
-    connection: &Connection,
-    counter: &RosettaCounter,
-) -> anyhow::Result<bool> {
+pub fn is_counter_flag_set(connection: &Connection, counter: &RosettaCounter) -> Result<bool> {
     if !counter.is_flag() {
-        bail!("Counter {} is not a flag counter", counter.name());
+        return Err(StorageError::DataIntegrity(format!(
+            "Counter {} is not a flag counter",
+            counter.name()
+        )));
     }
 
     Ok(get_counter_value(connection, counter)?.unwrap_or(0) > 0)
@@ -75,9 +78,12 @@ pub fn is_counter_flag_set(
 
 /// Sets a counter flag to true (value = 1).
 /// Only works with flag counters.
-pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> anyhow::Result<()> {
+pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> Result<()> {
     if !counter.is_flag() {
-        bail!("Counter {} is not a flag counter", counter.name());
+        return Err(StorageError::DataIntegrity(format!(
+            "Counter {} is not a flag counter",
+            counter.name()
+        )));
     }
 
     set_counter_value(connection, counter, 1)
@@ -85,10 +91,7 @@ pub fn set_counter_flag(connection: &Connection, counter: &RosettaCounter) -> an
 
 /// Initializes a counter with its default value if it doesn't exist.
 /// For SyncedBlocks, this sets it to the current block count.
-pub fn initialize_counter_if_missing(
-    connection: &Connection,
-    counter: &RosettaCounter,
-) -> anyhow::Result<()> {
+pub fn initialize_counter_if_missing(connection: &Connection, counter: &RosettaCounter) -> Result<()> {
     match counter {
         RosettaCounter::SyncedBlocks => {
             // Set to current block count if not exists
@@ -112,7 +115,7 @@ pub fn initialize_counter_if_missing(
 pub fn get_fee_collector_from_block(
     rosetta_block: &RosettaBlock,
     connection: &Connection,
-) -> anyhow::Result<Option<Account>> {
+) -> Result<Option<Account>> {
     // First check if the fee collector is directly specified in the block
     if let Some(fee_collector) = rosetta_block.get_fee_collector() {
         return Ok(Some(fee_collector));
@@ -120,22 +123,22 @@ pub fn get_fee_collector_from_block(
 
     // If not, check if there's a fee_collector_block_index that points to another block
     if let Some(fee_collector_block_index) = rosetta_block.get_fee_collector_block_index() {
-        let referenced_block = get_block_at_idx(connection, fee_collector_block_index)?
-            .with_context(|| {
-                format!(
+        let referenced_block =
+            get_block_at_idx(connection, fee_collector_block_index)?.ok_or_else(|| {
+                StorageError::DataIntegrity(format!(
                     "Block at index {} has fee_collector_block_index {} but there is no block at that index",
                     rosetta_block.index, fee_collector_block_index
-                )
+                ))
             })?;
 
         if let Some(fee_collector) = referenced_block.get_fee_collector() {
             return Ok(Some(fee_collector));
         } else {
-            bail!(
+            return Err(StorageError::DataIntegrity(format!(
                 "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
                 rosetta_block.index,
                 fee_collector_block_index
-            );
+            )));
         }
     }
 
@@ -143,10 +146,7 @@ pub fn get_fee_collector_from_block(
     Ok(None)
 }
 
-pub fn store_metadata(
-    connection: &mut Connection,
-    metadata: Vec<MetadataEntry>,
-) -> anyhow::Result<()> {
+pub fn store_metadata(connection: &mut Connection, metadata: Vec<MetadataEntry>) -> Result<()> {
     let insert_tx = connection.transaction()?;
 
     for entry in metadata.into_iter() {
@@ -156,7 +156,7 @@ pub fn store_metadata(
     Ok(())
 }
 
-pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry>> {
+pub fn get_metadata(connection: &Connection) -> Result<Vec<MetadataEntry>> {
     let mut stmt_metadata = connection.prepare_cached("SELECT key, value FROM metadata")?;
     let rows = stmt_metadata.query_map(params![], |row| {
         Ok(MetadataEntry {
@@ -172,7 +172,7 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
     Ok(result)
 }
 
-pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
+pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> Result<Option<Vec<u8>>> {
     let mut stmt_metadata = connection.prepare_cached(&format!(
         "SELECT value FROM rosetta_metadata WHERE key = '{key}'"
     ))?;
@@ -185,7 +185,9 @@ pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Resul
     match result.len() {
         0 => Ok(None),
         1 => Ok(Some(result.swap_remove(0))),
-        _ => bail!(format!("Multiple metadata entries found for key: {key}")),
+        _ => Err(StorageError::MultipleRecordsFound(format!(
+            "Multiple metadata entries found for key: {key}"
+        ))),
     }
 }
 
@@ -193,262 +195,278 @@ pub fn update_account_balances(
     connection: &mut Connection,
     flush_cache_and_shrink_memory: bool,
     batch_size: u64,
-) -> anyhow::Result<()> {
-    // Utility method that tries to fetch the balance from the cache first and, if
-    // no balance has been found, fetches it from the database
-    fn get_account_balance_with_cache(
-        account: &Account,
-        index: u64,
+) -> Result<()> {
+    use anyhow::Context;
+
+    // Inner function that uses anyhow for convenient error handling
+    fn inner(
         connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
-    ) -> anyhow::Result<Option<Nat>> {
-        // Either fetch the balance from the cache or from the database
-        match account_balances_cache.get(account).map(|balances| {
-            balances
-                .last_key_value()
-                .map(|(_, balance)| balance.clone())
-        }) {
-            Some(balance) => Ok(balance),
-            None => get_account_balance_at_block_idx(connection, account, index),
+        flush_cache_and_shrink_memory: bool,
+        batch_size: u64,
+    ) -> anyhow::Result<()> {
+        // Utility method that tries to fetch the balance from the cache first and, if
+        // no balance has been found, fetches it from the database
+        fn get_account_balance_with_cache(
+            account: &Account,
+            index: u64,
+            connection: &mut Connection,
+            account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
+        ) -> anyhow::Result<Option<Nat>> {
+            // Either fetch the balance from the cache or from the database
+            match account_balances_cache.get(account).map(|balances| {
+                balances
+                    .last_key_value()
+                    .map(|(_, balance)| balance.clone())
+            }) {
+                Some(balance) => Ok(balance),
+                None => get_account_balance_at_block_idx(connection, account, index)
+                    .map_err(Into::into),
+            }
         }
-    }
 
-    fn debit(
-        account: Account,
-        amount: Nat,
-        index: u64,
-        connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
-    ) -> anyhow::Result<()> {
-        let new_balance = if let Some(balance) =
-            get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
-        {
-            Nat(balance.0.checked_sub(&amount.0).with_context(|| {
-                format!(
-                    "Underflow while debiting account {account} for amount {amount} at index {index} (balance: {balance})"
+        fn debit(
+            account: Account,
+            amount: Nat,
+            index: u64,
+            connection: &mut Connection,
+            account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
+        ) -> anyhow::Result<()> {
+            let new_balance = if let Some(balance) =
+                get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
+            {
+                Nat(balance.0.checked_sub(&amount.0).with_context(|| {
+                    format!(
+                        "Underflow while debiting account {account} for amount {amount} at index {index} (balance: {balance})"
+                    )
+                })?)
+            } else {
+                anyhow::bail!(
+                    "Trying to debit an account {} that has not yet been allocated any tokens (index: {})",
+                    account,
+                    index
                 )
-            })?)
-        } else {
-            bail!(
-                "Trying to debit an account {} that has not yet been allocated any tokens (index: {})",
-                account,
-                index
-            )
-        };
-        account_balances_cache
-            .entry(account)
-            .or_default()
-            .insert(index, new_balance);
-        Ok(())
-    }
+            };
+            account_balances_cache
+                .entry(account)
+                .or_default()
+                .insert(index, new_balance);
+            Ok(())
+        }
 
-    fn credit(
-        account: Account,
-        amount: Nat,
-        index: u64,
-        connection: &mut Connection,
-        account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
-    ) -> anyhow::Result<()> {
-        let new_balance = if let Some(balance) =
-            get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
-        {
-            Nat(balance.0.checked_add(&amount.0).with_context(|| {
-                format!(
-                    "Overflow while crediting an account {account} for amount {amount} at index {index} (balance: {balance})"
-                )
-            })?)
-        } else {
-            amount
-        };
-        account_balances_cache
-            .entry(account)
-            .or_default()
-            .insert(index, new_balance);
-        Ok(())
-    }
+        fn credit(
+            account: Account,
+            amount: Nat,
+            index: u64,
+            connection: &mut Connection,
+            account_balances_cache: &mut HashMap<Account, BTreeMap<u64, Nat>>,
+        ) -> anyhow::Result<()> {
+            let new_balance = if let Some(balance) =
+                get_account_balance_with_cache(&account, index, connection, account_balances_cache)?
+            {
+                Nat(balance.0.checked_add(&amount.0).with_context(|| {
+                    format!(
+                        "Overflow while crediting an account {account} for amount {amount} at index {index} (balance: {balance})"
+                    )
+                })?)
+            } else {
+                amount
+            };
+            account_balances_cache
+                .entry(account)
+                .or_default()
+                .insert(index, new_balance);
+            Ok(())
+        }
 
-    // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
-    let next_block_to_be_updated =
-        get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
-    let highest_block_idx =
-        get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index);
+        // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
+        let next_block_to_be_updated =
+            get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
+        let highest_block_idx =
+            get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index);
 
-    // If the blocks and account_balance tables show the same max block height then there is nothing that needs to be synced
-    if highest_block_idx < next_block_to_be_updated {
-        return Ok(());
-    }
-    let mut batch_start_idx = next_block_to_be_updated;
-    let mut batch_end_idx = batch_start_idx + batch_size;
-    let mut rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
+        // If the blocks and account_balance tables show the same max block height then there is nothing that needs to be synced
+        if highest_block_idx < next_block_to_be_updated {
+            return Ok(());
+        }
+        let mut batch_start_idx = next_block_to_be_updated;
+        let mut batch_end_idx = batch_start_idx + batch_size;
+        let mut rosetta_blocks =
+            get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
 
-    // For faster inserts, keep a cache of the account balances within a batch range in memory
-    // This also makes the inserting of the account balances batchable and therefore faster
-    let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
+        // For faster inserts, keep a cache of the account balances within a batch range in memory
+        // This also makes the inserting of the account balances batchable and therefore faster
+        let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
 
-    // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
-    while !rosetta_blocks.is_empty() {
-        for rosetta_block in rosetta_blocks {
-            match rosetta_block.get_transaction().operation {
-                crate::common::storage::types::IcrcOperation::Burn {
-                    from,
-                    amount,
-                    fee: _,
-                    spender: _,
-                } => {
-                    let fee = rosetta_block
-                        .get_fee_paid()?
-                        .unwrap_or(Nat(BigUint::zero()));
-                    let burn_amount = Nat(amount.0.checked_add(&fee.0)
-                        .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
-                            fee, amount, rosetta_block.index
-                    ))?);
-                    debit(
+        // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
+        while !rosetta_blocks.is_empty() {
+            for rosetta_block in rosetta_blocks {
+                match rosetta_block.get_transaction().operation {
+                    crate::common::storage::types::IcrcOperation::Burn {
                         from,
-                        burn_amount,
-                        rosetta_block.index,
-                        connection,
-                        &mut account_balances_cache,
-                    )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                        amount,
+                        fee: _,
+                        spender: _,
+                    } => {
+                        let fee = rosetta_block
+                            .get_fee_paid()?
+                            .unwrap_or(Nat(BigUint::zero()));
+                        let burn_amount = Nat(amount.0.checked_add(&fee.0).with_context(|| {
+                            format!(
+                                "Overflow while adding the fee {} to the amount {} for block at index {}",
+                                fee, amount, rosetta_block.index
+                            )
+                        })?);
+                        debit(
+                            from,
+                            burn_amount,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                        if let Some(collector) =
+                            get_fee_collector_from_block(&rosetta_block, connection)?
+                        {
+                            credit(
+                                collector,
+                                fee,
+                                rosetta_block.index,
+                                connection,
+                                &mut account_balances_cache,
+                            )?;
+                        }
+                    }
+                    crate::common::storage::types::IcrcOperation::Mint { to, amount, fee: _ } => {
+                        let fee = rosetta_block
+                            .get_fee_paid()?
+                            .unwrap_or(Nat(BigUint::zero()));
+                        let credit_amount = Nat(amount.0.checked_sub(&fee.0).with_context(|| {
+                            format!(
+                                "Underflow while subtracting the fee {} from the amount {} for block at index {}",
+                                fee, amount, rosetta_block.index
+                            )
+                        })?);
                         credit(
-                            collector,
+                            to,
+                            credit_amount,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                        if let Some(collector) =
+                            get_fee_collector_from_block(&rosetta_block, connection)?
+                        {
+                            credit(
+                                collector,
+                                fee,
+                                rosetta_block.index,
+                                connection,
+                                &mut account_balances_cache,
+                            )?;
+                        }
+                    }
+                    crate::common::storage::types::IcrcOperation::Approve {
+                        from,
+                        spender: _,
+                        amount: _,
+                        expected_allowance: _,
+                        expires_at: _,
+                        fee: _,
+                    } => {
+                        let fee = rosetta_block
+                            .get_fee_paid()?
+                            .unwrap_or(Nat(BigUint::zero()));
+                        debit(
+                            from,
                             fee,
                             rosetta_block.index,
                             connection,
                             &mut account_balances_cache,
                         )?;
                     }
-                }
-                crate::common::storage::types::IcrcOperation::Mint { to, amount, fee: _ } => {
-                    let fee = rosetta_block
-                        .get_fee_paid()?
-                        .unwrap_or(Nat(BigUint::zero()));
-                    let credit_amount = Nat(amount.0.checked_sub(&fee.0)
-                        .with_context(|| format!("Underflow while subtracting the fee {} from the amount {} for block at index {}",
-                            fee, amount, rosetta_block.index
-                    ))?);
-                    credit(
-                        to,
-                        credit_amount,
-                        rosetta_block.index,
-                        connection,
-                        &mut account_balances_cache,
-                    )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
-                        credit(
-                            collector,
-                            fee,
-                            rosetta_block.index,
-                            connection,
-                            &mut account_balances_cache,
-                        )?;
-                    }
-                }
-                crate::common::storage::types::IcrcOperation::Approve {
-                    from,
-                    spender: _,
-                    amount: _,
-                    expected_allowance: _,
-                    expires_at: _,
-                    fee: _,
-                } => {
-                    let fee = rosetta_block
-                        .get_fee_paid()?
-                        .unwrap_or(Nat(BigUint::zero()));
-                    debit(
+                    crate::common::storage::types::IcrcOperation::Transfer {
                         from,
-                        fee,
-                        rosetta_block.index,
-                        connection,
-                        &mut account_balances_cache,
-                    )?;
-                }
-                crate::common::storage::types::IcrcOperation::Transfer {
-                    from,
-                    to,
-                    amount,
-                    spender: _,
-                    fee: _,
-                } => {
-                    let fee = rosetta_block
-                        .get_fee_paid()?
-                        .unwrap_or(Nat(BigUint::zero()));
-                    let payable_amount = Nat(amount.0.checked_add(&fee.0)
-                        .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
-                            fee, amount, rosetta_block.index
-                    ))?);
-
-                    credit(
                         to,
                         amount,
-                        rosetta_block.index,
-                        connection,
-                        &mut account_balances_cache,
-                    )?;
-                    debit(
-                        from,
-                        payable_amount,
-                        rosetta_block.index,
-                        connection,
-                        &mut account_balances_cache,
-                    )?;
+                        spender: _,
+                        fee: _,
+                    } => {
+                        let fee = rosetta_block
+                            .get_fee_paid()?
+                            .unwrap_or(Nat(BigUint::zero()));
+                        let payable_amount = Nat(amount.0.checked_add(&fee.0).with_context(|| {
+                            format!(
+                                "Overflow while adding the fee {} to the amount {} for block at index {}",
+                                fee, amount, rosetta_block.index
+                            )
+                        })?);
 
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
                         credit(
-                            collector,
-                            fee,
+                            to,
+                            amount,
                             rosetta_block.index,
                             connection,
                             &mut account_balances_cache,
                         )?;
+                        debit(
+                            from,
+                            payable_amount,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+
+                        if let Some(collector) =
+                            get_fee_collector_from_block(&rosetta_block, connection)?
+                        {
+                            credit(
+                                collector,
+                                fee,
+                                rosetta_block.index,
+                                connection,
+                                &mut account_balances_cache,
+                            )?;
+                        }
                     }
                 }
             }
-        }
 
-        // Flush the cache
-        let insert_tx = connection.transaction()?;
-        for (account, block_idx_new_balances) in account_balances_cache.drain() {
-            for (block_idx, new_balance) in block_idx_new_balances {
-                insert_tx
-                    .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
-                    .execute(named_params! {
-                        ":block_idx": block_idx,
-                        ":principal": account.owner.as_slice(),
-                        ":subaccount": account.effective_subaccount().as_slice(),
-                        ":amount": new_balance.to_string(),
-                    })?;
+            // Flush the cache
+            let insert_tx = connection.transaction()?;
+            for (account, block_idx_new_balances) in account_balances_cache.drain() {
+                for (block_idx, new_balance) in block_idx_new_balances {
+                    insert_tx
+                        .prepare_cached("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (:block_idx, :principal, :subaccount, :amount)")?
+                        .execute(named_params! {
+                            ":block_idx": block_idx,
+                            ":principal": account.owner.as_slice(),
+                            ":subaccount": account.effective_subaccount().as_slice(),
+                            ":amount": new_balance.to_string(),
+                        })?;
+                }
             }
-        }
-        insert_tx.commit()?;
+            insert_tx.commit()?;
 
-        if flush_cache_and_shrink_memory {
-            trace!("flushing cache and shrinking memory");
-            connection.cache_flush()?;
-            connection.pragma_update(None, "shrink_memory", 1)?;
-        }
+            if flush_cache_and_shrink_memory {
+                trace!("flushing cache and shrinking memory");
+                connection.cache_flush()?;
+                connection.pragma_update(None, "shrink_memory", 1)?;
+            }
 
-        // Fetch the next batch of blocks
-        batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
-            .context("No blocks in account balance table after inserting")?
-            + 1;
-        batch_end_idx = batch_start_idx + batch_size;
-        rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
+            // Fetch the next batch of blocks
+            batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
+                .context("No blocks in account balance table after inserting")?
+                + 1;
+            batch_end_idx = batch_start_idx + batch_size;
+            rosetta_blocks = get_blocks_by_index_range(connection, batch_start_idx, batch_end_idx)?;
+        }
+        Ok(())
     }
-    Ok(())
+
+    inner(connection, flush_cache_and_shrink_memory, batch_size).map_err(StorageError::from)
 }
 
 // Stores a batch of RosettaBlocks
-pub fn store_blocks(
-    connection: &mut Connection,
-    rosetta_blocks: Vec<RosettaBlock>,
-) -> anyhow::Result<()> {
+pub fn store_blocks(connection: &mut Connection, rosetta_blocks: Vec<RosettaBlock>) -> Result<()> {
     let insert_tx = connection.transaction()?;
     for rosetta_block in rosetta_blocks.into_iter() {
         let transaction: crate::common::storage::types::IcrcTransaction =
@@ -588,10 +606,7 @@ fn convert_timestamp_to_db(timestamp: u64) -> i64 {
 
 // Returns a RosettaBlock if the block index exists in the database, else returns None.
 // Returns an Error if the query fails.
-pub fn get_block_at_idx(
-    connection: &Connection,
-    block_idx: u64,
-) -> anyhow::Result<Option<RosettaBlock>> {
+pub fn get_block_at_idx(connection: &Connection, block_idx: u64) -> Result<Option<RosettaBlock>> {
     let command = format!("SELECT idx,serialized_block FROM blocks WHERE idx = {block_idx}");
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
@@ -600,10 +615,7 @@ pub fn get_block_at_idx(
 // Returns a RosettaBlock with the smallest index larger than block_idx.
 // Returns None if there are no blocks with larger index.
 // Returns an Error if the query fails.
-fn get_block_at_next_idx(
-    connection: &Connection,
-    block_idx: u64,
-) -> anyhow::Result<Option<RosettaBlock>> {
+fn get_block_at_next_idx(connection: &Connection, block_idx: u64) -> Result<Option<RosettaBlock>> {
     let command = format!(
         "SELECT idx,serialized_block FROM blocks WHERE idx > {block_idx} ORDER BY idx ASC LIMIT 1"
     );
@@ -613,27 +625,20 @@ fn get_block_at_next_idx(
 
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
 // Returns an Error if the query fails.
-pub fn get_block_by_hash(
-    connection: &Connection,
-    hash: ByteBuf,
-) -> anyhow::Result<Option<RosettaBlock>> {
+pub fn get_block_by_hash(connection: &Connection, hash: ByteBuf) -> Result<Option<RosettaBlock>> {
     let mut stmt =
         connection.prepare_cached("SELECT idx,serialized_block FROM blocks WHERE hash = ?1")?;
     read_single_block(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
-pub fn get_block_with_highest_block_idx(
-    connection: &Connection,
-) -> anyhow::Result<Option<RosettaBlock>> {
+pub fn get_block_with_highest_block_idx(connection: &Connection) -> Result<Option<RosettaBlock>> {
     let command =
         "SELECT idx,serialized_block FROM blocks WHERE idx = (SELECT MAX(idx) FROM blocks)";
     let mut stmt = connection.prepare_cached(command)?;
     read_single_block(&mut stmt, params![])
 }
 
-pub fn get_block_with_lowest_block_idx(
-    connection: &Connection,
-) -> anyhow::Result<Option<RosettaBlock>> {
+pub fn get_block_with_lowest_block_idx(connection: &Connection) -> Result<Option<RosettaBlock>> {
     let command =
         "SELECT idx,serialized_block FROM blocks WHERE idx = (SELECT MIN(idx) FROM blocks)";
     let mut stmt = connection.prepare_cached(command)?;
@@ -644,15 +649,13 @@ pub fn get_blocks_by_index_range(
     connection: &Connection,
     start_index: u64,
     end_index: u64,
-) -> anyhow::Result<Vec<RosettaBlock>> {
+) -> Result<Vec<RosettaBlock>> {
     let command = "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2";
     let mut stmt = connection.prepare_cached(command)?;
     read_blocks(&mut stmt, params![start_index, end_index])
 }
 
-pub fn get_blockchain_gaps(
-    connection: &Connection,
-) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
+pub fn get_blockchain_gaps(connection: &Connection) -> Result<Vec<(RosettaBlock, RosettaBlock)>> {
     // Search for blocks, such that there is no block with index+1.
     let command = "SELECT b1.idx,b1.serialized_block FROM blocks b1 WHERE not exists(select 1 from blocks b2 where b2.idx = b1.idx + 1)";
     let mut stmt = connection.prepare_cached(command)?;
@@ -669,7 +672,7 @@ pub fn get_blockchain_gaps(
     Ok(gap_limits)
 }
 
-pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
+pub fn get_block_count(connection: &Connection) -> Result<u64> {
     let count = get_counter_value(connection, &RosettaCounter::SyncedBlocks)?.unwrap_or(0);
     Ok(count as u64)
 }
@@ -679,7 +682,7 @@ pub fn get_block_count(connection: &Connection) -> anyhow::Result<u64> {
 pub fn get_blocks_by_transaction_hash(
     connection: &Connection,
     hash: ByteBuf,
-) -> anyhow::Result<Vec<RosettaBlock>> {
+) -> Result<Vec<RosettaBlock>> {
     let mut stmt =
         connection.prepare_cached("SELECT idx,serialized_block FROM blocks WHERE tx_hash = ?1")?;
     read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
@@ -687,7 +690,7 @@ pub fn get_blocks_by_transaction_hash(
 
 pub fn get_highest_block_idx_in_account_balance_table(
     connection: &Connection,
-) -> anyhow::Result<Option<u64>> {
+) -> Result<Option<u64>> {
     match connection
         .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
         .query_map(params![], |row| row.get(0))?
@@ -698,9 +701,7 @@ pub fn get_highest_block_idx_in_account_balance_table(
     }
 }
 
-pub fn get_highest_block_idx_in_blocks_table(
-    connection: &Connection,
-) -> anyhow::Result<Option<u64>> {
+pub fn get_highest_block_idx_in_blocks_table(connection: &Connection) -> Result<Option<u64>> {
     match connection
         .prepare_cached("SELECT MAX(idx) FROM blocks")?
         .query_map(params![], |row| row.get(0))?
@@ -714,7 +715,7 @@ pub fn get_highest_block_idx_in_blocks_table(
 pub fn get_account_balance_at_highest_block_idx(
     connection: &Connection,
     account: &Account,
-) -> anyhow::Result<Option<Nat>> {
+) -> Result<Option<Nat>> {
     get_account_balance_at_block_idx(connection, account, i64::MAX as u64)
 }
 
@@ -722,8 +723,8 @@ pub fn get_account_balance_at_block_idx(
     connection: &Connection,
     account: &Account,
     block_idx: u64,
-) -> anyhow::Result<Option<Nat>> {
-    Ok(connection
+) -> Result<Option<Nat>> {
+    let amount_str: Option<String> = connection
         .prepare_cached(
             "SELECT amount \
              FROM account_balances \
@@ -740,12 +741,14 @@ pub fn get_account_balance_at_block_idx(
         })?
         .mapped(|row| row.get(0))
         .next()
-        .transpose()
-        .with_context(|| {
-            format!("Unable to fetch balance of account {account} at index {block_idx}")
-        })?
-        .map(|x: String| Nat::from_str(&x))
-        .transpose()?)
+        .transpose()?;
+
+    match amount_str {
+        Some(s) => Nat::from_str(&s)
+            .map(Some)
+            .map_err(|e| StorageError::DataIntegrity(format!("Invalid balance format: {}", e))),
+        None => Ok(None),
+    }
 }
 
 /// Gets the aggregated balance of all subaccounts for a given principal at a specific block index.
@@ -754,7 +757,7 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
     connection: &Connection,
     principal: &PrincipalId,
     block_idx: u64,
-) -> anyhow::Result<Nat> {
+) -> Result<Nat> {
     // Query to get the latest balance for each subaccount of the principal at or before the given block index
     let mut stmt = connection.prepare_cached(
         "SELECT a1.subaccount, a1.amount
@@ -789,10 +792,12 @@ pub fn get_aggregated_balance_for_principal_at_block_idx(
     let mut total_balance = Nat(BigUint::zero());
     for balance_result in rows {
         let balance = balance_result?;
-        total_balance = Nat(total_balance
-            .0
-            .checked_add(&balance.0)
-            .with_context(|| "Overflow while aggregating balances")?);
+        total_balance = Nat(
+            total_balance
+                .0
+                .checked_add(&balance.0)
+                .ok_or_else(|| StorageError::DataIntegrity("Overflow while aggregating balances".to_string()))?,
+        );
     }
 
     Ok(total_balance)
@@ -802,7 +807,7 @@ pub fn get_blocks_by_custom_query<P>(
     connection: &Connection,
     sql_query: String,
     params: P,
-) -> anyhow::Result<Vec<RosettaBlock>>
+) -> Result<Vec<RosettaBlock>>
 where
     P: Params,
 {
@@ -810,7 +815,7 @@ where
     read_blocks(&mut stmt, params)
 }
 
-pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
+pub fn reset_blocks_counter(connection: &Connection) -> Result<()> {
     let block_count: i64 = connection
         .prepare_cached("SELECT COUNT(*) FROM blocks")?
         .query_row(params![], |row| row.get(0))?;
@@ -818,10 +823,7 @@ pub fn reset_blocks_counter(connection: &Connection) -> anyhow::Result<()> {
     set_counter_value(connection, &RosettaCounter::SyncedBlocks, block_count)
 }
 
-fn read_single_block<P>(
-    stmt: &mut CachedStatement,
-    params: P,
-) -> anyhow::Result<Option<RosettaBlock>>
+fn read_single_block<P>(stmt: &mut CachedStatement, params: P) -> Result<Option<RosettaBlock>>
 where
     P: Params,
 {
@@ -834,12 +836,14 @@ where
         Ok(None)
     } else {
         // If more than one block was found return an error
-        bail!("Multiple blocks found with given parameters".to_owned(),)
+        Err(StorageError::MultipleRecordsFound(
+            "Multiple blocks found with given parameters".to_owned(),
+        ))
     }
 }
 
 // Executes the constructed statement that reads blocks. The statement expects two values: The serialized Block and the index of that block
-fn read_blocks<P>(stmt: &mut CachedStatement, params: P) -> anyhow::Result<Vec<RosettaBlock>>
+fn read_blocks<P>(stmt: &mut CachedStatement, params: P) -> Result<Vec<RosettaBlock>>
 where
     P: Params,
 {
@@ -868,7 +872,7 @@ where
 pub fn repair_fee_collector_balances(
     connection: &mut Connection,
     balance_sync_batch_size: u64,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     // Check if the repair has already been performed
     if is_counter_flag_set(connection, &RosettaCounter::CollectorBalancesFixed)? {
         // Repair has already been performed, skip it
