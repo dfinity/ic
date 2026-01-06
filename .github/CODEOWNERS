@@ -245,6 +245,8 @@ go.sum                    @dfinity/idx
 /rs/tests/                                              @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
+/rs/tests/testnets/mainnet_nns/                         @dfinity/consensus
+/rs/tests/testnets/mainnet_nns.rs                       @dfinity/consensus
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/node

@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:memchr",
     "@crate_index//:nix",
     "@crate_index//:regex",
+    "@crate_index//:sysinfo",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",

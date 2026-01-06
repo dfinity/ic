@@ -24,6 +24,7 @@ macaddr = { workspace = true }
 memchr = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
+sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }

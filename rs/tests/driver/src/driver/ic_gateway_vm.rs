@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
 use std::{
     fs,
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     path::Path,
     time::Duration,
 };
@@ -19,7 +19,7 @@ use crate::{
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl,
+            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv,
             HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path,
         },
         test_setup::InfraProvider,
@@ -49,6 +49,7 @@ pub struct IcGatewayVm {
 /// Represents a deployed IC HTTP Gateway VM.
 #[derive(Debug)]
 pub struct DeployedIcGatewayVm {
+    env: TestEnv,
     vm: AllocatedVm,
     https_url: Url,
 }
@@ -61,6 +62,18 @@ impl DeployedIcGatewayVm {
     /// Retrieves the underlying VM.
     pub fn get_vm(&self) -> AllocatedVm {
         self.vm.clone()
+    }
+}
+
+impl HasTestEnv for DeployedIcGatewayVm {
+    fn test_env(&self) -> TestEnv {
+        self.env.clone()
+    }
+}
+
+impl SshSession for DeployedIcGatewayVm {
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.get_vm().ipv6.into())
     }
 }
 
@@ -373,12 +386,13 @@ impl HasIcGatewayVm for TestEnv {
             .then(|| playnet_url.clone())
             .context("Expected a TLS URL")?;
 
-        let vm = self
+        let uvm = self
             .get_deployed_universal_vm(name)
-            .context("Failed to retrieve deployed universal VM")?
-            .get_vm()?;
+            .context("Failed to retrieve deployed universal VM")?;
+        let env = uvm.test_env();
+        let vm = uvm.get_vm()?;
 
-        Ok(DeployedIcGatewayVm { vm, https_url })
+        Ok(DeployedIcGatewayVm { env, vm, https_url })
     }
 
     fn get_deployed_ic_gateways(&self) -> Result<Vec<DeployedIcGatewayVm>> {
