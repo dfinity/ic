@@ -55,7 +55,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_tool_lib"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib"],
 )
 
 rust_binary(
@@ -67,7 +67,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_tool_lib_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib_dev"],
 )
 
 # You can update the XML config golden files with

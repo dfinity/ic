@@ -11,7 +11,7 @@ rust_library(
     crate_name = "guest_upgrade_server",
     deps = [
         "//rs/ic_os/attestation",
-        "//rs/ic_os/config/tool:config_tool_lib",
+        "//rs/ic_os/config/tool:config_lib",
         "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/guest_upgrade/shared",
         "//rs/ic_os/sev",

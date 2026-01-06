@@ -110,7 +110,7 @@ rust_test(
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/test_utils/tls",
         "//rs/crypto/tls_interfaces/mocks",
-        "//rs/ic_os/config/tool:config_tool_lib",
+        "//rs/ic_os/config/tool:config_lib",
         "//rs/registry/fake",
         "//rs/registry/proto_data_provider",
         "//rs/registry/subnet_type",

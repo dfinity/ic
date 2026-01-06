@@ -11,7 +11,7 @@ rust_library(
         "//rs:system-tests-pkg",
     ],
     deps = [
-        "//rs/ic_os/config/tool:config_tool_lib_dev",
+        "//rs/ic_os/config/tool:config_lib_dev",
         "//rs/ic_os/config/types:config_types",
         "@crate_index//:anyhow",
         "@crate_index//:serde_json",
@@ -29,7 +29,7 @@ rust_binary(
     deps = [
         ":setupos-image-config",
         "//rs/ic_os/build_tools/partition_tools",
-        "//rs/ic_os/config/tool:config_tool_lib_dev",
+        "//rs/ic_os/config/tool:config_lib_dev",
         "//rs/ic_os/config/types:config_types",
         "@crate_index//:anyhow",
         "@crate_index//:clap",

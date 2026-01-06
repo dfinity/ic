@@ -58,7 +58,7 @@ LIB_SOURCES = glob(
 )
 
 rust_library(
-    name = "config_tool_lib",
+    name = "config_lib",
     srcs = LIB_SOURCES,
     crate_name = "config_tool",
     target_compatible_with = [
@@ -73,7 +73,7 @@ rust_library(
 )
 
 rust_library(
-    name = "config_tool_lib_dev",
+    name = "config_lib_dev",
     srcs = LIB_SOURCES,
     crate_features = ["dev"],
     crate_name = "config_tool",
@@ -88,18 +88,18 @@ rust_library(
 )
 
 # You can update the golden files with
-# bazel test //rs/ic_os/config/tool:config_tool_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
+# bazel test //rs/ic_os/config/tool:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
-    name = "config_tool_lib_test_dev",
-    crate = ":config_tool_lib_dev",
+    name = "config_lib_test_dev",
+    crate = ":config_lib_dev",
     crate_features = ["dev"],
     env = {"CARGO_MANIFEST_DIR": "rs/ic_os/generate_guestos_vm_config"},
     deps = TEST_DEPENDENCIES,
 )
 
 rust_test(
-    name = "config_tool_lib_test",
-    crate = ":config_tool_lib",
+    name = "config_lib_test",
+    crate = ":config_lib",
     deps = TEST_DEPENDENCIES,
 )
 
@@ -113,7 +113,7 @@ rust_binary(
         "@platforms//os:linux",
     ],
     deps = [
-        ":config_tool_lib",
+        ":config_lib",
     ] + DEPENDENCIES,
 )
 
@@ -128,7 +128,7 @@ rust_binary(
         "@platforms//os:linux",
     ],
     deps = [
-        ":config_tool_lib_dev",
+        ":config_lib_dev",
     ] + DEPENDENCIES,
 )
 

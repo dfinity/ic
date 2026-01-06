@@ -34,7 +34,7 @@ rust_binary(
     ],
     deps = DEPENDENCIES + [
         ":lib",
-        "//rs/ic_os/config/tool:config_tool_lib",
+        "//rs/ic_os/config/tool:config_lib",
     ],
 )
 
@@ -46,7 +46,7 @@ rust_binary(
     ],
     deps = DEPENDENCIES + [
         ":lib",
-        "//rs/ic_os/config/tool:config_tool_lib_dev",
+        "//rs/ic_os/config/tool:config_lib_dev",
     ],
 )
 
