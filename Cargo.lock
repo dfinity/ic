@@ -5601,6 +5601,8 @@ dependencies = [
  "memchr",
  "nix 0.24.3",
  "regex",
+ "strum 0.26.3",
+ "strum_macros 0.26.4",
  "sysinfo",
  "systemd",
  "tempfile",
