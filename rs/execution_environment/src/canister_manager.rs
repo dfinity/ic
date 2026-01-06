@@ -2856,7 +2856,7 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
-    ) -> Result<NumInstructions, CanisterManagerError> {
+    ) -> (Result<(), CanisterManagerError>, NumInstructions) {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
@@ -2867,18 +2867,25 @@ impl CanisterManager {
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
         if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
-            return Err(CanisterManagerError::CanisterSnapshotImmutable);
+            return (
+                Err(CanisterManagerError::CanisterSnapshotImmutable),
+                NumInstructions::new(0),
+            );
         }
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
             && canister.scheduler_state.heap_delta_debit >= self.config.heap_delta_rate_limit
         {
-            return Err(CanisterManagerError::WasmChunkStoreError {
-                message: format!(
-                    "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
-                    canister.scheduler_state.heap_delta_debit, self.config.heap_delta_rate_limit
-                ),
-            });
+            return (
+                Err(CanisterManagerError::WasmChunkStoreError {
+                    message: format!(
+                        "Canister is heap delta rate limited. Current delta debit: {}, limit: {}",
+                        canister.scheduler_state.heap_delta_debit,
+                        self.config.heap_delta_rate_limit
+                    ),
+                }),
+                NumInstructions::new(0),
+            );
         }
 
         // Write data to the appropriate location, as specified by the `CanisterSnapshotDataOffset` variant.
@@ -2906,20 +2913,26 @@ impl CanisterManager {
                     .wasm_binary
                     .write(&args.chunk, offset as usize);
                 if res.is_err() {
-                    return Err(CanisterManagerError::InvalidSlice {
-                        offset,
-                        size: args.chunk.len() as u64,
-                    });
+                    return (
+                        Err(CanisterManagerError::InvalidSlice {
+                            offset,
+                            size: args.chunk.len() as u64,
+                        }),
+                        NumInstructions::new(0),
+                    );
                 }
             }
             CanisterSnapshotDataOffset::WasmMemory { offset } => {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSlice {
-                        offset,
-                        size: args.chunk.len() as u64,
-                    });
+                    return (
+                        Err(CanisterManagerError::InvalidSlice {
+                            offset,
+                            size: args.chunk.len() as u64,
+                        }),
+                        NumInstructions::new(0),
+                    );
                 }
                 let mut buffer = Buffer::new(snapshot_inner.wasm_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
@@ -2930,10 +2943,13 @@ impl CanisterManager {
                 let max_size_bytes =
                     snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
-                    return Err(CanisterManagerError::InvalidSlice {
-                        offset,
-                        size: args.chunk.len() as u64,
-                    });
+                    return (
+                        Err(CanisterManagerError::InvalidSlice {
+                            offset,
+                            size: args.chunk.len() as u64,
+                        }),
+                        NumInstructions::new(0),
+                    );
                 }
                 let mut buffer = Buffer::new(snapshot_inner.stable_memory().page_map.clone());
                 buffer.write(&args.chunk, offset as usize);
@@ -2949,10 +2965,14 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return Ok(NumInstructions::new(0));
+                        return (Ok(()), NumInstructions::new(0));
                     }
                     ChunkValidationResult::ValidationError(err) => {
-                        return Err(CanisterManagerError::WasmChunkStoreError { message: err });
+                        // In this case, we spent instructions calculating the chunk hash, so we charge them.
+                        return (
+                            Err(CanisterManagerError::WasmChunkStoreError { message: err }),
+                            instructions,
+                        );
                     }
                 };
 
@@ -3002,7 +3022,7 @@ impl CanisterManager {
         round_limits.instructions -= as_round_instructions(instructions);
 
         // Return the instructions needed to write the chunk to the destination.
-        Ok(instructions)
+        (Ok(()), instructions)
     }
 
     /// Remove the specified snapshot and increase the subnet's available memory.

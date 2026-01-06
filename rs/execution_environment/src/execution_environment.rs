@@ -2887,10 +2887,9 @@ impl ExecutionEnvironment {
         );
         // Put canister back.
         state.put_canister_state(canister);
-
         match result {
-            Ok(instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+            (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
         }
     }
 
