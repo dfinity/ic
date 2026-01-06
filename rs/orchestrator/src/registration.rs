@@ -302,7 +302,7 @@ impl NodeRegistration {
     ///
     /// This method is intended to be called periodically, such that failed attempts
     /// to generate or register keys are retried.
-    pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
+    pub async fn poll(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
         // If there is no Chain key config or no key_ids, threshold signing is disabled.
         // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
@@ -1166,10 +1166,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_len(0);
@@ -1193,10 +1190,7 @@ mod tests {
                 .with_check_keys_with_registry_result(Ok(()))
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_len(0);
@@ -1214,10 +1208,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_len(0);
@@ -1240,10 +1231,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1268,10 +1256,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1295,10 +1280,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1322,10 +1304,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1349,10 +1328,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1374,10 +1350,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1401,10 +1374,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1424,10 +1394,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1447,10 +1414,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
@@ -1472,10 +1436,7 @@ mod tests {
                 .with_logger(&in_memory_logger)
                 .build();
 
-            setup
-                .node_registration
-                .check_all_keys_registered_otherwise_register(setup.subnet_id)
-                .await;
+            setup.node_registration.poll(setup.subnet_id).await;
 
             let logs = in_memory_logger.drain_logs();
             LogEntriesAssert::assert_that(logs).has_only_one_message_containing(

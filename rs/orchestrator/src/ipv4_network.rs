@@ -117,7 +117,7 @@ impl Ipv4Configurator {
 
     /// Checks for a change in the IPv4 configuration, and if found, updates the
     /// local network configuration
-    pub async fn check_and_update(&mut self) {
+    pub async fn poll(&mut self) {
         let registry_version = self.registry.get_latest_version();
         debug!(
             self.logger,

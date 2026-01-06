@@ -44,7 +44,7 @@ impl HostosUpgrader {
         liveness_timeout: Duration,
     ) {
         loop {
-            match tokio::time::timeout(liveness_timeout, self.check_for_upgrade()).await {
+            match tokio::time::timeout(liveness_timeout, self.poll()).await {
                 Ok(Ok(())) => backoff.reset(),
                 e => warn!(&self.logger, "Check for HostOS upgrade failed: {:?}", e),
             }
@@ -63,7 +63,7 @@ impl HostosUpgrader {
         }
     }
 
-    async fn check_for_upgrade(&mut self) -> OrchestratorResult<()> {
+    async fn poll(&mut self) -> OrchestratorResult<()> {
         let latest_registry_version = self.registry.get_latest_version();
 
         let node_id = self.node_id;

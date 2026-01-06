@@ -46,7 +46,7 @@ impl SshAccessManager {
     }
 
     /// Checks for changes in the keysets, and updates the node accordingly.
-    pub(crate) fn check_for_keyset_changes(&mut self, subnet_id: Option<SubnetId>) {
+    pub(crate) fn poll(&mut self, subnet_id: Option<SubnetId>) {
         let registry_version = self.registry.get_latest_version();
         let last_applied_parameters = self.last_applied_parameters.read().unwrap();
         if last_applied_parameters.registry_version == registry_version

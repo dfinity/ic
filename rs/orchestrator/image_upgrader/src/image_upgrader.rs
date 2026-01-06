@@ -308,5 +308,5 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
+    async fn poll(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }

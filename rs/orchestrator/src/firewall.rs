@@ -467,7 +467,7 @@ impl Firewall {
 
     /// Checks for new firewall config, and if found, update local firewall
     /// rules
-    pub fn check_and_update(&mut self) {
+    pub fn poll(&mut self) {
         if !self.enabled {
             return;
         }

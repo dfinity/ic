@@ -394,7 +394,7 @@ impl Orchestrator {
             let mut last_flow = OrchestratorControlFlow::Stop;
 
             loop {
-                match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
+                match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.poll()).await {
                     Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
@@ -525,11 +525,7 @@ impl Orchestrator {
             loop {
                 let subnet_assignment = *subnet_assignment.read().unwrap();
                 match subnet_assignment {
-                    SubnetAssignment::Assigned(subnet_id) => {
-                        registration
-                            .check_all_keys_registered_otherwise_register(subnet_id)
-                            .await
-                    }
+                    SubnetAssignment::Assigned(subnet_id) => registration.poll(subnet_id).await,
                     SubnetAssignment::Unassigned | SubnetAssignment::Unknown => {}
                 }
 
@@ -557,17 +553,17 @@ impl Orchestrator {
                 // point redeploy the purged keys.
                 match *subnet_assignment.read().unwrap() {
                     SubnetAssignment::Assigned(subnet_id) => {
-                        ssh_access_manager.check_for_keyset_changes(Some(subnet_id));
+                        ssh_access_manager.poll(Some(subnet_id));
                     }
                     SubnetAssignment::Unassigned => {
-                        ssh_access_manager.check_for_keyset_changes(None);
+                        ssh_access_manager.poll(None);
                     }
                     SubnetAssignment::Unknown => {}
                 };
                 // Check and update the firewall rules
-                firewall.check_and_update();
+                firewall.poll();
                 // Check and update the network configuration
-                ipv4_configurator.check_and_update().await;
+                ipv4_configurator.poll().await;
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = cancellation_token.cancelled() => break

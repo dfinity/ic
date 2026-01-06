@@ -615,7 +615,7 @@ impl ImageUpgrader<ReplicaVersion> for Upgrade {
         principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
     }
 
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
+    async fn poll(&mut self) -> UpgradeResult<OrchestratorControlFlow> {
         self.check().await.map_err(UpgradeError::from)
     }
 }
