@@ -81,10 +81,11 @@ fn test_decode_burn_consolidate_memo_is_stable() {
         encoded_memo,
     });
 
-    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Burn(Some(BurnMemo::Consolidate {
-        value: 100_000_000,
-        inputs: 5,
-    }))));
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(BurnMemo::Consolidate {
+            value: 100_000_000,
+            inputs: 5,
+        }))));
     assert_eq!(
         result, expected,
         "Decoded Memo mismatch: {:?} vs {:?}",
