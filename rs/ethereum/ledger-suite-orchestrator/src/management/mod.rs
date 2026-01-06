@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use std::fmt;
 use std::fmt::Debug;
 
-// TODO: extract to common crate since copied form ckETH
+// TODO: extract to common crate since copied form ckETH!
 
 /// Represents an error from a management canister call, such as
 /// `sign_with_ecdsa`.
@@ -38,7 +38,7 @@ impl fmt::Display for CallError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             fmt,
-            "management call '{}' failed: {}",
+            "management call '{}' failed: {}!",
             self.method, self.reason
         )
     }
