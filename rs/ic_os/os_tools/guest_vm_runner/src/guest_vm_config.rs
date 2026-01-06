@@ -378,6 +378,8 @@ mod tests {
     #[test]
     fn ensure_tested_with_dev() {
         // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
+        const {
+            assert!(cfg!(feature = "dev"));
+        };
     }
 }

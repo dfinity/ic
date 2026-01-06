@@ -110,17 +110,15 @@ impl From<&CspPublicKey> for KeyId {
     }
 }
 
-impl TryFrom<&MEGaPublicKey> for KeyId {
-    type Error = String;
+impl From<&MEGaPublicKey> for KeyId {
+    fn from(public_key: &MEGaPublicKey) -> Self {
+        let alg = match public_key.curve_type() {
+            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
+        };
 
-    fn try_from(public_key: &MEGaPublicKey) -> Result<Self, Self::Error> {
-        match public_key.curve_type() {
-            EccCurveType::K256 => Ok(KeyId::from((
-                AlgorithmId::ThresholdEcdsaSecp256k1,
-                &public_key.serialize(),
-            ))),
-            c => Err(format!("unsupported curve: {c:?}")),
-        }
+        KeyId::from((alg, &public_key.serialize()))
     }
 }
 

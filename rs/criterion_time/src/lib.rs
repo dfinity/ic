@@ -16,17 +16,13 @@ use std::time::Duration;
 /// by the background load.
 ///
 /// This implementation uses getrusage system call to obtain the timings.
+#[derive(Default)]
 pub enum ProcessTime {
     /// User time used by this process.
     UserTime,
     /// User + System time used by this process.
+    #[default]
     UserAndSystemTime,
-}
-
-impl Default for ProcessTime {
-    fn default() -> Self {
-        Self::UserAndSystemTime
-    }
 }
 
 impl ProcessTime {
