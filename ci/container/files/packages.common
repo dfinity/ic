@@ -53,6 +53,7 @@ dosfstools # provides mkfs.vfat
 faketime
 fdisk
 iasl # to build OVMF
+ipmitool # to connect to baremetal test instances
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
  # Linked in by IC-OS binaries for creating mapped devices.
