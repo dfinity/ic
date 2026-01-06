@@ -1,11 +1,14 @@
 use crate::pb::v1::{
-    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, SelfDescribingValue,
-    SelfDescribingValueArray, SelfDescribingValueMap,
+    Account, ApproveGenesisKyc, Motion, NetworkEconomics, SelfDescribingProposalAction,
+    SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
+use ic_nervous_system_proto::pb::v1::{Decimal, Percentage};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use icp_ledger::protobuf::AccountIdentifier;
 use std::{collections::HashMap, marker::PhantomData};
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
@@ -58,16 +61,26 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
     }
 }
 
+impl LocallyDescribableProposalAction for NetworkEconomics {
+    const TYPE_NAME: &'static str = "Manage Network Economics";
+    const TYPE_DESCRIPTION: &'static str = "Updates the network economics parameters that control various costs, rewards, and \
+        thresholds in the Network Nervous System, including proposal costs, neuron staking \
+        requirements, transaction fees, and voting power economics.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
+    }
+}
+
 /// A builder for `SelfDescribingValue` objects.
-pub(crate) struct ValueBuilder {
+#[derive(Default)]
+pub struct ValueBuilder {
     fields: HashMap<String, SelfDescribingValue>,
 }
 
 impl ValueBuilder {
     pub fn new() -> Self {
-        Self {
-            fields: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn add_field(mut self, key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
@@ -75,25 +88,29 @@ impl ValueBuilder {
         self
     }
 
+    /// Adds a field with an empty array value. This is useful for fields that don't have a meaningful
+    /// payload (e.g., StartDissolving, StopDissolving).
+    pub fn add_empty_field(self, key: impl ToString) -> Self {
+        self.add_field(key, SelfDescribingValue::EMPTY)
+    }
+
     /// Given an `value: Option<T>`, if `value` is `Some(inner)`, add the `inner` to the builder. If
     /// `value` is `None`, add an empty array to the builder. This is useful for cases where a field
     /// is designed to be required, while we want to still add an empty field to the builder in case
     /// of a bug.
     pub fn add_field_with_empty_as_fallback(
-        mut self,
+        self,
         key: impl ToString,
         value: Option<impl Into<SelfDescribingValue>>,
     ) -> Self {
         if let Some(value) = value {
             self.add_field(key, value)
         } else {
-            self.fields.insert(
-                key.to_string(),
-                SelfDescribingValue {
-                    value: Some(Array(SelfDescribingValueArray { values: vec![] })),
-                },
+            println!(
+                "A field {} is added with an empty value while we think it should be impossible",
+                key.to_string()
             );
-            self
+            self.add_empty_field(key)
         }
     }
 
@@ -109,6 +126,14 @@ impl From<String> for SelfDescribingValue {
     fn from(value: String) -> Self {
         SelfDescribingValue {
             value: Some(Text(value)),
+        }
+    }
+}
+
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue {
+            value: Some(Text(value.to_string())),
         }
     }
 }
@@ -137,6 +162,36 @@ impl From<bool> for SelfDescribingValue {
     }
 }
 
+impl From<Percentage> for SelfDescribingValue {
+    fn from(value: Percentage) -> Self {
+        let Percentage { basis_points } = value;
+
+        let basis_points = match basis_points {
+            Some(basis_points) => basis_points,
+            None => {
+                println!("A Percentage is added with absent basis_points");
+                return Self::from("[unspecified]");
+            }
+        };
+
+        Self::singleton_map("basis_points", basis_points)
+    }
+}
+
+impl From<Decimal> for SelfDescribingValue {
+    fn from(decimal: Decimal) -> Self {
+        let Decimal { human_readable } = decimal;
+        let decimal = match human_readable {
+            Some(human_readable) => human_readable,
+            None => {
+                println!("A Decimal is added with absent human_readable");
+                "[unspecified]".to_string()
+            }
+        };
+        Self::from(decimal)
+    }
+}
+
 impl<T> From<Option<T>> for SelfDescribingValue
 where
     SelfDescribingValue: From<T>,
@@ -162,7 +217,6 @@ where
         }
     }
 }
-
 pub(crate) struct SelfDescribingProstEnum<E> {
     value: i32,
     prost_type: PhantomData<E>,
@@ -208,6 +262,45 @@ where
         .unwrap_or("???")
 }
 
+impl From<NeuronId> for SelfDescribingValue {
+    fn from(value: NeuronId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<ProposalId> for SelfDescribingValue {
+    fn from(value: ProposalId) -> Self {
+        Self::from(value.id)
+    }
+}
+
+impl From<AccountIdentifier> for SelfDescribingValue {
+    fn from(value: AccountIdentifier) -> Self {
+        Self::from(value.hash)
+    }
+}
+
+impl From<Account> for SelfDescribingValue {
+    fn from(account: Account) -> Self {
+        let Account { owner, subaccount } = account;
+        let subaccount = subaccount.map(|subaccount| subaccount.subaccount);
+        ValueBuilder::new()
+            .add_field_with_empty_as_fallback("owner", owner)
+            .add_field("subaccount", subaccount)
+            .build()
+    }
+}
+
+impl SelfDescribingValue {
+    pub const EMPTY: Self = Self {
+        value: Some(Array(SelfDescribingValueArray { values: vec![] })),
+    };
+
+    pub fn singleton_map(key: impl ToString, value: impl Into<SelfDescribingValue>) -> Self {
+        ValueBuilder::new().add_field(key, value).build()
+    }
+}
+
 /// A trait for types that can be converted to a SelfDescribingValue as an unsigned integer. This is
 /// used because we can't do `impl<T: Into<candid::Nat>> From<T> for SelfDescribingValue` because of
 /// potential conflicts.
@@ -226,6 +319,7 @@ where
 
 // Types we want to be able to convert to a SelfDescribingValue as an unsigned integer.
 impl ToSelfDescribingNat for u64 {}
+impl ToSelfDescribingNat for u32 {}
 
 pub(crate) fn to_self_describing_nat<N>(n: N) -> Value
 where

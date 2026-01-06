@@ -2089,6 +2089,13 @@ fn test_utxo_consolidation_multiple() {
     );
     let transfer_index = result.0.to_u64().unwrap();
 
+    // Set fee percentiles so that the 25th percentile is 2000 and the median (50th) is 5000.
+    // We set the first 40 percentiles to 2000 and the rest to 5000.
+    let fees: Vec<u64> = std::iter::repeat_n(2000, 40)
+        .chain(std::iter::repeat_n(5000, 60))
+        .collect();
+    ckbtc.set_fee_percentiles(&fees);
+
     // Test two consolidations
     for i in 1..=2 {
         // Upgrade to trigger consolidation task by setting a lower threshold.
@@ -2141,6 +2148,18 @@ fn test_utxo_consolidation_multiple() {
         let new_fee_account_balance = ckbtc.get_ledger_account_balance(&fee_account);
         assert_eq!(fee_account_balance, new_fee_account_balance + burn_amount);
         fee_account_balance = new_fee_account_balance;
+
+        // Verify that the fee rate corresponds to the 25th percentile (2000).
+        // Since signatures length vary slightly, we check if the rate is close to 2000.
+        // It definitely shouldn't be close to 5000 (the median).
+        let tx_fee = total_input - total_output;
+        let vsize = tx.vsize();
+        let fee_rate = tx_fee * 1000 / vsize as u64;
+        assert!(
+            (1900..2100).contains(&fee_rate),
+            "Fee rate {} should be around 2000 (25th percentile), not 5000 (median)",
+            fee_rate
+        );
 
         // Finalize the new transaction.
         ckbtc.finalize_transaction(tx);
