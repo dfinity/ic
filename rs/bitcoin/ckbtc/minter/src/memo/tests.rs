@@ -97,6 +97,18 @@ fn encode_burn_memo_is_stable() {
 }
 
 #[test]
+fn encode_burn_consolidate_memo_is_stable() {
+    let burn_memo = BurnMemo::Consolidate {
+        value: 100_000_000,
+        inputs: 5,
+    };
+    let encoded = crate::memo::encode(&burn_memo);
+    let memo = Memo::from(encoded);
+
+    assert_eq!(memo.0, [130, 1, 130, 26, 5, 245, 225, 0, 5]);
+}
+
+#[test]
 fn should_have_a_strategy_for_each_mint_memo_variant() {
     let memo_to_match = MintMemo::Convert {
         txid: None,

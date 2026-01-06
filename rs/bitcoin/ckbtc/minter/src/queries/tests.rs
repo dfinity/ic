@@ -74,6 +74,25 @@ fn test_decode_mint_reimburse_withdrawal_memo_is_stable() {
 }
 
 #[test]
+fn test_decode_burn_consolidate_memo_is_stable() {
+    let encoded_memo = vec![130, 1, 130, 26, 5, 245, 225, 0, 5];
+    let result = decode_ledger_memo(DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo,
+    });
+
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Burn(Some(BurnMemo::Consolidate {
+        value: 100_000_000,
+        inputs: 5,
+    }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
 fn test_decode_empty_array() {
     for memo_type in &[MemoType::Burn, MemoType::Mint] {
         let encoded_memo = vec![];
