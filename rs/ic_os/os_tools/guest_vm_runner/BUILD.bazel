@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:memchr",
     "@crate_index//:nix",
     "@crate_index//:regex",
+    "@crate_index//:strum",
     "@crate_index//:sysinfo",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
@@ -39,7 +40,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 cargo_build_script(
     name = "build_script",

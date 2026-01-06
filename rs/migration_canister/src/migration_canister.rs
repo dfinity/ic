@@ -42,7 +42,9 @@ fn post_upgrade(args: MigrationCanisterInitArgs) {
 
 #[derive(Clone, CandidType, Deserialize)]
 pub struct MigrateCanisterArgs {
+    /// The canister ID being migrated from a source subnet to a target subnet.
     pub migrated_canister_id: Principal,
+    /// The canister ID being replaced on the target subnet by the migrated canister ID.
     pub replaced_canister_id: Principal,
 }
 
