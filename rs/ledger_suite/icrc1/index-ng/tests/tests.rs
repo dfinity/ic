@@ -1385,21 +1385,20 @@ fn test_fee_collector_107() {
         block_id + 1
     };
 
-    let add_fee_collector_107_block =
-        |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
-            let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
-                .with_btype("107feecol".to_string())
-                .fee_collector(fc, None, None, mthd)
-                .build();
+    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
+        let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
+            .with_btype("107feecol".to_string())
+            .fee_collector(fc, None, None, mthd)
+            .build();
 
-            assert_eq!(
-                Nat::from(block_id),
-                add_block(env, ledger_id, &fee_collector)
-                    .expect("error adding fee collector block to ICRC-3 test ledger")
-            );
-            wait_until_sync_is_completed(env, index_id, ledger_id);
-            block_id + 1
-        };
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &fee_collector)
+                .expect("error adding fee collector block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
 
     // Legacy fee collector collects the fees
     block_id = add_mint_block(block_id, Some(feecol_legacy), None);
