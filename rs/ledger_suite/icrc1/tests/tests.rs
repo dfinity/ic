@@ -185,9 +185,10 @@ where
         proptest::option::of(arb_account()),
         proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
         any::<Option<u64>>(),
+        prop_oneof![Just(None), Just(Some("107set_fee_collector".to_string()))],
     )
         .prop_map(
-            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts)| {
+            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts, mthd)| {
                 let caller = caller.map(|mut c| {
                     c.push(0x00);
                     Principal::try_from_slice(&c[..]).unwrap()
@@ -198,7 +199,9 @@ where
                     Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
                     None => builder,
                 };
-                builder.fee_collector(fee_collector, caller, tx_ts).build()
+                builder
+                    .fee_collector(fee_collector, caller, tx_ts, mthd)
+                    .build()
             },
         )
 }
@@ -270,7 +273,7 @@ mod block_encoding_stability {
 
     #[test]
     fn test_fee_collector_block() {
-        const EXPECTED_BLOCK: &str = "d9d9f7a465627479706569313037666565636f6c657068617368582043434343434343434343434343434343434343434343434343434343434343436274731a00bc614e627478a46663616c6c65724a0200000000000000fe016d6665655f636f6c6c6563746f72824a0100000000000000fe0158202525252525252525252525252525252525252525252525252525252525252525626f70743130377365745f6665655f636f6c6c6563746f726274731a0154cbf7";
+        const EXPECTED_BLOCK: &str = "d9d9f7a465627479706569313037666565636f6c657068617368582043434343434343434343434343434343434343434343434343434343434343436274731a00bc614e627478a46663616c6c65724a0200000000000000fe016d6665655f636f6c6c6563746f72824a0100000000000000fe0158202525252525252525252525252525252525252525252525252525252525252525646d746864743130377365745f6665655f636f6c6c6563746f726274731a0154cbf7";
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
@@ -283,6 +286,7 @@ mod block_encoding_stability {
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
                 Some(22334455u64),
+                Some("107set_fee_collector".to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }

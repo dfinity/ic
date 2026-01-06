@@ -58,12 +58,7 @@ use ic_types::signature::BasicSignatureBatch;
 impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
     for CryptoComponentImpl<C>
 {
-    fn sign_basic(
-        &self,
-        message: &H,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<H>> {
+    fn sign_basic(&self, message: &H) -> CryptoResult<BasicSigOf<H>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -437,8 +432,6 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
 }
 
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
-    // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
-    // ThresholdSigDataNotFoundError>
     fn sign_threshold(
         &self,
         message: &T,

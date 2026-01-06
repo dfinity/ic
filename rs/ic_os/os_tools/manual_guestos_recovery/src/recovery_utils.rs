@@ -26,15 +26,40 @@ impl RecoveryUpgraderCommand {
     }
 }
 
-pub fn build_recovery_upgrader_command(
+pub fn build_recovery_upgrader_command(mode: &str, args: &[String]) -> RecoveryUpgraderCommand {
+    let mut full_args = Vec::with_capacity(args.len() + 1);
+    full_args.push(format!("mode={mode}"));
+    full_args.extend_from_slice(args);
+    RecoveryUpgraderCommand { args: full_args }
+}
+
+pub fn build_recovery_upgrader_prep_command(
     version: &str,
-    version_hash: &str,
-    recovery_hash: &str,
+    recovery_hash_prefix: &str,
 ) -> RecoveryUpgraderCommand {
-    let args = vec![
-        format!("version={version}"),
-        format!("version-hash={version_hash}"),
-        format!("recovery-hash={recovery_hash}"),
-    ];
-    RecoveryUpgraderCommand { args }
+    build_recovery_upgrader_command(
+        "prep",
+        &[
+            format!("version={version}"),
+            format!("recovery-hash-prefix={recovery_hash_prefix}"),
+        ],
+    )
+}
+
+pub fn build_recovery_upgrader_install_command() -> RecoveryUpgraderCommand {
+    build_recovery_upgrader_command("install", &[])
+}
+
+/// Convenience helper to perform a single-shot run (prep + install) without TUI confirmation.
+pub fn build_recovery_upgrader_run_command(
+    version: &str,
+    recovery_hash_prefix: &str,
+) -> RecoveryUpgraderCommand {
+    build_recovery_upgrader_command(
+        "run",
+        &[
+            format!("version={version}"),
+            format!("recovery-hash-prefix={recovery_hash_prefix}"),
+        ],
+    )
 }
