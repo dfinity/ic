@@ -9,6 +9,10 @@ on:
   schedule:
     - cron: "0 */2 * * *"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/update-mainnet-canister-revisions.yaml'
+
 
 defaults:
   run:
@@ -35,9 +39,14 @@ jobs:
           private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup python3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
 
       - name: Setup gh cli
         env:
@@ -60,6 +69,7 @@ jobs:
       - name: Update mainnet canister versions file
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           set -eEuxo pipefail
 
@@ -71,4 +81,5 @@ jobs:
             --delay=1,2,4,8,15,30,60,120,300,600 \
             -- time python \
             ci/src/mainnet_revisions/mainnet_revisions.py \
+            $DRY_RUN \
             canisters
