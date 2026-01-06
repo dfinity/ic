@@ -10,15 +10,16 @@ COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
 COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
-# Create user groups needed for github actions runner
-RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
-    # CI before script requires sudo \
-    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-
+# Todo: split out essential packages from application-level packages
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
+
+# Create user groups needed for github actions runner
+RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
+    # CI before script requires sudo \
+    echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # install afl & gsutils deps for bazel-fuzzers
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
