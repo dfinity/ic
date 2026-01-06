@@ -1386,10 +1386,10 @@ fn test_fee_collector_107() {
     };
 
     let add_fee_collector_107_block =
-        |block_id: u64, fc: Option<Account>, op_name: Option<String>| {
+        |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
             let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
                 .with_btype("107feecol".to_string())
-                .fee_collector(fc, None, None, op_name)
+                .fee_collector(fc, None, None, mthd)
                 .build();
 
             assert_eq!(
