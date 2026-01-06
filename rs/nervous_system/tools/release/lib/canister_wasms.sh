@@ -49,11 +49,17 @@ _download_canister_gz() {
     DOWNLOAD_URL="https://download.dfinity.systems/ic/${GIT_HASH}/canisters/${DOWNLOAD_NAME}.wasm.gz"
     OUTPUT_FILE="$MY_DOWNLOAD_DIR/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
 
-    curl \
+    # Download the file, but don't fail the script if it doesn't exist (404)
+    # The caller will check if the file exists and is valid by trying to ungzip it
+    if ! curl \
         "${DOWNLOAD_URL}" \
         --output "${OUTPUT_FILE}" \
         --fail \
-        --silent
+        --silent \
+        2>/dev/null; then
+        # If download failed, ensure the file doesn't exist so caller can detect failure
+        rm -f "${OUTPUT_FILE}"
+    fi
 
     echo "${OUTPUT_FILE}"
 }
