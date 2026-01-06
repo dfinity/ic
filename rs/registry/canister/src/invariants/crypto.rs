@@ -289,10 +289,8 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
         let mut key_ids = BTreeSet::new();
         for key_config in chain_key_config.key_configs {
             let key_id = key_config.key_id.clone();
-            if key_id.requires_pre_signatures()
-                && (key_config.pre_signatures_to_create_in_advance.is_none()
-                    || key_config.pre_signatures_to_create_in_advance == Some(0))
-            {
+            let pre_sigs = key_config.pre_signatures_to_create_in_advance;
+            if key_id.requires_pre_signatures() && (pre_sigs.is_none() || pre_sigs == Some(0)) {
                 return Err(InvariantCheckError {
                     msg: format!(
                         "pre_signatures_to_create_in_advance for key {key_id} of subnet {subnet_id:} must be non-zero",
