@@ -2638,18 +2638,17 @@ impl StateManager for StateManagerImpl {
 
                 // Since the state machine will use this tip to compute the *next* state,
                 // we populate the prev_state_hash with the hash of the current tip.
-                if let Some(hash) = &tip_metadata.certified_state_hash {
-                    Some(CryptoHashOfPartialState::from(hash.clone()))
-                } else {
-                    let certification_metadata =
-                        Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
-                            .unwrap_or_else(|err| {
-                                fatal!(self.log, "Failed to compute hash tree: {:?}", err)
-                            });
-                    let hash = certification_metadata.certified_state_hash.clone().unwrap();
-                    certifications_metadata.insert(tip_height, certification_metadata);
-                    Some(CryptoHashOfPartialState::from(hash))
-                }
+                let hash = tip_metadata
+                    .certified_state_hash
+                    .clone()
+                    .unwrap_or_else(|| {
+                        fatal!(
+                            self.log,
+                            "Bug: missing tip certified state hash @{}",
+                            tip_height
+                        )
+                    });
+                Some(CryptoHashOfPartialState::from(hash.clone()))
             } else {
                 // This code is executed at most once per subnet, no need to
                 // optimize this.
