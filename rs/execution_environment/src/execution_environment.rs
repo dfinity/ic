@@ -1874,6 +1874,7 @@ impl ExecutionEnvironment {
         //   - `InstallChunkedCode`
         //   - `TakeCanisterSnapshot`
         //   - `LoadCanisterSnapshot`
+        //   - `ReadCanisterSnapshotData`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.

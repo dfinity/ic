@@ -2574,6 +2574,7 @@ impl CanisterManager {
         snapshot_id: SnapshotId,
         canister: &CanisterState,
         state: &ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(ReadCanisterSnapshotMetadataResponse, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2587,6 +2588,7 @@ impl CanisterManager {
         debug_assert!(maybe_instruction_counter.is_some());
 
         let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
+        round_limits.instructions -= as_round_instructions(num_instructions);
 
         Ok((
             ReadCanisterSnapshotMetadataResponse {
@@ -2626,6 +2628,7 @@ impl CanisterManager {
         kind: CanisterSnapshotDataKind,
         state: &ReplicatedState,
         subnet_size: usize,
+        round_limits: &mut RoundLimits,
     ) -> Result<(ReadCanisterSnapshotDataResponse, NumInstructions), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
@@ -2648,7 +2651,7 @@ impl CanisterManager {
         ) {
             return Err(CanisterManagerError::CanisterSnapshotNotEnoughCycles(err));
         };
-
+        round_limits.instructions -= as_round_instructions(num_instructions);
         let res = match kind {
             CanisterSnapshotDataKind::StableMemory { offset, size } => {
                 let stable_memory = snapshot.execution_snapshot().stable_memory.clone();

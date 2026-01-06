@@ -251,20 +251,6 @@ fn read_canister_snapshot_metadata_bench<M: criterion::measurement::Measurement>
             BatchSize::SmallInput,
         );
     });
-    group.bench_function(format!("{bench_name}+checkpoint"), |b| {
-        b.iter_batched(
-            || env_and_canister_snapshot(canister_size),
-            |(env, canister_id, snapshot_id)| {
-                let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
-                let _ = env
-                    .read_canister_snapshot_metadata(&args)
-                    .expect("Error reading snapshot metadata");
-                env.checkpointed_tick();
-                env
-            },
-            BatchSize::SmallInput,
-        );
-    });
 }
 
 fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
