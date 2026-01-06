@@ -2858,12 +2858,17 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
     ) -> (Result<(), CanisterManagerError>, NumInstructions) {
         // Check sender is a controller.
-        validate_controller(canister, &sender)?;
+        if let Err(e) = validate_controller(canister, &sender) {
+            return (Err(e), NumInstructions::new(0));
+        }
         let snapshot_id = args.get_snapshot_id();
 
         let cost_schedule = state.get_own_cost_schedule();
         let snapshot: &mut Arc<CanisterSnapshot> =
-            self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
+            match self.get_snapshot_mut(canister.canister_id(), snapshot_id, state) {
+                Err(e) => return (Err(e), NumInstructions::new(0)),
+                Ok(snapshot) => snapshot,
+            };
 
         // Ensure the snapshot was created via metadata upload, not from the canister.
         if snapshot.source() != SnapshotSource::MetadataUpload(candid::Reserved) {
@@ -2893,7 +2898,8 @@ impl CanisterManager {
         // but the instructions used to copy the data still need to be accounted for.
         // Cycles should be charged in any case, because memory is being written.
         let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
-        self.cycles_account_manager
+        if let Err(e) = self
+            .cycles_account_manager
             .consume_cycles_for_instructions(
                 &sender,
                 canister,
@@ -2903,7 +2909,10 @@ impl CanisterManager {
                 // It does not matter if this is a Wasm64 or Wasm32 module.
                 WasmExecutionMode::Wasm32,
             )
-            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)?;
+            .map_err(CanisterManagerError::CanisterSnapshotNotEnoughCycles)
+        {
+            return (Err(e), NumInstructions::new(0));
+        }
 
         let snapshot_inner = Arc::make_mut(snapshot);
         match args.kind {
@@ -2979,7 +2988,7 @@ impl CanisterManager {
                 let memory_usage = canister.memory_usage();
                 let chunk_bytes = wasm_chunk_store::chunk_size();
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
-                let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
+                let validated_cycles_and_memory_usage = match self.cycles_and_memory_usage_checks(
                     subnet_size,
                     state.get_own_cost_schedule(),
                     canister,
@@ -2989,7 +2998,10 @@ impl CanisterManager {
                     new_memory_usage,
                     memory_usage,
                     resource_saturation,
-                )?;
+                ) {
+                    Err(e) => return (Err(e), NumInstructions::new(0)),
+                    Ok(ok) => ok,
+                };
                 self.cycles_and_memory_usage_updates(
                     subnet_size,
                     state.get_own_cost_schedule(),
