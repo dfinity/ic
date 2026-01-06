@@ -522,9 +522,7 @@ fn test_known_neuron_to_self_describing() {
             "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
             "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
                 "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
-                "description".to_string() => SelfDescribingValue::Array(vec![
-                    SelfDescribingValue::Text("Description".to_string())
-                ]),
+                "description".to_string() => SelfDescribingValue::Text("Description".to_string()),
                 "links".to_string() => SelfDescribingValue::Array(vec![
                     SelfDescribingValue::Text("https://test.com".to_string())
                 ]),
@@ -557,7 +555,7 @@ fn test_known_neuron_to_self_describing_empty_fields() {
             "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
             "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
                 "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
-                "description".to_string() => SelfDescribingValue::Array(vec![]),
+                "description".to_string() => SelfDescribingValue::Null,
                 "links".to_string() => SelfDescribingValue::Array(vec![]),
                 "committed_topics".to_string() => SelfDescribingValue::Array(vec![]),
             }),
