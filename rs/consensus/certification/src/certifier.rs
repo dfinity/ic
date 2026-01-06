@@ -144,11 +144,11 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(
-                |(height, hash)| match certification_pool.certification_at_height(height) {
+            .filter_map(|(height, hash)| {
+                match (certification_pool.certification_at_height(height), hash) {
                     // if we have a valid certification, deliver it to the state manager and skip
                     // the pair
-                    Some(certification) => {
+                    (Some(certification), _) => {
                         // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
                         // change set for the artifact processor to handle.
                         self.state_manager
@@ -167,9 +167,10 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         None
                     }
                     // return this pair to be signed by the current replica
-                    _ => Some((height, hash)),
-                },
-            )
+                    (None, Some(hash)) => Some((height, hash)),
+                    (None, None) => None,
+                }
+            })
             .collect();
         trace!(
             &self.log,
@@ -679,11 +680,21 @@ mod tests {
                     .map(move |h| {
                         (
                             Height::from(h),
-                            CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                            Some(CryptoHashOfPartialState::from(CryptoHash(Vec::new()))),
                         )
                     })
-                    .collect::<Vec<(Height, CryptoHashOfPartialState)>>(),
+                    .collect::<Vec<(Height, Option<CryptoHashOfPartialState>)>>(),
             );
+    }
+
+    fn state_hashes_to_validate(
+        state_manager: Arc<ic_test_utilities::state_manager::RefMockStateManager>,
+    ) -> Vec<(Height, CryptoHashOfPartialState)> {
+        state_manager
+            .list_state_hashes_to_certify()
+            .into_iter()
+            .filter_map(|(height, hash)| hash.map(|hash| (height, hash)))
+            .collect()
     }
 
     #[test]
@@ -725,8 +736,8 @@ mod tests {
                 for height in &[1, 3] {
                     cert_pool.insert(fake_cert_default(Height::from(*height)));
                 }
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 cert_pool.apply(change_set);
 
                 let bouncer = bouncer_factory.new_bouncer(&cert_pool);
@@ -797,8 +808,8 @@ mod tests {
                 }
 
                 // let's move everything to validated
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
@@ -926,8 +937,8 @@ mod tests {
                     .for_each(|x| cert_pool.insert(x));
 
                 // this moves unvalidated shares to validated
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 cert_pool.apply(change_set);
 
                 // emulates a call from inside on_state_change
@@ -1009,8 +1020,8 @@ mod tests {
                 cert_pool.insert(cert);
 
                 // this moves unvalidated shares to validated
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 cert_pool.apply(change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
@@ -1164,8 +1175,8 @@ mod tests {
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_none());
 
                 // this moves unvalidated shares to validated
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 assert_eq!(change_set.len(), 1);
                 cert_pool.apply(change_set);
 
@@ -1268,8 +1279,8 @@ mod tests {
                     .for_each(|x| cert_pool.insert(x));
 
                 // this moves unvalidated shares to validated
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
                 cert_pool.apply(change_set);
 
                 // Let's insert valid shares from the same signer again:
@@ -1277,8 +1288,8 @@ mod tests {
                 cert_pool.insert(fake_share(Height::from(5), 0));
 
                 // This is supposed to invalidate the two new shares
-                let change_set =
-                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
+                let change_set = certifier
+                    .validate(&cert_pool, &state_hashes_to_validate(state_manager.clone()));
 
                 assert_eq!(change_set.len(), 2, "unexpected changeset: {change_set:?}");
 
@@ -1383,7 +1394,7 @@ mod tests {
                         .map(|h| {
                             (
                                 Height::from(h),
-                                CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                                Some(CryptoHashOfPartialState::from(CryptoHash(Vec::new()))),
                             )
                         })
                         .collect::<Vec<_>>()

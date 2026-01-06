@@ -2891,7 +2891,7 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)> {
         let _timer = self
             .metrics
             .api_call_duration
@@ -2906,7 +2906,9 @@ impl StateManager for StateManagerImpl {
             .map(|(height, metadata)| {
                 (
                     *height,
-                    CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
+                    Some(CryptoHashOfPartialState::from(
+                        metadata.certified_state_hash.clone(),
+                    )),
                 )
             })
             .collect()
