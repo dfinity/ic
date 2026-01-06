@@ -918,7 +918,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics

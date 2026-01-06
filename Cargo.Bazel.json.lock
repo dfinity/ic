@@ -1,5 +1,5 @@
 {
-  "checksum": "d154dd0e371170ad8d3c57a751b807c9e2920d800fdd658238acadec4f95a70d",
+  "checksum": "d63cbc2bcc37798ad250fabf3e2bd2fcaccf11d0b4c46ce7f3a8936b2b9eb7fb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1096,14 +1096,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "actix-web-prom 0.9.0": {
+    "actix-web-prom 0.10.0": {
       "name": "actix-web-prom",
-      "version": "0.9.0",
+      "version": "0.10.0",
       "package_url": "https://github.com/nlopes/actix-web-prom.git",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/actix-web-prom/0.9.0/download",
-          "sha256": "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+          "url": "https://static.crates.io/crates/actix-web-prom/0.10.0/download",
+          "sha256": "a7eb266b4c692a4a7e68429fcbe4eb3bd55c053f6d84c0522dc83df22395edf6"
         }
       },
       "targets": [
@@ -1144,7 +1144,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "prometheus 0.13.4",
+              "id": "prometheus 0.14.0",
               "target": "prometheus"
             },
             {
@@ -1159,7 +1159,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.0"
+        "version": "0.10.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -21187,7 +21187,7 @@
               "target": "actix_web"
             },
             {
-              "id": "actix-web-prom 0.9.0",
+              "id": "actix-web-prom 0.10.0",
               "target": "actix_web_prom"
             },
             {
@@ -21962,7 +21962,7 @@
               "target": "opentelemetry_otlp"
             },
             {
-              "id": "opentelemetry-prometheus 0.13.0",
+              "id": "opentelemetry-prometheus 0.14.1",
               "target": "opentelemetry_prometheus"
             },
             {
@@ -22034,11 +22034,11 @@
               "target": "proc_macro2"
             },
             {
-              "id": "procfs 0.9.1",
+              "id": "procfs 0.17.0",
               "target": "procfs"
             },
             {
-              "id": "prometheus 0.13.4",
+              "id": "prometheus 0.14.0",
               "target": "prometheus"
             },
             {
@@ -22063,7 +22063,7 @@
               "target": "prost_build"
             },
             {
-              "id": "protobuf 2.28.0",
+              "id": "protobuf 3.7.2",
               "target": "protobuf"
             },
             {
@@ -54011,69 +54011,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-prometheus 0.13.0": {
-      "name": "opentelemetry-prometheus",
-      "version": "0.13.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-prometheus/0.13.0/download",
-          "sha256": "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_prometheus",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_prometheus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry_api 0.20.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "opentelemetry_sdk 0.20.0",
-              "target": "opentelemetry_sdk"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "prometheus"
-            },
-            {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.13.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry-prometheus 0.14.1": {
       "name": "opentelemetry-prometheus",
       "version": "0.14.1",
@@ -54343,93 +54280,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry_api 0.20.0": {
-      "name": "opentelemetry_api",
-      "version": "0.20.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_api/0.20.0/download",
-          "sha256": "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_api",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_api",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "pin-project-lite",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "indexmap 1.9.3",
-              "target": "indexmap"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "pin-project-lite 0.2.16",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "urlencoding 2.1.3",
-              "target": "urlencoding"
-            }
-          ],
-          "selects": {
-            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
-              {
-                "id": "js-sys 0.3.77",
-                "target": "js_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.20.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry_sdk 0.18.0": {
       "name": "opentelemetry_sdk",
       "version": "0.18.0",
@@ -54522,98 +54372,6 @@
           "selects": {}
         },
         "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry_sdk 0.20.0": {
-      "name": "opentelemetry_sdk",
-      "version": "0.20.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.20.0/download",
-          "sha256": "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_sdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_sdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-trait",
-            "metrics",
-            "regex"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-executor 0.3.31",
-              "target": "futures_executor"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry_api 0.20.0",
-              "target": "opentelemetry_api"
-            },
-            {
-              "id": "ordered-float 3.9.2",
-              "target": "ordered_float"
-            },
-            {
-              "id": "regex 1.12.2",
-              "target": "regex"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.20.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54897,60 +54655,6 @@
         "MPL-2.0"
       ],
       "license_file": "LICENSE.txt"
-    },
-    "ordered-float 3.9.2": {
-      "name": "ordered-float",
-      "version": "3.9.2",
-      "package_url": "https://github.com/reem/rust-ordered-float",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ordered-float/3.9.2/download",
-          "sha256": "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ordered_float",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ordered_float",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "3.9.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE-MIT"
     },
     "ordered-float 4.2.0": {
       "name": "ordered-float",
@@ -60457,74 +60161,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "procfs 0.9.1": {
-      "name": "procfs",
-      "version": "0.9.1",
-      "package_url": "https://github.com/eminence/procfs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/procfs/0.9.1/download",
-          "sha256": "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "procfs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "procfs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
-              "id": "flate2 1.1.5",
-              "target": "flate2"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "libc 0.2.177",
-              "target": "libc"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.9.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "procfs 0.16.0": {
       "name": "procfs",
       "version": "0.16.0",
@@ -60616,6 +60252,93 @@
       ],
       "license_file": null
     },
+    "procfs 0.17.0": {
+      "name": "procfs",
+      "version": "0.17.0",
+      "package_url": "https://github.com/eminence/procfs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/procfs/0.17.0/download",
+          "sha256": "cc5b72d8145275d844d4b5f6d4e1eef00c8cd889edb6035c21675d1bb1f45c9f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "procfs",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "procfs",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            },
+            {
+              "id": "procfs 0.17.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "procfs-core 0.17.0",
+              "target": "procfs_core"
+            },
+            {
+              "id": "rustix 0.38.44",
+              "target": "rustix"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.17.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "procfs-core 0.16.0": {
       "name": "procfs-core",
       "version": "0.16.0",
@@ -60667,6 +60390,58 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "procfs-core 0.17.0": {
+      "name": "procfs-core",
+      "version": "0.17.0",
+      "package_url": "https://github.com/eminence/procfs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/procfs-core/0.17.0/download",
+          "sha256": "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "procfs_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "procfs_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.10.0",
+              "target": "bitflags"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.17.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
     },
     "prometheus 0.13.4": {
       "name": "prometheus",
@@ -60837,6 +60612,9 @@
         "crate_features": {
           "common": [
             "default",
+            "libc",
+            "process",
+            "procfs",
             "protobuf"
           ],
           "selects": {}
@@ -60854,6 +60632,10 @@
             {
               "id": "lazy_static 1.5.0",
               "target": "lazy_static"
+            },
+            {
+              "id": "libc 0.2.177",
+              "target": "libc"
             },
             {
               "id": "memchr 2.7.4",
@@ -60876,7 +60658,20 @@
               "target": "thiserror"
             }
           ],
-          "selects": {}
+          "selects": {
+            "aarch64-unknown-linux-gnu": [
+              {
+                "id": "procfs 0.17.0",
+                "target": "procfs"
+              }
+            ],
+            "x86_64-unknown-linux-gnu": [
+              {
+                "id": "procfs 0.17.0",
+                "target": "procfs"
+              }
+            ]
+          }
         },
         "edition": "2018",
         "version": "0.14.0"
@@ -68930,57 +68725,45 @@
         "crate_features": {
           "common": [
             "alloc",
+            "default",
             "fs",
             "libc-extra-traits",
             "net",
-            "std"
+            "param",
+            "process",
+            "std",
+            "system",
+            "thread",
+            "use-libc-auxv"
           ],
           "selects": {
             "aarch64-apple-darwin": [
-              "default",
               "event",
               "pipe",
-              "process",
               "stdio",
               "termios",
-              "time",
-              "use-libc-auxv"
+              "time"
             ],
             "aarch64-unknown-linux-gnu": [
-              "default",
               "event",
-              "param",
               "pipe",
-              "process",
               "stdio",
-              "system",
               "termios",
-              "thread",
-              "time",
-              "use-libc-auxv"
+              "time"
             ],
             "x86_64-apple-darwin": [
-              "default",
               "event",
               "pipe",
-              "process",
               "stdio",
               "termios",
-              "time",
-              "use-libc-auxv"
+              "time"
             ],
             "x86_64-unknown-linux-gnu": [
-              "default",
               "event",
-              "param",
               "pipe",
-              "process",
               "stdio",
-              "system",
               "termios",
-              "thread",
-              "time",
-              "use-libc-auxv"
+              "time"
             ]
           }
         },
@@ -98737,7 +98520,7 @@
   "direct_deps": [
     "actix-rt 2.10.0",
     "actix-web 4.9.0",
-    "actix-web-prom 0.9.0",
+    "actix-web-prom 0.10.0",
     "addr 0.15.6",
     "aide 0.14.2",
     "anyhow 1.0.100",
@@ -98936,7 +98719,7 @@
     "openssh-keys 0.5.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
-    "opentelemetry-prometheus 0.13.0",
+    "opentelemetry-prometheus 0.14.1",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
     "p384 0.13.1",
@@ -98955,15 +98738,15 @@
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
     "proc-macro2 1.0.103",
-    "procfs 0.9.1",
-    "prometheus 0.13.4",
+    "procfs 0.17.0",
+    "prometheus 0.14.0",
     "prometheus-parse 0.2.4",
     "proptest 1.5.0",
     "proptest-derive 0.5.0",
     "prost 0.12.2",
     "prost 0.13.3",
     "prost-build 0.13.3",
-    "protobuf 2.28.0",
+    "protobuf 3.7.2",
     "publicsuffix 2.2.3",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
