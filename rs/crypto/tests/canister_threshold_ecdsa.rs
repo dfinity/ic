@@ -21,7 +21,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::{AlgorithmId, ExtendedDerivationPath};
 use maplit::hashset;
 use rand::prelude::*;
-use std::convert::TryFrom;
 use std::sync::Arc;
 
 mod sign_share {
@@ -795,9 +794,6 @@ mod verify_combined_sig {
 
     #[test]
     fn should_verify_combined_signature_with_usual_basic_sig_verification() {
-        use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
-        use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
-
         let rng = &mut reproducible_rng();
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let (env, inputs, _, _) = environment_with_sig_inputs(1..10, alg, rng);
@@ -815,30 +811,20 @@ mod verify_combined_sig {
 
             match alg {
                 AlgorithmId::ThresholdEcdsaSecp256k1 => {
-                    let ecdsa_sig = ecdsa_secp256k1::types::SignatureBytes(
-                        <[u8; 64]>::try_from(combined_sig.signature).expect("Expected 64 bytes"),
-                    );
-                    let ecdsa_pk =
-                        ecdsa_secp256k1::types::PublicKeyBytes(canister_public_key.public_key);
-
-                    assert_eq!(
-                        ecdsa_secp256k1::api::verify(&ecdsa_sig, &inputs.hashed_message, &ecdsa_pk),
-                        Ok(()),
-                        "ECDSA sig verification failed"
-                    );
+                    if let Ok(pk) = ic_secp256k1::PublicKey::deserialize_sec1(&canister_public_key.public_key) {
+                        assert!(pk.verify_ecdsa_signature_prehashed(&inputs.hashed_message, &combined_sig.signature),
+                                "ECDSA sig verification failed");
+                    } else {
+                        panic!("Failed to parse purported canister public key");
+                    }
                 }
                 AlgorithmId::ThresholdEcdsaSecp256r1 => {
-                    let ecdsa_sig = ecdsa_secp256r1::types::SignatureBytes(
-                        <[u8; 64]>::try_from(combined_sig.signature).expect("Expected 64 bytes"),
-                    );
-                    let ecdsa_pk =
-                        ecdsa_secp256r1::types::PublicKeyBytes(canister_public_key.public_key);
-
-                    assert_eq!(
-                        ecdsa_secp256r1::verify(&ecdsa_sig, &inputs.hashed_message, &ecdsa_pk),
-                        Ok(()),
-                        "ECDSA sig verification failed"
-                    );
+                    if let Ok(pk) = ic_secp256r1::PublicKey::deserialize_sec1(&canister_public_key.public_key) {
+                        assert!(pk.verify_signature_prehashed(&inputs.hashed_message, &combined_sig.signature),
+                                "ECDSA sig verification failed");
+                    } else {
+                        panic!("Failed to parse purported canister public key");
+                    }
                 }
                 unexpected => {
                     panic!("Unhandled ECDSA algorithm {unexpected}")
