@@ -20,13 +20,13 @@ pub enum SevRootCertificateVerification {
 /// - Checking the certificate chain and the attestation report signature.
 /// - Checking that the launch measurement is in the list of blessed measurements.
 /// - Checking that the custom data in the attestation report matches the expected custom data.
-/// - Checking that the chip ID matches the expected chip ID (if provided).
+/// - Checking that the chip ID matches one of the expected chip IDs (if provided).
 pub fn verify_attestation_package(
     attestation_package: &SevAttestationPackage,
     sev_root_certificate_verification: SevRootCertificateVerification,
     blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
     expected_custom_data: &(impl EncodeSevCustomData + Debug),
-    expected_chip_id: Option<&[u8]>,
+    expected_chip_ids: Option<&[[u8; 64]]>,
 ) -> Result<(), VerificationError> {
     let Some(ref attestation_report) = attestation_package.attestation_report else {
         return Err(VerificationError::invalid_attestation_report(
@@ -41,12 +41,17 @@ pub fn verify_attestation_package(
             ))
         })?;
 
-    if let Some(expected_chip_id) = expected_chip_id
-        && parsed_attestation_report.chip_id.as_slice() != expected_chip_id
+    if let Some(expected_chip_ids) = expected_chip_ids
+        && !expected_chip_ids.contains(&parsed_attestation_report.chip_id)
     {
         return Err(VerificationError::invalid_chip_id(format!(
-            "Expected chip ID: {expected_chip_id:?}, actual: {:?}",
-            parsed_attestation_report.chip_id
+            "Expected one of chip IDs: {}, actual: {}",
+            expected_chip_ids
+                .iter()
+                .map(hex::encode)
+                .collect::<Vec<_>>()
+                .join(", "),
+            hex::encode(parsed_attestation_report.chip_id)
         )));
     }
 
