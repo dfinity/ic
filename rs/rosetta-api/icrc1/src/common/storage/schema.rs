@@ -1,17 +1,17 @@
 use crate::common::storage::{
+    error::{Result, StorageError},
     storage_operations::{
         METADATA_SCHEMA_VERSION, get_rosetta_metadata, initialize_counter_if_missing,
     },
     types::RosettaCounter,
 };
-use anyhow::bail;
 use rusqlite::{Connection, params};
 
 pub const SCHEMA_VERSION: u64 = 1;
 
 /// Creates all the necessary tables for the ICRC1 Rosetta storage system.
 /// This function is used by both production code and tests to ensure consistency.
-pub fn create_tables(connection: &Connection) -> anyhow::Result<()> {
+pub fn create_tables(connection: &Connection) -> Result<()> {
     // Metadata table
     connection.execute(
         r#"
@@ -76,12 +76,7 @@ pub fn create_tables(connection: &Connection) -> anyhow::Result<()> {
     )?;
 
     // Initialize counters using the new counter management system
-    initialize_counter_if_missing(connection, &RosettaCounter::SyncedBlocks).map_err(|e| {
-        rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_ABORT),
-            Some(format!("Failed to initialize SyncedBlocks counter: {e}")),
-        )
-    })?;
+    initialize_counter_if_missing(connection, &RosettaCounter::SyncedBlocks)?;
 
     // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
     // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
@@ -111,14 +106,16 @@ pub fn create_tables(connection: &Connection) -> anyhow::Result<()> {
     )?;
 
     let stored_schema_version = match get_rosetta_metadata(connection, METADATA_SCHEMA_VERSION)? {
-        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into().map_err(|_| {
+            StorageError::DataIntegrity("Invalid schema version bytes".to_string())
+        })?),
         None => 0,
     };
 
     if stored_schema_version > SCHEMA_VERSION {
-        bail!(format!(
+        return Err(StorageError::DataIntegrity(format!(
             "Selected database has schema version {stored_schema_version} which is incompatible with current schema version {SCHEMA_VERSION}."
-        ));
+        )));
     }
 
     if stored_schema_version != SCHEMA_VERSION {
@@ -132,7 +129,7 @@ pub fn create_tables(connection: &Connection) -> anyhow::Result<()> {
 }
 
 /// Creates all the necessary indexes for optimal query performance.
-pub fn create_indexes(connection: &Connection) -> anyhow::Result<()> {
+pub fn create_indexes(connection: &Connection) -> Result<()> {
     connection.execute(
         r#"
         CREATE INDEX IF NOT EXISTS block_idx_account_balances
