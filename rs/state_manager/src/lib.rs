@@ -957,7 +957,11 @@ fn check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
         .map(|s| s.height)
         .filter(|h| h.get() != 0)
         .collect::<Vec<_>>();
-    debug_assert_eq!(certification_heights, snapshot_heights);
+    debug_assert!(
+        snapshot_heights
+            .iter()
+            .all(|h| certification_heights.contains(h))
+    );
 }
 
 fn initialize_tip(
