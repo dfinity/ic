@@ -80,12 +80,12 @@ def main():
 
     log.info(f"Using args: {args}")
 
-    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
-    # podman (no longer in latest version). bazel strips this out - add it back
-    # manually, for now.
+    # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
+    # strips this out - add it back manually.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
     build_args = list(build_args or [])
+    # tempfile cleanup is handled by proc_wrapper.sh
     context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir

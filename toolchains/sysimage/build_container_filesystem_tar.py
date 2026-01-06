@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import os
 import shutil
-import signal
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -90,13 +88,16 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
+    # tempfile cleanup is handled by proc_wrapper.sh
     tempdir = tempfile.mkdtemp()
     tar_file = tempdir + "/temp.tar"
     fakeroot_statefile = tempdir + "/fakeroot.state"
     tar_dir = tempdir + "/tar"
 
+    # container cleanup is handled by proc_wrapper.sh
     container_name = image_tag + "_container"
-    invoke.run(f"podman create --name {container_name} {image_tag}")
+    sys_tempdir = tempfile.gettempdir()
+    invoke.run(f"podman create --name {container_name} --cidfile {sys_tempdir}/cidfile {image_tag}")
     invoke.run(f"podman export -o {tar_file} {container_name}")
     invoke.run(f"mkdir -p {tar_dir}")
     invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
@@ -201,23 +202,15 @@ def main():
     destination_tar_filename = args.output
     build_args = list(args.build_args or [])
 
-    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
-    # podman (no longer in latest version). bazel strips this out - add it back
-    # manually, for now.
+    # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
+    # strips this out - add it back manually.
     os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
 
     image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files
     component_files = args.component_files
 
-    def cleanup():
-        invoke.run("podman container stop --all")
-        invoke.run("podman container cleanup --all --rm")
-
-    atexit.register(lambda: cleanup())
-    signal.signal(signal.SIGTERM, lambda: cleanup())
-    signal.signal(signal.SIGINT, lambda: cleanup())
-
+    # tempfile cleanup is handled by proc_wrapper.sh
     context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
