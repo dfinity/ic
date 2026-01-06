@@ -806,8 +806,6 @@ mod test {
         expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
     )]
     fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
-        // ECDSA keys require pre-signatures, so not specifying
-        // pre_signatures_to_create_in_advance should return an error
         let mut registry = invariant_compliant_registry(0);
         let subnet_id = subnet_test_id(1000);
 
@@ -837,8 +835,6 @@ mod test {
         expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
-        // VetKd keys don't require pre-signatures, so specifying
-        // pre_signatures_to_create_in_advance should return an error
         let mut registry = invariant_compliant_registry(0);
         let subnet_id = subnet_test_id(1000);
 

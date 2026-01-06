@@ -295,7 +295,7 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
             {
                 return Err(InvariantCheckError {
                     msg: format!(
-                        "pre_signatures_to_create_in_advance for key {key_id} of subnet {subnet_id:} must be present and non-zero",
+                        "pre_signatures_to_create_in_advance for key {key_id} of subnet {subnet_id:} must be non-zero",
                     ),
                     source: None,
                 });

@@ -59,7 +59,8 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
     /// each with a subnet ID to request this key from.
     ///
     /// key_id: Master public key ID formatted as "Scheme:AlgorithmID:KeyName".
-    /// pre_signatures_to_create_in_advance: Non-negative integer value. Omit this for keys without pre-signatures (e.g., vetKD).
+    /// pre_signatures_to_create_in_advance: Non-negative integer value.
+    ///     Omit this for keys without pre-signatures (e.g., vetKD).
     /// max_queue_size: Integer value greater than or equal 1.
     /// subnet_id: Principal ID of a subnet holding the requested key.
     ///

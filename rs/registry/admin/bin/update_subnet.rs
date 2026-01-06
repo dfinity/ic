@@ -90,7 +90,8 @@ pub(crate) struct ProposeToUpdateSubnetCmd {
     /// is new for the specified subnet, it must also not already exist on the IC.
     ///
     /// key_id: master public key ID formatted as "Scheme:AlgorithmID:KeyName".
-    /// pre_signatures_to_create_in_advance: Non-negative integer value. Omit this for keys without pre-signatures (e.g., vetKD).
+    /// pre_signatures_to_create_in_advance: Non-negative integer value.
+    ///     Omit this for keys without pre-signatures (e.g., vetKD).
     /// max_queue_size: integer value greater than or equal 1.
     ///
     /// Example (note that all values, including integers, are represented as strings):
@@ -217,7 +218,11 @@ fn parse_chain_key_configs_option(
                 .map(|x| x.parse::<u32>().expect("max_queue_size must be a u32"))
                 .expect("Each element of the JSON object must specify a 'max_queue_size'."));
 
-            do_update_subnet::KeyConfig { key_id: Some(key_id), pre_signatures_to_create_in_advance, max_queue_size }
+            do_update_subnet::KeyConfig {
+                key_id: Some(key_id),
+                pre_signatures_to_create_in_advance,
+                max_queue_size
+            }
         })
         .collect()
 }

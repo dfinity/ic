@@ -939,18 +939,45 @@ mod tests {
             let (subnet_id, registry, version) =
                 set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
 
-            let config =
+            let result =
                 get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
 
-            assert_matches!(config, Err(RegistryClientError::DecodeError{ error })
-              if error.contains("failed with Missing required struct field: KeyConfig::pre_signatures_to_create_in_advance")
+            assert_matches!(result, Err(RegistryClientError::DecodeError{ error })
+              if error.contains("\
+                   failed with Missing required struct field: \
+                   KeyConfig::pre_signatures_to_create_in_advance\
+              ")
             );
         })
     }
 
     #[test]
-    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some()
-    {
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some_0()
+     {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let malformed_chain_key_config = ChainKeyConfig {
+                key_configs: vec![KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(
+                        VetKdKeyId::from_str("Bls12_381_G2:some_key").unwrap(),
+                    ),
+                    pre_signatures_to_create_in_advance: Some(0),
+                    max_queue_size: 3,
+                }],
+                ..ChainKeyConfig::default()
+            };
+            let (subnet_id, registry, version) =
+                set_up_get_chain_key_config_test(&malformed_chain_key_config, pool_config);
+
+            let config =
+                get_idkg_chain_key_config_if_enabled(subnet_id, version, registry.as_ref());
+
+            assert_matches!(config, Ok(None));
+        })
+    }
+
+    #[test]
+    fn test_get_chain_key_config_if_enabled_malformed_with_pre_sigs_to_create_for_vetkd_being_some_1()
+     {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let malformed_chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {

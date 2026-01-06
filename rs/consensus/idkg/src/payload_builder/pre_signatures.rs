@@ -357,7 +357,7 @@ fn make_new_pre_signatures_if_needed_helper(
         .iter()
         .find(|key_config| &key_config.key_id == key_id.inner())
         .and_then(|key_config| key_config.pre_signatures_to_create_in_advance)
-        .map(|u32| u32 as usize)
+        .map(|pre_sigs_to_create| pre_sigs_to_create as usize)
     else {
         return new_pre_signatures;
     };
