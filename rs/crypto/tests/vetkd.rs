@@ -538,7 +538,7 @@ mod verify_encrypted_key {
     use super::*;
 
     #[test]
-    fn should_err_with_invalidargumentencryptedkey_if_encrypted_key_is_invalid() {
+    fn should_err_if_encrypted_key_is_invalid() {
         let mut rng = reproducible_rng();
         let server = VetKDTestServer::new(&mut rng);
         let client = VetKDTestClient::new(&mut rng, &server);
@@ -563,7 +563,12 @@ mod verify_encrypted_key {
 
         match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
             Ok(_) => panic!("Unexpected success"),
-            Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => { /* expected */ }
+            Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => {
+                // expected if invalid key cannot be deserialized
+            }
+            Err(VetKdKeyVerificationError::VerificationError) => {
+                // expected if invalid key can be deserialized
+            }
             Err(e) => panic!("Unexpected error {:?}", e),
         }
     }
