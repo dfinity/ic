@@ -153,6 +153,7 @@ pub enum ValidNnsFunction {
     PauseCanisterMigrations,
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
+    TakeCanisterSnapshot,
 }
 
 impl ValidNnsFunction {
@@ -281,6 +282,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::SetSubnetOperationalLevel => {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
+            ValidNnsFunction::TakeCanisterSnapshot => (ROOT_CANISTER_ID, "take_canister_snapshot"),
         }
     }
 
@@ -341,6 +343,8 @@ impl ValidNnsFunction {
             ValidNnsFunction::AddSnsWasm | ValidNnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
             }
+
+            ValidNnsFunction::TakeCanisterSnapshot => Topic::ProtocolCanisterManagement,
         }
     }
 
@@ -397,6 +401,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::PauseCanisterMigrations => "Pause Canister Migrations",
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
+            ValidNnsFunction::TakeCanisterSnapshot => "Take Canister Snapshot",
         }
     }
 
@@ -623,6 +628,11 @@ impl ValidNnsFunction {
                 used to take a subnet offline or bring it back online as part of \
                 subnet recovery."
             }
+            ValidNnsFunction::TakeCanisterSnapshot => {
+                "A proposal to take a snapshot of a canister controlled the NNS. \
+                 For an introduction to canister snapshots in general, see \
+                 https://docs.internetcomputer.org/building-apps/canister-management/snapshots ."
+            }
         }
     }
 }
@@ -711,6 +721,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
             NnsFunction::SetSubnetOperationalLevel => {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
+            NnsFunction::TakeCanisterSnapshot => Ok(ValidNnsFunction::TakeCanisterSnapshot),
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {

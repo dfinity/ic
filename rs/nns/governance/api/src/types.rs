@@ -4200,6 +4200,12 @@ pub enum NnsFunction {
     /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
     /// state of the art (as of Oct 2025) way of doing subnet recovery.
     SetSubnetOperationalLevel = 55,
+    /// Does what the name says: takes a canister snapshot.
+    ///
+    /// The canister being snapshotted (the "target" canister) must be
+    /// controlled by the NNS Root canister. This restriction could be relaxed
+    /// later. See nns/.../root.did for the payload type.
+    TakeCanisterSnapshot = 56,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4283,6 +4289,7 @@ impl NnsFunction {
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
+            NnsFunction::TakeCanisterSnapshot => "NNS_FUNCTION_TAKE_CANISTER_SNAPSHOT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4363,6 +4370,7 @@ impl NnsFunction {
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
+            "NNS_FUNCTION_TAKE_CANISTER_SNAPSHOT" => Some(Self::TakeCanisterSnapshot),
             _ => None,
         }
     }

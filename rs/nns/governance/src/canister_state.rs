@@ -394,7 +394,8 @@ fn get_effective_payload(
         | ValidNnsFunction::DeployHostosToSomeNodes
         | ValidNnsFunction::PauseCanisterMigrations
         | ValidNnsFunction::UnpauseCanisterMigrations
-        | ValidNnsFunction::SetSubnetOperationalLevel => Ok(payload.clone()),
+        | ValidNnsFunction::SetSubnetOperationalLevel
+        | ValidNnsFunction::TakeCanisterSnapshot => Ok(payload.clone()),
     }
 }
 
