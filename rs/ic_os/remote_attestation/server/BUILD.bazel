@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -17,4 +17,9 @@ rust_binary(
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],
+)
+
+rust_test(
+    name = "server_test",
+    crate = ":server",
 )

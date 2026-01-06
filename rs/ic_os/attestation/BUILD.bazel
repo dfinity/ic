@@ -40,6 +40,7 @@ rust_library(
         "@crate_index//:itertools",
         "@crate_index//:pem",
         "@crate_index//:prost",
+        "@crate_index//:rand",
         "@crate_index//:ring",
         "@crate_index//:serde",
         "@crate_index//:sev",

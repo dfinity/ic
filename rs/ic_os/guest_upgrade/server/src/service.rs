@@ -1,7 +1,6 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -111,12 +110,12 @@ impl DiskEncryptionKeyExchangeServiceImpl {
 
         let client_public_key = Self::client_public_key_from_request(&request)?;
 
-        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(&client_public_key)
                 .expect("Could not encode client public key"),
             server_tls_public_key: OctetStringRef::new(&self.my_public_key)
                 .expect("Could not encode server public key"),
-        });
+        };
 
         let my_attestation_package = generate_attestation_package(
             sev_firmware.as_mut(),

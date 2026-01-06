@@ -10,7 +10,7 @@ service RemoteAttestationService {
 }
 
 message AttestRequest {
-  // 64-byte long custom data
+  // 64-byte long custom data that will be included in the attestation report, the first 4 bytes must be [1, 0, 0, 0].
   optional bytes custom_data = 1;
 }
 
