@@ -811,17 +811,31 @@ mod verify_combined_sig {
 
             match alg {
                 AlgorithmId::ThresholdEcdsaSecp256k1 => {
-                    if let Ok(pk) = ic_secp256k1::PublicKey::deserialize_sec1(&canister_public_key.public_key) {
-                        assert!(pk.verify_ecdsa_signature_prehashed(&inputs.hashed_message, &combined_sig.signature),
-                                "ECDSA sig verification failed");
+                    if let Ok(pk) =
+                        ic_secp256k1::PublicKey::deserialize_sec1(&canister_public_key.public_key)
+                    {
+                        assert!(
+                            pk.verify_ecdsa_signature_prehashed(
+                                &inputs.hashed_message,
+                                &combined_sig.signature
+                            ),
+                            "ECDSA sig verification failed"
+                        );
                     } else {
                         panic!("Failed to parse purported canister public key");
                     }
                 }
                 AlgorithmId::ThresholdEcdsaSecp256r1 => {
-                    if let Ok(pk) = ic_secp256r1::PublicKey::deserialize_sec1(&canister_public_key.public_key) {
-                        assert!(pk.verify_signature_prehashed(&inputs.hashed_message, &combined_sig.signature),
-                                "ECDSA sig verification failed");
+                    if let Ok(pk) =
+                        ic_secp256r1::PublicKey::deserialize_sec1(&canister_public_key.public_key)
+                    {
+                        assert!(
+                            pk.verify_signature_prehashed(
+                                &inputs.hashed_message,
+                                &combined_sig.signature
+                            ),
+                            "ECDSA sig verification failed"
+                        );
                     } else {
                         panic!("Failed to parse purported canister public key");
                     }

@@ -1,6 +1,6 @@
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::types;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_crypto_secrets_containers::SecretVec;
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 
 // SECP256K1_PK_1_DER_HEX was generated via the following commands:
 //   openssl ecparam -name secp256k1 -genkey -noout -out private.ec.key

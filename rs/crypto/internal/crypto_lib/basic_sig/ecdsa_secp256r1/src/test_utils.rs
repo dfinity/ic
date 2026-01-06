@@ -9,4 +9,3 @@ use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 // test vectors (addition of test vectors for signature creation is more
 // involved as Rust OpenSSL API doesn't seem to provide a way for
 // "de-randomization" of signing operation).
-
