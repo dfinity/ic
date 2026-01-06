@@ -3176,6 +3176,57 @@ impl StateManager for StateManagerImpl {
 
         self.populate_extra_metadata(&mut state, height);
 
+        if let CertificationScope::Metadata = scope {
+            // We want to balance writing too many overlay files with having too many unflushed pages at
+            // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+            // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+            // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+            if let Some(batch_summary) = batch_summary
+                && batch_summary
+                    .next_checkpoint_height
+                    .get()
+                    .saturating_sub(height.get())
+                    == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+            {
+                flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
+            }
+        }
+
+        let latest_subnet_certified_height =
+            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        if matches!(scope, CertificationScope::Metadata)
+            && height.get() < latest_subnet_certified_height
+            && !height.get().is_multiple_of(10)
+        {
+            let mut states = self.states.write();
+            #[cfg(debug_assertions)]
+            check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+            // The following assert validates that we don't have two clients
+            // modifying TIP at the same time and that each commit_and_certify()
+            // is preceded by a call to take_tip().
+            if let Some((tip_height, _)) = &states.tip {
+                fatal!(
+                    self.log,
+                    "Attempt to commit state not borrowed from this StateManager, height = {}, tip_height = {}",
+                    height,
+                    tip_height,
+                );
+            }
+
+            states
+                .certifications_metadata
+                .entry(height)
+                .or_insert_with(|| {
+                    Self::compute_certification_metadata(&self.metrics, &self.log, &state)
+                        .unwrap_or_else(|err| {
+                            fatal!(self.log, "Failed to compute hash tree: {:?}", err)
+                        })
+                });
+
+            states.tip = Some((height, state));
+            return;
+        }
+
         let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
             None;
         let mut follow_up_tip_requests = Vec::new();
@@ -3194,23 +3245,7 @@ impl StateManager for StateManagerImpl {
 
                 state
             }
-            CertificationScope::Metadata => {
-                // We want to balance writing too many overlay files with having too many unflushed pages at
-                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                if let Some(batch_summary) = batch_summary
-                    && batch_summary
-                        .next_checkpoint_height
-                        .get()
-                        .saturating_sub(height.get())
-                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                {
-                    flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
-                }
-
-                Arc::new(state)
-            }
+            CertificationScope::Metadata => Arc::new(state),
         };
 
         let certification_metadata =
@@ -3277,6 +3312,10 @@ impl StateManager for StateManagerImpl {
                 .snapshots
                 .make_contiguous()
                 .sort_by_key(|snapshot| snapshot.height);
+
+            if states.certifications_metadata.contains_key(&height) {
+                update_latest_height(&self.latest_certified_height, height);
+            }
 
             states
                 .certifications_metadata
