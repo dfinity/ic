@@ -213,6 +213,8 @@ impl Execution {
                     instance_stats,
                     system_api_call_counters,
                 };
+                // TODO: (?) update log memory store in execution state.
+
                 self.sandbox_manager.controller.execution_finished(
                     protocol::ctlsvc::ExecutionFinishedRequest {
                         exec_id: self.exec_id,

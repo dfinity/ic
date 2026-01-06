@@ -500,6 +500,7 @@ pub fn apply_canister_state_changes(
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
             }
+            // TODO: (?) update log memory store in execution state.
             round_limits.subnet_available_callbacks -= callbacks_created as i64;
             deallocate(clean_system_state);
 
