@@ -897,6 +897,7 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
+    latest_subnet_certified_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1459,6 +1460,7 @@ impl StateManagerImpl {
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
+        let latest_subnet_certified_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1573,6 +1575,7 @@ impl StateManagerImpl {
             deallocator_thread,
             latest_state_height,
             latest_certified_height,
+            latest_subnet_certified_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -3067,6 +3070,9 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["remove_inmemory_states_below"])
             .start_timer();
+
+        self.latest_subnet_certified_height
+            .store(requested_height.get(), Ordering::Relaxed);
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
