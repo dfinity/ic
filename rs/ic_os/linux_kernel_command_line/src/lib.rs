@@ -13,7 +13,7 @@ pub struct ImproperlyQuotedValue {
 }
 impl StdError for ImproperlyQuotedValue {}
 
-impl fmt::Display for ImproperlyQuotedValue {
+impl Display for ImproperlyQuotedValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -47,14 +47,15 @@ impl KernelCommandLine {
         value: Option<&str>,
     ) -> Result<String, UnrepresentableValue> {
         fn escape_value(val: &str) -> Result<String, UnrepresentableValue> {
-            Ok(if val.contains("\"") || val.contains("\n") {
-                return Err(UnrepresentableValue(val.to_string()));
+            if val.contains("\"") || val.contains("\n") {
+                Err(UnrepresentableValue(val.to_string()))
             } else if val.contains(" ") {
-                format!("\"{val}\"")
+                Ok(format!("\"{val}\""))
             } else {
-                val.to_string()
-            })
+                Ok(val.to_string())
+            }
         }
+
         if let Some(val) = value {
             Ok(format!("{}={}", argument, escape_value(val)?))
         } else {
@@ -65,22 +66,23 @@ impl KernelCommandLine {
     /// Remove an argument from a kernel command line, however many times it appears.
     /// Returns the position of the first removed argument.
     pub fn remove_argument(&mut self, argument: &str) -> Option<usize> {
-        let mut firstpos: Option<usize> = None;
-        self.tokenized_arguments = self
-            .tokenized_arguments
-            .clone()
-            .into_iter()
-            .enumerate()
-            .filter(|(pos, arg)| {
-                let res =
-                    *arg != argument && !arg.starts_with((argument.to_owned() + "=").as_str());
-                if !res && firstpos.is_none() {
-                    firstpos.replace(*pos);
-                }
-                res
-            })
-            .map(|(_, x)| x)
-            .collect();
+        let starts_with_argument = |haystack: &str| {
+            // haystack must be exactly argument or have argument=... format
+            haystack
+                .strip_prefix(argument)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with('='))
+        };
+
+        let mut firstpos = None;
+        let mut pos = 0;
+        self.tokenized_arguments.retain(|arg| {
+            let should_remove = starts_with_argument(arg);
+            if should_remove && firstpos.is_none() {
+                firstpos = Some(pos);
+            }
+            pos += 1;
+            !should_remove
+        });
         firstpos
     }
 
@@ -164,43 +166,43 @@ impl FromStr for KernelCommandLine {
     type Err = ImproperlyQuotedValue;
 
     fn from_str(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
-        let mut res: Vec<String> = vec![];
-        let mut curr = String::new();
-        let mut is_quoted = false;
+        let mut tokenized_arguments = vec![];
+        let mut current_token = String::new();
+        let mut inside_quote = false;
+
         for ch in cmdline.chars() {
-            match ch {
-                '"' => {
-                    if is_quoted {
-                        curr.push(ch);
-                        res.push(curr);
-                        curr = String::new();
-                        is_quoted = false;
-                    } else {
-                        curr.push(ch);
-                        is_quoted = true;
+            match (ch, inside_quote) {
+                // starting quoted string
+                ('"', false) => {
+                    current_token.push(ch);
+                    inside_quote = true;
+                }
+                // ending quoted string
+                ('"', true) => {
+                    current_token.push(ch);
+                    tokenized_arguments.push(std::mem::take(&mut current_token));
+                    inside_quote = false;
+                }
+                // space outside quoted string
+                (' ', false) => {
+                    if !current_token.is_empty() {
+                        tokenized_arguments.push(std::mem::take(&mut current_token));
                     }
                 }
-                ' ' => {
-                    if is_quoted {
-                        curr.push(ch);
-                    } else if !curr.is_empty() {
-                        res.push(curr);
-                        curr = String::new();
-                    }
-                }
-                _ => {
-                    curr.push(ch);
-                }
+                _ => current_token.push(ch),
             }
         }
-        if !curr.is_empty() {
-            if is_quoted {
-                return Err(ImproperlyQuotedValue { val: curr });
-            }
-            res.push(curr);
+
+        if inside_quote {
+            return Err(ImproperlyQuotedValue { val: current_token });
         }
+
+        if !current_token.is_empty() {
+            tokenized_arguments.push(current_token);
+        }
+
         Ok(Self {
-            tokenized_arguments: res,
+            tokenized_arguments,
         })
     }
 }
