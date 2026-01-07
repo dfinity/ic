@@ -93,9 +93,6 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
     # CI before script requires sudo \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Add gitconfig
-COPY ./ci/container/files/gitconfig /etc/gitconfig
-
 # Install AFLplusplus for fuzzing
 # LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
 ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
