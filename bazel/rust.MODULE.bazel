@@ -1873,10 +1873,6 @@ crate.spec(
     version = "^1.240.0",
 )
 crate.spec(
-    package = "wee_alloc",
-    version = "^0.4.3",
-)
-crate.spec(
     package = "which",
     version = "^4.2.2",
 )
