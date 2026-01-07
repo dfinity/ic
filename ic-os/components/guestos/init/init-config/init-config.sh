@@ -83,7 +83,7 @@ mkdir /run/config
 mkdir /run/config/bootstrap
 
 # Check if ic-bootstrap.tar exists (backward compatibility with older HostOS versions)
-# TODO: Remove this check once all nodes have HostOS that supports tarless configuration.
+# TODO(NODE-1821): Remove this check once all nodes have HostOS that supports tarless configuration.
 if [ -f /mnt/config/ic-bootstrap.tar ]; then
     echo "Found ic-bootstrap.tar, using legacy tar-based configuration"
 
