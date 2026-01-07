@@ -90,16 +90,15 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
 # Add gitconfig
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 
-# Install LLVM deps for fuzzing
+# Install AFLplusplus for fuzzing
+# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
 ARG LLVM_VERSION=21
 RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
     echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev
-
-# Install afl for fuzzing
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
-RUN mkdir -p /afl && \
+    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
+    mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
@@ -107,7 +106,8 @@ RUN mkdir -p /afl && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
     STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
     mv afl-fuzz afl-showmap  /afl && \
-    cd .. && rm -rf AFLplusplus
+    cd .. && rm -rf AFLplusplus && \
+    apt -yqq remove lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev
 
 # Pre-populate the Bazel installation for root
 # (note: this is only used for bash completion; the actual bazel version comes from bazelisk)
