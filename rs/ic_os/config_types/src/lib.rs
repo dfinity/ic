@@ -20,6 +20,15 @@
 //! ## Logging safety
 //!
 //! All configuration objects defined in this file are safe to log. They do not contain any secret material.
+//!
+//! ## Note on `Default` implementations
+//!
+//! The `Default` implementations on the OS config structs (`SetupOSConfig`, `HostOSConfig`,
+//! `GuestOSConfig`) are **only intended for use in unit tests**. Some default values are
+//! not meaningful (e.g., `config_version` defaults to `""`, `mgmt_mac` defaults to
+//! `00:00:00:00:00:00`).
+//! **Do not use these defaults in system tests or production code.** For system tests,
+//! always construct a custom config explicitly.
 use ic_types::malicious_behavior::MaliciousBehavior;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
