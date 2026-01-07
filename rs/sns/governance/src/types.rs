@@ -1965,7 +1965,7 @@ impl From<ManageLedgerParameters> for LedgerUpgradeArgs {
         } = manage_ledger_parameters;
 
         let metadata = token_logo.map(|token_logo| {
-            let key = MetadataKey::ICRC1_LOGO.to_string();
+            let key = MetadataKey::parse(MetadataKey::ICRC1_LOGO).unwrap();
             let value = MetadataValue::Text(token_logo);
             vec![(key, value)]
         });
