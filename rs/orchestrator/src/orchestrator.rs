@@ -42,6 +42,13 @@ use std::{
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(target_os = "linux")]
+use {
+    ic_sev::guest::is_sev_active,
+    sev::firmware::guest::{AttestationReport, Firmware},
+    sev::parser::ByteParser,
+};
+
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 /// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
@@ -92,6 +99,52 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
             "Couldn't parse the contents of {:?}: {:?}", path, err
         );
     })
+}
+
+/// Retrieves the AMD SEV chip ID from the attestation report, if SEV is active.
+/// Returns `None` if SEV is not active or if there's any error retrieving the chip ID.
+#[cfg(target_os = "linux")]
+fn get_sev_chip_id(logger: &ReplicaLogger) -> Option<Vec<u8>> {
+    if !is_sev_active().unwrap_or(false) {
+        info!(
+            logger,
+            "SEV is not active, chip_id will not be included in registration"
+        );
+        return None;
+    }
+
+    let mut firmware = match Firmware::open() {
+        Ok(f) => f,
+        Err(e) => {
+            warn!(logger, "Failed to open SEV firmware: {:?}", e);
+            return None;
+        }
+    };
+
+    let report_bytes = match firmware.get_report(None, None, None) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            warn!(
+                logger,
+                "Failed to get attestation report from SEV firmware: {:?}", e
+            );
+            return None;
+        }
+    };
+
+    match AttestationReport::from_bytes(&report_bytes) {
+        Ok(report) => {
+            info!(
+                logger,
+                "Successfully retrieved chip_id from SEV attestation report"
+            );
+            Some(report.chip_id.to_vec())
+        }
+        Err(e) => {
+            warn!(logger, "Failed to parse attestation report: {:?}", e);
+            None
+        }
+    }
 }
 
 impl Orchestrator {
@@ -210,6 +263,13 @@ impl Orchestrator {
             .with_label_values(&[replica_version.as_ref()])
             .set(1);
 
+        // Get the chip_id from SEV firmware if SEV is active
+        #[cfg(target_os = "linux")]
+        let chip_id: Option<Vec<u8>> = get_sev_chip_id(&logger);
+
+        #[cfg(not(target_os = "linux"))]
+        let chip_id: Option<Vec<u8>> = None;
+
         let mut registration = NodeRegistration::new(
             logger.clone(),
             config.clone(),
@@ -218,6 +278,7 @@ impl Orchestrator {
             node_id,
             Arc::clone(&crypto) as _,
             registry_local_store.clone(),
+            chip_id,
         );
 
         let replica_process = Arc::new(Mutex::new(ProcessManager::new(logger.clone())));

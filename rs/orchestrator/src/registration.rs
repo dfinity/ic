@@ -71,6 +71,7 @@ pub(crate) struct NodeRegistration {
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
     display_qr_code: bool,
+    chip_id: Option<Vec<u8>>,
 }
 
 impl NodeRegistration {
@@ -84,6 +85,7 @@ impl NodeRegistration {
         node_id: NodeId,
         key_handler: Arc<dyn NodeRegistrationCrypto>,
         local_store: Arc<dyn LocalStore>,
+        chip_id: Option<Vec<u8>>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
         // we use the given node operator private key to register the node.
@@ -127,6 +129,7 @@ impl NodeRegistration {
             // fully complete and tested, this will be the default, and will be
             // removed.
             display_qr_code: cfg!(test),
+            chip_id,
         }
     }
 
@@ -275,7 +278,7 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            chip_id: None,
+            chip_id: self.chip_id.clone(),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -1133,6 +1136,7 @@ mod tests {
                     node_id,
                     Arc::new(key_handler),
                     local_store,
+                    None,
                 );
 
                 Setup {
