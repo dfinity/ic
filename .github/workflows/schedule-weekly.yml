@@ -1,8 +1,9 @@
 name: Schedule Weekly
 
 on:
-  schedule:
-    - cron: "0 8 * * 3"
+  # Schedule is temporarily disabled as Clusterfuzz is not active anymore
+  # schedule:
+  #   - cron: "0 8 * * 3"
   workflow_dispatch:
 
 jobs:
@@ -23,24 +24,18 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Install gsutil
-        shell: bash
-        run: |
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add -
-          apt -yqq install --no-install-recommends google-cloud-cli gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
-          gsutil --version
-      - name: Load Service Account Key to file
-        env:
-          FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}
-        run: |
-          echo $FUZZING_GCP_SERVICE_KEY | base64 --decode > bin/fuzzing/fuzzing_service_account.json
+      - name: Authenticate GCloud
+        id: 'auth'
+        uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' # v3 latest
+        with:
+          credentials_json: '${{ secrets.FUZZING_GCP_SERVICE_KEY}}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db' # v3.0.1
       - name: Build and Push Fuzzers to GCP
         shell: bash
         run: |
           cd bin/fuzzing/
-          gcloud auth activate-service-account --key-file fuzzing_service_account.json
           ./build-all-fuzzers.sh --zip
           cd fuzzer_build
-          gsutil -m cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
-          gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
+          gcloud storage cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
+          gcloud storage cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
