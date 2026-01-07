@@ -7,6 +7,9 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+#[cfg(test)]
+mod tests;
+
 use crate::{
     API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
     convert::{self, neuron_account_from_public_key},
