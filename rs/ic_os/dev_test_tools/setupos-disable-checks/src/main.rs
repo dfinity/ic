@@ -87,6 +87,8 @@ fn process_cmdline(input: &str, compat: bool) -> Result<String> {
     let mut cmdline = KernelCommandLine::from_str(boot_args)?;
     cmdline.ensure_single_argument("ic.setupos.run_checks", Some("0"))?;
 
+    // TODO: Remove with NODE-1791
+    // Disable old flags for temporary backwards compatibility
     if compat {
         cmdline.ensure_single_argument("ic.setupos.check_hardware", Some("0"))?;
         cmdline.ensure_single_argument("ic.setupos.check_network", Some("0"))?;
