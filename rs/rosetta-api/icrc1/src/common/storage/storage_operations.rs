@@ -594,6 +594,7 @@ pub fn store_blocks(
             crate::common::storage::types::IcrcOperation::FeeCollector {
                 fee_collector: _,
                 caller: _,
+                mthd: _,
             } => (
                 "107feecol",
                 None,

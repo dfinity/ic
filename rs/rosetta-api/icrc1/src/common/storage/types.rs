@@ -371,6 +371,7 @@ pub enum IcrcOperation {
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
+        mthd: Option<String>,
     },
 }
 
@@ -431,13 +432,15 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                     expires_at,
                 })
             }
-            "107set_fee_collector" => {
+            "107feecol" => {
                 let fee_collector: Option<Account> =
                     get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
                 let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
                 Ok(Self::FeeCollector {
                     fee_collector,
                     caller,
+                    mthd,
                 })
             }
             found => {
@@ -524,13 +527,17 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
             Op::FeeCollector {
                 fee_collector,
                 caller,
+                mthd,
             } => {
-                map.insert("op".to_string(), Value::text("107set_fee_collector"));
+                map.insert("op".to_string(), Value::text("107feecol"));
                 if let Some(fee_collector) = fee_collector {
                     map.insert("fee_collector".to_string(), Value::from(fee_collector));
                 }
                 if let Some(caller) = caller {
                     map.insert("caller".to_string(), Value::from(caller));
+                }
+                if let Some(mthd) = mthd {
+                    map.insert("mthd".to_string(), Value::text(mthd));
                 }
             }
         }
@@ -649,9 +656,11 @@ where
             Op::FeeCollector {
                 fee_collector,
                 caller,
+                mthd,
             } => Self::FeeCollector {
                 fee_collector,
                 caller,
+                mthd,
             },
         }
     }
@@ -778,11 +787,20 @@ mod tests {
         (
             option::of(arb_account()),   // fee_collector
             option::of(arb_principal()), // caller
+            prop_oneof![
+                Just(None),
+                Just(Some("107feecol".to_string())),
+                Just(Some("107set_fee_collector".to_string())),
+                Just(Some("other_mthd".to_string()))
+            ],
         )
-            .prop_map(|(fee_collector, caller)| IcrcOperation::FeeCollector {
-                fee_collector,
-                caller,
-            })
+            .prop_map(
+                |(fee_collector, caller, mthd)| IcrcOperation::FeeCollector {
+                    fee_collector,
+                    caller,
+                    mthd,
+                },
+            )
     }
 
     fn arb_op() -> impl Strategy<Value = IcrcOperation> {
@@ -837,6 +855,7 @@ mod tests {
                         IcrcOperation::FeeCollector {
                             fee_collector: _,
                             caller: _,
+                            mthd: _,
                         } => Some("107feecol".to_string()),
                         _ => None,
                     },
@@ -1043,10 +1062,12 @@ mod tests {
                 ic_icrc1::Operation::FeeCollector {
                     fee_collector,
                     caller,
+                    mthd,
                 },
                 IcrcOperation::FeeCollector {
                     fee_collector: rosetta_fee_collector,
                     caller: rosetta_caller,
+                    mthd: rosetta_mthd,
                 },
             ) => {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
