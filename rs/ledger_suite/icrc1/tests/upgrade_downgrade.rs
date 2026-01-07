@@ -10,7 +10,6 @@ use ic_ledger_suite_state_machine_tests_constants::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime};
 

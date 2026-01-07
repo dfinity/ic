@@ -5,7 +5,6 @@ use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, Le
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_helpers::get_logs;
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
