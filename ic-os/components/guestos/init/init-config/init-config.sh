@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Initialize configuration in /run/config from bootstrap package.
+# Initialize configuration in /run/config from config partition.
 
 set -eo pipefail
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
-# List all block devices that could potentially contain the ic-bootstrap.tar configuration,
+# List all block devices that could potentially contain the configuration,
 # i.e. "removable" devices, devices with the serial "config"
 # or devices containing a filesystem with the label "CONFIG".
 function find_config_devices() {
@@ -52,6 +52,8 @@ function mount_config_device() {
         if [ "$config_device" != "" ]; then
             echo "Found CONFIG device at $config_device, creating mount at /mnt/config"
 
+            # Ensure that the config device is vfat. If we ever change to another filesystem type, we should ensure
+            # that it only contains regular files and directories (not symlinks, devices, etc.).
             if mount -t vfat -o ro "$config_device" /mnt/config; then
                 echo "Successfully mounted CONFIG device at /mnt/config"
                 return 0
@@ -77,16 +79,34 @@ fi
 
 trap "umount /mnt/config" EXIT
 
-# Verify that ic-bootstrap.tar contains only regular files (-) and directories (d)
-if tar -tvf /mnt/config/ic-bootstrap.tar | cut -c 1 | grep -E -q '[^-d]'; then
-    echo "ic-bootstrap.tar contains non-regular files, aborting"
+mkdir /run/config
+mkdir /run/config/bootstrap
+
+# Check if ic-bootstrap.tar exists (backward compatibility with older HostOS versions)
+# TODO(NODE-1821): Remove this check once all nodes have HostOS that supports tarless configuration.
+if [ -f /mnt/config/ic-bootstrap.tar ]; then
+    echo "Found ic-bootstrap.tar, using legacy tar-based configuration"
+
+    # Verify that ic-bootstrap.tar contains only regular files (-) and directories (d)
+    if tar -tvf /mnt/config/ic-bootstrap.tar | cut -c 1 | grep -E -q '[^-d]'; then
+        echo "ic-bootstrap.tar contains non-regular files, aborting"
+        exit 1
+    fi
+
+    tar xf /mnt/config/ic-bootstrap.tar -C /run/config/bootstrap
+else
+    echo "Using direct file-based configuration"
+    cp -r /mnt/config/* /run/config/bootstrap/
+fi
+
+if [ -f /run/config/bootstrap/config.json ]; then
+    cp /run/config/bootstrap/config.json /run/config/config.json
+    chown ic-replica:nogroup /run/config/config.json
+else
+    echo "config.json not found in config partition"
     exit 1
 fi
 
-mkdir -p /run/config/bootstrap
-tar xf /mnt/config/ic-bootstrap.tar -C /run/config/bootstrap
-cp /run/config/bootstrap/config.json /run/config/config.json
-chown ic-replica:nogroup /run/config/config.json
 /opt/ic/bin/config populate-nns-public-key
 
 # Create file under /run/config/guest_vm_type, this can be used to add ConditionPathExists conditions to systemd units
