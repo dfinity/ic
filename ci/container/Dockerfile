@@ -10,17 +10,6 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
-RUN apt -yqq install --no-install-recommends podman containernetworking-plugins buildah zip fuse-overlayfs xtail
-
-# install afl & gsutils deps for bazel-fuzzers
-RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends lld-18 llvm-18 llvm-18-dev clang-18 libclang-rt-18-dev google-cloud-cli \
-    gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
-
 # Install a version of google-android-platform-tools-installer with e2fsdroid
 RUN export DEBIAN_FRONTEND=noninteractive && \
     mkdir e2fsdroid && \
@@ -93,13 +82,6 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
 ARG motoko_version=0.14.7
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux-x86_64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
-# Add kubectl
-ARG KUBECTL_BIN="/usr/local/bin/kubectl"
-ARG KUBECTL_VERSION="1.22.17"
-RUN curl -sSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl" -o "${KUBECTL_BIN}" && \
-    echo "7506a0ae7a59b35089853e1da2b0b9ac0258c5309ea3d165c3412904a9051d48  ${KUBECTL_BIN}" | sha256sum -c - && \
-    chmod +x "${KUBECTL_BIN}"
-
 # Create user groups needed for github actions runner
 RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubuntu buildifier && \
     # CI before script requires sudo \
@@ -108,15 +90,21 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
 # Add gitconfig
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 
-# Install AFLplusplus
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.21c
-RUN mkdir -p /afl && \
+# Install AFLplusplus for fuzzing
+# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
+ARG LLVM_VERSION=21
+RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
+    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    apt -yq update && \
+    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
+    mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make install && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
@@ -135,7 +123,6 @@ USER ubuntu
 
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
-ENV PYTHONPATH=/ic/ci/src:/ic/ci/src/dependencies:$PYTHONPATH
 
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
@@ -154,7 +141,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 RUN rm -rf /tmp/rust-version
 
 # Add cargo-audit
-ARG CARGO_AUDIT_VERSION=0.21.0
+ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc

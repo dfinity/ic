@@ -90,6 +90,7 @@ rust_test(
         "@crate_index//:clap",
         "@crate_index//:rand",
         "@crate_index//:reqwest",
+        "@crate_index//:rstest",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
         "@crate_index//:slog",

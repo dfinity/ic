@@ -631,6 +631,16 @@ pub mod proposal {
         /// charged for the use of computational resources (mainly, executing
         /// instructions, storing data, network, etc.)
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// The main use case for this is when the virtual machine (VM) where
+        /// replica runs is totally hosed such that it cannot be upgraded (and
+        /// therefore fixed) using the usual mechanisms. When the VM is started
+        /// with this alternative software, a signed copy of the ProposalInfo is
+        /// passed to the VM, and read at boot time to prove that NNS has
+        /// approved this alternative set of software. One of the main goals of
+        /// this alternative software would generally be to bring the system
+        /// back to a healthy state, to recover from some kind of disaster, like
+        /// a boot loop, or something like that.
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1388,6 +1398,7 @@ pub enum ProposalActionRequest {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 #[derive(
@@ -2661,6 +2672,44 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    pub chip_ids: Option<Vec<Vec<u8>>>,
+    pub rootfs_hash: Option<String>,
+    pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+/// See also the definition of GuestLaunchMeasurements (plural!) in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurements {
+    pub guest_launch_measurements: Option<Vec<GuestLaunchMeasurement>>,
+}
+
+/// See also the definition of GuestLaunchMeasurement in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurement {
+    pub measurement: Option<Vec<u8>>,
+    pub metadata: Option<GuestLaunchMeasurementMetadata>,
+}
+
+/// See also the definition of GuestLaunchMeasurementMetadata in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurementMetadata {
+    pub kernel_cmdline: Option<String>,
+}
+
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -4518,6 +4567,7 @@ pub enum SelfDescribingValue {
     Text(String),
     Nat(Nat),
     Int(Int),
+    Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
 }

@@ -1,5 +1,6 @@
 use super::*;
 
+use crate::proposals::self_describing::LocallyDescribableProposalAction;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
@@ -10,6 +11,8 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::SelfDescribingValue;
+use maplit::hashmap;
 use std::collections::BTreeMap;
 
 fn create_test_neuron_store() -> NeuronStore {
@@ -495,5 +498,67 @@ fn test_validate_duplicate_committed_topics() {
         Err(error) if error.error_type == ErrorType::InvalidProposal as i32
             && error.error_message.contains("Duplicate topic found in committed_topics")
             && error.error_message.contains("3")
+    );
+}
+
+#[test]
+fn test_known_neuron_to_self_describing() {
+    let known_neuron = KnownNeuron {
+        id: Some(NeuronId { id: 123 }),
+        known_neuron_data: Some(KnownNeuronData {
+            name: "Test Neuron".to_string(),
+            description: Some("Description".to_string()),
+            links: vec!["https://test.com".to_string()],
+            committed_topics: vec![Topic::Governance as i32],
+        }),
+    };
+
+    let action = known_neuron.to_self_describing_action();
+    let value = SelfDescribingValue::from(action.value.unwrap());
+
+    assert_eq!(
+        value,
+        SelfDescribingValue::Map(hashmap! {
+            "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
+            "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
+                "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
+                "description".to_string() => SelfDescribingValue::Text("Description".to_string()),
+                "links".to_string() => SelfDescribingValue::Array(vec![
+                    SelfDescribingValue::Text("https://test.com".to_string())
+                ]),
+                "committed_topics".to_string() => SelfDescribingValue::Array(vec![
+                    SelfDescribingValue::Text("Governance".to_string())
+                ]),
+            }),
+        })
+    );
+}
+
+#[test]
+fn test_known_neuron_to_self_describing_empty_fields() {
+    let known_neuron = KnownNeuron {
+        id: Some(NeuronId { id: 123 }),
+        known_neuron_data: Some(KnownNeuronData {
+            name: "Test Neuron".to_string(),
+            description: None,
+            links: vec![],
+            committed_topics: vec![],
+        }),
+    };
+
+    let action = known_neuron.to_self_describing_action();
+    let value = SelfDescribingValue::from(action.value.unwrap());
+
+    assert_eq!(
+        value,
+        SelfDescribingValue::Map(hashmap! {
+            "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123u64)),
+            "known_neuron_data".to_string() => SelfDescribingValue::Map(hashmap! {
+                "name".to_string() => SelfDescribingValue::Text("Test Neuron".to_string()),
+                "description".to_string() => SelfDescribingValue::Null,
+                "links".to_string() => SelfDescribingValue::Array(vec![]),
+                "committed_topics".to_string() => SelfDescribingValue::Array(vec![]),
+            }),
+        })
     );
 }

@@ -5,6 +5,7 @@ pub mod delete_canister;
 pub mod ledger_client;
 pub mod management_canister_client;
 pub mod stop_canister;
+pub mod take_canister_snapshot;
 pub mod update_settings;
 
 mod request;

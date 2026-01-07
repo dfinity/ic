@@ -232,6 +232,12 @@ type InitArgs = record {
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -264,6 +270,12 @@ type UpgradeArgs = record {
 
     /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
     get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
@@ -418,6 +430,12 @@ type EventType = variant {
         kyt_provider : opt principal;
         reimbursement_account : opt Account;
     };
+    created_consolidate_utxos_request : record {
+        amount : nat64;
+        address : BitcoinAddress;
+        block_index : nat64;
+        received_at : nat64;
+    };
     distributed_kyt_fee : record {
         kyt_provider : principal;
         amount : nat64;
@@ -432,6 +450,7 @@ type EventType = variant {
         submitted_at : nat64;
         fee: opt nat64;
         withdrawal_fee : opt WithdrawalFee;
+        signed_tx: opt blob;
     };
     replaced_transaction : record {
         new_txid : blob;
@@ -494,6 +513,94 @@ type MinterArg = variant {
     Init : InitArgs;
     Upgrade : opt UpgradeArgs;
 };
+
+type MemoType = variant {
+    Burn;
+    Mint;
+};
+
+type DecodeLedgerMemoArgs = record {
+    // The encoded memo type
+    memo_type : MemoType;
+    // The encoded memo from a minter transaction on the ledger
+    encoded_memo : blob;
+};
+
+type Status = variant {
+    // The minter accepted a retrieve_btc request.
+    Accepted;
+    // The minter rejected a retrieve_btc due to a failed Bitcoin check.
+    Rejected;
+    CallFailed;
+};
+
+type MintMemo = variant {
+    // The minter converted a single UTXO to ckBTC.
+    Convert : record {
+        // The transaction ID of the accepted UTXO.
+        txid : opt blob;
+        // UTXO's output index within the BTC transaction.
+        vout : opt nat32;
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+    };
+    // [deprecated] The minter minted accumulated check fees to the KYT provider.
+    Kyt;
+    // [deprecated] The minter failed to check retrieve btc destination address
+    // or the destination address is tainted.
+    KytFail : record {
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+        associated_burn_index : opt nat64;
+    };
+    ReimburseWithdrawal : record {
+        // The id corresponding to the withdrawal request,
+        // which corresponds to the ledger burn index.
+        withdrawal_id : nat64;
+    };
+};
+
+type BurnMemo = variant {
+    // The minter processed a retrieve_btc request.
+    Convert : record {
+        // The destination of the retrieve BTC request.
+        address : opt text;
+        // The check fee for the burn.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+    };
+    // The minter consolidated UTXOs.
+    Consolidate : record {
+        // The total value of the consolidated UTXOs.
+        value : nat64;
+        // The number of input UTXOs that were consolidated.
+        inputs : nat64;
+    };
+};
+
+type DecodedMemo = variant {
+    // The decoded MintMemo - `opt` since other variants of `MintMemo` could be added in the future.
+    Mint : opt MintMemo;
+    // The decoded BurnMemo - `opt` since other variants of `BurnMemo` could be added in the future.
+    Burn : opt BurnMemo;
+};
+
+type DecodeLedgerMemoError = variant {
+    // The provided memo could not be decoded.
+    InvalidMemo : text;
+};
+
+type DecodeLedgerMemoResult = variant {
+    // The decoded memo, if the minter was able to decode it. This field is `opt`, so that other memo types can be
+    // added in the future.
+    Ok : opt DecodedMemo;
+    // An error in case the minter was not able to decode the provided memo. This field is `opt`, so that other error
+    // types can be added in the future.
+    Err : opt DecodeLedgerMemoError;
+}
 
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
@@ -605,4 +712,9 @@ service : (minter_arg : MinterArg) -> {
     // The ckBTC minter authors do not guarantee backward compatibility for this method.
     get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
     // }}} Section "Event log"
+
+    // Section "Transaction Information" {{{
+    // Returns information related to minter transactions.
+    decode_ledger_memo : (DecodeLedgerMemoArgs) -> (DecodeLedgerMemoResult) query;
+    // }}}
 }

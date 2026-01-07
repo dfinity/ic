@@ -1695,7 +1695,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
@@ -2009,6 +2009,8 @@ impl ExecutionEnvironment {
         //   - `InstallChunkedCode`
         //   - `TakeCanisterSnapshot`
         //   - `LoadCanisterSnapshot`
+        //   - `ReadCanisterSnapshotData`
+        //   - `ReadCanisterSnapshotMetadata`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
@@ -3038,13 +3040,9 @@ impl ExecutionEnvironment {
         );
         // Put canister back.
         state.put_canister_state(canister);
-
         match result {
-            Ok(instructions_token) => (Ok(Encode!(&()).unwrap()), instructions_token),
-            Err(e) => (
-                Err(UserError::from(e)),
-                MessageExecutionInstructions::none(),
-            ),
+            (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
         }
     }
 

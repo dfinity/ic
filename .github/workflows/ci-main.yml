@@ -26,9 +26,9 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
+      image: ghcr.io/dfinity/ic-build@sha256:d061ef470d2b84a79eb73746f03ca2d7854de9cd01c8c94dd0cfe2d6a2048606
       options: >-
-         -e NODE_NAME --privileged --cgroupns host
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 90
     steps:
       - &checkout
@@ -88,7 +88,7 @@ jobs:
           elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
-              release_build="true"
+              release_build="false"
               diff_only="false"
               skip_long_tests="false"
           elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
@@ -148,6 +148,12 @@ jobs:
   bazel-test-all:
     name: Bazel Test All
     needs: [config]
+    environment:
+      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
+      # when `release-build == 'true'` but not otherwise.
+      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 150
@@ -240,9 +246,9 @@ jobs:
             bazel_do build
             bazel_do test
 
-      - name: Upload to S3
+      - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
-        if: needs.config.outputs.release-build == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        if: needs.config.outputs.release-build == 'true'
         with:
           name: Bazel Test All
           # with --check_up_to_date Bazel will error out if the artifacts
@@ -254,6 +260,12 @@ jobs:
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
     needs: [config]
+    environment:
+      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
+      # when `release-build == 'true'` but not otherwise.
+      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
     timeout-minutes: 180
     runs-on:
       labels: macOS
@@ -384,11 +396,14 @@ jobs:
   # Upload external artifacts, retrieved from non-DFINITY runner builds.
   upload-external-artifacts:
     name: Upload external artifacts
+    needs: [bazel-test-arm64, config]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    # The `Upload artifacts` step below requires the CLOUD_CREDENTIALS_CONTENT secret
+    # which is only available in the `upload-artifacts` environment.
+    environment: upload-artifacts
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
-    needs: [bazel-test-arm64, config]
-    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
     steps:
       - uses: actions/checkout@v4
       - name: Download pocket-ic-server (arm64-linux)
@@ -419,7 +434,7 @@ jobs:
 
           echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
 
-      - name: Upload
+      - name: Upload artifacts
         uses: ./.github/actions/upload-artifacts
         with:
           name: arm64 artifacts
@@ -582,7 +597,8 @@ jobs:
             -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
             execlogs-cache/execlogs.csv \
             execlogs-nocache/execlogs.csv \
-            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }'
+            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }' \
+            | column -t | sort
 
   bazel-build-all-no-cache:
     name: Bazel Build All No Cache

@@ -1385,10 +1385,10 @@ fn test_fee_collector_107() {
         block_id + 1
     };
 
-    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>| {
+    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
         let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
             .with_btype("107feecol".to_string())
-            .fee_collector(fc, None, None)
+            .fee_collector(fc, None, None, mthd)
             .build();
 
         assert_eq!(
@@ -1411,7 +1411,8 @@ fn test_fee_collector_107() {
     assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None);
+    block_id =
+        add_fee_collector_107_block(block_id, None, Some("107set_fee_collector".to_string()));
 
     // No fees collected
     block_id = add_mint_block(block_id, None, None);
@@ -1425,7 +1426,7 @@ fn test_fee_collector_107() {
     assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to fee_collector_2
-    block_id = add_fee_collector_107_block(block_id, Some(feecol_107));
+    block_id = add_fee_collector_107_block(block_id, Some(feecol_107), None);
 
     // New fee collector receives the fees
     block_id = add_mint_block(block_id, None, None);
@@ -1444,7 +1445,7 @@ fn test_fee_collector_107() {
     assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None);
+    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
 
     // No fees collected
     add_mint_block(block_id, None, None);
@@ -1476,8 +1477,8 @@ fn add_custom_block(
 }
 
 #[test]
-fn test_fee_collector_107_irregular_op() {
-    const UNRECOGNIZED_OP_NAME: &str = "non_standard_fee_col_setter_endpoint_method_name";
+fn test_fee_collector_107_irregular_mthd() {
+    const UNRECOGNIZED_MTHD_NAME: &str = "non_standard_fee_col_setter_endpoint_method_name";
 
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
@@ -1485,32 +1486,24 @@ fn test_fee_collector_107_irregular_op() {
     let feecol_107 = account(102, 0);
 
     let tx_fields = vec![
-        ("op", ICRC3Value::Text(UNRECOGNIZED_OP_NAME.to_string())),
+        ("mthd", ICRC3Value::Text(UNRECOGNIZED_MTHD_NAME.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
-    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block with btype '107feecol' but unrecognized tx.op parsed successfully by index");
-    let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
-    assert!(
-        index_err_logs.contains(&expected_log_msg),
-        "index logs did not contain expected string '{}': {}",
-        expected_log_msg,
-        index_err_logs
-    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
 #[test]
-fn test_fee_collector_107_mthd_instead_of_op() {
+fn test_fee_collector_107_op_instead_of_mthd() {
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
     let feecol_107 = account(102, 0);
 
     let tx_fields = vec![
-        ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
+        ("op", ICRC3Value::Text("107set_fee_collector".to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
@@ -1518,9 +1511,9 @@ fn test_fee_collector_107_mthd_instead_of_op() {
     add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err(
-            "unrecognized block with '107feecol' but tx.mthd instead of tx.op parsed successfully by index",
+            "unrecognized block with '107feecol' but tx.op instead of tx.mthd parsed successfully by index",
         );
-    let expected_log_msg = "missing field `op`";
+    let expected_log_msg = "unknown fields";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
@@ -1530,25 +1523,25 @@ fn test_fee_collector_107_mthd_instead_of_op() {
 }
 
 #[test]
-fn test_block_with_no_btype_and_unrecognized_op() {
-    const UNRECOGNIZED_OP_NAME: &str = "non_standard_op_name";
+fn test_block_with_no_btype_but_with_mthd() {
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
     let tx_fields = vec![
-        ("op", ICRC3Value::Text(UNRECOGNIZED_OP_NAME.to_string())),
+        ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err(
-            "unrecognized block with tx.op 'non_standard_op_name' parsed successfully by index",
+            "unrecognized block with tx.mthd 'non_standard_mthd_name' parsed successfully by index",
         );
-    let expected_log_msg = format!("Unknown operation name {}", UNRECOGNIZED_OP_NAME);
+    let expected_log_msg =
+        "Failed to deserialize transaction: No operation specified and/or unknown btype None";
     assert!(
-        index_err_logs.contains(&expected_log_msg),
+        index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",
         expected_log_msg,
         index_err_logs
@@ -1556,7 +1549,7 @@ fn test_block_with_no_btype_and_unrecognized_op() {
 }
 
 #[test]
-fn test_block_with_no_btype_and_no_op() {
+fn test_block_with_no_btype_and_no_mthd() {
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -1565,8 +1558,8 @@ fn test_block_with_no_btype_and_no_op() {
 
     add_custom_block(env, ledger_id, 0, None, tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
-        .expect_err("unrecognized block with no btype and no tx.op parsed successfully by index");
-    let expected_log_msg = "missing field `op`";
+        .expect_err("unrecognized block with no btype and no tx.mthd parsed successfully by index");
+    let expected_log_msg = "No operation specified and/or unknown btype";
     assert!(
         index_err_logs.contains(expected_log_msg),
         "index logs did not contain expected string '{}': {}",

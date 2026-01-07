@@ -85,9 +85,9 @@ struct Args {
     /// A json file storing the mainnet routing table.
     #[clap(long)]
     mainnet_routing_table: Option<PathBuf>,
-    /// Specifies to fetch the mainnet routing table from the mainnet registry
-    /// and write it to the file path specified as `--mainnet-routing-table`.
-    #[clap(long, default_value_t = false, requires = "mainnet_routing_table")]
+    /// Specifies to fetch the mainnet routing table from the mainnet registry and
+    /// write it to the file path specified as `--mainnet-routing-table`, if provided.
+    #[clap(long, default_value_t = false)]
     fetch_mainnet_routing_table: bool,
     /// The mainnet registry version to use for fetching the mainnet routing table.
     /// Defaults to the latest registry version.
@@ -227,11 +227,10 @@ async fn start(runtime: Arc<Runtime>) {
         let registry_version = args.mainnet_registry_version.map(RegistryVersion::from);
         let (routing_table, _) = get_routing_table(vec![nns_url], registry_version);
         let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
-        // `#[clap(long, default_value_t = false, requires = "mainnet_routing_table")]`
-        // ensures that the mainnet routing table file path is specified.
-        let mainnet_routing_table_path = args.mainnet_routing_table.unwrap();
-        std::fs::write(mainnet_routing_table_path, &routing_table_json)
-            .expect("Failed to write mainnet routing table file");
+        if let Some(mainnet_routing_table_path) = args.mainnet_routing_table {
+            std::fs::write(mainnet_routing_table_path, &routing_table_json)
+                .expect("Failed to write mainnet routing table file");
+        }
         routing_table_json.into_bytes()
     } else if let Some(mainnet_routing_table_path) = args.mainnet_routing_table {
         std::fs::read(mainnet_routing_table_path)
