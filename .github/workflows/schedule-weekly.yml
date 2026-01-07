@@ -1,8 +1,9 @@
 name: Schedule Weekly
 
 on:
-  schedule:
-    - cron: "0 8 * * 3"
+  # Schedule is temporarily disabled as Clusterfuzz is not active anymore
+  # schedule:
+  #   - cron: "0 8 * * 3"
   workflow_dispatch:
 
 jobs:
@@ -10,7 +11,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:10281ef3f269edfc664d74ddc7a85d8ea7e13204f30e1bc52e1e79e32789ab69
+      image: ghcr.io/dfinity/ic-build@sha256:ea590bb4afc6c513a93f3cdd4e1a370babe068fea9650033dcea03859eb95afe
       options: >-
         -e NODE_NAME --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 60 # 1 hour
@@ -23,17 +24,18 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-      - name: Load Service Account Key to file
-        env:
-          FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}
-        run: |
-          echo $FUZZING_GCP_SERVICE_KEY | base64 --decode > bin/fuzzing/fuzzing_service_account.json
+      - name: Authenticate GCloud
+        id: 'auth'
+        uses: 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093' # v3 latest
+        with:
+          credentials_json: '${{ secrets.FUZZING_GCP_SERVICE_KEY }}'
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db' # v3.0.1
       - name: Build and Push Fuzzers to GCP
         shell: bash
         run: |
           cd bin/fuzzing/
-          gcloud auth activate-service-account --key-file fuzzing_service_account.json
           ./build-all-fuzzers.sh --zip
           cd fuzzer_build
-          gsutil -m cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
-          gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
+          gcloud storage cp libfuzzer_asan_linux_*.zip gs://ic_fuzzer_builds
+          gcloud storage cp afl_asan_linux_*.zip gs://ic_fuzzer_builds

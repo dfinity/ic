@@ -2,23 +2,23 @@
 # Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file
 # to regenerate Cargo Bazel lockfiles.
 
-bazel_dep(name = "rules_rust", version = "0.67.0")
+bazel_dep(name = "rules_rust", version = "0.68.1")
 archive_override(
     module_name = "rules_rust",
-    integrity = "sha256-3Ch+PsqAsp1cyV4mHK4nPu3xr0oAqWrpN+I0U02tskw=",
+    integrity = "sha256-yKqAbPYGZnmsI0YyQe6ArWkiZdrQRl9RERy74wuJA1I=",
     patch_strip = 1,
     patches = [
         "//bazel:rules_rust_strip_level.patch",
         "//bazel:rules_rust_package_alias.patch",
         "//bazel:rules_rust_rust_test.patch",
     ],
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.68.1/rules_rust-0.68.1.tar.gz"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    versions = ["1.90.0"],
+    versions = ["1.92.0"],
 )
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
@@ -990,7 +990,7 @@ crate.spec(
 crate.spec(
     features = ["prime"],
     package = "num-bigint-dig",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "num-rational",
@@ -1872,10 +1872,6 @@ crate.spec(
 crate.spec(
     package = "wat",
     version = "^1.240.0",
-)
-crate.spec(
-    package = "wee_alloc",
-    version = "^0.4.3",
 )
 crate.spec(
     package = "which",
