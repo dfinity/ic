@@ -560,7 +560,7 @@ impl SchedulerImpl {
 
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
-            round_limits.charge_other_instruction_cost(
+            round_limits.charge_instructions(
                 self.config
                     .instruction_overhead_per_canister_for_finalization
                     * state.num_canisters() as u64,
@@ -800,7 +800,7 @@ impl SchedulerImpl {
 
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
-        round_limits.charge_other_instruction_cost(max_instructions_executed_per_thread);
+        round_limits.charge_instructions(max_instructions_executed_per_thread);
 
         round_limits.subnet_available_callbacks -= callbacks_created;
 
@@ -1885,7 +1885,7 @@ fn execute_canisters_on_thread(
             }
             total_slices_executed.inc_assign();
             canister = new_canister;
-            round_limits.charge_other_instruction_cost(config.instruction_overhead_per_execution);
+            round_limits.charge_instructions(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
             if rate_limiting_of_heap_delta == FlagStatus::Enabled {
                 canister.scheduler_state.heap_delta_debit += heap_delta;
@@ -1928,7 +1928,7 @@ fn execute_canisters_on_thread(
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
-            round_limits.charge_other_instruction_cost(config.instruction_overhead_per_canister);
+            round_limits.charge_instructions(config.instruction_overhead_per_canister);
         }
     }
 

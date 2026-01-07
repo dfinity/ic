@@ -280,7 +280,7 @@ impl MessageExecutionInstructions {
             instructions: NumInstructions::from(0),
         }
     }
-    pub fn amount(self) -> NumInstructions {
+    pub fn get(self) -> NumInstructions {
         self.instructions
     }
     /// Creates a token for instructions that were already charged during
@@ -318,8 +318,9 @@ impl RoundLimits {
         self.instructions <= RoundInstructions::from(0)
     }
 
-    /// Used for message execution cost only. For other instruction costs, use `charge_other_instruction_cost`.
-    pub fn charge_message_execution_cost(
+    /// Used for subnet message execution cost only. For other instruction costs, use `charge_instructions`.
+    /// Returns a token to syntactically guarantee that subnet messages have an explicit decision about costs.
+    pub fn charge_subnet_message_execution_cost(
         &mut self,
         instructions: NumInstructions,
     ) -> MessageExecutionInstructions {
@@ -327,8 +328,9 @@ impl RoundLimits {
         MessageExecutionInstructions { instructions }
     }
 
-    /// Used for other instruction costs only. For message execution cost, use `charge_message_execution_cost`.
-    pub fn charge_other_instruction_cost(&mut self, instructions: NumInstructions) {
+    /// Charge instructions for non-subnet messages.
+    /// For subnet message execution cost, use `charge_subnet_message_execution_cost` to get a token.
+    pub fn charge_instructions(&mut self, instructions: NumInstructions) {
         self.instructions -= as_round_instructions(instructions);
     }
 }
@@ -1770,7 +1772,7 @@ impl ExecutionEnvironment {
                         origin,
                     );
                     let instructions_token =
-                        round_limits.charge_message_execution_cost(instructions_used);
+                        round_limits.charge_subnet_message_execution_cost(instructions_used);
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),

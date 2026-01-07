@@ -1615,7 +1615,7 @@ impl CanisterManager {
         {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
             ChunkValidationResult::AlreadyExists(hash) => {
-                let instructions_token = round_limits.charge_message_execution_cost(instructions);
+                let instructions_token = round_limits.charge_subnet_message_execution_cost(instructions);
                 return Ok((
                     UploadChunkResult {
                         reply: UploadChunkReply {
@@ -1670,7 +1670,7 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += chunk_bytes;
         }
 
-        let instructions_token = round_limits.charge_message_execution_cost(instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(instructions);
 
         let hash = validated_chunk.hash().to_vec();
         canister
@@ -2047,7 +2047,7 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
-        let instructions_token = round_limits.charge_message_execution_cost(instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -2619,7 +2619,7 @@ impl CanisterManager {
         debug_assert!(maybe_instruction_counter.is_some());
 
         let num_instructions = self.config.canister_snapshot_data_baseline_instructions;
-        let instructions_token = round_limits.charge_message_execution_cost(num_instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(num_instructions);
 
         Ok((
             ReadCanisterSnapshotMetadataResponse {
@@ -2725,7 +2725,7 @@ impl CanisterManager {
             }
         };
 
-        let instructions_token = round_limits.charge_message_execution_cost(num_instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(num_instructions);
         res.map(|x| (ReadCanisterSnapshotDataResponse::new(x), instructions_token))
     }
 
@@ -2858,7 +2858,7 @@ impl CanisterManager {
             validated_cycles_and_memory_usage,
         );
 
-        let instructions_token = round_limits.charge_message_execution_cost(instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(instructions);
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled {
             canister.scheduler_state.heap_delta_debit = canister
@@ -3039,7 +3039,7 @@ impl CanisterManager {
             canister.scheduler_state.heap_delta_debit += NumBytes::new(bytes_written);
         }
 
-        let instructions_token = round_limits.charge_message_execution_cost(instructions);
+        let instructions_token = round_limits.charge_subnet_message_execution_cost(instructions);
 
         state.record_snapshot_data_upload(snapshot_id);
 

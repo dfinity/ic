@@ -3,9 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::{
-    execution::common::log_dirty_pages, execution_environment::MessageExecutionInstructions,
-};
+use crate::execution::common::log_dirty_pages;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::{

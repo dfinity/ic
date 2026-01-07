@@ -34,7 +34,7 @@ use std::{
 
 use crate::canister_logs::check_log_visibility_permission;
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
-use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
+use crate::execution_environment::{CompilationCostHandling, RoundLimits};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
@@ -147,7 +147,7 @@ impl Hypervisor {
         };
         let compilation_cost = self.cost_to_compile_wasm_instruction * wasm_size as u64;
         if let Err(err) = wasm_size_result {
-            round_limits.instructions -= as_round_instructions(compilation_cost);
+            round_limits.charge_instructions(compilation_cost);
             self.compilation_cache
                 .insert_err(&canister_module, err.clone().into());
             return (compilation_cost, Err(err.into()));
@@ -170,11 +170,11 @@ impl Hypervisor {
                 }
                 let adjusted_compilation_cost =
                     compilation_cost_handling.adjusted_compilation_cost(compilation_cost);
-                round_limits.instructions -= as_round_instructions(adjusted_compilation_cost);
+                round_limits.charge_instructions(adjusted_compilation_cost);
                 (adjusted_compilation_cost, Ok(execution_state))
             }
             Err(err) => {
-                round_limits.instructions -= as_round_instructions(compilation_cost);
+                round_limits.charge_instructions(compilation_cost);
                 (compilation_cost, Err(err))
             }
         }

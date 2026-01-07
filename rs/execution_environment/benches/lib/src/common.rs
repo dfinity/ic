@@ -93,13 +93,13 @@ where
     let canister_root = tmpdir.path().to_path_buf();
     // Create Canister state
     let canister_id = canister_test_id(LOCAL_CANISTER_ID);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(MAX_NUM_INSTRUCTIONS),
-        subnet_available_memory: *MAX_SUBNET_AVAILABLE_MEMORY,
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: 0,
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(MAX_NUM_INSTRUCTIONS),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        0,
+        SUBNET_MEMORY_RESERVATION,
+    );
     let execution_state = hypervisor
         .create_execution_state(
             CanisterModule::new(wat::parse_str(wat.as_ref()).unwrap()),

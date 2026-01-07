@@ -2,7 +2,7 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
+use crate::{ExecuteMessageResult, RoundLimits, metrics::CallTreeMetrics};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -407,7 +407,7 @@ pub fn get_call_context_and_callback(
 }
 
 pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutionOutput) {
-    round_limits.instructions -= as_round_instructions(slice.executed_instructions);
+    round_limits.charge_instructions(slice.executed_instructions)
 }
 
 /// Tries to apply the given canister changes to the given system state and

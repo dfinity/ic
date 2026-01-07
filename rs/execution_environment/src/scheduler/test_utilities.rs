@@ -562,18 +562,15 @@ impl SchedulerTest {
             &Randomness::from([0; 32]),
             &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
         );
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(
-                self.scheduler.config.max_instructions_per_round / 16,
-            ),
-            subnet_available_memory: self
-                .scheduler
+        let mut round_limits = RoundLimits::new(
+            as_round_instructions(self.scheduler.config.max_instructions_per_round / 16),
+            self.scheduler
                 .exec_env
                 .scaled_subnet_available_memory(&state),
-            subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
+            self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
-            subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
-        };
+            self.scheduler.exec_env.scaled_subnet_memory_reservation(),
+        );
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
             state,

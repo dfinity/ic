@@ -229,7 +229,7 @@ impl<'a> QueryContext<'a> {
             QuerySource::User { .. } => (),
         }
 
-        let instructions_before = self.round_limits.instructions;
+        let instructions_before = self.round_limits.instructions();
 
         let (mut canister, result) = {
             let measurement_scope =
@@ -279,7 +279,7 @@ impl<'a> QueryContext<'a> {
 
         match query.source {
             QuerySource::System => {
-                let instructions_consumed = instructions_before - self.round_limits.instructions;
+                let instructions_consumed = instructions_before - self.round_limits.instructions();
                 if instructions_consumed >= RoundInstructions::from(10_000_000) {
                     info!(
                         self.log,
@@ -417,7 +417,7 @@ impl<'a> QueryContext<'a> {
         }
 
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
-            self.round_limits.instructions.get().max(0) as u64,
+            self.round_limits.instructions().get().max(0) as u64,
         ));
         let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -616,7 +616,7 @@ impl<'a> QueryContext<'a> {
         let incoming_cycles = Cycles::zero();
 
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
-            self.round_limits.instructions.get().max(0) as u64,
+            self.round_limits.instructions().get().max(0) as u64,
         ));
         let instruction_limits = InstructionLimits::new(instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -850,7 +850,10 @@ impl<'a> QueryContext<'a> {
             measurement_scope,
         );
 
-        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+        // Overhead should not be negative, but max(0) just in case.
+        self.round_limits.charge_instructions(NumInstructions::new(
+            self.instruction_overhead_per_query_call.get().max(0) as u64,
+        ));
 
         match result {
             // Execution of the message failed. We do not need to bother with
