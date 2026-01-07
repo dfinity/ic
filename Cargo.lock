@@ -17592,6 +17592,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 
 [[package]]
+name = "linux_kernel_command_line"
+version = "0.9.0"
+dependencies = [
+ "regex",
+]
+
+[[package]]
 name = "litemap"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22957,6 +22964,7 @@ dependencies = [
  "anyhow",
  "clap 4.5.27",
  "indoc 1.0.9",
+ "linux_kernel_command_line",
  "partition_tools",
  "regex",
  "tempfile",
