@@ -99,7 +99,7 @@ pub use funds::*;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
     PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
-    subnet_id_into_protobuf,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
