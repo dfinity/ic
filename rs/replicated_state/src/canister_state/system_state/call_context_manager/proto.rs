@@ -2,6 +2,7 @@ use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::user_id_try_from_option;
 
 impl From<&CallContext> for pb::CallContext {
     fn from(item: &CallContext) -> Self {
@@ -85,10 +86,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 message_id,
                 method_name,
             }) => Self::Ingress(
-                user_id_try_from_protobuf(try_from_option_field(
-                    user_id,
-                    "CallOrigin::Ingress::user_id",
-                )?)?,
+                user_id_try_from_option(user_id, "CallOrigin::Ingress::user_id")?,
                 message_id.as_slice().try_into()?,
                 method_name,
             ),
@@ -121,10 +119,7 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
                 user_id,
                 method_name,
             }) => Self::Query(
-                user_id_try_from_protobuf(try_from_option_field(
-                    user_id,
-                    "CallOrigin::UserQuery::user_id",
-                )?)?,
+                user_id_try_from_option(user_id, "CallOrigin::UserQuery::user_id")?,
                 method_name,
             ),
             pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,

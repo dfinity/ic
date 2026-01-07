@@ -99,7 +99,7 @@ pub use funds::*;
 pub use ic_base_types::{
     CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
     PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
+    subnet_id_into_protobuf,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
@@ -128,13 +128,16 @@ pub fn user_id_into_protobuf(id: UserId) -> pb::UserId {
     }
 }
 
-/// From its protobuf definition convert to a UserId.  Normally, we would
+/// From an optional protobuf definition convert to a UserId.  Normally, we would
 /// use `impl TryFrom<pb::UserId> for UserId` here however we cannot as
 /// both `Id` and `pb::UserId` are defined in other crates.
-pub fn user_id_try_from_protobuf(value: pb::UserId) -> Result<UserId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
+pub fn user_id_try_from_option(
+    value: Option<pb::UserId>,
+    field_name: &'static str,
+) -> Result<UserId, ProxyDecodeError> {
+    let value: pb::UserId = value.ok_or(ProxyDecodeError::MissingField(field_name))?;
+    let principal_id: PrincipalId =
+        try_from_option_field(value.principal_id, "UserId::principal_id")?;
     Ok(UserId::from(principal_id))
 }
 

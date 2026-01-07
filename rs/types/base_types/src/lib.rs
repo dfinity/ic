@@ -154,8 +154,9 @@ where
 /// as both `Id` and `pb::SubnetId` are defined in other crates.
 pub fn subnet_id_try_from_option(
     value: Option<pb::SubnetId>,
+    field_name: &'static str,
 ) -> Result<SubnetId, ProxyDecodeError> {
-    let value: pb::SubnetId = value.ok_or(ProxyDecodeError::MissingField("SubnetId"))?;
+    let value: pb::SubnetId = value.ok_or(ProxyDecodeError::MissingField(field_name))?;
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "SubnetId::PrincipalId")?;
     Ok(SubnetId::from(principal_id))

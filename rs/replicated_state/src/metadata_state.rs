@@ -30,7 +30,7 @@ use ic_types::{
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
+    subnet_id_into_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,

@@ -1,4 +1,5 @@
 use super::*;
+use ic_base_types::subnet_id_try_from_option;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
@@ -12,6 +13,7 @@ use ic_protobuf::{
     },
     types::v1 as pb_types,
 };
+use ic_types::subnet_id_try_from_protobuf;
 
 impl From<&NetworkTopology> for pb_metadata::NetworkTopology {
     fn from(item: &NetworkTopology) -> Self {
@@ -59,18 +61,13 @@ impl TryFrom<pb_metadata::NetworkTopology> for NetworkTopology {
         let mut subnets = BTreeMap::new();
         for entry in item.subnets {
             subnets.insert(
-                subnet_id_try_from_protobuf(try_from_option_field(
-                    entry.subnet_id,
-                    "NetworkTopology::subnets::K",
-                )?)?,
+                subnet_id_try_from_option(entry.subnet_id, "NetworkTopology::subnets::K")?,
                 try_from_option_field(entry.subnet_topology, "NetworkTopology::subnets::V")?,
             );
         }
 
-        let nns_subnet_id = subnet_id_try_from_protobuf(try_from_option_field(
-            item.nns_subnet_id,
-            "NetworkTopology::nns_subnet_id",
-        )?)?;
+        let nns_subnet_id =
+            subnet_id_try_from_option(item.nns_subnet_id, "NetworkTopology::nns_subnet_id")?;
 
         let mut chain_key_enabled_subnets = BTreeMap::new();
         for entry in item.chain_key_enabled_subnets {
@@ -347,10 +344,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
         let mut streams = BTreeMap::<SubnetId, Stream>::new();
         for entry in item.streams {
             streams.insert(
-                subnet_id_try_from_protobuf(try_from_option_field(
-                    entry.subnet_id,
-                    "SystemMetadata::streams::K",
-                )?)?,
+                subnet_id_try_from_option(entry.subnet_id, "SystemMetadata::streams::K")?,
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
@@ -415,10 +409,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
         );
 
         Ok(Self {
-            own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
+            own_subnet_id: subnet_id_try_from_option(
                 item.own_subnet_id,
                 "SystemMetadata::own_subnet_id",
-            )?)?,
+            )?,
             // WARNING! Setting to the default value which can be incorrect. We do not store the
             // actual value when we serialize SystemMetadata. We rely on `load_checkpoint()` to
             // properly set this value.

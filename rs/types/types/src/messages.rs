@@ -19,7 +19,7 @@ pub use self::http::{
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
+use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -221,10 +221,10 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         call_id,
                     },
                 ) => StopCanisterContext::Ingress {
-                    sender: user_id_try_from_protobuf(try_from_option_field(
+                    sender: user_id_try_from_option(
                         sender,
                         "StopCanisterContext::Ingress::sender",
-                    )?)?,
+                    )?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
                     call_id: call_id.map(StopCanisterCallId::from),
                 },
