@@ -2,6 +2,7 @@ use regex::Regex;
 /// Utilities to manipulate a kernel command line reliably.
 use std::error::Error as StdError;
 use std::fmt;
+use std::fmt::{Display, Write};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
@@ -148,9 +149,15 @@ impl KernelCommandLine {
     }
 }
 
-impl From<KernelCommandLine> for String {
-    fn from(val: KernelCommandLine) -> Self {
-        val.tokenized_arguments.join(" ")
+impl Display for KernelCommandLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, arg) in self.tokenized_arguments.iter().enumerate() {
+            if i > 0 {
+                f.write_char(' ')?;
+            }
+            f.write_str(arg)?;
+        }
+        Ok(())
     }
 }
 
@@ -277,7 +284,7 @@ mod tests {
         for (name, input, argument_to_remove, expected) in table.iter() {
             let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.remove_argument(argument_to_remove);
-            let result: String = cmdline.into();
+            let result = cmdline.to_string();
             if result != *expected {
                 panic!(
                     "During test {name}:
@@ -364,7 +371,7 @@ actual:   {result:?}",
         for (test_name, input, argument, value, expected) in table.into_iter() {
             let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.ensure_single_argument(argument, value).unwrap();
-            let result: String = cmdline.into();
+            let result = cmdline.to_string();
             if result != *expected {
                 panic!(
                     "During test {test_name}:

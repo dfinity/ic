@@ -96,10 +96,9 @@ fn process_cmdline(input: &str, compat: bool) -> Result<String> {
     }
 
     Ok(format!(
-        "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{boot_args}\"{tail}{file_end}",
+        "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{cmdline}\"{tail}{file_end}",
         file_start = &input[..left],
         file_end = &input[right..],
-        boot_args = cmdline.into(),
     ))
 }
 
