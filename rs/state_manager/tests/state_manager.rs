@@ -4933,13 +4933,33 @@ fn can_commit_below_state_sync() {
             dst_state_manager.flush_tip_channel();
 
             // take_tip should update the tip to the synced checkpoint
-            let (tip_height, _state) = dst_state_manager.take_tip();
+            let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
-            // state 1 should be removable
+
+            // Since state sync checkpoint@2 is unverified, checkpoint @1 remains as the most recent unverified checkpoint.
             dst_state_manager.remove_states_below(height(2));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            assert_eq!(
+                dst_state_manager
+                    .state_layout()
+                    .verified_or_state_sync_checkpoint_heights()
+                    .unwrap(),
+                vec![height(1), height(2)]
+            );
+
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+            dst_state_manager.flush_tip_channel();
+            dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
+            assert_eq!(
+                dst_state_manager
+                    .state_layout()
+                    .verified_or_state_sync_checkpoint_heights()
+                    .unwrap(),
+                vec![height(3)]
+            );
+
             assert_error_counters(dst_metrics);
         })
     })

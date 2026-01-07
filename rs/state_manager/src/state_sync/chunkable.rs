@@ -971,6 +971,17 @@ impl IncompleteState {
             CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
 
+        scratchpad_layout
+            .create_state_sync_checkpoint_marker()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    log,
+                    "Failed to create state sync checkpoint marker for scratchpad @height {}: {}",
+                    height,
+                    err
+                );
+            });
+
         match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();

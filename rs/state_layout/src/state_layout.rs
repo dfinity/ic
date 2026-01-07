@@ -435,11 +435,9 @@ impl TipHandler {
             if path.extension() == Some(OsStr::new("pbuf")) {
                 // Do not copy protobufs.
                 CopyInstruction::Skip
-            } else if path == cp.unverified_checkpoint_marker() {
-                // The unverified checkpoint marker should already be removed at this point.
-                debug_assert!(false);
-                CopyInstruction::Skip
-            } else if path == cp.state_sync_checkpoint_marker() {
+            } else if path == cp.unverified_checkpoint_marker()
+                || path == cp.state_sync_checkpoint_marker()
+            {
                 CopyInstruction::Skip
             } else {
                 // Everything else should be readonly.
@@ -1981,6 +1979,16 @@ where
         sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
             path: self.0.root.clone(),
             message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            io_err: err,
+        })
+    }
+
+    pub fn create_state_sync_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.state_sync_checkpoint_marker();
+        open_for_write(&marker)?;
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the creation of the state sync checkpoint marker".to_string(),
             io_err: err,
         })
     }
