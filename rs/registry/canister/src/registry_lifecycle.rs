@@ -275,10 +275,6 @@ mod test {
         registry_lifecycle::Registry,
     };
     use ic_base_types::PrincipalId;
-    use ic_management_canister_types_private::{
-        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-        VetKdKeyId,
-    };
     use ic_protobuf::registry::subnet::v1::{
         ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
@@ -776,7 +772,7 @@ mod test {
                         name: "test_key".to_string(),
                     })),
                 }),
-                pre_signatures_to_create_in_advance: Some(0), // This should NOT be migrated (not vetKD)
+                pre_signatures_to_create_in_advance: Some(10), // This should NOT be migrated (not vetKD, and not zero)
                 max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
             }],
             signature_request_timeout_ns: None,
@@ -865,7 +861,7 @@ mod test {
             .key_configs[0];
         assert_eq!(
             key_config_4.pre_signatures_to_create_in_advance,
-            Some(0),
+            Some(10),
             "Subnet with non-vetKD key should not be affected"
         );
     }
