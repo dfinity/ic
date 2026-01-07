@@ -25,8 +25,11 @@ pub fn do_list(config: PathBuf) -> Result<(), String> {
         .unfiltered_checkpoint_heights()
         .map_err(|e| format!("failed to enumerate unverified checkpoints: {e}"))?
         .into_iter()
-        .filter_map(|h| match state_layout.checkpoint_verification_status(h) {
-            Ok(false) => Some((h, CheckpointStatus::Unverified)),
+        .filter_map(|h| match state_layout.checkpoint_status(h) {
+            Ok(
+                ic_state_layout::CheckpointStatus::UnverifiedRegular
+                | ic_state_layout::CheckpointStatus::UnverifiedStateSync,
+            ) => Some((h, CheckpointStatus::Unverified)),
             _ => None,
         });
 
