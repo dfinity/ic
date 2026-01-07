@@ -918,7 +918,7 @@ impl StateLayout {
         }
         // An untracked checkpoint layout is acceptable for temporary use here, as it’s only needed briefly to verify the existence of the marker.
         let cp = CheckpointLayout::<ReadOnly>::new_untracked(path, height)?;
-        cp.checkpoint_status()
+        Ok(cp.checkpoint_status())
     }
 
     fn remove_checkpoint_ref(&self, height: Height) {
@@ -966,26 +966,22 @@ impl StateLayout {
     }
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
-    pub fn checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        self.unfiltered_checkpoint_heights()?
-            .into_iter()
-            .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
-            .collect()
-    }
-
-    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
     pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        self.unfiltered_checkpoint_heights()?
+        let verified_checkpoint_heights = self
+            .unfiltered_checkpoint_heights()?
             .into_iter()
             .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
-            .collect()
+            .collect();
+
+        Ok(verified_checkpoint_heights)
     }
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available and is either verified or a state sync checkpoint.
     ///
     /// Useful for determining candidates for the base checkpoint during incremental manifest computation and state sync.
     pub fn verified_or_state_sync_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        self.unfiltered_checkpoint_heights()?
+        let heights = self
+            .unfiltered_checkpoint_heights()?
             .into_iter()
             .filter(|h| {
                 matches!(
@@ -993,7 +989,8 @@ impl StateLayout {
                     Ok(CheckpointStatus::Verified | CheckpointStatus::UnverifiedStateSync)
                 )
             })
-            .collect()
+            .collect();
+        Ok(heights)
     }
 
     /// Returns a sorted in ascended order list of `Height`s of checkpoints that were marked as
@@ -1877,12 +1874,12 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             // is accidentally missing, since the presence of a state sync marker alone indicates
             // the checkpoint should never be considered verified.
             debug_assert!(self.unverified_checkpoint_marker().exists());
-            return Ok(CheckpointStatus::UnverifiedStateSync);
+            return CheckpointStatus::UnverifiedStateSync;
         }
         if self.unverified_checkpoint_marker().exists() {
-            return Ok(CheckpointStatus::UnverifiedRegular);
+            return CheckpointStatus::UnverifiedRegular;
         }
-        Ok(CheckpointStatus::Verified)
+        CheckpointStatus::Verified
     }
 
     /// Returns `true` if the checkpoint is verified.

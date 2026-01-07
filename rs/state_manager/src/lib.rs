@@ -51,7 +51,9 @@ use ic_replicated_state::{
     ReplicatedState,
     page_map::{PersistenceError, StorageMetrics},
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, error::LayoutError};
+use ic_state_layout::{
+    CheckpointLayout, CheckpointStatus, ReadOnly, StateLayout, error::LayoutError,
+};
 use ic_sys::fs::Clobber;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
@@ -1033,7 +1035,7 @@ fn path_age(log: &ReplicaLogger, path: &Path) -> Duration {
 /// On top of that we keep maximum MAX_DIVERGED_STATE_MARKERS_TO_KEEP of diverged markers
 /// no older then ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE
 fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
-    let last_checkpoint: Height = match layout.checkpoint_heights() {
+    let last_checkpoint: Height = match layout.verified_checkpoint_heights() {
         Err(err) => {
             fatal!(log, "Failed to get list of checkpoints: {}", err);
         }
@@ -1410,7 +1412,7 @@ impl StateManagerImpl {
 
         let starting_time = Instant::now();
 
-        let states = checkpoint_heights
+        let states = verified_checkpoint_heights
             .iter()
             .map(|height| {
                 let cp_layout = state_layout
@@ -1791,7 +1793,7 @@ impl StateManagerImpl {
             .states_metadata
             .iter()
             .rev()
-            .find_map(|(base_height, state_metadata)| {
+            .find_map(|(_, state_metadata)| {
                 let base_manifest = state_metadata.manifest()?.clone();
                 let checkpoint_layout = state_metadata.checkpoint_layout.clone()?;
                 checkpoint_layout
@@ -2774,12 +2776,12 @@ impl StateManager for StateManagerImpl {
                         height
                     );
 
-                    match self
-                        .state_layout
-                        .checkpoint_verification_status(checkpoint_height)
-                    {
-                        Ok(true) => {}
-                        Ok(false) => {
+                    match self.state_layout.checkpoint_status(checkpoint_height) {
+                        Ok(CheckpointStatus::Verified) => {}
+                        Ok(
+                            CheckpointStatus::UnverifiedRegular
+                            | CheckpointStatus::UnverifiedStateSync,
+                        ) => {
                             warn!(
                                 self.log,
                                 "Unverified checkpoint @{} cannot be cloned to a new checkpoint height.",

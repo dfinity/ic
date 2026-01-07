@@ -16,7 +16,7 @@ enum CheckpointStatus {
 pub fn do_list(config: PathBuf) -> Result<(), String> {
     let state_layout = utils::locate_state_root(config)?;
     let verified_heights = state_layout
-        .checkpoint_heights()
+        .verified_checkpoint_heights()
         .map_err(|e| format!("failed to enumerate checkpoints: {e}"))?
         .into_iter()
         .map(|h| (h, CheckpointStatus::Verified));

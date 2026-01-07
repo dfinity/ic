@@ -267,7 +267,7 @@ fn lsmt_merge_overhead() {
     }
     fn last_checkpoint_size(env: &StateMachine) -> f64 {
         let state_layout = env.state_manager.state_layout();
-        let checkpoint_heights = state_layout.checkpoint_heights().unwrap();
+        let checkpoint_heights = state_layout.verified_checkpoint_heights().unwrap();
         if checkpoint_heights.is_empty() {
             return 0.0;
         }
@@ -5908,7 +5908,7 @@ fn remove_too_many_diverged_checkpoints() {
     fn diverge_at(state_manager: StateManagerImpl, divergence: u64) {
         let last_correct_checkpoint = state_manager
             .state_layout()
-            .checkpoint_heights()
+            .verified_checkpoint_heights()
             .unwrap()
             .last()
             .unwrap_or(&height(0))
@@ -6701,7 +6701,13 @@ fn can_uninstall_code_state_machine() {
     env.state_manager.flush_tip_channel();
 
     let canister_layout = layout
-        .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .checkpoint_verified(
+            *layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .last()
+                .unwrap(),
+        )
         .unwrap()
         .canister(&canister_id)
         .unwrap();
@@ -6713,7 +6719,13 @@ fn can_uninstall_code_state_machine() {
 
     env.state_manager.flush_tip_channel();
     let canister_layout = layout
-        .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .checkpoint_verified(
+            *layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .last()
+                .unwrap(),
+        )
         .unwrap()
         .canister(&canister_id)
         .unwrap();

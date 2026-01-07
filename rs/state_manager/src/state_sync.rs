@@ -154,11 +154,12 @@ impl StateSync {
                 if metadata.root_hash().map(|v| v.get_ref()) == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
                     let meta_manifest = metadata.meta_manifest()?;
-                    let checkpoint_root = self
+                    let checkpoint_layout = self
                         .state_manager
                         .state_layout
-                        .checkpoint_verified(*height)
-                        .ok()?;
+                        .checkpoint_in_verification(*height)
+                        .ok()
+                        .filter(|layout| layout.is_verified_or_state_sync_checkpoint())?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
                         Some(value) => value.clone(),
                         None => {
@@ -173,7 +174,7 @@ impl StateSync {
                     Some(StateSyncMessage {
                         height: *height,
                         root_hash: CryptoHashOfState::from(msg_id.hash.clone()),
-                        checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
+                        checkpoint_root: checkpoint_layout.raw_path().to_path_buf(),
                         meta_manifest,
                         manifest: manifest.clone(),
                         state_sync_file_group,
@@ -200,7 +201,11 @@ impl StateSync {
     // Enumerates all recent fully certified (i.e. referenced in a CUP) states that
     // is above the filter height.
     fn get_all_validated_ids_by_height(&self, height: Height) -> Vec<StateSyncArtifactId> {
-        let heights = match self.state_manager.state_layout.checkpoint_heights() {
+        let heights = match self
+            .state_manager
+            .state_layout
+            .verified_or_state_sync_checkpoint_heights()
+        {
             Ok(heights) => heights,
             Err(err) => {
                 warn!(
