@@ -136,6 +136,16 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map_or(0, |metadata| metadata.len())
 }
 
+/// Returns a list of checkpoint heights that are either verified or created via state sync.
+///
+/// In state sync-related tests, both types of checkpoints are relevant and should be included in the result.
+fn verified_or_state_sync_checkpoint_heights(state_manager: &StateManagerImpl) -> Vec<Height> {
+    state_manager
+        .state_layout()
+        .verified_or_state_sync_checkpoint_heights()
+        .expect("failed to get verified or state sync checkpoint heights")
+}
+
 /// This is a canister that keeps a counter on the heap and allows to increment it.
 /// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
@@ -482,14 +492,17 @@ fn rejoining_node_doesnt_accumulate_states() {
                     dst_state_manager.get_latest_state().take()
                 );
                 assert_eq!(
-                    dst_state_manager.checkpoint_heights(),
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                     (1..=i).map(height).collect::<Vec<_>>()
                 );
             }
 
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
 
             assert_error_counters(src_metrics);
             assert_error_counters(dst_metrics);
@@ -4416,7 +4429,10 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
                     restart_fn(dst_state_manager, None);
 
                 // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
-                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Main testing scenario:
@@ -4841,7 +4857,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             // Checkpoint @2 should be removed
             // while checkpoint @1 is still kept because it is referenced by state sync as a base.
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(3)]
             );
 
@@ -4855,7 +4871,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
 
             // State sync adds back checkpoint @2 into the state manager.
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(2), height(3)]
             );
 
@@ -4888,7 +4904,10 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(4));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
             // Snapshots below 4 should be removable.
             assert_eq!(
@@ -4953,10 +4972,7 @@ fn can_commit_below_state_sync() {
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
             assert_eq!(
-                dst_state_manager
-                    .state_layout()
-                    .verified_or_state_sync_checkpoint_heights()
-                    .unwrap(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(3)]
             );
 
@@ -5006,12 +5022,15 @@ fn can_state_sync_below_commit() {
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(2)]
+            );
             // Perform the state sync after the state manager reaches height 2.
             pipe_state_sync(msg, chunkable);
 
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(2)]
             );
             dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
@@ -5023,7 +5042,10 @@ fn can_state_sync_below_commit() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_error_counters(dst_metrics);
         })
     })
