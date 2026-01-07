@@ -146,6 +146,9 @@ RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
+# Install Claude CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden
 # In GitHub that is the case and we need 1001 and we set it via ARG.

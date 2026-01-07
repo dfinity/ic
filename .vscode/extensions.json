@@ -1,5 +1,6 @@
 {
   "recommendations": [
+    "anthropic.claude-code",
     "rust-lang.rust-analyzer",
     "vadimcn.vscode-lldb",
     "bazelbuild.vscode-bazel",
