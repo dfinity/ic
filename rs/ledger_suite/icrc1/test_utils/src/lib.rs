@@ -14,6 +14,7 @@ use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -243,6 +244,10 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::FeeCollector { .. } => None,
             };
+            let btype = match transaction.operation {
+                Operation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
 
             Block {
                 parent_hash: Some(Block::<Tokens>::block_hash(
@@ -262,7 +267,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 timestamp,
                 fee_collector,
                 fee_collector_block_index: None,
-                btype: None,
+                btype,
             }
         })
 }
