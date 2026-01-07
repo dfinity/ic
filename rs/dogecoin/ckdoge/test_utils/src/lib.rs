@@ -290,6 +290,11 @@ impl Setup {
 
         self
     }
+
+    pub fn with_doge_balance(self) -> Self {
+        self.dogecoind().setup_user_with_balance();
+        self
+    }
 }
 
 impl Default for Setup {

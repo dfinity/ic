@@ -167,12 +167,11 @@ mod deposit {
 
     #[test]
     fn should_mint_ckdoge() {
-        let setup = Setup::new(Network::Regtest);
+        let setup = Setup::new(Network::Regtest).with_doge_balance();
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
-        setup.dogecoind().setup_user_with_balance();
 
         setup
             .deposit_flow()
@@ -235,8 +234,7 @@ mod withdrawal {
 
     #[test]
     fn should_withdraw_doge() {
-        let setup = Setup::new(Network::Regtest);
-        setup.dogecoind().setup_user_with_balance();
+        let setup = Setup::new(Network::Regtest).with_doge_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
