@@ -231,8 +231,8 @@ impl InitArgsBuilder {
     }
 
     pub fn with_metadata_entry(mut self, key: &str, value: impl Into<Value>) -> Self {
-        let metadata_key = MetadataKey::parse(key)
-            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        let metadata_key =
+            MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
         self.0.metadata.push((metadata_key, value.into()));
         self
     }
