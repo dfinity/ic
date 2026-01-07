@@ -458,9 +458,10 @@ pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(In
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -513,9 +514,10 @@ pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> 
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -1752,7 +1754,8 @@ where
     let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
 
     let metadata_res = metadata(&env, canister_id);
-    let metadata_value = metadata_res.get(TEXT_META_KEY).unwrap();
+    let text_meta_key = MetadataKey::parse(TEXT_META_KEY).unwrap();
+    let metadata_value = metadata_res.get(&text_meta_key).unwrap();
     assert_eq!(*metadata_value, Value::Text(TEXT_META_VALUE.to_string()));
 
     const OTHER_TOKEN_SYMBOL: &str = "NEWSYMBOL";
@@ -1761,7 +1764,7 @@ where
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         metadata: Some(vec![(
-            TEXT_META_KEY.into(),
+            MetadataKey::parse(TEXT_META_KEY).unwrap(),
             Value::Text(TEXT_META_VALUE_2.into()),
         )]),
         token_name: Some(OTHER_TOKEN_NAME.into()),
@@ -1775,7 +1778,7 @@ where
 
     let metadata_res_after_upgrade = metadata(&env, canister_id);
     assert_eq!(
-        *metadata_res_after_upgrade.get(TEXT_META_KEY).unwrap(),
+        *metadata_res_after_upgrade.get(&text_meta_key).unwrap(),
         Value::Text(TEXT_META_VALUE_2.to_string())
     );
 
