@@ -187,7 +187,7 @@ fn test_icrc3_get_blocks() {
         block2.encode(),
         block3.encode(),
     ];
-    let blockids = vec![blockid0, blockid1, blockid2, blockid3];
+    let blockids = [blockid0, blockid1, blockid2, blockid3];
     let _ = setup.append_blocks(blocks);
 
     let check_icrc3_get_blocks =
