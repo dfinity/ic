@@ -3,8 +3,9 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT, LABEL_ON_SYNCED_CHECKPOINT,
-    NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
+    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+    LABEL_MARK_FILES_READONLY_AND_SYNC, LABEL_ON_SYNCED_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
 };
@@ -119,7 +120,23 @@ impl StateSync {
                 );
             }
         };
-        ro_layout.mark_files_readonly_and_sync(Some(&mut thread_pool));
+        drop(timer);
+
+        let timer = state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_MARK_FILES_READONLY_AND_SYNC])
+            .start_timer();
+
+        ro_layout
+            .mark_files_readonly_and_sync(Some(&mut thread_pool))
+            .unwrap_or_else(|err| {
+                fatal!(
+                    self.log,
+                    "Failed to mark files readonly and sync for checkpoint @height {}: {}",
+                    height,
+                    err
+                );
+            });
         drop(timer);
 
         let _timer = state_sync_metrics
