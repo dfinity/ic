@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use strum_macros::AsRefStr;
 use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -61,7 +62,8 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
     Default,
     Upgrade,
@@ -501,7 +503,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         1.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 virtual_machine
             }
             Err(err) => {
@@ -510,7 +513,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         0.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 return Err(err);
             }
         };
@@ -1074,7 +1078,7 @@ mod tests {
         service.wait_for_systemd_ready().await;
 
         service
-            .check_metrics_contains("hostos_guestos_service_start 1")
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 1")
             .unwrap();
         service.check_vm_running().unwrap();
         service
@@ -1126,7 +1130,7 @@ mod tests {
             .unwrap_err();
 
         service
-            .check_metrics_contains("hostos_guestos_service_start 0")
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 0")
             .unwrap();
         service.check_vm_not_exists().unwrap();
         service

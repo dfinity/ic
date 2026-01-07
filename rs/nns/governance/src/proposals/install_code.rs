@@ -187,10 +187,10 @@ impl LocallyDescribableProposalAction for InstallCode {
         let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
 
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("canister_id", *canister_id)
-            .add_field_with_empty_as_fallback("install_mode", install_mode)
-            .add_field_with_empty_as_fallback("wasm_module_hash", wasm_module_hash.clone())
-            .add_field_with_empty_as_fallback("arg_hash", arg_hash.clone())
+            .add_field("canister_id", *canister_id)
+            .add_field("install_mode", install_mode)
+            .add_field("wasm_module_hash", wasm_module_hash.clone())
+            .add_field("arg_hash", arg_hash.clone())
             .add_field(
                 "skip_stopping_before_installing",
                 skip_stopping_before_installing.unwrap_or_default(),

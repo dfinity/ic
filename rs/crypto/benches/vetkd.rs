@@ -267,18 +267,18 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
     for node_id in config.receivers().get() {
         let result = crypto_for(*node_id, crypto_components).load_transcript(transcript);
 
-        if result.is_err() {
-            panic!(
-                "failed to load transcript {} for node {}: {}",
-                transcript,
-                *node_id,
-                result.unwrap_err()
-            );
-        }
-
-        if let Some(expected_status) = expected_status {
-            let result = result.unwrap();
-            assert_eq!(result, expected_status);
+        match result {
+            Ok(status) => {
+                if let Some(expected_status) = expected_status {
+                    assert_eq!(status, expected_status);
+                }
+            }
+            Err(err) => {
+                panic!(
+                    "failed to load transcript {} for node {}: {}",
+                    transcript, *node_id, err
+                );
+            }
         }
     }
 }
