@@ -1,5 +1,5 @@
 {
-  "checksum": "42d21ef41793b7e4a0bd9226f23a848070644cbf6866ef0e77e43661eccf8ba2",
+  "checksum": "9c005befd32524877226bd906ddced21caba9dd7f97158fe334855a7a1e03d6f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22594,10 +22594,6 @@
             {
               "id": "wat 1.240.0",
               "target": "wat"
-            },
-            {
-              "id": "wee_alloc 0.4.5",
-              "target": "wee_alloc"
             },
             {
               "id": "which 4.4.0",
@@ -48461,44 +48457,6 @@
       "license": "MIT",
       "license_ids": [
         "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "memory_units 0.4.0": {
-      "name": "memory_units",
-      "version": "0.4.0",
-      "package_url": "https://github.com/pepyakin/memory_units",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/memory_units/0.4.0/download",
-          "sha256": "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "memory_units",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "memory_units",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.4.0"
-      },
-      "license": "MPL-2.0",
-      "license_ids": [
-        "MPL-2.0"
       ],
       "license_file": "LICENSE"
     },
@@ -92146,104 +92104,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wee_alloc 0.4.5": {
-      "name": "wee_alloc",
-      "version": "0.4.5",
-      "package_url": "https://github.com/rustwasm/wee_alloc",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wee_alloc/0.4.5/download",
-          "sha256": "dbb3b5a6b2bb17cb6ad44a2e68a43e8d2722c997da10e928665c72ec6c0a0b8e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wee_alloc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wee_alloc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "size_classes"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 0.1.10",
-              "target": "cfg_if"
-            },
-            {
-              "id": "memory_units 0.4.0",
-              "target": "memory_units"
-            },
-            {
-              "id": "wee_alloc 0.4.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(all(unix, not(target_arch = \"wasm32\")))": [
-              {
-                "id": "libc 0.2.177",
-                "target": "libc"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.4.5"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MPL-2.0",
-      "license_ids": [
-        "MPL-2.0"
-      ],
-      "license_file": null
-    },
     "which 4.4.0": {
       "name": "which",
       "version": "4.4.0",
@@ -98622,12 +98482,6 @@
     "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
       "wasm32-unknown-unknown"
     ],
-    "cfg(all(unix, not(target_arch = \"wasm32\")))": [
-      "aarch64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
-      "x86_64-apple-darwin",
-      "x86_64-unknown-linux-gnu"
-    ],
     "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
       "aarch64-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
@@ -99207,7 +99061,6 @@
     "wasmtime 40.0.0",
     "wast 240.0.0",
     "wat 1.240.0",
-    "wee_alloc 0.4.5",
     "which 4.4.0",
     "wirm 2.1.0",
     "wsl 0.1.0",
