@@ -1570,7 +1570,7 @@ fn test_from_manage_ledger_parameters_into_ledger_upgrade_args() {
         observed,
         LedgerUpgradeArgs {
             metadata: Some(vec![(
-                MetadataKey::ICRC1_LOGO.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_LOGO).unwrap(),
                 MetadataValue::Text("<logo>".to_string())
             )]),
             token_name: Some("abc".to_string()),

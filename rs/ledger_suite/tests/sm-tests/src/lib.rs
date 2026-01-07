@@ -5201,7 +5201,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![Value::entry(*forbidden_metadata, 8u64)],
+                metadata: vec![Value::entry(forbidden_metadata, 8u64)],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -5227,7 +5227,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![Value::entry(*forbidden_metadata, 8u64)]),
+                metadata: Some(vec![Value::entry(forbidden_metadata, 8u64)]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(

@@ -15,7 +15,6 @@ use ic_ledger_suite_state_machine_tests_constants::{
 };
 
 use crate::common::local_replica;
-use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use pocket_ic::PocketIc;
 use std::str::FromStr;
 use std::sync::Arc;

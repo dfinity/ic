@@ -58,39 +58,39 @@ fn should_spawn_ledger_with_correct_init_args() {
         })
         .assert_ledger_icrc1_metadata(vec![
             (
-                MetadataKey::ICRC1_LOGO.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_LOGO).unwrap(),
                 LedgerMetadataValue::from(CKETH_TOKEN_LOGO),
             ),
             (
-                MetadataKey::ICRC1_DECIMALS.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_DECIMALS).unwrap(),
                 LedgerMetadataValue::from(6_u64),
             ),
             (
-                MetadataKey::ICRC1_NAME.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_NAME).unwrap(),
                 LedgerMetadataValue::from("USD Coin"),
             ),
             (
-                MetadataKey::ICRC1_SYMBOL.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_SYMBOL).unwrap(),
                 LedgerMetadataValue::from("USDC"),
             ),
             (
-                MetadataKey::ICRC1_FEE.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_FEE).unwrap(),
                 LedgerMetadataValue::from(2_000_000_000_000_u64),
             ),
             (
-                MetadataKey::ICRC1_MAX_MEMO_LENGTH.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC1_MAX_MEMO_LENGTH).unwrap(),
                 LedgerMetadataValue::from(80_u64),
             ),
             (
-                MetadataKey::ICRC103_PUBLIC_ALLOWANCES.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC103_PUBLIC_ALLOWANCES).unwrap(),
                 LedgerMetadataValue::from("true"),
             ),
             (
-                MetadataKey::ICRC103_MAX_TAKE_VALUE.to_string(),
+                MetadataKey::parse(MetadataKey::ICRC103_MAX_TAKE_VALUE).unwrap(),
                 LedgerMetadataValue::from(500u64),
             ),
             (
-                "icrc106:index_principal".to_string(),
+                MetadataKey::parse(MetadataKey::ICRC106_INDEX_PRINCIPAL).unwrap(),
                 LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
             ),
         ]);
