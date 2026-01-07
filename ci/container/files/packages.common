@@ -4,16 +4,14 @@ build-essential
 git
 git-lfs
 gnupg
-node-json5
 uuid-dev
 zsh
-fish
-clang
 iproute2
 shellcheck
 xxd
 vim
 retry
+zip
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -22,15 +20,12 @@ libboost-dev
 
 # GitHub CI
 sudo
-gosu
 jq
 rclone
 time
-qemu-system-x86
-
-# Test
-rsync
-lcov
+podman # rosetta-release.yml
+rsync # container-base-images.yml
+lcov # used for bazel coverage
 
 # RUST
 gcc
@@ -47,15 +42,17 @@ llvm
 liblmdb-dev
 liblzma-dev
 
+# Other code dependencies
+clang
+fish
+node-json5
+
 # IC-OS
-fdisk
 cryptsetup-bin
-dosfstools
-fakeroot
+dosfstools # provides mkfs.vfat
 faketime
-grub-efi-amd64-bin
+fdisk
 iasl # to build OVMF
-iputils-ping
  # Linked in by IC-OS binaries for managing encrypted disks.
 libcryptsetup-dev
  # Linked in by IC-OS binaries for creating mapped devices.
@@ -64,11 +61,10 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
-lsb-release
-lvm2
-mtools
+mtools # used for mcopy and mmd
 nasm # to build OVMF
-python-is-python3
-python3
-python3-pip
 zstd
+
+# Unknown
+containernetworking-plugins
+buildah
