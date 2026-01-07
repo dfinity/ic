@@ -3,8 +3,11 @@ use crate::{pb::v1::RegistryCanisterStableStorage, registry::Registry};
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_node_operator_record_key;
+use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordPb;
+use ic_protobuf::types::v1::master_public_key_id::KeyId;
+use ic_registry_keys::{make_node_operator_record_key, make_subnet_record_key};
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
+use ic_types::SubnetId;
 use maplit::btreemap;
 use prost::Message;
 use std::str::FromStr;
@@ -25,13 +28,21 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
+        let mut total_batches = 0;
+
         let mutations = fix_node_operators_corrupted(registry);
-        if mutations.is_empty() {
-            0 // No mutations required for this data migration.
-        } else {
+        if !mutations.is_empty() {
             registry.maybe_apply_mutation_internal(mutations);
-            1 // Single batch of mutations due to this data migration.
+            total_batches += 1;
         }
+
+        let mutations = fix_vetkd_pre_signatures_field(registry);
+        if !mutations.is_empty() {
+            registry.maybe_apply_mutation_internal(mutations);
+            total_batches += 1;
+        }
+
+        total_batches
     };
     //
     // When there are no migrations, `mutation_batches_due_to_data_migrations` should be set to `0`.
@@ -180,16 +191,107 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     mutations
 }
 
+fn fix_vetkd_pre_signatures_field(registry: &Registry) -> Vec<RegistryMutation> {
+    let mut mutations = Vec::new();
+
+    let subnets_with_vetkeys: Vec<&str> = vec![
+        // Subnet holding vetkd:Bls12_381_G2:key_1
+        "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
+        // Subnet holding vetkd:Bls12_381_G2:key_1 backup
+        "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
+        // Subnet holding vetkd:Bls12_381_G2:test_key_1
+        "fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae",
+        // Subnet holding vetkd:Bls12_381_G2:key_1 backup
+        "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
+    ];
+
+    for subnet_id_str in subnets_with_vetkeys {
+        let subnet_id_principal = match PrincipalId::from_str(subnet_id_str) {
+            Ok(pid) => pid,
+            Err(e) => {
+                ic_cdk::println!(
+                    "Warning: Failed to parse subnet ID '{subnet_id_str}': {e}. Skipping.",
+                );
+                continue;
+            }
+        };
+        let subnet_id = SubnetId::new(subnet_id_principal);
+
+        let subnet_key = make_subnet_record_key(subnet_id);
+        let registry_value = match registry.get(subnet_key.as_bytes(), registry.latest_version()) {
+            Some(value) => value,
+            None => {
+                ic_cdk::println!("Warning: Subnet {subnet_id} not found in registry, skipping",);
+                continue;
+            }
+        };
+
+        let mut subnet_record_pb = match SubnetRecordPb::decode(&registry_value.value[..]) {
+            Ok(record) => record,
+            Err(e) => {
+                ic_cdk::println!("Error decoding SubnetRecord for subnet {subnet_id}: {e}",);
+                continue;
+            }
+        };
+
+        // Check if chain_key_config exists and needs modification
+        let mut subnet_record_needs_update = false;
+        if let Some(ref mut chain_key_config) = subnet_record_pb.chain_key_config {
+            for key_config in &mut chain_key_config.key_configs {
+                // Check if this is a vetKD key
+                let is_vetkd_key = if let Some(key_id_pb) = &key_config.key_id {
+                    matches!(key_id_pb.key_id, Some(KeyId::Vetkd(_)))
+                } else {
+                    false
+                };
+
+                if is_vetkd_key && key_config.pre_signatures_to_create_in_advance == Some(0) {
+                    key_config.pre_signatures_to_create_in_advance = None;
+                    subnet_record_needs_update = true;
+                    ic_cdk::println!(
+                        "Migrating vetKD key in subnet {subnet_id}: changing pre_signatures_to_create_in_advance from Some(0) to None",
+                    );
+                }
+            }
+        }
+
+        if subnet_record_needs_update {
+            mutations.push(update(subnet_key, subnet_record_pb.encode_to_vec()));
+        }
+    }
+
+    mutations
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{
-        common::test_helpers::{empty_mutation, invariant_compliant_registry},
+        common::test_helpers::{
+            add_fake_subnet, empty_mutation, get_invariant_compliant_subnet_record,
+            invariant_compliant_registry, prepare_registry_with_nodes,
+        },
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
     use ic_base_types::PrincipalId;
+    use ic_management_canister_types_private::{
+        EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+        VetKdKeyId,
+    };
+    use ic_protobuf::registry::subnet::v1::{
+        ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+        SubnetRecord as SubnetRecordPb,
+    };
+    use ic_protobuf::types::v1::{
+        EcdsaCurve as EcdsaCurvePb, EcdsaKeyId as EcdsaKeyIdPb,
+        MasterPublicKeyId as MasterPublicKeyIdPb, VetKdCurve as VetKdCurvePb,
+        VetKdKeyId as VetKdKeyIdPb, master_public_key_id::KeyId,
+    };
+    use ic_registry_keys::make_subnet_record_key;
+    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_transport::insert;
+    use ic_test_utilities_types::ids::subnet_test_id;
     use maplit::btreemap;
     use std::str::FromStr;
 
@@ -526,6 +628,245 @@ mod test {
         assert_eq!(
             record_2rqo7_got, expected_record_2rqo7,
             "Assertion for NodeOperator {node_operator_2rqo7} failed"
+        );
+    }
+
+    #[test]
+    fn test_fix_vetkd_pre_signatures_field() {
+        let mut registry = invariant_compliant_registry(0);
+        let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 4);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        // Create a subnet that is in the migration list with a vetKD key that has pre_signatures_to_create_in_advance == Some(0)
+        let subnet_id_1 = SubnetId::new(
+            PrincipalId::from_str(
+                "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae",
+            )
+            .unwrap(),
+        );
+        let mut subnet_list_record = registry.get_subnet_list_record();
+        let mut subnet_record_1 = get_invariant_compliant_subnet_record(
+            node_ids_and_dkg_pks.keys().take(1).cloned().collect(),
+        );
+        subnet_record_1.chain_key_config = Some(ChainKeyConfigPb {
+            key_configs: vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb {
+                    key_id: Some(KeyId::Vetkd(VetKdKeyIdPb {
+                        curve: VetKdCurvePb::Bls12381G2 as i32,
+                        name: "key_1".to_string(),
+                    })),
+                }),
+                pre_signatures_to_create_in_advance: Some(0), // This should be migrated to None
+                max_queue_size: Some(50),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id_1,
+            &mut subnet_list_record,
+            subnet_record_1.clone(),
+            &node_ids_and_dkg_pks
+                .iter()
+                .take(1)
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        ));
+
+        // Create a subnet that is NOT in the migration list (should not be affected)
+        let subnet_id_2 = subnet_test_id(2000);
+        let mut subnet_record_2 = get_invariant_compliant_subnet_record(
+            node_ids_and_dkg_pks
+                .keys()
+                .skip(1)
+                .take(1)
+                .cloned()
+                .collect(),
+        );
+        subnet_record_2.chain_key_config = Some(ChainKeyConfigPb {
+            key_configs: vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb {
+                    key_id: Some(KeyId::Vetkd(VetKdKeyIdPb {
+                        curve: VetKdCurvePb::Bls12381G2 as i32,
+                        name: "other_key".to_string(),
+                    })),
+                }),
+                pre_signatures_to_create_in_advance: Some(0), // This should NOT be migrated
+                max_queue_size: Some(50),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id_2,
+            &mut subnet_list_record,
+            subnet_record_2.clone(),
+            &node_ids_and_dkg_pks
+                .iter()
+                .skip(1)
+                .take(1)
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        ));
+
+        // Create a subnet in the migration list with a vetKD key that has a different value (not 0)
+        let subnet_id_3 = SubnetId::new(
+            PrincipalId::from_str(
+                "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe",
+            )
+            .unwrap(),
+        );
+        let mut subnet_record_3 = get_invariant_compliant_subnet_record(
+            node_ids_and_dkg_pks
+                .keys()
+                .skip(2)
+                .take(1)
+                .cloned()
+                .collect(),
+        );
+        subnet_record_3.chain_key_config = Some(ChainKeyConfigPb {
+            key_configs: vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb {
+                    key_id: Some(KeyId::Vetkd(VetKdKeyIdPb {
+                        curve: VetKdCurvePb::Bls12381G2 as i32,
+                        name: "key_1".to_string(),
+                    })),
+                }),
+                pre_signatures_to_create_in_advance: Some(10), // This should NOT be migrated (not 0)
+                max_queue_size: Some(50),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id_3,
+            &mut subnet_list_record,
+            subnet_record_3.clone(),
+            &node_ids_and_dkg_pks
+                .iter()
+                .skip(2)
+                .take(1)
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        ));
+
+        // Create a subnet in the migration list with a non-vetKD key (should not be affected)
+        let subnet_id_4 = SubnetId::new(
+            PrincipalId::from_str(
+                "fuqsr-in2lc-zbcjj-ydmcw-pzq7h-4xm2z-pto4i-dcyee-5z4rz-x63ji-nae",
+            )
+            .unwrap(),
+        );
+        let mut subnet_record_4 = get_invariant_compliant_subnet_record(
+            node_ids_and_dkg_pks
+                .keys()
+                .skip(3)
+                .take(1)
+                .cloned()
+                .collect(),
+        );
+        subnet_record_4.chain_key_config = Some(ChainKeyConfigPb {
+            key_configs: vec![KeyConfigPb {
+                key_id: Some(MasterPublicKeyIdPb {
+                    key_id: Some(KeyId::Ecdsa(EcdsaKeyIdPb {
+                        curve: EcdsaCurvePb::Secp256k1 as i32,
+                        name: "test_key".to_string(),
+                    })),
+                }),
+                pre_signatures_to_create_in_advance: Some(0), // This should NOT be migrated (not vetKD)
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id_4,
+            &mut subnet_list_record,
+            subnet_record_4.clone(),
+            &node_ids_and_dkg_pks
+                .iter()
+                .skip(3)
+                .take(1)
+                .map(|(k, v)| (*k, v.clone()))
+                .collect(),
+        ));
+
+        // Run the migration
+        let mutations = fix_vetkd_pre_signatures_field(&registry);
+        // We expect 1 mutation: subnet_id_1 has a vetKD key with pre_signatures_to_create_in_advance == Some(0)
+        assert_eq!(mutations.len(), 1);
+        registry.apply_mutations_for_test(mutations);
+
+        // Verify subnet_id_1 was migrated (pre_signatures_to_create_in_advance changed from Some(0) to None)
+        let subnet_key_1 = make_subnet_record_key(subnet_id_1);
+        let registry_value_1 = registry
+            .get(subnet_key_1.as_bytes(), registry.latest_version())
+            .unwrap();
+        let subnet_record_1_after = SubnetRecordPb::decode(&registry_value_1.value[..]).unwrap();
+        assert!(subnet_record_1_after.chain_key_config.is_some());
+        let key_config_1 = &subnet_record_1_after
+            .chain_key_config
+            .as_ref()
+            .unwrap()
+            .key_configs[0];
+        assert_eq!(key_config_1.pre_signatures_to_create_in_advance, None);
+
+        // Verify subnet_id_2 was NOT migrated (not in the migration list)
+        let subnet_key_2 = make_subnet_record_key(subnet_id_2);
+        let registry_value_2 = registry
+            .get(subnet_key_2.as_bytes(), registry.latest_version())
+            .unwrap();
+        let subnet_record_2_after = SubnetRecordPb::decode(&registry_value_2.value[..]).unwrap();
+        assert!(subnet_record_2_after.chain_key_config.is_some());
+        let key_config_2 = &subnet_record_2_after
+            .chain_key_config
+            .as_ref()
+            .unwrap()
+            .key_configs[0];
+        assert_eq!(
+            key_config_2.pre_signatures_to_create_in_advance,
+            Some(0),
+            "Subnet not in migration list should not be affected"
+        );
+
+        // Verify subnet_id_3 was NOT migrated (pre_signatures_to_create_in_advance is not 0)
+        let subnet_key_3 = make_subnet_record_key(subnet_id_3);
+        let registry_value_3 = registry
+            .get(subnet_key_3.as_bytes(), registry.latest_version())
+            .unwrap();
+        let subnet_record_3_after = SubnetRecordPb::decode(&registry_value_3.value[..]).unwrap();
+        assert!(subnet_record_3_after.chain_key_config.is_some());
+        let key_config_3 = &subnet_record_3_after
+            .chain_key_config
+            .as_ref()
+            .unwrap()
+            .key_configs[0];
+        assert_eq!(
+            key_config_3.pre_signatures_to_create_in_advance,
+            Some(10),
+            "Subnet with vetKD key having non-zero value should not be affected"
+        );
+
+        // Verify subnet_id_4 was NOT migrated (not a vetKD key)
+        let subnet_key_4 = make_subnet_record_key(subnet_id_4);
+        let registry_value_4 = registry
+            .get(subnet_key_4.as_bytes(), registry.latest_version())
+            .unwrap();
+        let subnet_record_4_after = SubnetRecordPb::decode(&registry_value_4.value[..]).unwrap();
+        assert!(subnet_record_4_after.chain_key_config.is_some());
+        let key_config_4 = &subnet_record_4_after
+            .chain_key_config
+            .as_ref()
+            .unwrap()
+            .key_configs[0];
+        assert_eq!(
+            key_config_4.pre_signatures_to_create_in_advance,
+            Some(0),
+            "Subnet with non-vetKD key should not be affected"
         );
     }
 }
