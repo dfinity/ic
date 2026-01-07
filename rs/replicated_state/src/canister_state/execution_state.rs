@@ -453,6 +453,10 @@ impl ExecutionState {
             .expect("could not convert from stable memory number of pages to bytes")
     }
 
+    pub fn log_memory_usage(&self) -> NumBytes {
+        NumBytes::from(self.log_memory_store.total_allocated_bytes())
+    }
+
     // Returns the global memory currently used by the `ExecutionState`.
     pub fn global_memory_usage(&self) -> NumBytes {
         let globals_size_bytes = size_of::<Global>() as u64 * self.exported_globals.len() as u64;
@@ -474,6 +478,7 @@ impl ExecutionState {
     pub fn memory_usage(&self) -> NumBytes {
         self.wasm_memory_usage()
             + self.stable_memory_usage()
+            + self.log_memory_usage()
             + self.global_memory_usage()
             + self.wasm_binary_memory_usage()
             + self.custom_sections_memory_size()
