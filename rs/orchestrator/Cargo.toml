@@ -48,7 +48,7 @@ ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-replicator = { path = "./registry_replicator" }
-ic-sev = { path = "../ic_os/sev" }
+ic_sev = { path = "../ic_os/sev" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 idna = { workspace = true }
