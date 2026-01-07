@@ -149,11 +149,19 @@ fn operation_strategy<Tokens: TokensType>(
         let fee_collector_strategy = (
             prop::option::of(principal_strategy()),
             prop::option::of(account_strategy()),
+            prop_oneof![
+                Just(None),
+                Just(Some("107set_fee_collector".to_string())),
+                Just(Some("other_mthd".to_string())),
+            ],
         )
-            .prop_map(move |(caller, fee_collector)| Operation::FeeCollector {
-                fee_collector,
-                caller,
-            });
+            .prop_map(
+                move |(caller, fee_collector, mthd)| Operation::FeeCollector {
+                    fee_collector,
+                    caller,
+                    mthd,
+                },
+            );
 
         prop_oneof![
             mint_strategy,
