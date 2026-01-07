@@ -745,6 +745,7 @@ opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
+    "alloc",
     "arithmetic",
     "ecdsa",
     "pem",
