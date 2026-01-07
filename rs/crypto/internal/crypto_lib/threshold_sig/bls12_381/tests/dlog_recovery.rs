@@ -5,7 +5,7 @@ use rand::Rng;
 
 // Returns a random element of Gt
 fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
-    let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
+    let g1 = G1Affine::hash("ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
 }
@@ -60,7 +60,7 @@ fn baby_giant_1000() {
         accum += &base;
     }
 
-    // Test that we can solve in the postive range:
+    // Test that we can solve in the positive range:
     let mut accum = Gt::identity();
     for x in 0..1000 {
         assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_usize(x)));

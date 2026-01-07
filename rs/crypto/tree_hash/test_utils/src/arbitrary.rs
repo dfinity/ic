@@ -63,7 +63,7 @@ pub fn arbitrary_well_formed_mixed_hash_tree() -> impl Strategy<Value = T> {
 pub fn arbitrary_well_formed_mixed_hash_tree_with_params(
     max_depth: u32,
     expected_size: u32,
-    expected_iterms_per_collection: u32,
+    expected_items_per_collection: u32,
 ) -> impl Strategy<Value = T> {
     let labeled_leaf = (
         ".*",
@@ -73,7 +73,7 @@ pub fn arbitrary_well_formed_mixed_hash_tree_with_params(
     let tree = labeled_leaf.prop_recursive(
         max_depth,
         expected_size,
-        expected_iterms_per_collection,
+        expected_items_per_collection,
         |inner| {
             prop_oneof![
                 3 => (inner.clone(), inner.clone()).prop_map(|(l, r)| T::Fork(Box::new((l, r)))),

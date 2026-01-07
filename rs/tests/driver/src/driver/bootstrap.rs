@@ -1,31 +1,24 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::test_env_api::get_guestos_initial_launch_measurements;
-use crate::k8s::config::LOGS_URL;
-use crate::k8s::images::*;
-use crate::k8s::tnet::{TNet, TNode};
-use crate::util::block_on;
-use crate::{
-    driver::{
-        config::NODES_INFO,
-        driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-        farm::{AttachImageSpec, Farm, FarmResult, FileId},
-        ic::{InternetComputer, Node},
-        nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
-        node_software_version::NodeSoftwareVersion,
-        port_allocator::AddrType,
-        resource::AllocatedVm,
-        test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
-        test_env_api::{
-            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
-            get_build_setupos_config_image_tool, get_guestos_img_version,
-            get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-            get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
-            try_get_guestos_img_version,
-        },
-        test_setup::InfraProvider,
+use crate::driver::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    farm::{AttachImageSpec, Farm, FarmResult, FileId},
+    ic::{InternetComputer, Node},
+    nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
+    node_software_version::NodeSoftwareVersion,
+    port_allocator::AddrType,
+    resource::AllocatedVm,
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
+    test_env_api::{
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
+        get_build_setupos_config_image_tool, get_guestos_img_version,
+        get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
+        get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
+        try_get_guestos_img_version,
     },
-    k8s::job::wait_for_job_completion,
+    test_setup::InfraProvider,
 };
 use anyhow::{Context, Result, bail};
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
@@ -34,9 +27,9 @@ use config::setupos::{
     deployment_json::{self, DeploymentSettings},
 };
 use config_types::{
-    CONFIG_VERSION, DeploymentEnvironment, FixedIpv6Config, GuestOSConfig, GuestOSDevSettings,
-    GuestOSSettings, GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config,
-    Ipv6Config, Logging, NetworkSettings, RecoveryConfig,
+    CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
+    GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
+    NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -48,7 +41,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{Logger, info, warn};
+use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -207,7 +200,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
-        ic_os_launch_measurements,
+        Some(ic_os_launch_measurements),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -220,7 +213,7 @@ pub fn init_ic(
         ic_config.skip_unassigned_record();
     }
 
-    info!(test_env.logger(), "Initializing via {:?}", &ic_config);
+    debug!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
 }
@@ -244,12 +237,6 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
-
-    let tnet = match InfraProvider::read_attribute(env) {
-        InfraProvider::K8s => TNet::read_attribute(env),
-        InfraProvider::Farm => TNet::new("dummy")?,
-    };
-
     let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
@@ -264,15 +251,6 @@ pub fn setup_and_start_vms(
         let domain = ic.get_domain_of_node(node.node_id);
         let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
         nodes_info.insert(node.node_id, malicious_behavior.clone());
-        let tnet_node = match InfraProvider::read_attribute(env) {
-            InfraProvider::K8s => tnet
-                .nodes
-                .iter()
-                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
-                .expect("tnet doesn't have this node")
-                .clone(),
-            InfraProvider::Farm => TNode::default(),
-        };
         join_handles.push(thread::spawn(move || {
             create_config_disk_image(
                 &ic_name,
@@ -287,33 +265,6 @@ pub fn setup_and_start_vms(
 
             let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
             match InfraProvider::read_attribute(&t_env) {
-                InfraProvider::K8s => {
-                    let url = format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("Missing config_url"),
-                        mk_compressed_img_path()
-                    );
-                    info!(
-                        t_env.logger(),
-                        "Uploading image {} to {}",
-                        conf_img_path.clone().display().to_string(),
-                        url.clone()
-                    );
-                    block_on(upload_image(conf_img_path.as_path(), &url))
-                        .expect("Failed to upload config image");
-                    // wait for job pulling the disk to complete
-                    block_on(wait_for_job_completion(&tnet_node.name.clone().unwrap()))
-                        .expect("Waiting for job failed");
-                    block_on(tnet_node.start()).expect("Starting vm failed");
-                    let node_name = tnet_node.name.unwrap();
-                    info!(t_farm.logger, "Starting k8s vm: {}", node_name);
-                    info!(
-                        t_farm.logger,
-                        "VM {} console logs: {}",
-                        node_name.clone(),
-                        LOGS_URL.replace("{job}", &node_name)
-                    );
-                }
                 InfraProvider::Farm => {
                     let image_spec = AttachImageSpec::new(upload_config_disk_image(
                         &group_name,
@@ -545,13 +496,7 @@ fn create_guestos_config_for_node(
     ic_name: &str,
 ) -> anyhow::Result<GuestOSConfig> {
     // Build NetworkSettings
-    let ipv6_config = if InfraProvider::read_attribute(test_env) == InfraProvider::K8s {
-        let address = format!("{}/64", node.node_config.public_api.ip());
-        let gateway = "fe80::ecee:eeff:feee:eeee".parse::<std::net::Ipv6Addr>()?;
-        Ipv6Config::Fixed(FixedIpv6Config { address, gateway })
-    } else {
-        Ipv6Config::RouterAdvertisement
-    };
+    let ipv6_config = Ipv6Config::RouterAdvertisement;
 
     let ipv4_config = match ipv4_config {
         Some(config) => Some(Ipv4Config {
@@ -588,8 +533,6 @@ fn create_guestos_config_for_node(
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
-        logging: Logging {},
-        use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key: true,
         enable_trusted_execution_environment: false,
@@ -731,11 +674,10 @@ fn create_setupos_config_image(
                 deployment_environment: DeploymentEnvironment::Testnet,
                 mgmt_mac: Some(mac.to_string()),
             },
-            logging: deployment_json::Logging {},
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },
-            vm_resources: deployment_json::VmResources {
+            dev_vm_resources: deployment_json::VmResources {
                 memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
                 cpu: cpu.to_string(),
                 nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
@@ -746,13 +688,10 @@ fn create_setupos_config_image(
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
-    let path_key = "PATH";
-    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)
         .arg(&config_image)
-        .env(path_key, &new_path)
         .status()?;
 
     if !status.success() {

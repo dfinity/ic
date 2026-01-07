@@ -56,7 +56,7 @@ use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
 use std::time::Duration;
@@ -544,6 +544,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -554,16 +556,11 @@ pub enum LedgerField {
     Blocks,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Debug, Default)]
 pub enum LedgerState {
     Migrating(LedgerField),
+    #[default]
     Ready,
-}
-
-impl Default for LedgerState {
-    fn default() -> Self {
-        Self::Ready
-    }
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
@@ -872,6 +869,14 @@ impl LedgerData for Ledger {
 
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
         self.fee_collector.as_mut()
+    }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.get()
     }
 }
 

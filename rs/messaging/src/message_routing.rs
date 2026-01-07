@@ -34,7 +34,7 @@ use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
-use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::batch::{Batch, BatchContent, BatchSummary, CanisterCyclesCostSchedule};
 use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
@@ -101,6 +101,7 @@ const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
@@ -114,6 +115,7 @@ const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
 const METRIC_MAX_CANISTERS: &str = "mr_subnet_max_canisters";
 const METRIC_INITIAL_NOTARY_DELAY: &str = "mr_subnet_initial_notary_delay_seconds";
 const METRIC_MAX_BLOCK_PAYLOAD_SIZE: &str = "mr_subnet_max_block_payload_size_bytes";
+const METRIC_CANISTER_RANGES_COUNT: &str = "mr_canister_ranges_count";
 const METRIC_SUBNET_FEATURES: &str = "mr_subnet_features";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
@@ -312,6 +314,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) blocks_proposed_total: IntCounter,
     /// Number of blocks not proposed.
     pub(crate) blocks_not_proposed_total: IntCounter,
+    /// Number of blocks not proposed by blockmaker ID.
+    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -336,6 +340,7 @@ pub(crate) struct MessageRoutingMetrics {
     max_canisters: IntGauge,
     initial_notary_delay: Gauge,
     max_block_payload_size: IntGauge,
+    canister_ranges_count: IntGauge,
     subnet_features: IntGaugeVec,
 
     /// Critical error for not being able to calculate a subnet size.
@@ -446,6 +451,11 @@ impl MessageRoutingMetrics {
                 BLOCKS_NOT_PROPOSED_TOTAL,
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
             ),
+            blocks_not_proposed_by_blockmaker_total: metrics_registry.int_counter_vec(
+                BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
+                &["blockmaker_id"],
+            ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
                 "Total memory footprint of all canisters on this subnet.",
@@ -485,6 +495,10 @@ impl MessageRoutingMetrics {
             max_block_payload_size: metrics_registry.int_gauge(
                 METRIC_MAX_BLOCK_PAYLOAD_SIZE,
                 "Maximum size of a block payload, in bytes.",
+            ),
+            canister_ranges_count: metrics_registry.int_gauge(
+                METRIC_CANISTER_RANGES_COUNT,
+                "Number of canister ranges for the own subnet.",
             ),
             subnet_features: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_FEATURES,
@@ -916,6 +930,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         self.metrics
             .max_block_payload_size
             .set(subnet_record.max_block_payload_size as i64);
+        self.metrics
+            .canister_ranges_count
+            .set(network_topology.routing_table.ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -1247,8 +1264,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<RegistryClient_> {
     #[instrument(skip_all)]
     fn process_batch(&self, batch: Batch) {
-        let _process_batch_start = Instant::now();
         let since = Instant::now();
+        let _process_batch_start = since;
 
         // Fetch the mutable tip from StateManager
         let mut state = match self
@@ -1284,6 +1301,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO(DSM-57): Drop the `split_from` field and the `split()` and
+        // `after_split()` methods once online splitting is fully rolled out.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
@@ -1296,12 +1316,20 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .set(batch.batch_number.get() as i64);
             state.after_split();
         }
+        // If this is the round after an online subnet split, record the split height.
+        if let Some(split_from) = state.metadata.subnet_split_from {
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
+            state.metadata.subnet_split_from = None;
+        }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
         let commit_height = Height::from(batch.batch_number.get());
 
-        let certification_scope = if batch.requires_full_state_hash {
+        let certification_scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
             CertificationScope::Metadata
@@ -1322,6 +1350,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         self.metrics
             .blocks_not_proposed_total
             .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+            self.metrics
+                .blocks_not_proposed_by_blockmaker_total
+                .with_label_values(&[&failed_blockmaker.to_string()])
+                .inc();
+        }
+
         state
             .metadata
             .blockmaker_metrics_time_series
@@ -1342,6 +1377,8 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         if certification_scope == CertificationScope::Full {
             state_after_round.garbage_collect_canister_queues();
         }
+        state_after_round.metadata.subnet_metrics.num_canisters =
+            state_after_round.canister_states.len() as u64;
         let total_memory_usage = self.observe_canisters_memory_usage(&state_after_round);
         state_after_round
             .metadata
@@ -1426,8 +1463,17 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         let time = batch.time;
         state.metadata.batch_time = time;
 
+        let certification_scope = if batch.requires_full_state_hash() {
+            CertificationScope::Full
+        } else {
+            CertificationScope::Metadata
+        };
+
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
+        let signed_ingress_msgs = match batch.content {
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
+        };
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {
@@ -1455,12 +1501,6 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         // Postprocess the state and consolidate the Streams.
         let state_after_stream_builder = self.stream_builder.build_streams(state);
-
-        let certification_scope = if batch.requires_full_state_hash {
-            CertificationScope::Full
-        } else {
-            CertificationScope::Metadata
-        };
 
         self.state_manager.commit_and_certify(
             state_after_stream_builder,

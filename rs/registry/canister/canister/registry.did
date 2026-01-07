@@ -323,7 +323,7 @@ type ReviseElectedGuestosVersionsPayload = record {
 
 type GuestLaunchMeasurements = record {
  guest_launch_measurements : vec record {
-   metadata : opt record { kernel_cmdline : text };
+   metadata : opt record { kernel_cmdline : opt text };
    measurement : blob;
  };
 };
@@ -469,9 +469,35 @@ type UpdateUnassignedNodesConfigPayload = record {
 };
 
 type SwapNodeInSubnetDirectlyPayload = record {
-    new_node_id : opt principal;
-    old_node_id : opt principal;
-}
+  new_node_id : opt principal;
+  old_node_id : opt principal;
+};
+
+// Used to perform the first and last steps of subnet recovery.
+type SetSubnetOperationalLevelPayload = record {
+  // Which subnet not modify (if any).
+  subnet_id : opt principal;
+
+  // 1 = Normal. This results in setting is_halted in SubnetRecord to false.
+  // 2 = DownForRepairs. This results in setting is_halted in SubnetRecord to true.
+  operational_level : opt int32;
+
+  // SSH public keys that are allowed to ssh into nodes of the subnet with
+  // read-only access.
+  ssh_readonly_access : opt vec text;
+
+  // Similar to ssh_read_only_access, except that this targets one node at a
+  // time, not all the nodes in the subnet.
+  ssh_node_state_write_access : opt vec NodeSshAccess;
+};
+
+type NodeSshAccess = record {
+  // Doesn't make sense without this. (opt for future compatibility.)
+  node_id : opt principal;
+
+  // Doesn't make sense without this. (opt for future compatibility.)
+  public_keys : opt vec text;
+};
 
 service : {
   add_api_boundary_nodes : (AddApiBoundaryNodesPayload) -> ();
@@ -511,6 +537,7 @@ service : {
   revise_elected_guestos_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   revise_elected_replica_versions : (ReviseElectedGuestosVersionsPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
+  set_subnet_operational_level : (SetSubnetOperationalLevelPayload) -> ();
   update_api_boundary_nodes_version : (UpdateApiBoundaryNodesVersionPayload) -> ();
   update_elected_hostos_versions : (UpdateElectedHostosVersionsPayload) -> ();
   revise_elected_hostos_versions : (ReviseElectedHostosVersionsPayload) -> ();

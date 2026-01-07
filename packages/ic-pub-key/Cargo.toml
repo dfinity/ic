@@ -1,6 +1,6 @@
 [package]
 name = "ic-pub-key"
-version = "0.1.0"
+version = "0.2.0"
 description = "A package created for the Internet Computer Protocol for (offline) derivation of threshold public keys"
 license = "Apache-2.0"
 readme = "README.md"
@@ -18,11 +18,10 @@ ed25519 = ["dep:ic-ed25519"]
 vetkeys = ["dep:ic-vetkeys"]
 
 [dependencies]
-ic-secp256k1 = { workspace = true, optional = true }
-ic-ed25519 = { workspace = true, optional = true }
+ic-secp256k1 = { path = "../ic-secp256k1", version = "0.3.0", optional = true }
+ic-ed25519 = { path = "../ic-ed25519", version = "0.5.0", optional = true }
 ic-vetkeys = { workspace = true, optional = true }
-ic-management-canister-types = "0.3.2"
+ic-management-canister-types = { workspace = true }
 
 [dev-dependencies]
-hex-literal = "0.4"
 hex = "0.4"

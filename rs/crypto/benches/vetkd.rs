@@ -9,13 +9,14 @@ use ic_crypto_test_utils_ni_dkg::{
     NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_interfaces::crypto::LoadTranscriptResult;
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKeyShare};
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdEncryptedKeyShare};
 use ic_types::{NodeId, NumberOfNodes};
 use ic_types_test_utils::ids::canister_test_id;
 use ic_vetkeys::TransportSecretKey;
@@ -69,9 +70,10 @@ fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     group.bench_function("create_encrypted_key_share", |b| {
         b.iter_batched_ref(
             || {
-                let vetkd_args = VetKdArgs {
+                let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
-                    context: random_derivation_context_with_n_bytes(32, rng),
+                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
                 };
@@ -80,7 +82,7 @@ fn bench_create_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
             },
             |(creator, vetkd_args)| {
                 creator
-                    .create_encrypted_key_share(vetkd_args.clone())
+                    .create_encrypted_key_share(vetkd_args.as_ref())
                     .expect("encrypted key share creation failed")
             },
             SmallInput,
@@ -97,23 +99,24 @@ fn bench_verify_encrypted_key_share<M: Measurement, C: CryptoComponentRng>(
     group.bench_function("verify_encrypted_key_share", |b| {
         b.iter_batched_ref(
             || {
-                let vetkd_args = VetKdArgs {
+                let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
-                    context: random_derivation_context_with_n_bytes(32, rng),
+                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
                 };
                 let creator_id = random_node_in(config.receivers().get(), rng);
                 let creator = crypto_for(creator_id, env);
                 let key_share = creator
-                    .create_encrypted_key_share(vetkd_args.clone())
+                    .create_encrypted_key_share(vetkd_args.as_ref())
                     .expect("failed to create encrypted key share");
                 let verifier = creator;
                 (key_share, verifier, creator_id, vetkd_args)
             },
             |(key_share, verifier, creator_id, vetkd_args)| {
                 verifier
-                    .verify_encrypted_key_share(*creator_id, key_share, vetkd_args)
+                    .verify_encrypted_key_share(*creator_id, key_share, &vetkd_args.as_ref())
                     .expect("failed to verify key share")
             },
             SmallInput,
@@ -133,16 +136,17 @@ fn bench_combine_encrypted_key_shares<M: Measurement, C: CryptoComponentRng>(
         |b| {
             b.iter_batched_ref(
                 || {
-                    let vetkd_args = VetKdArgs {
+                    let vetkd_args = VetKdArgsOwned {
                         ni_dkg_id: config.dkg_id().clone(),
-                        context: random_derivation_context_with_n_bytes(32, rng),
+                        caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                        context: random_n_bytes(32, rng),
                         input: random_n_bytes(32, rng),
                         transport_public_key: random_transports_secret_key(rng).public_key(),
                     };
                     let num_of_shares = NumberOfNodes::from(num_of_shares_to_combine as u32);
                     let key_shares = create_and_verify_key_shares_for_each(
                         &n_random_nodes_in(config.receivers().get(), num_of_shares, rng),
-                        &vetkd_args,
+                        &vetkd_args.as_ref(),
                         env,
                     );
                     assert_eq!(key_shares.len(), num_of_shares_to_combine);
@@ -151,7 +155,7 @@ fn bench_combine_encrypted_key_shares<M: Measurement, C: CryptoComponentRng>(
                 },
                 |(key_shares, combiner, vetkd_args)| {
                     combiner
-                        .combine_encrypted_key_shares(key_shares, vetkd_args)
+                        .combine_encrypted_key_shares(key_shares, &vetkd_args.as_ref())
                         .expect("failed to combine signature shares")
                 },
                 SmallInput,
@@ -169,28 +173,29 @@ fn bench_verify_encrypted_key<M: Measurement, C: CryptoComponentRng>(
     group.bench_function("verify_encrypted_key", |b| {
         b.iter_batched_ref(
             || {
-                let vetkd_args = VetKdArgs {
+                let vetkd_args = VetKdArgsOwned {
                     ni_dkg_id: config.dkg_id().clone(),
-                    context: random_derivation_context_with_n_bytes(32, rng),
+                    caller: canister_test_id(rng.r#gen::<u64>()).get(),
+                    context: random_n_bytes(32, rng),
                     input: random_n_bytes(32, rng),
                     transport_public_key: random_transports_secret_key(rng).public_key(),
                 };
                 let num_of_shares = config.threshold().get();
                 let key_shares = create_and_verify_key_shares_for_each(
                     &n_random_nodes_in(config.receivers().get(), num_of_shares, rng),
-                    &vetkd_args,
+                    &vetkd_args.as_ref(),
                     env,
                 );
                 let combiner = crypto_for(random_node_in(config.receivers().get(), rng), env);
                 let encrypted_key = combiner
-                    .combine_encrypted_key_shares(&key_shares, &vetkd_args)
+                    .combine_encrypted_key_shares(&key_shares, &vetkd_args.as_ref())
                     .expect("failed to combine signature shares");
                 let verifier = combiner;
                 (encrypted_key, verifier, vetkd_args)
             },
             |(encrypted_key, verifier, vetkd_args)| {
                 verifier
-                    .verify_encrypted_key(encrypted_key, vetkd_args)
+                    .verify_encrypted_key(encrypted_key, &vetkd_args.as_ref())
                     .expect("failed to combine key shares")
             },
             SmallInput,
@@ -262,18 +267,18 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
     for node_id in config.receivers().get() {
         let result = crypto_for(*node_id, crypto_components).load_transcript(transcript);
 
-        if result.is_err() {
-            panic!(
-                "failed to load transcript {} for node {}: {}",
-                transcript,
-                *node_id,
-                result.unwrap_err()
-            );
-        }
-
-        if let Some(expected_status) = expected_status {
-            let result = result.unwrap();
-            assert_eq!(result, expected_status);
+        match result {
+            Ok(status) => {
+                if let Some(expected_status) = expected_status {
+                    assert_eq!(status, expected_status);
+                }
+            }
+            Err(err) => {
+                panic!(
+                    "failed to load transcript {} for node {}: {}",
+                    transcript, *node_id, err
+                );
+            }
         }
     }
 }
@@ -300,14 +305,4 @@ fn n_random_nodes_in<R: Rng + CryptoRng>(
 fn random_transports_secret_key<R: Rng + CryptoRng>(rng: &mut R) -> TransportSecretKey {
     ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("failed to create transport secret key")
-}
-
-fn random_derivation_context_with_n_bytes<R: Rng + CryptoRng>(
-    n: u128,
-    rng: &mut R,
-) -> VetKdDerivationContext {
-    VetKdDerivationContext {
-        caller: canister_test_id(rng.r#gen::<u64>()).get(),
-        context: random_n_bytes(n, rng),
-    }
 }

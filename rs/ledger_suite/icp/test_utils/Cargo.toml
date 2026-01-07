@@ -12,7 +12,6 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-icp-index = { path = "../index" }
 ic-ledger-core = { path = "../../common/ledger_core" }
-ic-nns-constants = { path = "../../../nns/constants" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-management-canister-types = { workspace = true }
 icp-ledger = { path = ".." }

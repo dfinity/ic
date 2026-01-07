@@ -80,14 +80,14 @@ fn should_add_ckusdc_and_ckusdt_to_minter_via_orchestrator() {
             .ledger
             .unwrap();
 
-        ckerc20 = ckerc20
-            .check_events()
-            .assert_has_unique_events_in_order(&vec![EventPayload::AddedCkErc20Token {
+        ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
+            EventPayload::AddedCkErc20Token {
                 chain_id: token.contract.chain_id,
                 address: format_ethereum_address_to_eip_55(&token.contract.address),
                 ckerc20_token_symbol: token.ledger_init_arg.token_symbol,
                 ckerc20_ledger_id: new_ledger_id,
-            }]);
+            },
+        ]);
     }
 }
 
@@ -128,7 +128,7 @@ fn should_retry_to_add_usdc_when_minter_stopped() {
 
     ckerc20
         .cketh
-        .assert_has_unique_events_in_order(&vec![EventPayload::AddedCkErc20Token {
+        .assert_has_unique_events_in_order(&[EventPayload::AddedCkErc20Token {
             chain_id: usdc.contract.chain_id,
             address: format_ethereum_address_to_eip_55(&usdc.contract.address),
             ckerc20_token_symbol: usdc.ledger_init_arg.token_symbol,
@@ -440,6 +440,7 @@ mod withdraw_erc20 {
                             .unwrap(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
 
             let balance_after_withdrawal = ckerc20.cketh.balance_of(caller);
@@ -448,16 +449,14 @@ mod withdraw_erc20 {
                 balance_before_withdrawal - Nat::from(transaction_fee),
             );
             let reimbursed_amount = Nat::from(transaction_fee - CKETH_TRANSFER_FEE);
-            ckerc20 = ckerc20
-                .check_events()
-                .assert_has_unique_events_in_order(&vec![
-                    EventPayload::FailedErc20WithdrawalRequest {
-                        withdrawal_id: cketh_burn_index.into(),
-                        reimbursed_amount: reimbursed_amount.clone(),
-                        to: caller,
-                        to_subaccount: None,
-                    },
-                ]);
+            ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
+                EventPayload::FailedErc20WithdrawalRequest {
+                    withdrawal_id: cketh_burn_index.into(),
+                    reimbursed_amount: reimbursed_amount.clone(),
+                    to: caller,
+                    to_subaccount: None,
+                },
+            ]);
 
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
             ckerc20.env.tick();
@@ -468,7 +467,7 @@ mod withdraw_erc20 {
             );
             ckerc20
                 .check_events()
-                .assert_has_unique_events_in_order(&vec![EventPayload::ReimbursedEthWithdrawal {
+                .assert_has_unique_events_in_order(&[EventPayload::ReimbursedEthWithdrawal {
                     withdrawal_id: cketh_burn_index.into(),
                     reimbursed_in_block: Nat::from(cketh_burn_index) + 1_u8,
                     reimbursed_amount: reimbursed_amount.clone(),
@@ -485,6 +484,7 @@ mod withdraw_erc20 {
                         withdrawal_id: cketh_burn_index.into(),
                     })),
                     created_at_time: None,
+                    fee: None,
                 });
         }
 
@@ -725,6 +725,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(
                 deposit_params.token().ledger_canister_id,
@@ -744,6 +745,7 @@ mod withdraw_erc20 {
                         .unwrap(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
 
             let expected_cketh_balance_after_withdrawal =
@@ -771,60 +773,54 @@ mod withdraw_erc20 {
 
             let estimated_max_fee_per_gas = Nat::from(33_003_708_258_u64);
             let estimated_gas_limit = Nat::from(65_000_u64);
-            let ckerc20 = ckerc20
-                .check_events()
-                .assert_has_unique_events_in_order(&vec![
-                    EventPayload::AcceptedErc20WithdrawalRequest {
-                        max_transaction_fee: ckerc20_tx_fee.into(),
-                        withdrawal_amount: ckerc20_withdrawal_amount.into(),
-                        erc20_contract_address: deposit_params
-                            .token()
-                            .erc20_contract_address
-                            .clone(),
-                        destination: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                        cketh_ledger_burn_index: cketh_block_index.clone(),
-                        ckerc20_ledger_id: deposit_params.token().ledger_canister_id,
-                        ckerc20_ledger_burn_index: ckerc20_block_index.clone(),
-                        from: ckerc20_account.owner,
-                        from_subaccount: ckerc20_account.subaccount,
-                        created_at: time,
+            let ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
+                EventPayload::AcceptedErc20WithdrawalRequest {
+                    max_transaction_fee: ckerc20_tx_fee.into(),
+                    withdrawal_amount: ckerc20_withdrawal_amount.into(),
+                    erc20_contract_address: deposit_params.token().erc20_contract_address.clone(),
+                    destination: DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                    cketh_ledger_burn_index: cketh_block_index.clone(),
+                    ckerc20_ledger_id: deposit_params.token().ledger_canister_id,
+                    ckerc20_ledger_burn_index: ckerc20_block_index.clone(),
+                    from: ckerc20_account.owner,
+                    from_subaccount: ckerc20_account.subaccount,
+                    created_at: time,
+                },
+                EventPayload::CreatedTransaction {
+                    withdrawal_id: cketh_block_index.clone(),
+                    transaction: UnsignedTransaction {
+                        chain_id: Nat::from(1_u8),
+                        nonce: Nat::from(0_u8),
+                        max_priority_fee_per_gas: 1_500_000_000_u64.into(),
+                        max_fee_per_gas: estimated_max_fee_per_gas.clone(),
+                        gas_limit: estimated_gas_limit.clone(),
+                        destination: deposit_params.token().erc20_contract_address.clone(),
+                        value: 0_u8.into(),
+                        data: ByteBuf::from(erc20_transfer_data(
+                            &DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS
+                                .parse()
+                                .unwrap(),
+                            &ckerc20_withdrawal_amount.into(),
+                        )),
+                        access_list: vec![],
                     },
-                    EventPayload::CreatedTransaction {
-                        withdrawal_id: cketh_block_index.clone(),
-                        transaction: UnsignedTransaction {
-                            chain_id: Nat::from(1_u8),
-                            nonce: Nat::from(0_u8),
-                            max_priority_fee_per_gas: 1_500_000_000_u64.into(),
-                            max_fee_per_gas: estimated_max_fee_per_gas.clone(),
-                            gas_limit: estimated_gas_limit.clone(),
-                            destination: deposit_params.token().erc20_contract_address.clone(),
-                            value: 0_u8.into(),
-                            data: ByteBuf::from(erc20_transfer_data(
-                                &DEFAULT_ERC20_WITHDRAWAL_DESTINATION_ADDRESS
-                                    .parse()
-                                    .unwrap(),
-                                &ckerc20_withdrawal_amount.into(),
-                            )),
-                            access_list: vec![],
-                        },
+                },
+                EventPayload::SignedTransaction {
+                    withdrawal_id: cketh_block_index.clone(),
+                    raw_transaction: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION.to_string(),
+                },
+                EventPayload::FinalizedTransaction {
+                    withdrawal_id: cketh_block_index.clone(),
+                    transaction_receipt: TransactionReceipt {
+                        block_hash: DEFAULT_BLOCK_HASH.to_string(),
+                        block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
+                        effective_gas_price: Nat::from(4_277_923_390_u64),
+                        gas_used: Nat::from(21_000_u64),
+                        status: transaction_status.clone(),
+                        transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
                     },
-                    EventPayload::SignedTransaction {
-                        withdrawal_id: cketh_block_index.clone(),
-                        raw_transaction: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION.to_string(),
-                    },
-                    EventPayload::FinalizedTransaction {
-                        withdrawal_id: cketh_block_index.clone(),
-                        transaction_receipt: TransactionReceipt {
-                            block_hash: DEFAULT_BLOCK_HASH.to_string(),
-                            block_number: Nat::from(DEFAULT_BLOCK_NUMBER),
-                            effective_gas_price: Nat::from(4_277_923_390_u64),
-                            gas_used: Nat::from(21_000_u64),
-                            status: transaction_status.clone(),
-                            transaction_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH
-                                .to_string(),
-                        },
-                    },
-                ]);
+                },
+            ]);
 
             ckerc20.env.advance_time(PROCESS_REIMBURSEMENT);
             let cketh_balance_after_reimbursement = ckerc20.wait_for_updated_ledger_balance(
@@ -849,18 +845,16 @@ mod withdraw_erc20 {
                 );
                 ckerc20
                     .check_events()
-                    .assert_has_unique_events_in_order(&vec![
-                        EventPayload::ReimbursedErc20Withdrawal {
-                            withdrawal_id: cketh_block_index.clone(),
-                            burn_in_block: ckerc20_block_index.clone(),
-                            reimbursed_in_block: Nat::from(3_u8),
-                            ledger_id: deposit_params.token().ledger_canister_id,
-                            reimbursed_amount: ckerc20_withdrawal_amount.into(),
-                            transaction_hash: Some(
-                                DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
-                            ),
-                        },
-                    ])
+                    .assert_has_unique_events_in_order(&[EventPayload::ReimbursedErc20Withdrawal {
+                        withdrawal_id: cketh_block_index.clone(),
+                        burn_in_block: ckerc20_block_index.clone(),
+                        reimbursed_in_block: Nat::from(3_u8),
+                        ledger_id: deposit_params.token().ledger_canister_id,
+                        reimbursed_amount: ckerc20_withdrawal_amount.into(),
+                        transaction_hash: Some(
+                            DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.to_string(),
+                        ),
+                    }])
                     .call_ckerc20_ledger_get_transaction(
                         deposit_params.token().ledger_canister_id,
                         3_u8,
@@ -873,6 +867,7 @@ mod withdraw_erc20 {
                             tx_hash: DEFAULT_CKERC20_WITHDRAWAL_TRANSACTION_HASH.parse().unwrap(),
                         })),
                         created_at_time: None,
+                        fee: None,
                     });
             }
         }
@@ -1144,7 +1139,7 @@ mod withdraw_erc20 {
                 resubmitted_tx_sig,
             )
             .check_events()
-            .assert_has_unique_events_in_order(&vec![
+            .assert_has_unique_events_in_order(&[
                 EventPayload::ReplacedTransaction {
                     withdrawal_id: cketh_block_index.clone(),
                     transaction: UnsignedTransaction {
@@ -1361,6 +1356,7 @@ fn should_deposit_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
@@ -1454,6 +1450,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: cketh_params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             })
             .call_ckerc20_ledger_get_transaction(params.token().ledger_canister_id, 0_u8)
             .expect_mint(Mint {
@@ -1465,6 +1462,7 @@ fn should_deposit_cketh_and_ckerc20() {
                     log_index: params.transaction_data().log_index.into(),
                 })),
                 created_at_time: None,
+                fee: None,
             });
     }
 }
@@ -1495,7 +1493,7 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
     let ckerc20 = deposit_flow
         .setup
         .check_events()
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::AcceptedDeposit {
                 transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 block_number: Nat::from(DEFAULT_DEPOSIT_BLOCK_NUMBER),
@@ -1535,26 +1533,24 @@ fn should_deposit_cketh_and_ckerc20_when_ledger_temporary_offline() {
     ckerc20.env.advance_time(MINT_RETRY_DELAY);
     ckerc20.env.tick();
 
-    let ckerc20 = ckerc20
-        .check_events()
-        .assert_has_unique_events_in_order(&vec![
-            EventPayload::MintedCkEth {
-                event_source: EventSource {
-                    transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                    log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
-                },
-                mint_block_index: Nat::from(0_u8),
+    let ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
+        EventPayload::MintedCkEth {
+            event_source: EventSource {
+                transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
             },
-            EventPayload::MintedCkErc20 {
-                event_source: EventSource {
-                    transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
-                    log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
-                },
-                ckerc20_token_symbol: ckusdc.ckerc20_token_symbol,
-                erc20_contract_address: ckusdc.erc20_contract_address,
-                mint_block_index: Nat::from(0_u8),
+            mint_block_index: Nat::from(0_u8),
+        },
+        EventPayload::MintedCkErc20 {
+            event_source: EventSource {
+                transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
+                log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
             },
-        ]);
+            ckerc20_token_symbol: ckusdc.ckerc20_token_symbol,
+            erc20_contract_address: ckusdc.erc20_contract_address,
+            mint_block_index: Nat::from(0_u8),
+        },
+    ]);
 
     assert_eq!(
         call_ledger_icrc1_total_supply(&ckerc20.env, ckerc20.cketh.ledger_id,),
@@ -1582,7 +1578,7 @@ fn should_block_deposit_from_blocked_address() {
         })
         .expect_no_mint()
         .check_events()
-        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+        .assert_has_unique_events_in_order(&[EventPayload::InvalidDeposit {
             event_source: EventSource {
                 transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
@@ -1605,7 +1601,7 @@ fn should_block_deposit_from_corrupted_principal() {
         })
         .expect_no_mint()
         .check_events()
-        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+        .assert_has_unique_events_in_order(&[EventPayload::InvalidDeposit {
             event_source: EventSource {
                 transaction_hash: DEFAULT_ERC20_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_ERC20_DEPOSIT_LOG_INDEX),
@@ -1815,16 +1811,14 @@ fn should_scrape_from_last_scraped_after_upgrade() {
     ckerc20
         .cketh
         .check_audit_logs_and_upgrade_as_ref(Default::default());
-    ckerc20 = ckerc20
-        .check_events()
-        .assert_has_unique_events_in_order(&vec![
-            EventPayload::SyncedToBlock {
-                block_number: latest_finalized_block.into(),
-            },
-            EventPayload::SyncedErc20ToBlock {
-                block_number: latest_finalized_block.into(),
-            },
-        ]);
+    ckerc20 = ckerc20.check_events().assert_has_unique_events_in_order(&[
+        EventPayload::SyncedToBlock {
+            block_number: latest_finalized_block.into(),
+        },
+        EventPayload::SyncedErc20ToBlock {
+            block_number: latest_finalized_block.into(),
+        },
+    ]);
 
     // Advance block height and scrape again
     let latest_finalized_block =
@@ -2036,7 +2030,7 @@ fn should_skip_single_block_containing_too_many_events() {
             } => address.to_lowercase() == ETH_HELPER_CONTRACT_ADDRESS,
             _ => false,
         })
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::SkippedBlock {
                 contract_address: Some(
                     ERC20_HELPER_CONTRACT_ADDRESS

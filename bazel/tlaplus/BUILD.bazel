@@ -1,6 +1,8 @@
 # See https://lamport.azurewebsites.net/tla/tools.html for the
 # description of the TLA+ command-line tools.
 
+load("@rules_java//java:java_binary.bzl", "java_binary")
+
 COMMON_DEPS = [
     # Keep sorted.
     "//third_party/tlaplus-1.8.0:tla2tools",

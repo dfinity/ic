@@ -316,12 +316,6 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     }
 }
 
-/// Indicates whether `uninstall_canister` should push a canister change (with a given change origin) to canister history.
-pub enum AddCanisterChangeToHistory {
-    Yes(CanisterChangeOrigin),
-    No,
-}
-
 pub(crate) struct UploadChunkResult {
     pub(crate) reply: UploadChunkReply,
     pub(crate) heap_delta_increase: NumBytes,
@@ -334,6 +328,7 @@ pub(crate) enum CanisterManagerError {
         controllers_expected: BTreeSet<PrincipalId>,
         controller_provided: PrincipalId,
     },
+    CallerNotAuthorized,
     CanisterAlreadyExists(CanisterId),
     CanisterIdAlreadyExists(CanisterId),
     CanisterNotFound(CanisterId),
@@ -356,10 +351,6 @@ pub(crate) enum CanisterManagerError {
     DeleteCanisterSelf(CanisterId),
     DeleteCanisterQueueNotEmpty(CanisterId),
     SenderNotInWhitelist(PrincipalId),
-    NotEnoughMemoryAllocationGiven {
-        memory_allocation_given: MemoryAllocation,
-        memory_usage_needed: NumBytes,
-    },
     CreateCanisterNotEnoughCycles {
         sent: Cycles,
         required: Cycles,
@@ -484,6 +475,14 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         section_name: String,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
+    CanisterLogMemoryLimitIsTooHigh {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -544,10 +543,6 @@ impl AsErrorHelp for CanisterManagerError {
                 in the meantime stop the canister."
                     .to_string(),
                 doc_link: doc_ref("delete-canister-queue-not-empty"),
-            },
-            CanisterManagerError::NotEnoughMemoryAllocationGiven { .. } => ErrorHelp::UserError {
-                suggestion: "Try increasing the canister's memory allocation.".to_string(),
-                doc_link: doc_ref("not-enough-memory-allocation-given"),
             },
             CanisterManagerError::CreateCanisterNotEnoughCycles { .. } => ErrorHelp::UserError {
                 suggestion: "Try sending more cycles with the request.".to_string(),
@@ -728,6 +723,18 @@ impl AsErrorHelp for CanisterManagerError {
                 suggestion: "If you are a controller of the canister, install a Wasm module containing a metadata section with the given name.".to_string(),
                 doc_link: "canister-metadata-section-not-found".to_string(),
             },
+            CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
+                suggestion: "The caller is not authorized to call this method.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -841,15 +848,6 @@ impl From<CanisterManagerError> for UserError {
                     String::from("Sender not authorized to use method."),
                 )
             }
-            NotEnoughMemoryAllocationGiven {
-                memory_allocation_given,
-                memory_usage_needed,
-            } => Self::new(
-                ErrorCode::InsufficientMemoryAllocation,
-                format!(
-                    "Canister was given {memory_allocation_given} memory allocation but at least {memory_usage_needed} of memory is needed.{additional_help}",
-                ),
-            ),
             CreateCanisterNotEnoughCycles { sent, required } => Self::new(
                 ErrorCode::InsufficientCyclesForCreateCanister,
                 format!(
@@ -1115,6 +1113,22 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::CanisterRejectedMessage,
                 format!(
                     "The canister {canister_id} has no metadata section with the name {section_name}."
+                ),
+            ),
+            CallerNotAuthorized => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. It must be at least {limit}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too high. It must be at most {limit}."
                 ),
             ),
         }

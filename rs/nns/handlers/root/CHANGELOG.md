@@ -11,6 +11,13 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-24: Proposal 139087
+
+Just a "maintenance" release, i.e. no behavior changes, just making
+sure that we do not become too behind, and avoid too many changes
+piling up in for the next "real" upgrade.
+
+
 # 2025-08-15: Proposal 137916
 
 http://dashboard.internetcomputer.org/proposal/137916

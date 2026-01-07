@@ -24,6 +24,9 @@ pub struct ConstructionHashResponse {
     pub metadata: ObjectMap,
 }
 
+/// `SignedTransaction` up to v2.0.0
+pub type LegacySignedTransaction = Vec<Request>;
+
 /// The type (encoded as CBOR) returned by /construction/combine, containing the
 /// IC calls to submit the transaction and to check the result.
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -34,8 +37,14 @@ pub struct SignedTransaction {
 impl FromStr for SignedTransaction {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_cbor::from_slice(hex::decode(s).map_err(|err| format!("{err:?}"))?.as_slice())
-            .map_err(|err| format!("{err:?}"))
+        let bytes = hex::decode(s).map_err(|err| format!("{err:?}"))?;
+        serde_cbor::from_slice(bytes.as_slice()).or_else(|first_err| {
+            serde_cbor::from_slice::<LegacySignedTransaction>(bytes.as_slice())
+                .map(|legacy_requests| SignedTransaction {
+                    requests: legacy_requests,
+                })
+                .map_err(|_| format!("{first_err:?}"))
+        })
     }
 }
 impl std::fmt::Display for SignedTransaction {
@@ -43,6 +52,7 @@ impl std::fmt::Display for SignedTransaction {
         write!(f, "{}", hex::encode(serde_cbor::to_vec(self).unwrap()))
     }
 }
+
 /// A vector of update/read-state calls for different ingress windows
 /// of the same call.
 pub type Request = (RequestType, Vec<EnvelopePair>);
@@ -63,21 +73,16 @@ impl EnvelopePair {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 #[serde(tag = "account_type")]
 pub enum AccountType {
+    #[default]
     Ledger,
     Neuron {
         #[serde(default)]
         neuron_index: u64,
     },
-}
-
-impl Default for AccountType {
-    fn default() -> Self {
-        Self::Ledger
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -345,10 +350,11 @@ pub struct NeuronSubaccountComponents {
 
 /// We use this type to make query to the governance
 /// canister about the current neuron information.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, Default)]
 #[serde(tag = "account_type")]
 pub enum BalanceAccountType {
     #[serde(rename = "ledger")]
+    #[default]
     Ledger,
     #[serde(rename = "neuron")]
     Neuron {
@@ -367,12 +373,6 @@ pub enum BalanceAccountType {
         #[serde(skip_serializing_if = "Option::is_none")]
         verified_query: Option<bool>,
     },
-}
-
-impl Default for BalanceAccountType {
-    fn default() -> Self {
-        Self::Ledger
-    }
 }
 
 /// The type of metadata for the /account/balance endpoint.

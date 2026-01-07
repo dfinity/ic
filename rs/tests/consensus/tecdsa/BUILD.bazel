@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "SIGNER_CANISTER_ENV", "SIGNER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -6,12 +6,8 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 system_test_nns(
     name = "tecdsa_complaint_test",
     env = MESSAGE_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
-    uses_guestos_img = False,
-    uses_guestos_malicious_img = True,
-    uses_guestos_test_update = True,
+    guestos = "malicious",
+    guestos_update = "test",
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -31,7 +27,6 @@ system_test_nns(
     name = "tecdsa_add_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -57,7 +52,6 @@ system_test_nns(
     name = "tschnorr_message_sizes_test",
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
@@ -79,7 +73,6 @@ system_test_nns(
     name = "tecdsa_remove_nodes_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -103,7 +96,6 @@ system_test_nns(
     name = "tecdsa_key_rotation_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -114,6 +106,30 @@ system_test_nns(
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
+    name = "pre_signature_stash_management_test",
+    env = MESSAGE_CANISTER_ENV,
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -125,7 +141,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.05% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -149,7 +164,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/consensus/tecdsa:tecdsa_signature_from_nns_without_cycles_test_head_nns variant.
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -168,7 +182,6 @@ system_test_nns(
     name = "tecdsa_signature_from_other_subnet_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -188,7 +201,6 @@ system_test_nns(
     name = "tecdsa_two_signing_subnets_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -216,7 +228,6 @@ system_test_nns(
     # Remove when CON-937 is resolved
     flaky = True,  # flakiness rate of 1.57% over the month from 2025-02-11 till 2025-03-11
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     test_timeout = "eternal",
@@ -243,7 +254,6 @@ system_test_nns(
     name = "tecdsa_signature_same_subnet_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -262,7 +272,6 @@ system_test_nns(
     name = "tecdsa_signature_timeout_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -296,7 +305,6 @@ tecdsa_performance_test_template = system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -317,6 +325,8 @@ tecdsa_performance_test_template = system_test_nns(
     ],
 )
 
+DEFAULT_NODES_COUNT = str(25)
+
 system_test_nns(
     name = "tecdsa_performance_test",
     additional_colocate_tags = [
@@ -335,15 +345,15 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
-        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -364,15 +374,15 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
-        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -393,15 +403,15 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
-        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -422,13 +432,13 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",
+        "DEFAULT_NODES_COUNT": DEFAULT_NODES_COUNT,
     },
     tags = [
         "colocate",
-        "k8s",
         "manual",
     ],
     test_driver_target = tecdsa_performance_test_template.test_driver_target,
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + SIGNER_CANISTER_RUNTIME_DEPS,
 )

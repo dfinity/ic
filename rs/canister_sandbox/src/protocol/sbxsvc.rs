@@ -318,20 +318,20 @@ mod tests {
     use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::{flag_status::FlagStatus, subnet_config::CyclesAccountManagerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, InstructionLimits,
         sandbox_safe_system_state::SandboxSafeSystemState,
     };
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
+    use ic_interfaces::execution_environment::{
+        ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
     };
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
+        ComputeAllocation, Cycles, NumBytes, NumInstructions, SubnetId, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
@@ -464,12 +464,11 @@ mod tests {
                 },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
-                        FlagStatus::Enabled,
                         NumInstructions::new(123),
                         NumInstructions::new(12),
                     ),
                     wasm_memory_limit: Some(NumBytes::new(123)),
-                    memory_allocation: MemoryAllocation::Reserved(NumBytes::new(123)),
+                    memory_allocation: NumBytes::new(123).into(),
                     canister_guaranteed_callback_quota: 123,
                     compute_allocation: ComputeAllocation::zero(),
                     subnet_type: SubnetType::Application,

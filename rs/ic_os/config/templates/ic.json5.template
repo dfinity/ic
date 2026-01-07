@@ -273,7 +273,7 @@ table ip6 filter {\n\
     #   - The rule drops all new connections that goes over the configured limit.\n\
     ct state new add @connection_limit { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } counter name connection_limit_v6_counter drop\n\
     icmpv6 type $icmp_v6_types_accept accept\n\
-    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100 } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9090, 9091, 9100, 19531, 19100, 19522 } accept\n\
     ip6 saddr { hostos } ct state { new } tcp dport { 42372 } accept # Allow access from HostOS metrics-proxy so GuestOS metrics-proxy can proxy certain metrics to HostOS.\n\
     <<IPv6_TCP_RULES>>\n\
     <<IPv6_UDP_RULES>>\n\
@@ -472,6 +472,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-advert, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
+    ip6 saddr { {{ ipv6_prefix }} } ct state { new } tcp dport { 7070, 9091, 9100, 9324, 19531, 19100, 19522 } accept\n\
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept\n\
 \n\
     <<IPv6_TCP_RULES>>\n\
@@ -488,7 +489,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept\n\
     ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",
@@ -517,7 +518,7 @@ table ip6 filter {\n\
     registration: {
         node_reward_type: "{{ node_reward_type }}",
         nns_url: "{{ nns_urls }}",
-        nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
+        nns_pub_key_pem: "/run/config/nns_public_key.pem",
         node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
     },
 

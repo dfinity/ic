@@ -12,7 +12,7 @@ use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
@@ -22,6 +22,7 @@ use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -33,10 +34,11 @@ use x509_parser::prelude::FromDer;
 
 mod tls;
 
-// TODO: replace this in dev images so that system tests work
-const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
+const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
+pub type CanOpenStore =
+    Box<dyn Fn(&Path, &Path, &mut dyn SevGuestFirmware) -> Result<bool> + Send + Sync>;
 
 pub struct DiskEncryptionKeyExchangeClientAgent {
     guestos_config: GuestOSConfig,
@@ -45,6 +47,9 @@ pub struct DiskEncryptionKeyExchangeClientAgent {
     previous_key_path: PathBuf,
     server_port: u16,
     sev_root_certificate_verification: SevRootCertificateVerification,
+    // We mock can_open_store for easier testing, in production it calls
+    // guest_disk::sev::can_open_store, the signature corresponds to that function
+    can_open_store: CanOpenStore,
 }
 
 impl DiskEncryptionKeyExchangeClientAgent {
@@ -53,6 +58,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         sev_root_certificate_verification: SevRootCertificateVerification,
         sev_firmware: Box<dyn SevGuestFirmware>,
         nns_registry_client: Arc<dyn RegistryClient>,
+        can_open_store: CanOpenStore,
         previous_key_path: PathBuf,
         server_port: u16,
     ) -> Self {
@@ -63,6 +69,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             previous_key_path,
             server_port,
             sev_root_certificate_verification,
+            can_open_store,
         }
     }
 
@@ -90,14 +97,27 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .context(format!("Could not connect to server at {server_uri}"))?;
         println!("Connected successfully to server");
 
-        let retrieve_status = self
-            .retrieve_disk_encryption_key(
+        // If we can already open the store, we don't need to run the key exchange.
+        // (We still have to call signal_status, since the server is expecting us to signal
+        // success)
+        let can_open_store = (self.can_open_store)(
+            Path::new("/dev/vda10"),
+            &self.previous_key_path,
+            self.sev_firmware.as_mut(),
+        )?;
+
+        let retrieve_status = if can_open_store {
+            println!("/dev/vda10 can be opened with our derived key, no need to run exchange");
+            Ok(())
+        } else {
+            self.retrieve_disk_encryption_key(
                 &mut upgrade_service_client,
                 &my_public_key_der,
                 &server_public_key_der,
             )
             .await
-            .context("Failed to retrieve disk encryption key");
+            .context("Failed to retrieve disk encryption key")
+        };
 
         let _ignored = upgrade_service_client
             .signal_status(SignalStatusRequest {
@@ -164,7 +184,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             self.sev_root_certificate_verification,
             &blessed_measurements,
             &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
+            Some(&[my_attestation_report.chip_id]),
         )
         .context("Server attestation report verification failed")?;
 
@@ -273,7 +293,7 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
 }
 
 pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key(Path::new(NNS_PUBLIC_KEY_PATH))
+    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
         .context("Cannot read NNS public key")?;
 
     let client = RegistryClientImpl::new(

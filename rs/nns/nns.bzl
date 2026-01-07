@@ -16,8 +16,8 @@ but other things could be added here later.
 CANISTER_NAME_TO_MAX_COMPRESSED_WASM_SIZE_E5_BYTES = {
     "cycles-minting-canister.wasm.gz": 6,
     "genesis-token-canister.wasm.gz": 3,
-    "governance-canister.wasm.gz": 18,
-    "governance-canister_test.wasm.gz": 20,
+    "governance-canister.wasm.gz": 21,
+    "governance-canister_test.wasm.gz": 23,
     "registry-canister.wasm.gz": 14,
     "root-canister.wasm.gz": 5,
 }

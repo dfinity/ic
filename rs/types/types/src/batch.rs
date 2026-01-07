@@ -42,6 +42,30 @@ use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum BatchContent {
+    /// The payload messages to be processed.
+    Data {
+        batch_messages: BatchMessages,
+        /// Responses to subnet calls that require consensus' involvement.
+        consensus_responses: Vec<ConsensusResponse>,
+        /// Data required by the chain key service
+        chain_key_data: ChainKeyData,
+        /// Whether the state obtained by executing this batch needs to be fully
+        /// hashed to be eligible for StateSync.
+        requires_full_state_hash: bool,
+    },
+    /// During subnet splitting we don't include any messages with the batch.
+    /// Subnet splitting rounds are always checkpoint ("full state hash") rounds.
+    Splitting {
+        /// The id of the subnet the replica is assigned to after subnet splitting.
+        new_subnet_id: SubnetId,
+        /// The id of the subnet which will have the other half of the state.
+        // Used for sanity checks
+        other_subnet_id: SubnetId,
+    },
+}
+
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Batch {
@@ -50,25 +74,34 @@ pub struct Batch {
     /// The batch summary is always set by the consensus, see `deliver_batches()`.
     /// The tests and the `PocketIC` might set it to `None`, i.e. "unknown".
     pub batch_summary: Option<BatchSummary>,
-    /// Whether the state obtained by executing this batch needs to be fully
-    /// hashed to be eligible for StateSync.
-    pub requires_full_state_hash: bool,
-    /// The payload messages to be processed.
-    pub messages: BatchMessages,
+    /// Content, such as ingress messages, to be processed by the Message Routing.
+    pub content: BatchContent,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// Data required by the chain key service
-    pub chain_key_data: ChainKeyData,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Responses to subnet calls that require consensus' involvement.
-    pub consensus_responses: Vec<ConsensusResponse>,
     /// Information about block makers
     pub blockmaker_metrics: BlockmakerMetrics,
     /// The current replica version.
     pub replica_version: ReplicaVersion,
+}
+
+impl Batch {
+    /// Returns `true` if this is a checkpoint round.
+    pub fn requires_full_state_hash(&self) -> bool {
+        match &self.content {
+            // Regular data batches have an explicit flag.
+            BatchContent::Data {
+                requires_full_state_hash,
+                ..
+            } => *requires_full_state_hash,
+
+            // Subnet splitting always requires a checkpoint.
+            BatchContent::Splitting { .. } => true,
+        }
+    }
 }
 
 /// The context built by Consensus for deterministic processing. Captures all

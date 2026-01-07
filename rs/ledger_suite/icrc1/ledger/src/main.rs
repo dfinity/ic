@@ -381,7 +381,7 @@ fn migrate_next_part(instruction_limit: u64) {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
             );
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            ic_cdk_timers::set_timer(Duration::from_secs(0), async {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
         } else {
@@ -506,6 +506,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 .as_nanos_since_unix_epoch()
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
+        )?;
+        w.encode_counter(
+            "ledger_archiving_failures",
+            ledger.get_archiving_failure_metric() as f64,
+            "Number of archiving failures since canister initialization.",
         )?;
         match ledger.blockchain().archive.read() {
             Ok(archive_guard) => {
@@ -744,6 +749,7 @@ fn execute_transfer_not_async(
                         from: from_account,
                         spender,
                         amount,
+                        fee: None,
                     },
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
                     memo,

@@ -50,6 +50,7 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_set_subnet_operational_level::SetSubnetOperationalLevelPayload,
         do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
@@ -157,9 +158,10 @@ fn canister_init() {
     dfn_core::printer::hook();
     recertify_registry();
 
-    let init_payload =
-        Decode!(&arg_data(), RegistryCanisterInitPayload)
-            .expect("The init argument for the registry canister must be a Candid-encoded RegistryCanisterInitPayload.");
+    let init_payload = Decode!(&arg_data(), RegistryCanisterInitPayload).expect(
+        "The init argument for the registry canister must be a Candid-encoded \
+        RegistryCanisterInitPayload.",
+    );
     println!(
         "{}canister_init: Initializing with: {}",
         LOG_PREFIX,
@@ -184,20 +186,26 @@ fn canister_init() {
 
         println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
         println!(
-            "{LOG_PREFIX}canister_intt: Swapping enabled: {}",
+            "{LOG_PREFIX}canister_intt: Swapping enabled: {:?}",
             init_payload.is_swapping_feature_enabled
         );
-        test_set_swapping_status(init_payload.is_swapping_feature_enabled);
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled.unwrap_or_default());
         println!(
             "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
             init_payload.swapping_whitelisted_callers
         );
-        test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
+        test_set_swapping_whitelisted_callers(
+            init_payload
+                .swapping_whitelisted_callers
+                .unwrap_or_default(),
+        );
         println!(
             "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
             init_payload.swapping_enabled_subnets
         );
-        test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
+        test_set_swapping_enabled_subnets(
+            init_payload.swapping_enabled_subnets.unwrap_or_default(),
+        );
     }
 }
 
@@ -1117,7 +1125,11 @@ fn add_node_(payload: AddNodePayload) -> NodeId {
     let node_id = registry_mut()
         .do_add_node(payload)
         .unwrap_or_else(|error_message| {
-            trap_with(&format!("{LOG_PREFIX} Add node failed: {error_message}"))
+            let msg = format!("{LOG_PREFIX} Add node failed: {error_message}");
+            // TODO(NNS1-4290): Delete once we figure why it seems like clients
+            // are throwing this away.
+            println!("{}", msg);
+            trap_with(&msg);
         });
 
     recertify_registry();
@@ -1204,6 +1216,17 @@ fn remove_node_directly() {
 fn remove_node_directly_(payload: RemoveNodeDirectlyPayload) {
     registry_mut().do_remove_node_directly(payload);
     recertify_registry();
+}
+
+#[unsafe(export_name = "canister_update set_subnet_operational_level")]
+fn set_subnet_operational_level() {
+    check_caller_is_governance_and_log("set_subnet_operational_level");
+    over(candid_one, set_subnet_operational_level_);
+}
+
+#[candid_method(update, rename = "set_subnet_operational_level")]
+fn set_subnet_operational_level_(payload: SetSubnetOperationalLevelPayload) {
+    registry_mut().do_set_subnet_operational_level(payload);
 }
 
 fn recertify_registry() {

@@ -17,7 +17,6 @@ type Config struct {
 	isFuzzyMatch         bool
 	isDryRun             bool
 	keepAlive            bool
-	k8s                  bool
 	filterTests          string
 	farmBaseUrl          string
 	requiredHostFeatures string
@@ -65,13 +64,10 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		if len(cfg.requiredHostFeatures) > 0 {
 			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
 		}
-		if cfg.k8s {
-			command = append(command, "--k8s")
-		}
 		if cfg.keepAlive {
 			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS*60))
 			command = append(command, keepAlive)
-			command = append(command, "--test_arg=--debug-keepalive")
+			command = append(command, "--test_arg=--keepalive")
 		}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
 		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
@@ -101,12 +97,11 @@ func NewTestCmd() *cobra.Command {
 		RunE:    TestCommandWithConfig(&cfg),
 	}
 	testCmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar target names. Default: substring match.")
-	testCmd.Flags().BoolVarP(&cfg.k8s, "k8s", "", false, "Run system test on k8s.")
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, fmt.Sprintf("Keep test system alive for %d minutes.", DEFAULT_TEST_KEEPALIVE_MINS))
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")
 	testCmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
-	testCmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
+	testCmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, performance, io-performance, dll, spm, dmz], separated by comma (see Examples).")
 	testCmd.PersistentFlags().StringVarP(&cfg.k8sBranch, "k8s-branch", "", "main", "Override the branch from which the dashboards are being synced. Default: main")
 	testCmd.SetOut(os.Stdout)
 	return testCmd

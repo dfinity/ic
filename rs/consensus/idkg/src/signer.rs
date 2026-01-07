@@ -795,7 +795,7 @@ enum Action<'a> {
     /// The message is relevant to our current state, process it
     /// immediately. The transcript params for this transcript
     /// (as specified by the finalized block) is the argument
-    Process(&'a ThresholdSigInputs),
+    Process(&'a ThresholdSigInputs<'a>),
 
     /// Keep it to be processed later (e.g) this is from a node
     /// ahead of us
@@ -858,11 +858,13 @@ mod tests {
     use super::*;
     use crate::test_utils::*;
     use assert_matches::assert_matches;
+    use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
         generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs, run_tecdsa_protocol,
         run_tschnorr_protocol,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
@@ -870,7 +872,6 @@ mod tests {
         EcdsaArguments, EcdsaMatchedPreSignature, SchnorrArguments, SchnorrMatchedPreSignature,
         ThresholdArguments, VetKdArguments,
     };
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
@@ -880,7 +881,9 @@ mod tests {
     use ic_types::{
         Height, Randomness,
         consensus::idkg::*,
-        crypto::{AlgorithmId, ExtendedDerivationPath},
+        crypto::{
+            AlgorithmId, ExtendedDerivationPath, canister_threshold_sig::idkg::IDkgReceivers,
+        },
         time::UNIX_EPOCH,
     };
     use std::{ops::Deref, sync::RwLock};
@@ -897,19 +900,14 @@ mod tests {
             request_id(5, Height::from(200)),
         );
 
+        let sig_inputs_1 = create_threshold_sig_inputs(1, &key_id);
+        let sig_inputs_2 = create_threshold_sig_inputs(2, &key_id);
+        let sig_inputs_3 = create_threshold_sig_inputs(3, &key_id);
+
         let requested = BTreeMap::from([
-            (
-                id_1.callback_id,
-                Some((id_1, create_threshold_sig_inputs(1, &key_id))),
-            ),
-            (
-                id_2.callback_id,
-                Some((id_2, create_threshold_sig_inputs(2, &key_id))),
-            ),
-            (
-                id_3.callback_id,
-                Some((id_3, create_threshold_sig_inputs(3, &key_id))),
-            ),
+            (id_1.callback_id, Some((id_1, sig_inputs_1.as_ref()))),
+            (id_2.callback_id, Some((id_2, sig_inputs_2.as_ref()))),
+            (id_3.callback_id, Some((id_3, sig_inputs_3.as_ref()))),
             (id_4.callback_id, None),
         ]);
 
@@ -1033,7 +1031,7 @@ mod tests {
 
         // Set up the IDKG pool. Pool has shares for requests 0, 1, 2.
         // Only the share for request 0 is issued by us
-        let shares = vec![
+        let shares = [
             create_signature_share(&key_id, NODE_1, ids[0]),
             create_signature_share(&key_id, NODE_2, ids[1]),
             create_signature_share(&key_id, NODE_3, ids[2]),
@@ -1290,6 +1288,34 @@ mod tests {
     }
 
     fn test_crypto_verify_idkg_sig_share(key_id: IDkgMasterPublicKeyId) {
+        fn create_sig_share_and_assert_that_verification_fails(
+            key_id: &IDkgMasterPublicKeyId,
+            pool_config: ArtifactPoolConfig,
+            logger: ReplicaLogger,
+            env: &CanisterThresholdSigTestEnvironment,
+            receivers: &IDkgReceivers,
+            inputs: &ThresholdSigInputs,
+        ) {
+            let crypto = env
+                .nodes
+                .filter_by_receivers(receivers)
+                .next()
+                .unwrap()
+                .crypto();
+            let (_, signer) =
+                create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
+            let id = request_id(1, Height::from(5));
+            let message = create_signature_share(key_id, NODE_2, id);
+            let share = match message {
+                IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
+                IDkgMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
+                _ => panic!("Unexpected message type"),
+            };
+            let result = signer.crypto_verify_sig_share(inputs, share, &(IDkgStatsNoOp {}));
+            // assert that the mock signature share does not pass real crypto check
+            assert!(result.is_err());
+        }
+
         let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -1309,7 +1335,7 @@ mod tests {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
                 };
-                let (receivers, inputs) = match key_id.inner() {
+                match key_id.inner() {
                     MasterPublicKeyId::Ecdsa(_) => {
                         let inputs = generate_tecdsa_protocol_inputs(
                             &env,
@@ -1322,11 +1348,14 @@ mod tests {
                             AlgorithmId::from(key_id.inner()),
                             &mut rng,
                         );
-
-                        (
-                            inputs.receivers().clone(),
-                            ThresholdSigInputs::Ecdsa(inputs),
-                        )
+                        create_sig_share_and_assert_that_verification_fails(
+                            &key_id,
+                            pool_config,
+                            logger,
+                            &env,
+                            inputs.as_ref().receivers(),
+                            &ThresholdSigInputs::Ecdsa(inputs.as_ref()),
+                        );
                     }
                     MasterPublicKeyId::Schnorr(_) => {
                         let inputs = generate_tschnorr_protocol_inputs(
@@ -1341,31 +1370,17 @@ mod tests {
                             AlgorithmId::from(key_id.inner()),
                             &mut rng,
                         );
-                        (
-                            inputs.receivers().clone(),
-                            ThresholdSigInputs::Schnorr(inputs),
-                        )
+                        create_sig_share_and_assert_that_verification_fails(
+                            &key_id,
+                            pool_config,
+                            logger,
+                            &env,
+                            &inputs.receivers().clone(),
+                            &ThresholdSigInputs::Schnorr(inputs.as_ref()),
+                        );
                     }
                     MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
-                };
-                let crypto = env
-                    .nodes
-                    .filter_by_receivers(&receivers)
-                    .next()
-                    .unwrap()
-                    .crypto();
-                let (_, signer) =
-                    create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = request_id(1, Height::from(5));
-                let message = create_signature_share(&key_id, NODE_2, id);
-                let share = match message {
-                    IDkgMessage::EcdsaSigShare(share) => SigShare::Ecdsa(share),
-                    IDkgMessage::SchnorrSigShare(share) => SigShare::Schnorr(share),
-                    _ => panic!("Unexpected message type"),
-                };
-                let result = signer.crypto_verify_sig_share(&inputs, share, &(IDkgStatsNoOp {}));
-                // assert that the mock signature share does not pass real crypto check
-                assert!(result.is_err());
+                }
             })
         })
     }
@@ -1946,9 +1961,10 @@ mod tests {
                     .nodes
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
-                        receiver.load_tecdsa_sig_transcripts(&sig_inputs);
-                        let share = ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
+                        receiver.load_tecdsa_sig_transcripts(&sig_inputs.as_ref());
+                        let share =
+                            ThresholdEcdsaSigner::create_sig_share(receiver, &sig_inputs.as_ref())
+                                .expect("failed to create sig share");
                         EcdsaSigShare {
                             signer_id: receiver.id(),
                             request_id: req_id,
@@ -1971,7 +1987,11 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(callback_id, &context);
                 // Compare to combined signature returned by crypto environment
-                let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(&env, &sig_inputs, &mut rng));
+                let r2 = CombinedSignature::Ecdsa(run_tecdsa_protocol(
+                    &env,
+                    &sig_inputs.as_ref(),
+                    &mut rng,
+                ));
                 assert_matches!(r1, Some(ref s) if s == &r2);
 
                 // If the context's nonce hasn't been set yet, no signature should be completed
@@ -2071,9 +2091,12 @@ mod tests {
                     .nodes
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
-                        receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
+                        receiver.load_tschnorr_sig_transcripts(&sig_inputs.as_ref());
+                        let share = ThresholdSchnorrSigner::create_sig_share(
+                            receiver,
+                            &sig_inputs.as_ref(),
+                        )
+                        .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
                             request_id: req_id,
@@ -2096,8 +2119,11 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(callback_id, &context);
                 // Compare to combined signature returned by crypto environment
-                let r2 =
-                    CombinedSignature::Schnorr(run_tschnorr_protocol(&env, &sig_inputs, &mut rng));
+                let r2 = CombinedSignature::Schnorr(run_tschnorr_protocol(
+                    &env,
+                    &sig_inputs.as_ref(),
+                    &mut rng,
+                ));
                 assert_matches!(r1, Some(ref s) if s == &r2);
 
                 // If the context's nonce hasn't been set yet, no signature should be completed
@@ -2128,7 +2154,7 @@ mod tests {
                         height,
                     }),
                     pseudo_random_id: [1; 32],
-                    derivation_path: Arc::new(vec![]),
+                    derivation_path: Arc::new(vec![vec![]]),
                     batch_time: UNIX_EPOCH,
                     matched_pre_signature: None,
                     nonce: None,

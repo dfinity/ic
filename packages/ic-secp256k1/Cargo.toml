@@ -1,6 +1,6 @@
 [package]
 name = "ic-secp256k1"
-version = "0.2.0"
+version = "0.3.0"
 description = "A package created for the Internet Computer Protocol for the handling of ECDSA and Schnorr keys over the secp256k1 curve."
 license = "Apache-2.0"
 readme = "README.md"
@@ -18,7 +18,7 @@ hmac = "0.12"
 ic_principal = { version = "0.1.1", default-features = false }
 k256 = { workspace = true }
 num-bigint = { workspace = true }
-pem = "1.1.0"
+pem = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 simple_asn1 = { workspace = true }
@@ -29,5 +29,6 @@ zeroize = { workspace = true }
 bip32 = "0.5"
 bitcoin = { version = "0.28.2" }
 hex = { workspace = true }
+ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 secp256k1 = { version = "0.22", features = ["global-context", "rand-std"] }
 wycheproof = { version = "0.6", default-features = false, features = ["ecdsa"] }

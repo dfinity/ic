@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "GRAFANA_RUNTIME_DEPS", "IC_GATEWAY_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -13,11 +13,9 @@ system_test(
     name = "single_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -30,10 +28,8 @@ system_test(
     name = "single_app_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -46,10 +42,8 @@ system_test_nns(
     name = "single_app_large_node_with_nns",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -63,10 +57,8 @@ system_test(
     name = "single_app_small_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -81,7 +73,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -97,7 +89,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -114,7 +106,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -132,7 +124,7 @@ system_test(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/dre/utils:os_qualification_utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -153,7 +145,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = IC_GATEWAY_UVM_IMAGE + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -181,7 +173,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = IC_GATEWAY_UVM_IMAGE + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -208,7 +200,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -231,7 +223,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -253,7 +245,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
         "@sns_aggregator//file",
@@ -275,7 +267,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE,
+    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -300,7 +292,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
         "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
         "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
@@ -324,6 +316,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
+    guestos_update = "test",
     tags = [
         "dynamic_testnet",
         "manual",
@@ -332,10 +325,39 @@ system_test_nns(
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/limits",
+        "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "mainnet_nns",
+    env = MAINNET_ENV | {
+        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
+        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
+        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
+    },
+    env_inherit = ["SSH_AUTH_SOCK"],
+    guestos = "mainnet_nns",
+    tags = [
+        "dynamic_testnet",
+        "manual",
+    ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
+        "//rs/recovery:ic-recovery",
+        "//rs/replay:ic-replay",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/testnets/mainnet_nns:lib",
+        "@crate_index//:anyhow",
     ],
 )

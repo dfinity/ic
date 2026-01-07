@@ -1,7 +1,9 @@
 use crate::{
-    is_deregister_known_neuron_enabled,
     neuron_store::NeuronStore,
-    pb::v1::{DeregisterKnownNeuron, GovernanceError, governance_error::ErrorType},
+    pb::v1::{
+        DeregisterKnownNeuron, GovernanceError, SelfDescribingValue, governance_error::ErrorType,
+    },
+    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
 };
 
 impl DeregisterKnownNeuron {
@@ -11,13 +13,6 @@ impl DeregisterKnownNeuron {
     ///  - A Neuron ID is given in the request and this ID identifies an existing neuron.
     ///  - The neuron currently has known neuron data to be removed.
     pub fn validate(&self, neuron_store: &NeuronStore) -> Result<(), GovernanceError> {
-        if !is_deregister_known_neuron_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "DeregisterKnownNeuron proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let neuron_id = self.id.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
@@ -55,6 +50,18 @@ impl DeregisterKnownNeuron {
         neuron_store.with_neuron_mut(neuron_id, |neuron| neuron.clear_known_neuron_data())?;
 
         Ok(())
+    }
+}
+
+impl LocallyDescribableProposalAction for DeregisterKnownNeuron {
+    const TYPE_NAME: &'static str = "Deregister Known Neuron";
+    const TYPE_DESCRIPTION: &'static str = "Deregisters a known neuron, removing its known neuron \
+        data (name, description, etc.) and making it a regular neuron.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        ValueBuilder::new()
+            .add_field("neuron_id", self.id.map(|id| id.id))
+            .build()
     }
 }
 

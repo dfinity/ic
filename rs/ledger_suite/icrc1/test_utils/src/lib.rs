@@ -91,16 +91,26 @@ fn operation_strategy<Tokens: TokensType>(
     amount_strategy.prop_flat_map(|amount| {
         // Clone amount due to move
         let mint_amount = amount.clone();
-        let mint_strategy = account_strategy().prop_map(move |to| Operation::Mint {
-            to,
-            amount: mint_amount.clone(),
-        });
+        let mint_strategy = (
+            account_strategy(),
+            prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
+        )
+            .prop_map(move |(to, fee)| Operation::Mint {
+                to,
+                amount: mint_amount.clone(),
+                fee,
+            });
         let burn_amount = amount.clone();
-        let burn_strategy = account_strategy().prop_map(move |from| Operation::Burn {
-            from,
-            spender: None,
-            amount: burn_amount.clone(),
-        });
+        let burn_strategy = (
+            account_strategy(),
+            prop::option::of(Just(token_amount(DEFAULT_TRANSFER_FEE))),
+        )
+            .prop_map(move |(from, fee)| Operation::Burn {
+                from,
+                spender: None,
+                amount: burn_amount.clone(),
+                fee,
+            });
         let transfer_amount = amount.clone();
         let transfer_strategy = (
             account_strategy(),
@@ -211,8 +221,9 @@ pub fn blocks_strategy<Tokens: TokensType>(
             let effective_fee = match transaction.operation {
                 Operation::Transfer { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                Operation::Burn { .. } => None,
-                Operation::Mint { .. } => None,
+                Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::FeeCollector { .. } => None,
             };
 
             Block {
@@ -224,6 +235,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                         timestamp,
                         fee_collector,
                         fee_collector_block_index: None,
+                        btype: None,
                     }
                     .encode(),
                 )),
@@ -232,6 +244,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 timestamp,
                 fee_collector,
                 fee_collector_block_index: None,
+                btype: None,
             }
         })
 }
@@ -418,12 +431,14 @@ impl ArgWithCaller {
                     Operation::Mint {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         to: transfer_arg.to,
+                        fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
                 } else if burn_operation {
                     Operation::Burn {
                         amount: T::try_from(transfer_arg.amount.clone()).unwrap(),
                         from: caller,
                         spender: None,
+                        fee: transfer_arg.fee.clone().map(|f| T::try_from(f).unwrap()),
                     }
                 } else {
                     Operation::Transfer {
@@ -565,6 +580,9 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         };
         self.transactions.push(tx);
 
@@ -591,6 +609,9 @@ impl TransactionsAndBalances {
                 // Check if the from account should be added/removed from valid_allowance_from
                 // (allowance was added/modified for this account)
                 self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
             }
         }
     }
@@ -770,6 +791,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         operation: Operation::Mint::<Tokens> {
                             amount: Tokens::from_e8s(amount),
                             to,
+                            fee: None,
                         },
                         created_at_time,
                         memo: memo.clone(),
@@ -832,6 +854,7 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                                 amount: Tokens::from_e8s(amount),
                                 from,
                                 spender: None,
+                                fee: None,
                             },
                             created_at_time,
                             memo: memo.clone(),
@@ -1394,7 +1417,12 @@ where
     Tokens: TokensType,
     S: Strategy<Value = Tokens>,
 {
-    (arb_account(), arb_tokens()).prop_map(|(to, amount)| Operation::Mint { to, amount })
+    (
+        arb_account(),
+        arb_tokens(),
+        proptest::option::of(arb_tokens()),
+    )
+        .prop_map(|(to, amount, fee)| Operation::Mint { to, amount, fee })
 }
 
 pub fn arb_burn<Tokens, S>(arb_tokens: fn() -> S) -> impl Strategy<Value = Operation<Tokens>>
@@ -1406,11 +1434,13 @@ where
         arb_account(),
         proptest::option::of(arb_account()),
         arb_tokens(),
+        proptest::option::of(arb_tokens()),
     )
-        .prop_map(|(from, spender, amount)| Operation::Burn {
+        .prop_map(|(from, spender, amount, fee)| Operation::Burn {
             from,
             spender,
             amount,
+            fee,
         })
 }
 
@@ -1471,6 +1501,7 @@ where
                 timestamp: ts,
                 fee_collector: fee_col,
                 fee_collector_block_index: fee_col_block,
+                btype: None,
             },
         )
 }

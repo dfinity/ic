@@ -1,8 +1,8 @@
 load("@aspect_bazel_lib//lib:tar.bzl", "tar")
-load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
@@ -11,11 +11,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 exports_files([
     "counter.wat",
 ])
-
-bool_flag(
-    name = "k8s",
-    build_setting_default = False,
-)
 
 # Packages we install into the image; see base image definition and its
 # 'manifest = ...' field for more information
@@ -26,6 +21,7 @@ PACKAGES = [
     "@noble//libcryptsetup-dev/amd64",
     "@noble//dmsetup/amd64",
     "@noble//dosfstools/amd64",
+    "@noble//e2fsprogs/amd64",
     "@noble//gawk/amd64",
     "@noble//gzip/amd64",
     "@noble//libssl3t64/amd64",
@@ -89,6 +85,33 @@ passwd(
     ],
 )
 
+UBUNTU_PACKAGES = [
+    ":dpkg_status",
+    ":passwd",  # needed because we ssh in
+
+    # symlinks
+    ":awk",
+    ":mkfsvfat",
+    ":sh",
+] + PACKAGES
+
+# Squash all packages into a single tarball (there are too many to make each a separate layer)
+genrule(
+    name = "ubuntu_packages_tar",
+    srcs = UBUNTU_PACKAGES,
+    outs = ["ubuntu_packages.tar"],
+    cmd = """
+        mkdir -p squash_tmp
+        trap "rm -rf squash_tmp" EXIT
+
+        for f in $(SRCS); do
+            tar -xf $$f -C squash_tmp
+        done
+
+        tar -cf $@ -C squash_tmp .
+    """,
+)
+
 oci_image(
     name = "ubuntu_test_runtime_image_src",
     architecture = "amd64",
@@ -97,14 +120,8 @@ oci_image(
         "@platforms//os:linux",
     ],
     tars = [
-        ":dpkg_status",
-        ":passwd",  # needed because we ssh in
-
-        # symlinks
-        ":awk",
-        ":mkfsvfat",
-        ":sh",
-    ] + PACKAGES,
+        ":ubuntu_packages_tar",
+    ],
 )
 
 oci_tar(
@@ -279,4 +296,24 @@ uvm_config_image(
         "vector_activate.sh": "activate",
     },
     tags = ["manual"],
+)
+
+sh_binary(
+    name = "upload_systest_dep",
+    srcs = ["upload_systest_dep.sh"],
+    visibility = ["//visibility:public"],
+)
+
+sh_binary(
+    name = "run_systest",
+    srcs = ["run_systest.sh"],
+    visibility = ["//visibility:public"],
+)
+
+# the STABLE_VERSION, suffixed with `-test`. Used in testing.
+genrule(
+    name = "version-test",
+    srcs = ["//bazel:version.txt"],
+    outs = ["version-test.txt"],
+    cmd = "sed < $< 's/$$/-test/' > $@",
 )

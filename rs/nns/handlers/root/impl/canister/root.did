@@ -145,16 +145,49 @@ type UpdateCanisterSettingsResponse = variant {
   Err : UpdateCanisterSettingsError;
 };
 
+type CallCanisterRequest = record {
+  canister_id : principal;
+  method_name : text;
+  payload : blob;
+};
+
+type TakeCanisterSnapshotArgs = record {
+  canister_id : principal;
+  replace_snapshot : opt blob;
+};
+
+type TakeCanisterSnapshotResponse = variant {
+  Ok : TakeCanisterSnapshotOk;
+  Err : TakeCanisterSnapshotError;
+};
+
+type TakeCanisterSnapshotOk = record {
+  id : blob;
+  taken_at_timestamp : nat64;
+  total_size : nat64;
+};
+
+type TakeCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
 service : () -> {
-  add_nns_canister : (AddCanisterRequest) -> ();
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+  get_build_metadata : () -> (text) query;
+
+  // Below are methods that can only be called by other NNS canisters.
+  add_nns_canister : (AddCanisterRequest) -> ();
   change_canister_controllers : (ChangeCanisterControllersRequest) -> (
       ChangeCanisterControllersResponse,
     );
   change_nns_canister : (ChangeCanisterRequest) -> ();
-  get_build_metadata : () -> (text) query;
   stop_or_start_nns_canister : (StopOrStartCanisterRequest) -> ();
   update_canister_settings : (UpdateCanisterSettingsRequest) -> (
       UpdateCanisterSettingsResponse,
+    );
+  call_canister : (CallCanisterRequest) -> ();
+  take_canister_snapshot : (TakeCanisterSnapshotArgs) -> (
+      TakeCanisterSnapshotResponse,
     );
 }

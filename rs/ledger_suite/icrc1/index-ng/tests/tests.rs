@@ -1,24 +1,35 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
-    wait_until_sync_is_completed,
+    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
+    wait_until_sync_is_completed_or_error,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::blocks::generic_block_to_encoded_block;
+use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
     InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
 use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_test_utils::icrc3::account_to_icrc3_value;
 use ic_icrc1_test_utils::{
-    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
+    valid_transactions_strategy,
+};
+use ic_ledger_core::block::BlockType;
+use ic_ledger_suite_state_machine_helpers::{
+    add_block, archive_blocks, get_logs, set_icrc3_enabled,
 };
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
@@ -32,6 +43,12 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 mod common;
+
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 fn index_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -350,6 +367,12 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
             );
         }
     }
+    // Verify there are no errors in the index log.
+    assert!(
+        parse_index_logs(&get_logs(env, index_id))
+            .entries
+            .is_empty()
+    );
 }
 
 #[cfg(any(feature = "get_blocks_disabled", feature = "icrc3_disabled"))]
@@ -454,6 +477,107 @@ fn test_ledger_growing() {
     );
 }
 
+// With 6 blocks we can store 2 blocks in 2 archives and the ledger each.
+// This way we can test all possible locations for the unknown block:
+// - ledger/archive
+// - last/not-last archive
+// - last block/not last block in the archive/ledger
+const NUM_BLOCKS: u64 = 6;
+
+fn verify_unknown_block_handling(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+    bad_block_index: u64,
+) {
+    const TEST_ACCOUNT: Account = Account {
+        owner: PrincipalId::new_user_test_id(44).0,
+        subaccount: None,
+    };
+
+    for i in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(i, i)
+            .mint(TEST_ACCOUNT, Tokens::from(1u64))
+            .build();
+        let block = if i == bad_block_index {
+            let mut bad_block = match block {
+                ICRC3Value::Map(btree_map) => btree_map,
+                _ => panic!("block should be a map"),
+            };
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            ICRC3Value::Map(bad_block)
+        } else {
+            block
+        };
+        add_block(env, ledger_id, &block).expect("failed adding block to the ledger");
+    }
+
+    let archive1 = install_icrc3_test_ledger(env);
+    let archive2 = install_icrc3_test_ledger(env);
+    let archived_count = archive_blocks(env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+    let archived_count = archive_blocks(env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+
+    // Advance more than once to make sure the indexing was stopped.
+    for _ in 0..3 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
+    let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
+    assert_eq!(ledger_blocks.chain_length, NUM_BLOCKS);
+    assert_eq!(index_blocks.chain_length, bad_block_index);
+
+    assert_eq!(
+        icrc1_balance_of(env, index_id, TEST_ACCOUNT),
+        bad_block_index
+    );
+
+    let logs = parse_index_logs(&get_logs(env, index_id));
+    let mut error_count = 0;
+    let mut stopping_message = false;
+    for entry in logs.entries {
+        if entry.message.contains(&format!(
+            "Block at index {} has unknown fields.",
+            bad_block_index
+        )) {
+            error_count += 1;
+        }
+        if entry.message.contains("Stopping the indexing timer.") {
+            stopping_message = true;
+        }
+    }
+    // This additionally checks whether the indexing was stopped.
+    assert_eq!(error_count, 1);
+    assert!(stopping_message);
+}
+
+#[test]
+fn test_unknown_block_icrc3() {
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
+}
+
+#[test]
+fn test_unknown_block_legacy() {
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+        set_icrc3_enabled(env, ledger_id, false);
+
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
+}
+
 #[test]
 fn test_archive_indexing() {
     let env = &StateMachine::new();
@@ -541,6 +665,7 @@ fn test_get_account_transactions() {
                 amount: 1_000_000_000_000_u64.into(),
                 created_at_time: None,
                 memo: None,
+                fee: None,
             },
             0,
         ),
@@ -652,6 +777,71 @@ fn test_get_account_transactions() {
 }
 
 #[test]
+fn test_get_account_transactions_self_transfer() {
+    let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    // List of the transactions that the test is going to add. This exists to make
+    // the test easier to read.
+    let tx0 = TransactionWithId {
+        id: 0u8.into(),
+        transaction: Transaction::mint(
+            Mint {
+                to: account(1, 0),
+                amount: 1_000_000_000_000_u64.into(),
+                created_at_time: None,
+                memo: None,
+                fee: None,
+            },
+            0,
+        ),
+    };
+    let tx1 = TransactionWithId {
+        id: 1u8.into(),
+        transaction: Transaction::transfer(
+            Transfer {
+                from: account(1, 0),
+                to: account(1, 0),
+                spender: None,
+                amount: 1_000_000u32.into(),
+                fee: Some(FEE.into()),
+                created_at_time: None,
+                memo: None,
+            },
+            0,
+        ),
+    };
+
+    ////////////
+    //// Phase 1: only 1 mint to (1, 0).
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Account (1, 0) has one mint.
+    let actual_txs =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx0.clone()]);
+
+    /////////////
+    //// Phase 2: transfer from (1, 0) to (1, 0).
+    transfer(env, ledger_id, account(1, 0), account(1, 0), 1_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Account (1, 0) has one transfer and one mint.
+    let actual_txs =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
+}
+
+#[test]
 fn test_get_account_transactions_start_length() {
     // 10 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10).map(|i| (account(1, 0), i * 10_000)).collect();
@@ -674,6 +864,7 @@ fn test_get_account_transactions_start_length() {
                     amount: (i * 10_000).into(),
                     created_at_time: None,
                     memo: None,
+                    fee: None,
                 },
                 0,
             ),
@@ -768,10 +959,12 @@ fn test_get_account_transactions_pagination() {
                         amount: (id * 10_000).into(),
                         created_at_time: None,
                         memo: None,
+                        fee: None,
                     }),
                     transfer: None,
                     approve: None,
                     timestamp: 0,
+                    fee_collector: None,
                 },
                 transaction,
             );
@@ -1142,6 +1335,240 @@ fn test_fee_collector() {
 }
 
 #[test]
+fn test_fee_collector_107() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let feecol_legacy = account(101, 0);
+    let feecol_107 = account(102, 0);
+    let regular_account = account(1, 0);
+
+    let mut block_id = 0;
+
+    let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
+        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let mint = match fc {
+            Some(fc) => mint.with_fee_collector(fc),
+            None => mint,
+        };
+        let mint = match fc_id {
+            Some(fc_id) => mint.with_fee_collector_block(fc_id),
+            None => mint,
+        };
+        let mint = mint.mint(regular_account, Tokens::from(1000u64)).build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &mint)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    let add_approve_block = |block_id: u64, fc: Option<Account>| {
+        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let approve = match fc {
+            Some(fc) => approve.with_fee_collector(fc),
+            None => approve,
+        };
+        let approve = approve
+            .approve(regular_account, regular_account, Tokens::from(1u64))
+            .build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &approve)
+                .expect("error adding approve block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
+        let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
+            .with_btype("107feecol".to_string())
+            .fee_collector(fc, None, None, mthd)
+            .build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &fee_collector)
+                .expect("error adding fee collector block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    // Legacy fee collector collects the fees
+    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
+    assert_eq!(1, icrc1_balance_of(env, index_id, feecol_legacy));
+    block_id = add_mint_block(block_id, None, Some(0));
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+
+    // Legacy fee collector does not collect approve fees
+    block_id = add_approve_block(block_id, Some(feecol_legacy));
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+
+    // Set 107 fee collector to burn
+    block_id =
+        add_fee_collector_107_block(block_id, None, Some("107set_fee_collector".to_string()));
+
+    // No fees collected
+    block_id = add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
+
+    // No fees collected with the legacy fee collector
+    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
+    block_id = add_mint_block(block_id, None, Some(block_id - 1));
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(0, icrc1_balance_of(env, index_id, feecol_107));
+
+    // Set 107 fee collector to fee_collector_2
+    block_id = add_fee_collector_107_block(block_id, Some(feecol_107), None);
+
+    // New fee collector receives the fees
+    block_id = add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(1, icrc1_balance_of(env, index_id, feecol_107));
+
+    // Legacy fee collector has no effect, new fee collector receives the fees
+    block_id = add_mint_block(block_id, Some(feecol_legacy), None);
+    block_id = add_mint_block(block_id, None, Some(block_id - 1));
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(3, icrc1_balance_of(env, index_id, feecol_107));
+
+    // 107 fee collector is credited the approve fee
+    block_id = add_approve_block(block_id, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
+
+    // Set 107 fee collector to burn
+    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
+
+    // No fees collected
+    add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
+    assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
+}
+
+fn add_custom_block(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    block_id: u64,
+    btype: Option<&str>,
+    tx_fields: Vec<(&str, ICRC3Value)>,
+) {
+    let mut block_builder = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+    if let Some(btype) = btype {
+        block_builder = block_builder.with_btype(String::from(btype));
+    }
+    let mut custom_tx_builder = block_builder.custom_transaction();
+    for tx_field in tx_fields {
+        custom_tx_builder = custom_tx_builder.add_field(tx_field.0, tx_field.1);
+    }
+    let block = custom_tx_builder.build();
+
+    assert_eq!(
+        Nat::from(block_id),
+        add_block(env, ledger_id, &block).expect("error adding mint block to ICRC-3 test ledger")
+    );
+}
+
+#[test]
+fn test_fee_collector_107_irregular_mthd() {
+    const UNRECOGNIZED_MTHD_NAME: &str = "non_standard_fee_col_setter_endpoint_method_name";
+
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let feecol_107 = account(102, 0);
+
+    let tx_fields = vec![
+        ("mthd", ICRC3Value::Text(UNRECOGNIZED_MTHD_NAME.to_string())),
+        ("fee_collector", account_to_icrc3_value(&feecol_107)),
+        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+    ];
+
+    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+}
+
+#[test]
+fn test_fee_collector_107_op_instead_of_mthd() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let feecol_107 = account(102, 0);
+
+    let tx_fields = vec![
+        ("op", ICRC3Value::Text("107set_fee_collector".to_string())),
+        ("fee_collector", account_to_icrc3_value(&feecol_107)),
+        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+    ];
+
+    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
+    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
+        .expect_err(
+            "unrecognized block with '107feecol' but tx.op instead of tx.mthd parsed successfully by index",
+        );
+    let expected_log_msg = "unknown fields";
+    assert!(
+        index_err_logs.contains(expected_log_msg),
+        "index logs did not contain expected string '{}': {}",
+        expected_log_msg,
+        index_err_logs
+    );
+}
+
+#[test]
+fn test_block_with_no_btype_but_with_mthd() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let tx_fields = vec![
+        ("mthd", ICRC3Value::Text("107set_fee_collector".to_string())),
+        ("ts", ICRC3Value::Nat(Nat::from(0u64))),
+    ];
+
+    add_custom_block(env, ledger_id, 0, None, tx_fields);
+    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
+        .expect_err(
+            "unrecognized block with tx.mthd 'non_standard_mthd_name' parsed successfully by index",
+        );
+    let expected_log_msg =
+        "Failed to deserialize transaction: No operation specified and/or unknown btype None";
+    assert!(
+        index_err_logs.contains(expected_log_msg),
+        "index logs did not contain expected string '{}': {}",
+        expected_log_msg,
+        index_err_logs
+    );
+}
+
+#[test]
+fn test_block_with_no_btype_and_no_mthd() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let tx_fields = vec![("ts", ICRC3Value::Nat(Nat::from(0u64)))];
+
+    add_custom_block(env, ledger_id, 0, None, tx_fields);
+    let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
+        .expect_err("unrecognized block with no btype and no tx.mthd parsed successfully by index");
+    let expected_log_msg = "No operation specified and/or unknown btype";
+    assert!(
+        index_err_logs.contains(expected_log_msg),
+        "index logs did not contain expected string '{}': {}",
+        expected_log_msg,
+        index_err_logs
+    );
+}
+
+#[test]
 fn test_index_ledger_coherence() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
@@ -1236,6 +1663,92 @@ fn test_principal_subaccounts() {
 }
 
 #[test]
+fn test_large_transfers_and_approvals() {
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(env, vec![], default_archive_options(), None, minter);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let account1 = account(1, 0);
+    let account2 = account(2, 0);
+    let max_amount = Nat::from(Tokens::MAX);
+
+    // Make sure we are using the correct token type.
+    #[cfg(not(feature = "u256-tokens"))]
+    assert_eq!(max_amount, Nat::from(u64::MAX));
+    #[cfg(feature = "u256-tokens")]
+    assert_ne!(max_amount, Nat::from(u64::MAX));
+
+    // Mint a huge amount
+    let req = TransferArg {
+        from_subaccount: None,
+        to: account1,
+        amount: max_amount.clone(),
+        created_at_time: None,
+        fee: None,
+        memo: None,
+    };
+    let mint_index = icrc1_transfer(env, ledger_id, minter.into(), req);
+    assert_eq!(mint_index, Nat::from(0u64));
+
+    // Test initial mint block.
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+    let balance = Decode!(
+        &env.execute_ingress(index_id, "icrc1_balance_of", Encode!(&account1).unwrap())
+            .expect("Failed to send icrc1_balance_of")
+            .bytes(),
+        Nat
+    )
+    .expect("Failed to decode icrc1_balance_of response");
+    assert_eq!(balance, max_amount);
+
+    // Approve a huge amount
+    let req = ApproveArgs {
+        from_subaccount: None,
+        spender: account2,
+        amount: max_amount.clone(),
+        expected_allowance: None,
+        expires_at: None,
+        fee: None,
+        memo: None,
+        created_at_time: None,
+    };
+    let approve_index = icrc2_approve(env, ledger_id, PrincipalId(account1.owner), req);
+    assert_eq!(approve_index, Nat::from(1u64));
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+    assert_ledger_index_parity(env, ledger_id, index_id);
+
+    let arg = AllowanceArgs {
+        account: account1,
+        spender: account2,
+    };
+    let allowance = Decode!(
+        &env.query(ledger_id, "icrc2_allowance", Encode!(&arg).unwrap())
+            .expect("failed to guery the allowance")
+            .bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response");
+    assert_eq!(allowance.allowance, max_amount);
+
+    let res = index_get_blocks(env, index_id, 1, 1);
+    let index_approval_block = res.blocks.first().expect("expected at least one block");
+    let encoded_block = generic_block_to_encoded_block(index_approval_block.clone())
+        .expect("should convert generic block to encoded block");
+    let block: Block<Tokens> = Block::decode(encoded_block).expect("should decode encoded block");
+    match block.transaction.operation {
+        Operation::Approve { amount, .. } => {
+            assert_eq!(
+                amount,
+                Tokens::try_from(max_amount).expect("should convert max amount to Tokens")
+            );
+        }
+        _ => panic!("expected Approve operation"),
+    }
+}
+
+#[test]
 fn test_index_http_request_decoding_quota() {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(
@@ -1276,12 +1789,9 @@ mod metrics {
 #[cfg(not(feature = "icrc3_disabled"))]
 mod fees_in_burn_and_mint_blocks {
     use super::*;
-    use crate::common::STARTING_CYCLES_PER_CANISTER;
     use ic_icrc1_ledger::Tokens;
     use ic_icrc1_test_utils::icrc3::BlockBuilder;
-    use ic_icrc3_test_ledger::AddBlockResult;
     use ic_types::time::GENESIS;
-    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 
     #[test]
     fn should_take_mint_block_fee_into_account() {
@@ -1301,14 +1811,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee(Tokens::from(MINT_FEE))
@@ -1371,14 +1874,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
@@ -1433,31 +1929,5 @@ mod fees_in_burn_and_mint_blocks {
             "Actual fee collector balance does not match expected balance after burn block ({} vs {})",
             actual_fee_collector_balance, BURN_FEE
         );
-    }
-
-    fn add_block(
-        env: &StateMachine,
-        canister_id: CanisterId,
-        block: &ICRC3Value,
-    ) -> Result<Nat, String> {
-        Decode!(
-            &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-                .expect("failed to add block")
-                .bytes(),
-            AddBlockResult
-        )
-        .expect("failed to decode add_block response")
-    }
-
-    fn test_ledger_wasm() -> Vec<u8> {
-        let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
-            "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
-        );
-        std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
-            panic!(
-                "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
-                ledger_wasm_path, e
-            )
-        })
     }
 }

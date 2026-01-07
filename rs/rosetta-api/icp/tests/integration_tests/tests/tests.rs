@@ -23,9 +23,9 @@ use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
 use std::process::Command;
-use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
+use tokio::time::sleep;
 use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
@@ -166,7 +166,7 @@ impl RosettaTestingClient {
                 );
             }
             attempts += 1;
-            sleep(DURATION_BETWEEN_ATTEMPTS);
+            sleep(DURATION_BETWEEN_ATTEMPTS).await;
         }
         Ok(())
     }
@@ -256,7 +256,7 @@ impl TestEnv {
                 }
                 Err(Error(err)) if matches_blockchain_is_empty_or_still_syncing_error(&err) => {
                     retries -= 1;
-                    sleep(DURATION_BETWEEN_ATTEMPTS);
+                    sleep(DURATION_BETWEEN_ATTEMPTS).await;
                 }
                 Err(Error(err)) => {
                     panic!("Unable to call /network/status: {err:?}")
@@ -1233,7 +1233,7 @@ async fn test_network_status_single_genesis_transaction() {
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let t1 = env.pocket_ic.get_time().await;
     // We need to advance the time to make sure only a single transaction gets into the genesis block
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(1)).await;
     let t2 = env.pocket_ic.get_time().await;
     assert!(t1 < t2);
     env.pocket_ic.stop_progress().await;

@@ -53,10 +53,13 @@ fn check_storage_validity(storage_client: Arc<StorageClient>, highest_index: u64
     assert_eq!(blocks_stored.len() as u64, highest_index + 1);
 
     // Make sure the blocks that are stored are valid
-    assert!(blocks_verifier::is_valid_blockchain(
-        &blocks_stored,
-        &blocks_stored.last().unwrap().clone().get_block_hash()
-    ));
+    assert!(
+        blocks_verifier::is_valid_blockchain(
+            &blocks_stored,
+            &blocks_stored.last().unwrap().clone().get_block_hash()
+        )
+        .is_ok()
+    );
 }
 
 proptest! {

@@ -19,7 +19,7 @@ use ic_nervous_system_root::{
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_governance, check_caller_is_sns_w},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
@@ -30,7 +30,8 @@ use ic_nns_handler_root::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use std::cell::RefCell;
 
@@ -191,8 +192,8 @@ async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[update(hidden = true)]
-fn call_canister(proposal: CallCanisterProposal) {
+#[update]
+fn call_canister(proposal: CallCanisterRequest) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.
     let future = canister_management::call_canister(proposal);
@@ -222,6 +223,20 @@ async fn update_canister_settings(
     check_caller_is_governance();
     canister_management::update_canister_settings(
         update_settings,
+        &mut new_management_canister_client(),
+    )
+    .await
+}
+
+/// Takes a snapshot of a canister controlled by NNS Root. Only callable by NNS
+/// Governance.
+#[update]
+async fn take_canister_snapshot(
+    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
+) -> TakeCanisterSnapshotResponse {
+    check_caller_is_governance();
+    canister_management::take_canister_snapshot(
+        take_canister_snapshot_request,
         &mut new_management_canister_client(),
     )
     .await

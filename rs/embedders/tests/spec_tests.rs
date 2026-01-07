@@ -73,7 +73,7 @@ mod convert {
                 Some(wasmtime::ExternRef::new(store, n).unwrap().into())
             }
             WastArg::Core(WastArgCore::RefHost(n)) => {
-                Some(unsafe { wasmtime::AnyRef::from_raw(store, n).unwrap().into() })
+                Some(wasmtime::AnyRef::from_raw(store, n).unwrap().into())
             }
             WastArg::Component(_) => {
                 println!("Component feature not enabled. Can't handle WastArg {arg:?}");
@@ -493,12 +493,9 @@ fn parse_and_encode(
             location(wat, text, path)
         )
     })?;
-    let module = ic_wasm_transform::Module::parse(&wasm, enable_multi_memory)
+    let mut module = wirm::Module::parse(&wasm, enable_multi_memory)
         .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))?;
-    module
-        .encode()
-        .map_err(|e| format!("Parsing error: {:?} in {}", e, location(wat, text, path)))
-        .unwrap();
+    module.encode();
     Ok(wasm)
 }
 
@@ -511,7 +508,7 @@ fn run_directive<'a>(
 ) -> Result<(), String> {
     match directive {
         // Here we check that an example module can be parsed and encoded with
-        // wasm-transform and is still validated by wasmtime after the round
+        // wirm and is still validated by wasmtime after the round
         // trip.
         WastDirective::Module(mut wat) => {
             if is_component(&wat) {
@@ -522,43 +519,30 @@ fn run_directive<'a>(
             test_state.create_instance(&wasm, wat_id(&wat));
             Ok(())
         }
-        // wasm-transform itself should throw an error when trying to parse these modules.
-        // TODO(RUN-448): Change this to assert `parse_and_encode` returned an error.
+
         WastDirective::AssertMalformed {
             span: _,
             module: mut wat,
             message,
-        } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled)
-                && test_state
-                    .validate_with_wasmtime(&wasm, &wat, text, path)
-                    .is_ok()
-            {
-                return Err(format!(
-                    "Should not have been able to validate malformed module ({}) {}",
-                    message,
-                    location(&wat, text, path)
-                ));
-            }
-            Ok(())
         }
-        // These directives include many wasm modules that wasm-transform won't
-        // be able to recognize as invalid (e.g. function bodies that don't type
-        // check). So we want to assert that after parsing and encoding,
-        // wasmtime still throws an error on validation. That is, wasm-transform
-        // didn't somehow make an invalid module valid.
-        WastDirective::AssertInvalid {
+        | WastDirective::AssertInvalid {
             span: _,
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled)
+            if let Ok(wasm) = wat.encode()
                 && test_state
                     .validate_with_wasmtime(&wasm, &wat, text, path)
                     .is_ok()
             {
+                // The memory 64 feature allows some integer representations
+                // which were originally to long in wasm2, so ignore those
+                // cases.
+                if message == "integer representation too long" {
+                    return Ok(());
+                }
                 return Err(format!(
-                    "Should not have been able to validate invalid module ({}) {}",
+                    "Should not have been able to validate malformed or invalid module ({}) {}",
                     message,
                     location(&wat, text, path)
                 ));

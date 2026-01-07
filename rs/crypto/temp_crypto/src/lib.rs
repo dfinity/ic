@@ -5,9 +5,12 @@ use ic_protobuf::registry::subnet::v1::{
     CanisterCyclesCostSchedule, ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType,
 };
 use ic_protobuf::types::v1 as pb_types;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// A crypto component set up in a temporary directory and using [`OsRng`]. The
@@ -32,6 +35,7 @@ pub mod internal {
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::memory_secret_key_store::InMemorySecretKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
+    use ic_crypto_internal_csp::vault::api::CspVault;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
     use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -287,33 +291,29 @@ pub mod internal {
                     ),
                 }
             });
-
-            let csp = if let Some(env) = &opt_remote_vault_environment {
-                let vault_client = env
+            let vault: Arc<dyn CspVault> = if let Some(env) = &opt_remote_vault_environment {
+                let remote_vault = env
                     .new_vault_client_builder()
                     .with_logger(new_logger!(logger))
                     .with_metrics(Arc::clone(&metrics))
                     .build()
                     .expect("Failed to build a vault client");
-                Csp::new_from_vault(
-                    Arc::new(vault_client),
-                    new_logger!(logger),
-                    Arc::clone(&metrics),
-                )
+                Arc::new(remote_vault)
             } else {
-                Csp::new_from_vault(
-                    Arc::clone(&local_vault) as _,
-                    new_logger!(logger),
-                    Arc::clone(&metrics),
-                )
+                local_vault
             };
+            let csp = Csp::new_from_vault(
+                Arc::clone(&vault),
+                new_logger!(logger),
+                Arc::clone(&metrics),
+            );
 
             let node_keys_to_generate = self
                 .node_keys_to_generate
                 .unwrap_or_else(NodeKeysToGenerate::none);
             let node_signing_pk = node_keys_to_generate
                 .generate_node_signing_keys
-                .then(|| generate_node_signing_keys(local_vault.as_ref()));
+                .then(|| generate_node_signing_keys(vault.as_ref()));
             let node_id = self
                 .node_id
                 .unwrap_or_else(|| match node_signing_pk.as_ref() {
@@ -323,20 +323,20 @@ pub mod internal {
                 });
             let committee_signing_pk = node_keys_to_generate
                 .generate_committee_signing_keys
-                .then(|| generate_committee_signing_keys(local_vault.as_ref()));
+                .then(|| generate_committee_signing_keys(vault.as_ref()));
             let dkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_dkg_dealing_encryption_keys
-                .then(|| generate_dkg_dealing_encryption_keys(local_vault.as_ref(), node_id));
+                .then(|| generate_dkg_dealing_encryption_keys(vault.as_ref(), node_id));
             let idkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
-                    generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
-                        |e| panic!("Error generating I-DKG dealing encryption keys: {e:?}"),
-                    )
+                    generate_idkg_dealing_encryption_keys(vault.as_ref()).unwrap_or_else(|e| {
+                        panic!("Error generating I-DKG dealing encryption keys: {e:?}")
+                    })
                 });
             let tls_certificate = node_keys_to_generate
                 .generate_tls_keys_and_certificate
-                .then(|| generate_tls_keys(local_vault.as_ref(), node_id).to_proto());
+                .then(|| generate_tls_keys(vault.as_ref(), node_id).to_proto());
 
             let is_registry_data_provided = self.registry_data.is_some();
             let registry_data = self
@@ -421,7 +421,7 @@ pub mod internal {
 
             let crypto_component = CryptoComponent::new_for_test(
                 csp,
-                local_vault,
+                vault,
                 logger,
                 registry_client,
                 node_id,
@@ -485,17 +485,11 @@ pub mod internal {
         }
     }
 
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigner<T>
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, T: Signable> BasicSigner<T>
         for TempCryptoComponentGeneric<C, R>
     {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -1222,4 +1216,14 @@ impl NodeKeysToGenerate {
             ..Self::none()
         }
     }
+}
+
+pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
+    let empty_fake_registry = Arc::new(FakeRegistryClient::new(Arc::new(
+        ProtoRegistryDataProvider::new(),
+    )));
+    TempCryptoComponent::builder()
+        .with_registry(empty_fake_registry)
+        .with_node_id(node_id)
+        .build()
 }

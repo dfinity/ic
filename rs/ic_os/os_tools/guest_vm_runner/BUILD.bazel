@@ -18,8 +18,11 @@ DEPENDENCIES = [
     "@crate_index//:devicemapper",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
+    "@crate_index//:memchr",
     "@crate_index//:nix",
     "@crate_index//:regex",
+    "@crate_index//:strum",
+    "@crate_index//:sysinfo",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -37,7 +40,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 cargo_build_script(
     name = "build_script",
@@ -91,6 +96,7 @@ rust_test(
     ],
     data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
     env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    flaky = True,
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,

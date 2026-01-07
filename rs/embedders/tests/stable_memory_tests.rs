@@ -140,7 +140,7 @@ fn stable_write_traps_after_failed_stable_grow_due_to_subnet_memory() {
     // Set up a subnet with a very small memory capacity to force stable_grow to fail.
     // Set subnet memory capacity to 20 GiB.
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(20 * (GIB as i64))
+        .with_subnet_execution_memory(20 * GIB)
         .build();
 
     // Install a canister with a wasm that:

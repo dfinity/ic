@@ -79,7 +79,7 @@ pub mod ed25519 {
     }
 
     /// An Ed25519 signature.
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Eq, PartialEq)]
     pub struct Signature(pub [u8; Signature::SIZE]);
     crate::derive_serde!(Signature, Signature::SIZE);
 
@@ -92,12 +92,6 @@ pub mod ed25519 {
             write!(f, "Signature(0x{hex_sig})")
         }
     }
-    impl PartialEq for Signature {
-        fn eq(&self, other: &Self) -> bool {
-            self.0[..] == other.0[..]
-        }
-    }
-    impl Eq for Signature {}
     impl Hash for Signature {
         fn hash<H: Hasher>(&self, state: &mut H) {
             self.0[..].hash(state);

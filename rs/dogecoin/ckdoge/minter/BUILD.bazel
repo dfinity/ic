@@ -19,10 +19,13 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
+        "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:bs58",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",
@@ -42,10 +45,19 @@ rust_test(
     env = {
         "TEST_VECTORS": "$(locations :test_vectors)",
     },
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
+        "//packages/ic-secp256k1",
+        "//rs/types/base_types",
         "@crate_index//:assert_matches",
+        "@crate_index//:mockall",
+        "@crate_index//:proptest",
         "@crate_index//:serde_json",
+        "@crate_index//:tokio",
     ],
 )
 
@@ -66,6 +78,7 @@ rust_test(
         deps = [
             # Keep sorted.
             ":ckdoge_minter_lib",
+            "//packages/ic-http-types",
             "//rs/bitcoin/ckbtc/minter:ckbtc_minter_lib",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
@@ -103,20 +116,24 @@ rust_ic_test(
     srcs = ["tests/tests.rs"],
     data = [
         ":ckdoge_minter_debug.wasm.gz",
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "//rs/bitcoin/mock:bitcoin_canister_mock",
+        "//rs/ledger_suite/icrc1/ledger:ledger_canister_u256",
     ],
     env = {
         "IC_CKDOGE_MINTER_WASM_PATH": "$(rootpath :ckdoge_minter_debug.wasm.gz)",
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister_u256)",
+        "IC_BITCOIN_CANISTER_MOCK_WASM_PATH": "$(rootpath //rs/bitcoin/mock:bitcoin_canister_mock)",
         "POCKET_IC_BIN": "$(rootpath //:pocket-ic-server)",
     },
     deps = [
         # Keep sorted.
         ":ckdoge_minter_lib",
         "//:pocket-ic-server",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
         "//rs/dogecoin/ckdoge/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
     ],
 )

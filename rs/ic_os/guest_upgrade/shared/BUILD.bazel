@@ -27,9 +27,6 @@ rust_library(
     name = "shared",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guest_upgrade_shared",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = [
         ":build_script",
         "//rs/ic_os/attestation",

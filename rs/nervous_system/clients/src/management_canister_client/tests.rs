@@ -58,7 +58,37 @@ async fn test_limit_outstanding_calls() {
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
+
+            async fn canister_metadata(
+                &self,
+                _canister_id: PrincipalId,
+                _name: String,
+            ) -> Result<Vec<u8>, (i32, String)> {
+                unimplemented!();
+            }
+
             fn canister_version(&self) -> Option<u64> {
+                unimplemented!();
+            }
+
+            async fn stop_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn delete_canister(
+                &self,
+                _canister_id_record: CanisterIdRecord,
+            ) -> Result<(), (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn take_canister_snapshot(
+                &self,
+                _args: TakeCanisterSnapshotArgs,
+            ) -> Result<CanisterSnapshotResponse, (i32, String)> {
                 unimplemented!();
             }
         }

@@ -22,18 +22,22 @@ use crate::{
     registry::Registry,
 };
 
-const SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
-const PROVIDER_CAPACITY_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS: u64 = 4;
+const NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS: u64 = 24;
+pub const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL: Duration =
+    Duration::from_secs(NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS * 60 * 60);
+pub const NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL: Duration =
+    Duration::from_secs(NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS * 60 * 60);
 
 struct SwapRateLimiter {
     subnet_limiter: InMemoryRateLimiter<SubnetId>,
-    provider_limiter: InMemoryRateLimiter<(PrincipalId, SubnetId)>,
+    node_operator_limiter: InMemoryRateLimiter<(PrincipalId, SubnetId)>,
 }
 
 #[derive(Debug)]
 struct SwapReservation {
     subnet_reservation: Reservation<SubnetId>,
-    provider_reservation: Reservation<(PrincipalId, SubnetId)>,
+    node_operator_reservation: Reservation<(PrincipalId, SubnetId)>,
 }
 
 impl SwapRateLimiter {
@@ -41,13 +45,13 @@ impl SwapRateLimiter {
         Self {
             subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: SUBNET_CAPACITY_INTERVAL,
+                add_capacity_interval: NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
-            provider_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+            node_operator_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: PROVIDER_CAPACITY_INTERVAL,
+                add_capacity_interval: NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
@@ -56,7 +60,7 @@ impl SwapRateLimiter {
 
     fn try_reserve(
         &mut self,
-        provider: PrincipalId,
+        node_operator: PrincipalId,
         subnet_id: SubnetId,
         now: SystemTime,
     ) -> Result<SwapReservation, SwapError> {
@@ -70,22 +74,22 @@ impl SwapRateLimiter {
                     re => panic!("Unexpected error from subnet rate limiter: {re:?}"),
                 })?;
 
-        let provider_reservation = self
-            .provider_limiter
-            .try_reserve(now, (provider, subnet_id), 1)
+        let node_operator_reservation = self
+            .node_operator_limiter
+            .try_reserve(now, (node_operator, subnet_id), 1)
             .map_err(|e| match e {
                 ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
-                    SwapError::ProviderRateLimitedOnSubnet {
+                    SwapError::OperatorRateLimitedOnSubnet {
                         subnet_id,
-                        caller: provider,
+                        caller: node_operator,
                     }
                 }
-                re => panic!("Unexpected error from provider rate limiter: {re:?}"),
+                re => panic!("Unexpected error from node operator rate limiter: {re:?}"),
             })?;
 
         Ok(SwapReservation {
             subnet_reservation,
-            provider_reservation,
+            node_operator_reservation,
         })
     }
 
@@ -94,8 +98,8 @@ impl SwapRateLimiter {
         self.subnet_limiter
             .commit(now, reservation.subnet_reservation)
             .unwrap();
-        self.provider_limiter
-            .commit(now, reservation.provider_reservation)
+        self.node_operator_limiter
+            .commit(now, reservation.node_operator_reservation)
             .unwrap();
     }
 }
@@ -135,7 +139,7 @@ impl Registry {
         let reservation =
             SWAP_LIMITER.with_borrow_mut(|limiter| limiter.try_reserve(caller, subnet_id, now))?;
 
-        self.validate_node_swap(old_node_id, new_node_id, caller)?;
+        self.validate_node_swap(old_node_id, new_node_id, caller, subnet_id)?;
         self.swap_nodes_in_subnet(subnet_id, old_node_id, new_node_id)?;
 
         SWAP_LIMITER.with_borrow_mut(|limiter| limiter.commit(reservation, now));
@@ -175,6 +179,7 @@ impl Registry {
         old_node_id: PrincipalId,
         new_node_id: PrincipalId,
         caller: PrincipalId,
+        subnet_id: SubnetId,
     ) -> Result<(), SwapError> {
         // Ensure that the nodes exist
         let old_node_id = NodeId::new(old_node_id);
@@ -187,7 +192,7 @@ impl Registry {
         })?;
 
         // Ensure that the old node is a member in a subnet
-        // This is done before calling `validate_business_logic`
+        // This is done before calling `validate_node_swap`
 
         // Ensure that the new node is not a member of any subnets
         let maybe_subnet_new_node =
@@ -200,22 +205,29 @@ impl Registry {
             });
         }
 
-        // Ensure that both of the nodes are owned by the same operator
-        let old_operator = PrincipalId::try_from(old_node.node_operator_id).unwrap();
-        let new_operator = PrincipalId::try_from(new_node.node_operator_id).unwrap();
+        // Ensure that both of the nodes are owned by the same node operator
+        let old_node_operator = PrincipalId::try_from(old_node.node_operator_id).unwrap();
+        let new_node_operator = PrincipalId::try_from(new_node.node_operator_id).unwrap();
 
-        if old_operator != new_operator {
+        if old_node_operator != new_node_operator {
             return Err(SwapError::NodesOwnedByDifferentOperators);
         }
 
         // Ensure that the caller is the actual node operator of the nodes.
         // Since the before check passed we can check for either one of the
-        // operators, new or old.
-        if new_operator != caller {
-            return Err(SwapError::CallerOperatorMismatch {
+        // node operators, new or old.
+        if new_node_operator != caller {
+            return Err(SwapError::CallerNodeOperatorMismatch {
                 caller,
-                operator: new_operator,
+                node_operator: new_node_operator,
             });
+        }
+
+        // Disalbe swapping of nodes during recovery, when the subnet
+        // is halted.
+        let subnet_record = self.get_subnet_or_panic(subnet_id);
+        if subnet_record.is_halted {
+            return Err(SwapError::SubnetHalted { subnet_id });
         }
 
         Ok(())
@@ -283,7 +295,7 @@ pub enum SwapError {
     SubnetRateLimited {
         subnet_id: SubnetId,
     },
-    ProviderRateLimitedOnSubnet {
+    OperatorRateLimitedOnSubnet {
         subnet_id: SubnetId,
         caller: PrincipalId,
     },
@@ -298,9 +310,12 @@ pub enum SwapError {
         node_id: PrincipalId,
         subnet_id: SubnetId,
     },
-    CallerOperatorMismatch {
+    CallerNodeOperatorMismatch {
         caller: PrincipalId,
-        operator: PrincipalId,
+        node_operator: PrincipalId,
+    },
+    SubnetHalted {
+        subnet_id: SubnetId,
     },
 }
 
@@ -322,10 +337,10 @@ impl Display for SwapError {
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
                 SwapError::SubnetRateLimited { subnet_id } => format!(
-                    "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
+                    "Subnet {subnet_id} had a swap performed within last {NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS} hours. Try again later."
                 ),
-                SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
-                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
+                SwapError::OperatorRateLimitedOnSubnet { subnet_id, caller } => format!(
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last {NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS} hours. Try again later."
                 ),
                 SwapError::SubnetSizeMismatch { subnet_id } => format!(
                     "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
@@ -336,8 +351,14 @@ impl Display for SwapError {
                 SwapError::NewNodeAssigned { node_id, subnet_id } => format!(
                     "New node {node_id} is a member of subnet {subnet_id} and cannot be used for direct swapping"
                 ),
-                SwapError::CallerOperatorMismatch { caller, operator } => format!(
-                    "Caller {caller} isn't an operator of the specified nodes. Expected operator {operator}"
+                SwapError::CallerNodeOperatorMismatch {
+                    caller,
+                    node_operator,
+                } => format!(
+                    "Caller {caller} isn't an operator of the specified nodes. Expected operator {node_operator}"
+                ),
+                SwapError::SubnetHalted { subnet_id } => format!(
+                    "Subnet {subnet_id} is halted and swapping is disabled. This is likely due to an on going recovery on that subnet"
                 ),
             }
         )
@@ -374,6 +395,7 @@ mod tests {
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use itertools::Itertools;
 
+    use crate::flags::{is_node_swapping_enabled_for_caller, is_node_swapping_enabled_on_subnet};
     use crate::{
         common::test_helpers::{
             get_invariant_compliant_subnet_record, invariant_compliant_registry,
@@ -386,8 +408,8 @@ mod tests {
         },
         mutations::{
             do_swap_node_in_subnet_directly::{
-                PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
-                SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
+                NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
+                SwapError, SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
             },
             node_management::common::make_add_node_registry_mutations,
         },
@@ -459,6 +481,8 @@ mod tests {
         let mut registry = Registry::new();
 
         let _temp = temporarily_enable_node_swapping();
+        test_set_swapping_whitelisted_callers(vec![]);
+        test_set_swapping_enabled_subnets(vec![]);
 
         let payload = valid_payload();
 
@@ -496,12 +520,13 @@ mod tests {
     struct NodeInformation {
         node_id: NodeId,
         subnet_id: Option<SubnetId>,
-        operator: PrincipalId,
+        node_operator: PrincipalId,
         valid_pks: ValidNodePublicKeys,
     }
 
     fn get_mutations_from_node_information(
         node_information: &[NodeInformation],
+        halt_subnets: bool,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
 
@@ -530,7 +555,7 @@ mod tests {
             let node_mutations = make_add_node_registry_mutations(
                 node.node_id,
                 NodeRecord {
-                    node_operator_id: node.operator.to_vec(),
+                    node_operator_id: node.node_operator.to_vec(),
                     xnet: Some(xnet_connection_endpoint),
                     http: Some(http_connection_endpoint),
                     ..Default::default()
@@ -544,6 +569,7 @@ mod tests {
             let node_ids: Vec<_> = nodes.iter().map(|n| n.node_id()).collect();
             let mut subnet_record = get_invariant_compliant_subnet_record(node_ids.clone());
             subnet_record.subnet_type = i32::from(SubnetType::System);
+            subnet_record.is_halted = halt_subnets;
 
             mutations.push(upsert(
                 make_subnet_record_key(*subnet),
@@ -578,40 +604,52 @@ mod tests {
         (keys.node_id(), keys)
     }
 
-    fn setup_registry_for_test() -> (NodeId, NodeId, SubnetId, PrincipalId, Registry) {
+    fn setup_registry_for_test(
+        halt_subnets: bool,
+    ) -> (NodeId, NodeId, SubnetId, PrincipalId, Registry) {
         let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let (old_node_id, old_node_keys) = get_new_node_and_keys();
         let (new_node_id, new_node_keys) = get_new_node_and_keys();
-        let operator_id = PrincipalId::new_user_test_id(1);
+        let node_operator_id = PrincipalId::new_user_test_id(1);
 
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id),
-                operator: operator_id,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: None,
-                operator: operator_id,
-                valid_pks: new_node_keys,
-            },
-        ]);
+        let mutations = get_mutations_from_node_information(
+            &[
+                NodeInformation {
+                    node_id: old_node_id,
+                    subnet_id: Some(subnet_id),
+                    node_operator: node_operator_id,
+                    valid_pks: old_node_keys,
+                },
+                NodeInformation {
+                    node_id: new_node_id,
+                    subnet_id: None,
+                    node_operator: node_operator_id,
+                    valid_pks: new_node_keys,
+                },
+            ],
+            halt_subnets,
+        );
         registry.apply_mutations_for_test(mutations);
 
-        (old_node_id, new_node_id, subnet_id, operator_id, registry)
+        (
+            old_node_id,
+            new_node_id,
+            subnet_id,
+            node_operator_id,
+            registry,
+        )
     }
 
     #[test]
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
-            setup_registry_for_test();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(false);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
+        test_set_swapping_whitelisted_callers(vec![]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(new_node_id.get()),
@@ -620,9 +658,10 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
+        let response =
+            registry.swap_nodes_inner(payload.clone(), node_operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledForCaller {
-            caller: operator_id,
+            caller: node_operator_id,
         };
         assert!(
             response.as_ref().is_err_and(|err| err == &expected_err),
@@ -630,8 +669,8 @@ mod tests {
         );
 
         // Enable the feature for the caller
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         // Expect the first next error which is the missing
         // subnet in the registry.
         assert!(response.is_ok(), "Expected OK but got {response:?}");
@@ -641,17 +680,18 @@ mod tests {
     fn feature_enabled_for_subnet() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
-            setup_registry_for_test();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(false);
 
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
             new_node_id: Some(new_node_id.get()),
         };
 
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now_system_time());
+        let response =
+            registry.swap_nodes_inner(payload.clone(), node_operator_id, now_system_time());
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
 
         // First call when the feature isn't enabled on the subnet.
@@ -662,7 +702,7 @@ mod tests {
 
         // Now enable the feature and call again.
         test_set_swapping_enabled_subnets(vec![subnet_id]);
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
@@ -682,17 +722,19 @@ mod tests {
         swap_limiter.commit(reservation, now);
 
         let before_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let expected_err = SwapError::SubnetRateLimited { subnet_id };
 
-        // Second call from the same provider should fail because of subnet rate limit
+        // Second call from the same node operator should fail because of subnet rate limit
         let response = swap_limiter
             .try_reserve(caller_1, subnet_id, before_duration_elapsed)
             .expect_err("Should error out");
         assert_eq!(response, expected_err);
 
-        // Call from a different provider should fail as well
+        // Call from a different node operator should fail as well
         let response = swap_limiter
             .try_reserve(caller_2, subnet_id, before_duration_elapsed)
             .expect_err("Should error out");
@@ -701,7 +743,9 @@ mod tests {
         // After SUBNET_CAPACITY_INTERVAL the second caller should be able to make reservation but
         // first shouldn't
         let after_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
 
         let reservation = swap_limiter
@@ -709,7 +753,7 @@ mod tests {
             .unwrap();
         drop(reservation);
 
-        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+        let expected_err = SwapError::OperatorRateLimitedOnSubnet {
             subnet_id,
             caller: caller_1,
         };
@@ -718,12 +762,16 @@ mod tests {
             .expect_err("Should error out");
         assert_eq!(response, expected_err);
 
-        // After PROVIDER_CAPACITY_INTERVAL the first provider should be able to perform a swap
-        let after_provider_duration_elapsed = now
-            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+        // After NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL the first node operator
+        // should be able to perform a swap
+        let after_node_operator_duration_elapsed = now
+            .checked_add(
+                NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL
+                    .saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response =
-            swap_limiter.try_reserve(caller_1, subnet_id, after_provider_duration_elapsed);
+            swap_limiter.try_reserve(caller_1, subnet_id, after_node_operator_duration_elapsed);
         assert!(response.is_ok());
     }
 
@@ -742,7 +790,9 @@ mod tests {
         }
 
         let before_subnet_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         for subnet in [subnet_1, subnet_2] {
             let response = swap_limiter
@@ -757,8 +807,8 @@ mod tests {
     #[test]
     fn rate_limits_e2e_respected() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
-            setup_registry_for_test();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(false);
 
         let now = now_system_time();
         let payload = SwapNodeInSubnetDirectlyPayload {
@@ -766,10 +816,10 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload.clone(), operator_id, now);
+        let response = registry.swap_nodes_inner(payload.clone(), node_operator_id, now);
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
@@ -785,35 +835,49 @@ mod tests {
 
         // Make an additional call which should fail because of the subnet limit
         let before_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response = registry
-            .swap_nodes_inner(payload.clone(), operator_id, before_duration_elapsed)
+            .swap_nodes_inner(payload.clone(), node_operator_id, before_duration_elapsed)
             .expect_err("Should error out");
 
         let expected_err = SwapError::SubnetRateLimited { subnet_id };
         assert_eq!(response, expected_err);
 
-        // Make an additional call which should fail because of the provider limit
+        // Make an additional call which should fail because of the node operator limit
         let after_subnet_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response = registry
-            .swap_nodes_inner(payload.clone(), operator_id, after_subnet_duration_elapsed)
+            .swap_nodes_inner(
+                payload.clone(),
+                node_operator_id,
+                after_subnet_duration_elapsed,
+            )
             .expect_err("Should error out");
 
-        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+        let expected_err = SwapError::OperatorRateLimitedOnSubnet {
             subnet_id,
-            caller: operator_id,
+            caller: node_operator_id,
         };
         assert_eq!(response, expected_err);
 
         // Make an additional call after all the rate limits have elapsed
-        let after_provider_duration_elapsed = now
-            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+        let after_node_operator_duration_elapsed = now
+            .checked_add(
+                NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL
+                    .saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
-        let response =
-            registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);
+        let response = registry.swap_nodes_inner(
+            payload,
+            node_operator_id,
+            after_node_operator_duration_elapsed,
+        );
 
         assert!(response.is_ok());
 
@@ -833,30 +897,33 @@ mod tests {
     }
 
     #[test]
-    fn nodes_owned_by_different_operators() {
+    fn nodes_owned_by_different_node_operators() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let mut registry = invariant_compliant_registry(0);
 
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let (old_node_id, old_node_keys) = get_new_node_and_keys();
         let (new_node_id, new_node_keys) = get_new_node_and_keys();
-        let operator_id_1 = PrincipalId::new_user_test_id(1);
-        let operator_id_2 = PrincipalId::new_user_test_id(2);
+        let node_operator_id_1 = PrincipalId::new_user_test_id(1);
+        let node_operator_id_2 = PrincipalId::new_user_test_id(2);
 
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id),
-                operator: operator_id_1,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: None,
-                operator: operator_id_2,
-                valid_pks: new_node_keys,
-            },
-        ]);
+        let mutations = get_mutations_from_node_information(
+            &[
+                NodeInformation {
+                    node_id: old_node_id,
+                    subnet_id: Some(subnet_id),
+                    node_operator: node_operator_id_1,
+                    valid_pks: old_node_keys,
+                },
+                NodeInformation {
+                    node_id: new_node_id,
+                    subnet_id: None,
+                    node_operator: node_operator_id_2,
+                    valid_pks: new_node_keys,
+                },
+            ],
+            false,
+        );
         registry.apply_mutations_for_test(mutations);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
@@ -864,11 +931,11 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        test_set_swapping_whitelisted_callers(vec![operator_id_1, operator_id_2]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id_1, node_operator_id_2]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
         let response = registry
-            .swap_nodes_inner(payload, operator_id_1, now_system_time())
+            .swap_nodes_inner(payload, node_operator_id_1, now_system_time())
             .expect_err("Should error out");
 
         let expected_err = SwapError::NodesOwnedByDifferentOperators;
@@ -881,8 +948,8 @@ mod tests {
     #[test]
     fn nodes_not_owned_by_the_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
-            setup_registry_for_test();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(false);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
@@ -891,16 +958,16 @@ mod tests {
 
         let different_caller = PrincipalId::new_user_test_id(2);
 
-        test_set_swapping_whitelisted_callers(vec![operator_id, different_caller]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id, different_caller]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
         let response = registry
             .swap_nodes_inner(payload, different_caller, now_system_time())
             .expect_err("Should error out");
 
-        let expected_err = SwapError::CallerOperatorMismatch {
+        let expected_err = SwapError::CallerNodeOperatorMismatch {
             caller: different_caller,
-            operator: operator_id,
+            node_operator: node_operator_id,
         };
         assert_eq!(
             response, expected_err,
@@ -917,23 +984,26 @@ mod tests {
         let subnet_id_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
         let (old_node_id, old_node_keys) = get_new_node_and_keys();
         let (new_node_id, new_node_keys) = get_new_node_and_keys();
-        let operator_id_1 = PrincipalId::new_user_test_id(1);
-        let operator_id_2 = PrincipalId::new_user_test_id(2);
+        let node_operator_id_1 = PrincipalId::new_user_test_id(1);
+        let node_operator_id_2 = PrincipalId::new_user_test_id(2);
 
-        let mutations = get_mutations_from_node_information(&[
-            NodeInformation {
-                node_id: old_node_id,
-                subnet_id: Some(subnet_id_1),
-                operator: operator_id_1,
-                valid_pks: old_node_keys,
-            },
-            NodeInformation {
-                node_id: new_node_id,
-                subnet_id: Some(subnet_id_2),
-                operator: operator_id_2,
-                valid_pks: new_node_keys,
-            },
-        ]);
+        let mutations = get_mutations_from_node_information(
+            &[
+                NodeInformation {
+                    node_id: old_node_id,
+                    subnet_id: Some(subnet_id_1),
+                    node_operator: node_operator_id_1,
+                    valid_pks: old_node_keys,
+                },
+                NodeInformation {
+                    node_id: new_node_id,
+                    subnet_id: Some(subnet_id_2),
+                    node_operator: node_operator_id_2,
+                    valid_pks: new_node_keys,
+                },
+            ],
+            false,
+        );
         registry.apply_mutations_for_test(mutations);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
@@ -941,11 +1011,11 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        test_set_swapping_whitelisted_callers(vec![operator_id_1, operator_id_2]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id_1, node_operator_id_2]);
         test_set_swapping_enabled_subnets(vec![subnet_id_1]);
 
         let response = registry
-            .swap_nodes_inner(payload, operator_id_1, now_system_time())
+            .swap_nodes_inner(payload, node_operator_id_1, now_system_time())
             .expect_err("Should error out");
 
         let expected_err = SwapError::NewNodeAssigned {
@@ -959,20 +1029,44 @@ mod tests {
     }
 
     #[test]
-    fn e2e_valid_swap() {
+    fn subnet_halted() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let (old_node_id, new_node_id, subnet_id, operator_id, mut registry) =
-            setup_registry_for_test();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(true);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
             new_node_id: Some(new_node_id.get()),
         };
 
-        test_set_swapping_whitelisted_callers(vec![operator_id]);
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload, operator_id, now_system_time());
+        let response = registry
+            .swap_nodes_inner(payload, node_operator_id, now_system_time())
+            .expect_err("Should error out");
+        let expected_err = SwapError::SubnetHalted { subnet_id };
+        assert_eq!(
+            response, expected_err,
+            "Expected err {expected_err:?} but got: {response:?}"
+        );
+    }
+
+    #[test]
+    fn e2e_valid_swap() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
+            setup_registry_for_test(false);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        test_set_swapping_whitelisted_callers(vec![node_operator_id]);
+        test_set_swapping_enabled_subnets(vec![subnet_id]);
+
+        let response = registry.swap_nodes_inner(payload, node_operator_id, now_system_time());
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
@@ -988,5 +1082,38 @@ mod tests {
 
         assert!(members.contains(&new_node_id));
         assert!(!members.contains(&old_node_id));
+    }
+
+    #[test]
+    fn feature_flag_subnet_test() {
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let subnet_2 = SubnetId::new(PrincipalId::new_subnet_test_id(2));
+
+        // Ensure that no subnets are whitelisted
+        test_set_swapping_enabled_subnets(vec![]);
+
+        assert!(!is_node_swapping_enabled_on_subnet(subnet_1));
+
+        // Now add the subnet to the whitelisted ones
+        test_set_swapping_enabled_subnets(vec![subnet_1]);
+        assert!(is_node_swapping_enabled_on_subnet(subnet_1));
+        assert!(!is_node_swapping_enabled_on_subnet(subnet_2));
+    }
+
+    #[test]
+    fn feature_flag_node_operator_test() {
+        let node_operator_1 = PrincipalId::new_user_test_id(1);
+        let node_operator_2 = PrincipalId::new_user_test_id(2);
+
+        // Ensure that no callers are whitelisted
+        test_set_swapping_whitelisted_callers(vec![]);
+
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_1));
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_2));
+
+        // Now add the node operator to the whitelisted ones
+        test_set_swapping_whitelisted_callers(vec![node_operator_1]);
+        assert!(is_node_swapping_enabled_for_caller(node_operator_1));
+        assert!(!is_node_swapping_enabled_for_caller(node_operator_2));
     }
 }

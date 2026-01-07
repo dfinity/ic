@@ -19,7 +19,7 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use ic_embedders::WASM_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -1260,7 +1260,7 @@ fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> Bina
 
 #[test]
 fn large_code_section_rejected() {
-    let wasm = wasm_with_fixed_sizes(11 * KB * KB + 10, 0);
+    let wasm = wasm_with_fixed_sizes(12 * KB * KB + 10, 0);
     let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
     let result = validate_and_instrument_for_testing(&embedder, &wasm);
     assert_matches!(

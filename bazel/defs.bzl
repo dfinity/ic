@@ -3,6 +3,8 @@ Utilities for building IC replica and canisters.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURRENCY = 16
@@ -238,7 +240,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, test_name = None, tes
 
     # The benchmark binary is a shell script that runs the binary
     # (similar to how `cargo bench` runs the benchmark binary).
-    native.sh_binary(
+    sh_binary(
         srcs = ["//bazel:generic_rust_bench.sh"],
         name = name,
         # Allow benchmark targets to use test-only libraries.
@@ -253,7 +255,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, test_name = None, tes
     # To test that the benchmarks work.
     if test_name != None:
         test_timeout = test_timeout or "moderate"
-        native.sh_test(
+        sh_test(
             name = test_name,
             testonly = True,
             timeout = test_timeout,
@@ -420,8 +422,7 @@ def file_size_check(
       max_file_size: Max accepted size in bytes.
       tags: See Bazel documentation
     """
-
-    native.sh_test(
+    sh_test(
         name = name,
         srcs = ["//bazel:file_size_test.sh"],
         data = [file],

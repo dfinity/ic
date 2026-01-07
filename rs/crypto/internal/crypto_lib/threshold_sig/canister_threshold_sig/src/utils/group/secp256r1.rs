@@ -303,7 +303,7 @@ impl Point {
         }
     }
 
-    /// Returns tbl[index-1] if index > 0 or otherwise identity elemement
+    /// Returns tbl[index-1] if index > 0 or otherwise identity element
     ///
     /// Namely if index is equal to zero, or is out of range, identity is returned
     #[inline]

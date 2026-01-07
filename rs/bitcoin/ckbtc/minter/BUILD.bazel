@@ -7,7 +7,9 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
     # Keep sorted.
+    "//packages/canlog",
     "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
     "//packages/ic-secp256k1",
     "//packages/icrc-ledger-client-cdk:icrc_ledger_client_cdk",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -15,7 +17,6 @@ LIB_DEPS = [
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1/ledger",
-    "//rs/rust_canisters/canister_log",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils/ensure",
@@ -37,10 +38,12 @@ LIB_DEPS = [
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
 ]
 
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
+    "//packages/canlog_derive",
     "@crate_index//:async-trait",
     "@crate_index//:minicbor-derive",
 ]
@@ -97,7 +100,6 @@ alias(
             "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/rust_canisters/canister_log",
             "@crate_index//:candid",
             "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-cdk",
@@ -125,7 +127,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:proptest",
@@ -183,7 +185,7 @@ rust_test(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/types/management_canister_types",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:flate2",
         "@crate_index//:ic-agent",
@@ -216,12 +218,14 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/canlog",
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/checker:btc_checker_lib",
         "//rs/bitcoin/mock",
         "//rs/config",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/ledger",
         "//rs/rust_canisters/canister_test",
@@ -230,11 +234,13 @@ rust_ic_test(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:assert_matches",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",
         "@crate_index//:minicbor",
+        "@crate_index//:num-traits",
+        "@crate_index//:rand",
         "@crate_index//:regex",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
@@ -306,7 +312,6 @@ rust_canbench(
         "//packages/ic-dummy-getrandom-for-wasm",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rust_canisters/canister_log",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",

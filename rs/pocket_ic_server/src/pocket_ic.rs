@@ -1,20 +1,21 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, GoogleOpenIdConfig,
-    InternetIdentityInit, NnsDappCanisterArguments, RateLimitConfig, SnsAggregatorConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
+    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{BlobStore, OpId, Operation, SubnetBlockmakers};
 use askama::Template;
 use async_trait::async_trait;
 use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use bitcoin::Network;
+use bitcoin::Network as BitcoinAdapterNetwork;
+use bitcoin::dogecoin::Network as DogecoinAdapterNetwork;
 use bytes::Bytes;
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
@@ -26,7 +27,10 @@ use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
-use ic_btc_adapter::start_server as start_btc_server;
+use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
+use ic_btc_interface::{
+    Fees as BitcoinFees, InitConfig as BitcoinInitConfig, Network as BitcoinNetwork,
+};
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
@@ -34,6 +38,9 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_doge_interface::{
+    Fees as DogecoinFees, InitConfig as DogecoinInitConfig, Network as DogecoinNetwork,
+};
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
     CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
@@ -46,6 +53,7 @@ use ic_https_outcalls_adapter::{
 use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
+use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_icp_index::InitArg as IcpIndexInitArg;
@@ -57,19 +65,22 @@ use ic_interfaces_state_manager::StateReader;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
-    EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, EcdsaCurve, EcdsaKeyId, LogVisibilityV2,
+    MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
-    CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID,
-    LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
-    SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
+    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -101,7 +112,8 @@ use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, Cycles, Height, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
@@ -126,7 +138,7 @@ use pocket_ic::common::rest::{
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -137,10 +149,10 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fs::{File, remove_file},
+    fs::{File, OpenOptions, remove_file},
     io::{BufReader, Read, Write},
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -156,6 +168,17 @@ use tower::{service_fn, util::ServiceExt};
 
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+
+const MAINNET_NNS_SUBNET_ID: &str =
+    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
+const MAINNET_II_SUBNET_ID: &str =
+    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe";
+const MAINNET_BITCOIN_SUBNET_ID: &str =
+    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe";
+const MAINNET_FIDUCIARY_SUBNET_ID: &str =
+    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae";
+const MAINNET_SNS_SUBNET_ID: &str =
+    "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae";
 
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
@@ -183,6 +206,10 @@ const SNS_AGGREGATOR_TEST_CANISTER_WASM: &[u8] =
 const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
     include_bytes!(env!("INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH"));
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
+const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
+    include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
+const DOGECOIN_CANISTER_WASM: &[u8] = include_bytes!(env!("DOGECOIN_CANISTER_WASM_PATH"));
+const MIGRATION_CANISTER_WASM: &[u8] = include_bytes!(env!("MIGRATION_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -196,7 +223,7 @@ const INITIAL_CYCLES: u128 = u128::MAX / 2;
 // - it is still possible to top up the canister with further cycles without overflowing 64-bit range.
 const INITIAL_CYCLES_64_BIT: u64 = u64::MAX / 2;
 
-// Maximum duration of waiting for bitcoin/canister http adapter server to start.
+// Maximum duration of waiting for bitcoin/dogecoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 
 // Clippy complains that these are interior-mutable.
@@ -204,6 +231,9 @@ const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+
+// Maximum data chunk size when downloading/uploading canister snapshots.
+const MAX_CHUNK_SIZE: u64 = 2_000_000;
 
 fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
@@ -220,10 +250,6 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
 
 /// The response type for `/api` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
-
-/// We assume that the maximum number of subnets on the mainnet is 1024.
-/// Used for generating canister ID ranges that do not appear on mainnet.
-pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
 
 fn wasm_result_to_canister_result(
     res: ic_state_machine_tests::WasmResult,
@@ -317,6 +343,7 @@ impl BitcoinAdapterParts {
     fn new(
         bitcoind_addr: Vec<SocketAddr>,
         uds_path: PathBuf,
+        network: AdapterNetwork,
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -328,7 +355,7 @@ impl BitcoinAdapterParts {
             logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
-            ..BitcoinAdapterConfig::default_with(Network::Regtest.into())
+            ..BitcoinAdapterConfig::default_with(network)
         };
         let adapter = tokio::spawn(async move {
             start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
@@ -424,7 +451,6 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: watch::Sender<Option<NNSDelegationBuilder>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -442,15 +468,13 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let (nns_delegation_tx, nns_delegation_rx) = watch::channel(None);
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
             adapter_config,
-            state_machine.query_handler.lock().unwrap().clone(),
+            state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            NNSDelegationReader::new(nns_delegation_rx, state_machine.replica_logger.clone()),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -459,23 +483,12 @@ impl Subnet {
         Self {
             state_machine,
             canister_http,
-            delegation_from_nns: nns_delegation_tx,
             _canister_http_adapter_parts: canister_http_adapter_parts,
         }
     }
 
     fn get_subnet_id(&self) -> SubnetId {
         self.state_machine.get_subnet_id()
-    }
-
-    fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        let builder = NNSDelegationBuilder::try_new(
-            delegation_from_nns.certificate,
-            self.get_subnet_id(),
-            &self.state_machine.replica_logger,
-        )
-        .unwrap();
-        self.delegation_from_nns.send(Some(builder)).unwrap();
     }
 }
 
@@ -526,6 +539,7 @@ struct PocketIcSubnets {
     nns_subnet: Option<Arc<Subnet>>,
     sns_subnet: Option<Arc<Subnet>>,
     ii_subnet: Option<Arc<Subnet>>,
+    btc_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     state_dir: Option<PathBuf>,
@@ -534,12 +548,14 @@ struct PocketIcSubnets {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
     auto_progress_enabled: bool,
     gateway_port: Option<u16>,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
+    _dogecoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
 impl PocketIcSubnets {
@@ -554,6 +570,7 @@ impl PocketIcSubnets {
         icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
+        dogecoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -644,6 +661,7 @@ impl PocketIcSubnets {
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
+            .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
             .create_at_registry_version(create_at_registry_version)
     }
 
@@ -653,6 +671,7 @@ impl PocketIcSubnets {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
         auto_progress_enabled: bool,
@@ -672,6 +691,7 @@ impl PocketIcSubnets {
             nns_subnet: None,
             sns_subnet: None,
             ii_subnet: None,
+            btc_subnet: None,
             runtime,
             state_dir,
             registry_data_provider,
@@ -680,12 +700,14 @@ impl PocketIcSubnets {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
             gateway_port,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
+            _dogecoin_adapter_parts: None,
         }
     }
 
@@ -720,6 +742,7 @@ impl PocketIcSubnets {
         self.nns_subnet.take();
         self.sns_subnet.take();
         self.ii_subnet.take();
+        self.btc_subnet.take();
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
@@ -770,6 +793,12 @@ impl PocketIcSubnets {
             } else {
                 None
             };
+        let dogecoin_adapter_uds_path =
+            if matches!(subnet_kind, SubnetKind::Bitcoin) && self.dogecoind_addr.is_some() {
+                Some(NamedTempFile::new().unwrap().into_temp_path().to_path_buf())
+            } else {
+                None
+            };
 
         let latest_registry_version = self.registry_data_provider.latest_version().get();
         let create_at_registry_version = if update_registry_and_system_canisters {
@@ -792,6 +821,7 @@ impl PocketIcSubnets {
             &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
+            dogecoin_adapter_uds_path.clone(),
         );
 
         if let Some(subnet_id) = subnet_id {
@@ -857,6 +887,9 @@ impl PocketIcSubnets {
         if let SubnetKind::II = subnet_kind {
             self.ii_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
         }
+        if let SubnetKind::Bitcoin = subnet_kind {
+            self.btc_subnet = Some(self.subnets.get_subnet(subnet_id).unwrap());
+        }
 
         // We need the actual subnet ID to update the chain keys.
         for chain_key in subnet_chain_keys {
@@ -867,11 +900,22 @@ impl PocketIcSubnets {
         }
 
         // We need `StateMachine` components (metrics/logger)
-        // to create a bitcoin adapter (if applicable).
+        // to create a bitcoin/dogecoin adapter (if applicable).
         if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
             self._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
                 self.bitcoind_addr.clone().unwrap(),
                 bitcoin_adapter_uds_path,
+                AdapterNetwork::Bitcoin(BitcoinAdapterNetwork::Regtest),
+                self.log_level,
+                sm.replica_logger.clone(),
+                sm.metrics_registry.clone(),
+            ));
+        }
+        if let Some(dogecoin_adapter_uds_path) = dogecoin_adapter_uds_path {
+            self._dogecoin_adapter_parts = Some(BitcoinAdapterParts::new(
+                self.dogecoind_addr.clone().unwrap(),
+                dogecoin_adapter_uds_path,
+                AdapterNetwork::Dogecoin(DogecoinAdapterNetwork::Regtest),
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
@@ -925,16 +969,6 @@ impl PocketIcSubnets {
             subnet.state_machine.execute_round();
         }
 
-        // Fetch the NNS delegation for the newly created subnet.
-        // This can only be done after updating the registry and executing
-        // a round on the NNS subnet (above).
-        let nns_subnet = self.get_nns().unwrap();
-        if subnet_id != nns_subnet.get_subnet_id() {
-            let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
-            let subnet = self.subnets.get_subnet(subnet_id).unwrap();
-            subnet.set_delegation_from_nns(delegation);
-        }
-
         let subnet_config = SubnetConfigInternal {
             subnet_id,
             subnet_kind,
@@ -958,6 +992,9 @@ impl PocketIcSubnets {
                 sns,
                 ii,
                 nns_ui,
+                bitcoin,
+                dogecoin,
+                canister_migration,
             } = icp_features;
             if let Some(ref config) = registry {
                 self.update_registry(config);
@@ -982,6 +1019,15 @@ impl PocketIcSubnets {
             }
             if let Some(ref config) = nns_ui {
                 self.deploy_nns_ui(config);
+            }
+            if let Some(ref config) = bitcoin {
+                self.deploy_bitcoin(config);
+            }
+            if let Some(ref config) = dogecoin {
+                self.deploy_dogecoin(config);
+            }
+            if let Some(ref config) = canister_migration {
+                self.deploy_canister_migration(config);
             }
         }
 
@@ -1018,6 +1064,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1029,6 +1076,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1099,6 +1147,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (1_073_741_824 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1110,6 +1159,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1267,6 +1317,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (4_294_967_296 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1278,6 +1329,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1346,6 +1398,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1357,6 +1410,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1409,6 +1463,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1420,6 +1475,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1471,6 +1527,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1482,6 +1539,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1536,6 +1594,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (4_294_967_296 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1547,6 +1606,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(4_294_967_296_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1611,6 +1671,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "rno2w-sqaaa-aaaaa-aaacq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (1_073_741_824 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1622,6 +1683,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1676,6 +1738,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1687,6 +1750,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1769,6 +1833,7 @@ impl PocketIcSubnets {
             //       };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1783,6 +1848,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1843,6 +1909,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1854,6 +1921,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1871,9 +1939,6 @@ impl PocketIcSubnets {
             // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             //     record {
             //       fetch_root_key = null;
-            //       openid_google = opt opt record {
-            //         client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
-            //       };
             //       is_production = opt true;
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
@@ -1884,7 +1949,7 @@ impl PocketIcSubnets {
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\4e\84\31\f2\c0\1c\32\ac\ed\21\43\9e\8a\97\ea\0a\be\22\4a\f8\18\89\58\a4\77\ea\df\ad\46\e6\90\fb";
+            //         module_hash = blob "\f5\59\00\84\1f\c3\d6\3d\58\01\c1\b6\65\c3\34\6b\c4\8c\58\24\ba\84\3f\55\6a\26\22\6b\60\2f\79\5e";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -1896,15 +1961,44 @@ impl PocketIcSubnets {
             //           api_host = null;
             //         }
             //       };
-            //       feature_flag_enable_generic_open_id_fe = null;
             //       related_origins = opt vec {
             //         "https://id.ai";
             //         "https://identity.ic0.app";
             //         "https://identity.internetcomputer.org";
             //         "https://identity.icp0.io";
             //       };
-            //       feature_flag_continue_from_another_device = opt true;
-            //       openid_configs = null;
+            //       openid_configs = opt vec {
+            //         record {
+            //           auth_uri = "https://accounts.google.com/o/oauth2/v2/auth";
+            //           jwks_uri = "https://www.googleapis.com/oauth2/v3/certs";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Google";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://accounts.google.com";
+            //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //         };
+            //         record {
+            //           auth_uri = "https://appleid.apple.com/auth/authorize";
+            //           jwks_uri = "https://appleid.apple.com/auth/keys";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M14.8 3.2c1-1.2 1.2-2.7 1-3.2-1 0-2.2.7-2.9 1.5-.9 1.2-1.1 2.6-.9 3 .6.2 2-.3 2.8-1.3ZM9.2 20c1.2 0 1.6-.8 3.2-.8 1.5 0 1.8.8 3.1.8s2.3-1.2 3-2.5c1-1.4 1.3-2.8 1.4-2.8 0 0-2.6-1.2-2.6-4.1 0-2.5 2-3.7 2.1-3.8a4.5 4.5 0 0 0-3.9-2c-1.4 0-2.6.8-3.4.8-.8 0-1.9-.8-3.2-.8-2.3 0-4.8 2-4.8 6 0 2.3 1 4.8 2 6.5 1 1.5 1.9 2.7 3 2.7Z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Apple";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://appleid.apple.com";
+            //           auth_scope = vec { "openid" };
+            //           client_id = "ai.id.auth";
+            //         };
+            //         record {
+            //           auth_uri = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+            //           jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M2.5 2.5h9v9h-9zm10 0h9v9h-9zm-10 10h9v9h-9zm10 0h9v9h-9z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Microsoft";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://login.microsoftonline.com/{tid}/v2.0";
+            //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           client_id = "80d5203e-9ba2-4acf-97a1-88d926a0bbbf";
+            //         };
+            //       };
             //       captcha_config = opt record {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
@@ -1922,11 +2016,16 @@ impl PocketIcSubnets {
             let openid_google = if self.auto_progress_enabled {
                 // We use a different id than in production:
                 // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
-                Some(Some(GoogleOpenIdConfig {
-                    client_id:
-                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
-                            .to_string(),
-                }))
+                Some(vec![OpenIdConfig {
+                  name: "Google".to_string(),
+                  logo: "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>".to_string(),
+                  issuer: "https://accounts.google.com".to_string(),
+                  client_id: "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com".to_string(),
+                  jwks_uri: "https://www.googleapis.com/oauth2/v3/certs".to_string(),
+                  auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
+                  auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
+                  fedcm_uri: Some("".to_string()),
+                }])
             } else {
                 None
             };
@@ -1942,17 +2041,14 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,  // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
-                openid_google,          // DIFFERENT FROM ICP MAINNET
-                openid_configs: None,
-                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
-                fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
+                related_origins: None,         // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
+                openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
+                fetch_root_key: Some(true),    // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
-                feature_flag_continue_from_another_device: Some(true),
-                feature_flag_enable_generic_open_id_fe: None,
             });
             ii_subnet
                 .state_machine
@@ -1990,6 +2086,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -2001,6 +2098,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2046,6 +2144,218 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     NNS_DAPP_TEST_CANISTER_WASM.to_vec(),
                     Encode!(&Some(nns_dapp_test_init_payload)).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_bitcoin(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the Bitcoin subnet does not exist (yet).
+        let Some(ref btc_subnet) = self.btc_subnet else {
+            return;
+        };
+
+        if !btc_subnet
+            .state_machine
+            .canister_exists(BITCOIN_TESTNET_CANISTER_ID)
+        {
+            // Create the Bitcoin testnet canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"g4xu7-jiaaa-aaaan-aaaaq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "cmqvo-qqaaa-aaaai-q3waa-cai";
+            //         principal "yfb3o-hyaaa-aaaaj-qno4q-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (2_000_000_000 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    PrincipalId::from_str("cmqvo-qqaaa-aaaai-q3waa-cai").unwrap(),
+                    PrincipalId::from_str("yfb3o-hyaaa-aaaaj-qno4q-cai").unwrap(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
+                wasm_memory_limit: Some(2_000_000_000_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
+                Some(BITCOIN_TESTNET_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
+
+            // Install the Bitcoin testnet canister.
+            let args = BitcoinInitConfig {
+                network: Some(BitcoinNetwork::Regtest),
+                fees: Some(BitcoinFees::testnet()),
+                ..Default::default()
+            };
+            btc_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    BITCOIN_TESTNET_CANISTER_WASM.to_vec(),
+                    Encode!(&args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_dogecoin(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the Bitcoin subnet does not exist (yet).
+        let Some(ref btc_subnet) = self.btc_subnet else {
+            return;
+        };
+
+        if !btc_subnet
+            .state_machine
+            .canister_exists(DOGECOIN_CANISTER_ID)
+        {
+            // Create the Dogecoin mainnet canister with its ICP mainnet settings and configured for the regtest network.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"gordg-fyaaa-aaaan-aaadq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "gordg-fyaaa-aaaan-aaadq-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    DOGECOIN_CANISTER_ID.get(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
+                Some(DOGECOIN_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
+
+            // Install the Dogecoin mainnet canister configured for the regtest network.
+            let args = DogecoinInitConfig {
+                network: Some(DogecoinNetwork::Regtest),
+                fees: Some(DogecoinFees::mainnet()),
+                ..Default::default()
+            };
+            btc_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    DOGECOIN_CANISTER_WASM.to_vec(),
+                    Encode!(&args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_canister_migration(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        let nns_subnet = self.nns_subnet.clone().expect(
+            "The NNS subnet is supposed to already exist if the `canister_migration` ICP feature is specified.",
+        );
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(MIGRATION_CANISTER_ID)
+        {
+            // Create the canister migration orchestrator canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"sbzkb-zqaaa-aaaaa-aaaiq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(MIGRATION_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, MIGRATION_CANISTER_ID);
+
+            // Install the canister migration orchestrator canister.
+            // TODO: replace by public interface
+            #[derive(CandidType, Deserialize, Default)]
+            struct MigrationCanisterInitArgs {
+                allowlist: Option<Vec<Principal>>,
+            }
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    MIGRATION_CANISTER_WASM.to_vec(),
+                    Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
                 )
                 .unwrap();
         }
@@ -2190,6 +2500,7 @@ impl GetChunk for PocketIcSubnets {
 pub struct PocketIc {
     range_gen: RangeGen,
     runtime: Arc<Runtime>,
+    mainnet_routing_table: RoutingTable,
     state_label: StateLabel,
     subnets: PocketIcSubnets,
     default_effective_canister_id: Principal,
@@ -2266,14 +2577,17 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
+        mainnet_routing_table: RoutingTable,
         seed: u64,
-        mut subnet_configs: ExtendedSubnetConfigSet,
+        subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         incomplete_state: Option<IncompleteStateFlag>,
         initial_time: Option<Time>,
@@ -2356,9 +2670,6 @@ impl PocketIc {
                 })
                 .collect()
         } else {
-            if let Some(ref icp_features) = icp_features {
-                subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
-            }
             let fixed_range_subnets = subnet_configs.get_named();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
@@ -2464,7 +2775,9 @@ impl PocketIc {
                     // We validate the given canister ranges.
                     let mut sorted_ranges = ranges.clone();
                     sorted_ranges.sort();
-                    if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
+                    if let Some(mut subnet_kind_ranges) =
+                        subnet_kind_canister_ranges(&mainnet_routing_table, subnet_kind)
+                    {
                         subnet_kind_ranges.sort();
                         if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
                             return Err(format!(
@@ -2474,8 +2787,10 @@ impl PocketIc {
                     }
                     for other_subnet_kind in SubnetKind::iter() {
                         if subnet_kind != other_subnet_kind
-                            && let Some(mut other_subnet_kind_ranges) =
-                                subnet_kind_canister_range(other_subnet_kind)
+                            && let Some(mut other_subnet_kind_ranges) = subnet_kind_canister_ranges(
+                                &mainnet_routing_table,
+                                other_subnet_kind,
+                            )
                         {
                             other_subnet_kind_ranges.sort();
                             if !are_disjoint(other_subnet_kind_ranges.iter(), sorted_ranges.iter())
@@ -2492,7 +2807,7 @@ impl PocketIc {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
-                    } = get_range_config(subnet_kind, &mut range_gen)?;
+                    } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
                     (ranges, alloc_range, None)
                 };
@@ -2534,6 +2849,7 @@ impl PocketIc {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
@@ -2571,6 +2887,7 @@ impl PocketIc {
         Ok(Self {
             range_gen,
             runtime,
+            mainnet_routing_table,
             state_label,
             subnets,
             default_effective_canister_id,
@@ -2644,51 +2961,91 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
-fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdRange>> {
+fn subnet_kind_canister_ranges(
+    mainnet_routing_table: &RoutingTable,
+    subnet_kind: SubnetKind,
+) -> Option<Vec<CanisterIdRange>> {
     use rest::SubnetKind::*;
     match subnet_kind {
         Application | VerifiedApplication | System => None,
-        NNS => Some(vec![
-            gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai"),
-            gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai"),
-        ]),
-        II => Some(vec![
-            gen_range("rdmx6-jaaaa-aaaaa-aaadq-cai", "rdmx6-jaaaa-aaaaa-aaadq-cai"),
-            gen_range("uc7f6-kaaaa-aaaaq-qaaaa-cai", "ijz7v-ziaaa-aaaaq-7777q-cai"),
-        ]),
-        Bitcoin => Some(vec![gen_range(
-            "g3wsl-eqaaa-aaaan-aaaaa-cai",
-            "2qqia-xyaaa-aaaan-p777q-cai",
-        )]),
-        Fiduciary => Some(vec![gen_range(
-            "mf7xa-laaaa-aaaar-qaaaa-cai",
-            "qoznl-yiaaa-aaaar-7777q-cai",
-        )]),
-        SNS => Some(vec![gen_range(
-            "ybpmr-kqaaa-aaaaq-aaaaa-cai",
-            "ekjw2-zyaaa-aaaaq-p777q-cai",
-        )]),
+        NNS => {
+            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(nns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        II => {
+            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(ii_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Bitcoin => {
+            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(bitcoin_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Fiduciary => {
+            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(fiduciary_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        SNS => {
+            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(sns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
     }
 }
 
-fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
-    use rest::SubnetKind::*;
-    for subnet_kind in [NNS, II, Bitcoin, Fiduciary, SNS] {
-        if let Some(ranges) = subnet_kind_canister_range(subnet_kind)
+fn subnet_kind_from_canister_id(
+    mainnet_routing_table: &RoutingTable,
+    canister_id: CanisterId,
+) -> SubnetKind {
+    for subnet_kind in SubnetKind::iter() {
+        if let Some(ranges) = subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind)
             && ranges.iter().any(|r| r.contains(&canister_id))
         {
             return subnet_kind;
         }
     }
-    Application
+    SubnetKind::Application
 }
 
 fn get_range_config(
+    mainnet_routing_table: &RoutingTable,
     subnet_kind: rest::SubnetKind,
     range_gen: &mut RangeGen,
 ) -> Result<RangeConfig, String> {
     let (canister_id_ranges, canister_allocation_range) =
-        match subnet_kind_canister_range(subnet_kind) {
+        match subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind) {
             Some(ranges) => {
                 range_gen.add_assigned(ranges.clone())?;
                 (ranges, Some(range_gen.next_range()))
@@ -2738,13 +3095,6 @@ impl RangeGen {
                 break range;
             }
         }
-    }
-}
-
-fn gen_range(start: &str, end: &str) -> CanisterIdRange {
-    CanisterIdRange {
-        start: CanisterId::from_str(start).unwrap(),
-        end: CanisterId::from_str(end).unwrap(),
     }
 }
 
@@ -2980,21 +3330,21 @@ impl Operation for ProcessCanisterHttpInternal {
 
 #[derive(Clone)]
 pub struct SingleResponseAdapter {
-    response: Result<HttpsOutcallResponse, (Code, String)>,
+    response: Result<HttpsOutcallResult, (Code, String)>,
 }
 
 impl SingleResponseAdapter {
-    fn new(response: Result<HttpsOutcallResponse, (Code, String)>) -> Self {
+    fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
         Self { response }
     }
 }
 
-#[async_trait::async_trait]
+#[tonic::async_trait]
 impl HttpsOutcallsService for SingleResponseAdapter {
     async fn https_outcall(
         &self,
         _request: Request<HttpsOutcallRequest>,
-    ) -> Result<Response<HttpsOutcallResponse>, Status> {
+    ) -> Result<Response<HttpsOutcallResult>, Status> {
         match self.response.clone() {
             Ok(resp) => Ok(Response::new(resp)),
             Err((code, msg)) => Err(Status::new(code, msg)),
@@ -3003,7 +3353,7 @@ impl HttpsOutcallsService for SingleResponseAdapter {
 }
 
 async fn setup_adapter_mock(
-    adapter_response: Result<HttpsOutcallResponse, (Code, String)>,
+    adapter_response: Result<HttpsOutcallResult, (Code, String)>,
 ) -> Channel {
     let (client, server) = tokio::io::duplex(1024);
     let mock_adapter = SingleResponseAdapter::new(adapter_response);
@@ -3073,38 +3423,46 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-    let builder = delegation.map(|delegation| {
-        NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &subnet.replica_logger)
-            .unwrap()
-    });
-    let (_, delegation_rx) = watch::channel(builder);
-    let nns_delegation_reader =
-        NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone());
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
-            let grpc_channel = pic
-                .runtime
-                .block_on(setup_adapter_mock(Ok(HttpsOutcallResponse {
-                    status: reply.status.into(),
-                    headers: reply
-                        .headers
-                        .iter()
-                        .map(|h| ic_https_outcalls_service::HttpHeader {
-                            name: h.name.clone(),
-                            value: h.value.clone(),
-                        })
-                        .collect(),
-                    content: reply.body.clone(),
-                })));
+            let response = HttpsOutcallResponse {
+                status: reply.status.into(),
+                headers: reply
+                    .headers
+                    .iter()
+                    .map(|h| ic_https_outcalls_service::HttpHeader {
+                        name: h.name.clone(),
+                        value: h.value.clone(),
+                    })
+                    .collect(),
+                content: reply.body.clone(),
+            };
+
+            let headers_size: usize = response
+                .headers
+                .iter()
+                .map(|h| h.name.len() + h.value.len())
+                .sum();
+            let total_size = (response.content.len() + headers_size) as u64;
+
+            let result = ic_https_outcalls_service::HttpsOutcallResult {
+                metrics: Some(ic_https_outcalls_service::CanisterHttpAdapterMetrics {
+                    downloaded_bytes: total_size,
+                }),
+                result: Some(
+                    ic_https_outcalls_service::https_outcall_result::Result::Response(response),
+                ),
+            };
+
+            let grpc_channel = pic.runtime.block_on(setup_adapter_mock(Ok(result)));
+
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
-                subnet.query_handler.lock().unwrap().clone(),
+                subnet.transform_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client
@@ -3197,16 +3555,12 @@ impl Operation for PubKey {
 
 #[derive(Clone, Debug)]
 pub struct Tick {
-    pub configs: TickConfigs,
+    pub blockmakers: Vec<SubnetBlockmakers>,
 }
 
 impl Tick {
-    fn validate_blockmakers_per_subnet(
-        &self,
-        pic: &mut PocketIc,
-        subnets_blockmaker: &[SubnetBlockmaker],
-    ) -> Result<(), OpOut> {
-        for subnet_blockmaker in subnets_blockmaker {
+    fn validate_blockmakers(&self, pic: &PocketIc) -> Result<(), OpOut> {
+        for subnet_blockmaker in &self.blockmakers {
             if subnet_blockmaker
                 .failed_blockmakers
                 .contains(&subnet_blockmaker.blockmaker)
@@ -3237,37 +3591,26 @@ impl Tick {
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
-            cfg.blockmakers_per_subnet
-                .iter()
-                .cloned()
-                .map(SubnetBlockmaker::from)
-                .collect_vec()
-        });
-
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
-            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
-        {
+        if let Err(error) = self.validate_blockmakers(pic) {
             return error;
         }
 
         for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.get_subnet_id();
-            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
-                bm_per_subnet
-                    .iter()
-                    .find(|bm| bm.subnet == subnet_id)
-                    .map(|bm| BlockmakerMetrics {
-                        blockmaker: bm.blockmaker,
-                        failed_blockmakers: bm.failed_blockmakers.clone(),
-                    })
-            });
+            let state_machine = subnet.state_machine.clone();
+            let subnet_id = state_machine.get_subnet_id();
+
+            let blockmaker_metrics = self
+                .blockmakers
+                .iter()
+                .find(|bm| bm.subnet == subnet_id)
+                .map(|bm| BlockmakerMetrics {
+                    blockmaker: bm.blockmaker,
+                    failed_blockmakers: bm.failed_blockmakers.clone(),
+                });
 
             match blockmaker_metrics {
-                Some(metrics) => subnet
-                    .state_machine
-                    .execute_round_with_blockmaker_metrics(metrics),
-                None => subnet.state_machine.execute_round(),
+                Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
+                None => state_machine.execute_round(),
             }
         }
 
@@ -3293,6 +3636,395 @@ impl Operation for AdvanceTimeAndTick {
 
     fn id(&self) -> OpId {
         OpId(format!("advance_time_and_tick({:?})", self.0))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterSnapshotDownload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub snapshot_id: SnapshotId,
+    pub snapshot_dir: PathBuf,
+}
+
+fn ensure_empty_dir(path: &Path) -> Result<(), String> {
+    // Create the directory if needed (including parents).
+    // Succeeds silently if the directory already exists.
+    std::fs::create_dir_all(path)
+        .map_err(|e| format!("Could not create snapshot directory: {}", e))?;
+
+    // Now ensure it's actually a directory.
+    if !path.is_dir() {
+        return Err("Snapshot directory path exists but is not a directory".to_string());
+    }
+
+    // Check if it is empty.
+    if std::fs::read_dir(path)
+        .map_err(|e| format!("Could not read snapshot directory: {}", e))?
+        .next()
+        .is_some()
+    {
+        return Err("Snapshot directory is not empty".to_string());
+    }
+
+    Ok(())
+}
+
+enum BlobKind {
+    WasmModule,
+    WasmMemory,
+    StableMemory,
+}
+
+impl BlobKind {
+    fn description(&self) -> &str {
+        match self {
+            BlobKind::WasmModule => "WASM module",
+            BlobKind::WasmMemory => "WASM memory",
+            BlobKind::StableMemory => "stable memory",
+        }
+    }
+}
+
+fn download_blob_to_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = OpenOptions::new()
+        .create(true) // create the file if it doesn't exist
+        .append(true) // allow appending
+        .open(file)
+        .map_err(|e| format!("Could not create {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataKind::WasmModule {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::WasmMemory => CanisterSnapshotDataKind::WasmMemory {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::StableMemory => CanisterSnapshotDataKind::StableMemory {
+                offset,
+                size: chunk_size,
+            },
+        };
+        let data_args = ReadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+        };
+        let data = subnet
+            .read_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?
+            .chunk;
+        file.write_all(&data)
+            .map_err(|e| format!("Could not write {} file: {}", blob_kind.description(), e))?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotDownload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                if let Err(e) = ensure_empty_dir(&self.snapshot_dir) {
+                    return OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(e));
+                }
+
+                // Download snapshot metadata.
+                let metadata_args = ReadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    snapshot_id: self.snapshot_id,
+                };
+                let metadata = match subnet.read_canister_snapshot_metadata(&metadata_args) {
+                    Ok(metadata) => metadata,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                let metadata_bytes = serde_json::to_string_pretty(&metadata).unwrap();
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                if let Err(e) = std::fs::write(metadata_path, metadata_bytes) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                        "Could not write metadata file: {}",
+                        e
+                    )));
+                }
+
+                // Download WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = download_blob_to_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        self.snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Download WASM chunk store.
+                let chunk_store = match subnet.get_snapshot_chunk_store(&metadata_args) {
+                    Ok(chunk_store) => chunk_store,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                if !chunk_store.is_empty() {
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    if let Err(e) = std::fs::create_dir_all(&chunk_store_path) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not create WASM chunk store directory: {}",
+                            e
+                        )));
+                    }
+                    for (hash, chunk) in chunk_store {
+                        let hash_str = hex::encode(hash);
+                        let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                        if let Err(e) = std::fs::write(chunk_file, chunk) {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not write WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+
+                OpOut::NoOutput
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_download(sender={},canister_id={},snapshot_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
+            self.snapshot_id,
+            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterSnapshotUpload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub replace_snapshot: Option<SnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+fn upload_blob_from_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = File::open(file)
+        .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let mut chunk = vec![0u8; chunk_size as usize];
+        file.read_exact(&mut chunk)
+            .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataOffset::WasmModule { offset },
+            BlobKind::WasmMemory => CanisterSnapshotDataOffset::WasmMemory { offset },
+            BlobKind::StableMemory => CanisterSnapshotDataOffset::StableMemory { offset },
+        };
+        let data_args = UploadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+            chunk,
+        };
+        subnet
+            .upload_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotUpload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                // Upload snapshot metadata.
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                let metadata_bytes = match std::fs::read(metadata_path) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not read metadata file: {}",
+                            e
+                        )));
+                    }
+                };
+                let metadata: ReadCanisterSnapshotMetadataResponse =
+                    match serde_json::from_slice(&metadata_bytes) {
+                        Ok(metadata) => metadata,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not parse metadata file: {}",
+                                e
+                            )));
+                        }
+                    };
+                let metadata_args = UploadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    replace_snapshot: self.replace_snapshot,
+                    wasm_module_size: metadata.wasm_module_size,
+                    globals: metadata.globals,
+                    wasm_memory_size: metadata.wasm_memory_size,
+                    stable_memory_size: metadata.stable_memory_size,
+                    certified_data: metadata.certified_data,
+                    global_timer: metadata.global_timer,
+                    on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+                };
+                let snapshot_id = match subnet.upload_canister_snapshot_metadata(&metadata_args) {
+                    Ok(upload_response) => upload_response.snapshot_id,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+
+                // Upload WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = upload_blob_from_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Upload WASM chunk store.
+                for hash in metadata.wasm_chunk_store {
+                    let hash_str = hex::encode(hash.hash);
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                    let chunk = match std::fs::read(chunk_file) {
+                        Ok(chunk) => chunk,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not read WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    };
+                    let data_args = UploadCanisterSnapshotDataArgs {
+                        canister_id: self.canister_id.into(),
+                        snapshot_id,
+                        kind: CanisterSnapshotDataOffset::WasmChunk,
+                        chunk,
+                    };
+                    match subnet.upload_canister_snapshot_data(&data_args) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                                e.description().to_string(),
+                            ));
+                        }
+                    };
+                }
+
+                OpOut::CanisterSnapshotId(snapshot_id.to_vec())
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
+            base64::encode_config(self.snapshot_dir.display().to_string(), base64::URL_SAFE)
+        ))
     }
 }
 
@@ -3645,6 +4377,9 @@ impl Operation for CallRequest {
         match subnet {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
+                // Make sure the latest state is certified for the ingress filter to work.
+                subnet.certify_latest_state();
+
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
@@ -3769,8 +4504,6 @@ impl BasicSigner<QueryResponseHash> for PocketNodeSigner {
     fn sign_basic(
         &self,
         message: &QueryResponseHash,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
     ) -> CryptoResult<BasicSigOf<QueryResponseHash>> {
         Ok(BasicSigOf::new(BasicSig(
             self.0.sign_message(&message.as_signed_bytes()).to_vec(),
@@ -4387,42 +5120,30 @@ fn route(
                         .unwrap())
                 } else if is_provisional_create_canister {
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.
-                    // NNS and II subnets cannot be created at this point though because NNS is the root subnet
-                    // and both NNS and II subnets on the IC mainnet do not have a single canister range
-                    // (the PocketIC instance must be created with those subnets if applicable).
-                    let subnet_kind = subnet_kind_from_canister_id(canister_id);
-                    if matches!(subnet_kind, SubnetKind::NNS)
-                        || matches!(subnet_kind, SubnetKind::II)
-                    {
+                    // NNS subnet cannot be created at this point though because NNS is the root subnet
+                    // and the root subnet cannot be changed after its PocketIC instance has already been created.
+                    let subnet_id = match pic.mainnet_routing_table.lookup_entry(canister_id) {
+                        Some((_, subnet_id)) => subnet_id,
+                        None => {
+                            return Err(format!(
+                                "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
+                            ));
+                        }
+                    };
+                    let subnet_kind =
+                        subnet_kind_from_canister_id(&pic.mainnet_routing_table, canister_id);
+                    if matches!(subnet_kind, SubnetKind::NNS) {
                         return Err(format!(
-                            "The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+                            "The effective canister ID {canister_id} belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
                         ));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
-                    // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
-                    let canister_id_slice: &[u8] = canister_id.as_ref();
-                    if canister_id_slice.len() != 10 {
-                        return Err(format!(
-                            "The binary representation {} of effective canister ID {canister_id} should consist of 10 bytes.",
-                            hex::encode(canister_id_slice)
-                        ));
-                    }
-                    // The first 8 bytes of the binary representation of a canister ID on the IC mainnet represent:
-                    // - the sequence number of the canister's subnet on the IC mainnet (all but the last 20 bits);
-                    // - the sequence number of the canister within its subnet (the last 20 bits).
-                    let canister_id_u64: u64 =
-                        u64::from_be_bytes(canister_id_slice[..8].try_into().unwrap());
-                    if (canister_id_u64 >> 20) >= MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET {
-                        return Err(format!(
-                            "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
-                        ));
-                    }
-                    // Hence, we derive the canister range of the canister ID on the IC mainnet by masking in/out the last 20 bits.
-                    // This works for all IC mainnet subnets that have not been split.
-                    let range = CanisterIdRange {
-                        start: CanisterId::from_u64(canister_id_u64 & 0xFFFFFFFFFFF00000),
-                        end: CanisterId::from_u64(canister_id_u64 | 0xFFFFF),
-                    };
+                    let ranges = pic
+                        .mainnet_routing_table
+                        .ranges(subnet_id)
+                        .iter()
+                        .cloned()
+                        .collect();
                     // The canister allocation range must be disjoint from the canister ranges on the IC mainnet
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
@@ -4431,7 +5152,7 @@ fn route(
                     let update_registry_and_system_canisters = true;
                     pic.subnets.create_subnet(
                         SubnetConfigInfo {
-                            ranges: vec![range],
+                            ranges,
                             alloc_range: Some(canister_allocation_range),
                             subnet_id: None,
                             subnet_state_dir: None,
@@ -4536,6 +5257,7 @@ mod tests {
             // State label changes.
             let mut pic0 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 0,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],
@@ -4548,12 +5270,14 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 false,
                 None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 1,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],
@@ -4561,6 +5285,7 @@ mod tests {
                 },
                 None,
                 IcpConfig::default(),
+                None,
                 None,
                 None,
                 None,
