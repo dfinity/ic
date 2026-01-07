@@ -173,136 +173,134 @@ fn test_network_economics_to_self_describing_minimal() {
 
 #[test]
 fn test_create_service_nervous_system_to_self_describing() {
-    use SelfDescribingValue::*;
-
     assert_proposal_action_self_describing_value_is(
         CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
-        Map(hashmap! {
-            "name".to_string() => Text("Hello, world!".to_string()),
-            "description".to_string() => Text("Best app that you ever did saw.".to_string()),
-            "url".to_string() => Text("https://best.app".to_string()),
-            "logo".to_string() => Map(hashmap! {
-                "base64_encoding".to_string() => Text(IMAGE_1.to_string()),
+        SelfDescribingValue::Map(hashmap! {
+            "name".to_string() => SelfDescribingValue::from("Hello, world!"),
+            "description".to_string() => SelfDescribingValue::from("Best app that you ever did saw."),
+            "url".to_string() => SelfDescribingValue::from("https://best.app"),
+            "logo".to_string() => SelfDescribingValue::Map(hashmap! {
+                "base64_encoding".to_string() => SelfDescribingValue::from(IMAGE_1),
             }),
-            "fallback_controller_principal_ids".to_string() => Array(vec![
-                Text("iakpb-r4pky-cqaaa-aaaap-4ai".to_string()),
+            "fallback_controller_principal_ids".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::from("iakpb-r4pky-cqaaa-aaaap-4ai"),
             ]),
-            "dapp_canisters".to_string() => Array(vec![
-                Text("uc7f6-kaaaa-aaaaq-qaaaa-cai".to_string()),
+            "dapp_canisters".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::from("uc7f6-kaaaa-aaaaq-qaaaa-cai"),
             ]),
-            "initial_token_distribution".to_string() => Map(hashmap! {
-                "developer_distribution".to_string() => Map(hashmap! {
-                    "developer_neurons".to_string() => Array(vec![
-                        Map(hashmap! {
-                            "controller".to_string() => Text("qarve-vpdvu-gaaaa-aaaap-4ai".to_string()),
-                            "dissolve_delay".to_string() => Map(hashmap! {
-                                "seconds".to_string() => Nat(candid::Nat::from(15_778_800_u64)),
+            "initial_token_distribution".to_string() => SelfDescribingValue::Map(hashmap! {
+                "developer_distribution".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "developer_neurons".to_string() => SelfDescribingValue::Array(vec![
+                        SelfDescribingValue::Map(hashmap! {
+                            "controller".to_string() => SelfDescribingValue::from("qarve-vpdvu-gaaaa-aaaap-4ai"),
+                            "dissolve_delay".to_string() => SelfDescribingValue::Map(hashmap! {
+                                "seconds".to_string() => SelfDescribingValue::from(15_778_800_u64),
                             }),
-                            "memo".to_string() => Nat(candid::Nat::from(763535_u64)),
-                            "stake".to_string() => Map(hashmap! {
-                                "e8s".to_string() => Nat(candid::Nat::from(756575_u64)),
+                            "memo".to_string() => SelfDescribingValue::from(763535_u64),
+                            "stake".to_string() => SelfDescribingValue::Map(hashmap! {
+                                "e8s".to_string() => SelfDescribingValue::from(756575_u64),
                             }),
-                            "vesting_period".to_string() => Map(hashmap! {
-                                "seconds".to_string() => Nat(candid::Nat::from(0_u64)),
+                            "vesting_period".to_string() => SelfDescribingValue::Map(hashmap! {
+                                "seconds".to_string() => SelfDescribingValue::from(0_u64),
                             }),
                         }),
                     ]),
                 }),
-                "treasury_distribution".to_string() => Map(hashmap! {
-                    "total".to_string() => Map(hashmap! {
-                        "e8s".to_string() => Nat(candid::Nat::from(307064_u64)),
+                "treasury_distribution".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "total".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "e8s".to_string() => SelfDescribingValue::from(307064_u64),
                     }),
                 }),
-                "swap_distribution".to_string() => Map(hashmap! {
-                    "total".to_string() => Map(hashmap! {
-                        "e8s".to_string() => Nat(candid::Nat::from(1_840_880_000_u64)),
-                    }),
-                }),
-            }),
-            "ledger_parameters".to_string() => Map(hashmap! {
-                "transaction_fee".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(11143_u64)),
-                }),
-                "token_name".to_string() => Text("Most valuable SNS of all time.".to_string()),
-                "token_symbol".to_string() => Text("Kanye".to_string()),
-                "token_logo".to_string() => Map(hashmap! {
-                    "base64_encoding".to_string() => Text(IMAGE_2.to_string()),
-                }),
-            }),
-            "governance_parameters".to_string() => Map(hashmap! {
-                "proposal_rejection_fee".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(372250_u64)),
-                }),
-                "proposal_initial_voting_period".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(709_499_u64)),
-                }),
-                "proposal_wait_for_quiet_deadline_increase".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(75_891_u64)),
-                }),
-                "neuron_minimum_stake".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(250_000_u64)),
-                }),
-                "neuron_minimum_dissolve_delay_to_vote".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(482538_u64)),
-                }),
-                "neuron_maximum_dissolve_delay".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(31_557_600_u64)),
-                }),
-                "neuron_maximum_dissolve_delay_bonus".to_string() => Map(hashmap! {
-                    "basis_points".to_string() => Nat(candid::Nat::from(1800_u64)),
-                }),
-                "neuron_maximum_age_for_age_bonus".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(740908_u64)),
-                }),
-                "neuron_maximum_age_bonus".to_string() => Map(hashmap! {
-                    "basis_points".to_string() => Nat(candid::Nat::from(5400_u64)),
-                }),
-                "voting_reward_parameters".to_string() => Map(hashmap! {
-                    "initial_reward_rate".to_string() => Map(hashmap! {
-                        "basis_points".to_string() => Nat(candid::Nat::from(2592_u64)),
-                    }),
-                    "final_reward_rate".to_string() => Map(hashmap! {
-                        "basis_points".to_string() => Nat(candid::Nat::from(740_u64)),
-                    }),
-                    "reward_rate_transition_duration".to_string() => Map(hashmap! {
-                        "seconds".to_string() => Nat(candid::Nat::from(378025_u64)),
+                "swap_distribution".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "total".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "e8s".to_string() => SelfDescribingValue::from(1_840_880_000_u64),
                     }),
                 }),
             }),
-            "swap_parameters".to_string() => Map(hashmap! {
-                "minimum_participants".to_string() => Nat(candid::Nat::from(50_u64)),
-                "minimum_icp".to_string() => Null,
-                "maximum_icp".to_string() => Null,
-                "minimum_direct_participation_icp".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(6_200_000_000_u64)),
+            "ledger_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
+                "transaction_fee".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(11143_u64),
                 }),
-                "maximum_direct_participation_icp".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(18_900_000_000_u64)),
+                "token_name".to_string() => SelfDescribingValue::from("Most valuable SNS of all time."),
+                "token_symbol".to_string() => SelfDescribingValue::from("Kanye"),
+                "token_logo".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "base64_encoding".to_string() => SelfDescribingValue::from(IMAGE_2),
                 }),
-                "minimum_participant_icp".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(100_000_000_u64)),
+            }),
+            "governance_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
+                "proposal_rejection_fee".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(372250_u64),
                 }),
-                "maximum_participant_icp".to_string() => Map(hashmap! {
-                    "e8s".to_string() => Nat(candid::Nat::from(10_000_000_000_u64)),
+                "proposal_initial_voting_period".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(709_499_u64),
                 }),
-                "neuron_basket_construction_parameters".to_string() => Map(hashmap! {
-                    "count".to_string() => Nat(candid::Nat::from(2_u64)),
-                    "dissolve_delay_interval".to_string() => Map(hashmap! {
-                        "seconds".to_string() => Nat(candid::Nat::from(10_001_u64)),
+                "proposal_wait_for_quiet_deadline_increase".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(75_891_u64),
+                }),
+                "neuron_minimum_stake".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(250_000_u64),
+                }),
+                "neuron_minimum_dissolve_delay_to_vote".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(482538_u64),
+                }),
+                "neuron_maximum_dissolve_delay".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(31_557_600_u64),
+                }),
+                "neuron_maximum_dissolve_delay_bonus".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "basis_points".to_string() => SelfDescribingValue::from(1800_u64),
+                }),
+                "neuron_maximum_age_for_age_bonus".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(740908_u64),
+                }),
+                "neuron_maximum_age_bonus".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "basis_points".to_string() => SelfDescribingValue::from(5400_u64),
+                }),
+                "voting_reward_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "initial_reward_rate".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "basis_points".to_string() => SelfDescribingValue::from(2592_u64),
+                    }),
+                    "final_reward_rate".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "basis_points".to_string() => SelfDescribingValue::from(740_u64),
+                    }),
+                    "reward_rate_transition_duration".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "seconds".to_string() => SelfDescribingValue::from(378025_u64),
                     }),
                 }),
-                "confirmation_text".to_string() => Text("Confirm you are a human".to_string()),
-                "restricted_countries".to_string() => Map(hashmap! {
-                    "iso_codes".to_string() => Array(vec![Text("CH".to_string())]),
+            }),
+            "swap_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
+                "minimum_participants".to_string() => SelfDescribingValue::from(50_u64),
+                "minimum_direct_participation_icp".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(6_200_000_000_u64),
                 }),
-                "start_time".to_string() => Map(hashmap! {
-                    "seconds_after_utc_midnight".to_string() => Nat(candid::Nat::from(0_u64)),
+                "maximum_direct_participation_icp".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(18_900_000_000_u64),
                 }),
-                "duration".to_string() => Map(hashmap! {
-                    "seconds".to_string() => Nat(candid::Nat::from(604_800_u64)),
+                "minimum_participant_icp".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(100_000_000_u64),
                 }),
-                "neurons_fund_investment_icp".to_string() => Null,
-                "neurons_fund_participation".to_string() => Nat(candid::Nat::from(0_u8)),
+                "maximum_participant_icp".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "e8s".to_string() => SelfDescribingValue::from(10_000_000_000_u64),
+                }),
+                "neuron_basket_construction_parameters".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "count".to_string() => SelfDescribingValue::from(2_u64),
+                    "dissolve_delay_interval".to_string() => SelfDescribingValue::Map(hashmap! {
+                        "seconds".to_string() => SelfDescribingValue::from(10_001_u64),
+                    }),
+                }),
+                "confirmation_text".to_string() => SelfDescribingValue::from("Confirm you are a human"),
+                "restricted_countries".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "iso_codes".to_string() => SelfDescribingValue::Array(vec![SelfDescribingValue::from("CH")]),
+                }),
+                "start_time".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds_after_utc_midnight".to_string() => SelfDescribingValue::from(0_u64),
+                }),
+                "duration".to_string() => SelfDescribingValue::Map(hashmap! {
+                    "seconds".to_string() => SelfDescribingValue::from(604_800_u64),
+                }),
+                "neurons_fund_participation".to_string() => SelfDescribingValue::from(0_u64),
+                "minimum_icp".to_string() => SelfDescribingValue::Null,
+                "maximum_icp".to_string() => SelfDescribingValue::Null,
+                "neurons_fund_investment_icp".to_string() => SelfDescribingValue::Null,
             }),
         }),
     );
