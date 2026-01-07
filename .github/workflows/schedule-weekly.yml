@@ -23,6 +23,13 @@ jobs:
         shell: bash
         run: |
           [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+      - name: Install gsutil
+        shell: bash
+        run: |
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add -
+          apt -yqq install --no-install-recommends google-cloud-cli gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
+          gsutil --version
       - name: Load Service Account Key to file
         env:
           FUZZING_GCP_SERVICE_KEY: ${{ secrets.FUZZING_GCP_SERVICE_KEY }}
