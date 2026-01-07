@@ -6,7 +6,7 @@ use ic_types::consensus::idkg::{
     SignedIDkgComplaint, SignedIDkgOpening, VetKdKeyShare,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+    IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId, SignedIDkgDealing,
 };
 
 #[derive(Debug)]
@@ -134,6 +134,13 @@ pub trait IDkgPoolSection: Send + Sync {
         &self,
         _prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_>;
+
+    fn transcripts(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_>;
+
+    fn transcripts_by_prefix(
+        &self,
+        _prefix: IDkgPrefixOf<IDkgTranscript>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgTranscript)> + '_>;
 }
 
 /// The mutable interface for validated/unvalidated parts of the artifact pool.
