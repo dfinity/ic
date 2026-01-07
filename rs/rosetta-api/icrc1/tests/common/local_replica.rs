@@ -9,9 +9,9 @@ use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_tests_constants::{
-    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
-    NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
-    TOKEN_NAME, TOKEN_SYMBOL,
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY,
+    INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 
 use crate::common::local_replica;
@@ -19,6 +19,7 @@ use pocket_ic::PocketIc;
 use std::str::FromStr;
 use std::sync::Arc;
 use url::Url;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 
 pub fn test_identity() -> BasicIdentity {
     BasicIdentity::from_pem(
@@ -68,10 +69,10 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })
-        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
-        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
-        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
-        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(NAT_META_KEY).unwrap(), NAT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(INT_META_KEY).unwrap(), INT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(TEXT_META_KEY).unwrap(), TEXT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(BLOB_META_KEY).unwrap(), BLOB_META_VALUE)
 }
 
 // Return the wasm of the icrc ledger

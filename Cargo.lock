@@ -11084,6 +11084,9 @@ dependencies = [
 [[package]]
 name = "ic-ledger-suite-state-machine-tests-constants"
 version = "0.9.0"
+dependencies = [
+ "icrc-ledger-types",
+]
 
 [[package]]
 name = "ic-ledger-test-utils"

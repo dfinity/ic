@@ -230,8 +230,8 @@ impl InitArgsBuilder {
         self
     }
 
-    pub fn with_metadata_entry(mut self, name: impl ToString, value: impl Into<Value>) -> Self {
-        self.0.metadata.push((name.to_string(), value.into()));
+    pub fn with_metadata_entry(mut self, key: MetadataKey, value: impl Into<Value>) -> Self {
+        self.0.metadata.push((key, value.into()));
         self
     }
 

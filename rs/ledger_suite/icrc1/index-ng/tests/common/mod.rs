@@ -5,6 +5,7 @@ use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, Le
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_helpers::get_logs;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -80,10 +81,10 @@ pub fn install_ledger(
     let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(minter_principal)
         .with_transfer_fee(FEE)
-        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
-        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
-        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
-        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(NAT_META_KEY).unwrap(), NAT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(INT_META_KEY).unwrap(), INT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(TEXT_META_KEY).unwrap(), TEXT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(BLOB_META_KEY).unwrap(), BLOB_META_VALUE)
         .with_archive_options(archive_options)
         .with_feature_flags(FeatureFlags { icrc2: true });
     if let Some(fee_collector_account) = fee_collector_account {

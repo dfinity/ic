@@ -5,13 +5,14 @@ use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUp
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_suite_state_machine_tests_constants::{
-    BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, NAT_META_KEY,
-    NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
+    BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
+    NAT_META_KEY, NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::{Duration, SystemTime};
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 
 mod common;
 
@@ -111,10 +112,10 @@ fn install_ledger(
     let mut builder = InitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(minter_principal)
         .with_transfer_fee(FEE)
-        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
-        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
-        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
-        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(NAT_META_KEY).unwrap(), NAT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(INT_META_KEY).unwrap(), INT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(TEXT_META_KEY).unwrap(), TEXT_META_VALUE)
+        .with_metadata_entry(MetadataKey::parse(BLOB_META_KEY).unwrap(), BLOB_META_VALUE)
         .with_archive_options(archive_options)
         .with_feature_flags(FeatureFlags { icrc2: true });
     if let Some(fee_collector_account) = fee_collector_account {
