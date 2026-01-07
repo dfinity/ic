@@ -398,6 +398,7 @@ impl TryFrom<ObjectMap> for FeeMetadata {
 pub struct FeeCollectorMetadata {
     pub fee_collector: Option<Account>,
     pub caller: Option<Principal>,
+    pub mthd: Option<String>,
 }
 
 impl TryFrom<FeeCollectorMetadata> for ObjectMap {

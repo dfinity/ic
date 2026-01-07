@@ -896,7 +896,7 @@ async fn set_fee_col_107(
     }
     let fee_col_block = builder
         .with_btype("107feecol".to_string())
-        .fee_collector(fee_col, None, None)
+        .fee_collector(fee_col, None, None, None)
         .build();
     let block_index = add_block(agent, ledger_canister_id, &fee_col_block)
         .await

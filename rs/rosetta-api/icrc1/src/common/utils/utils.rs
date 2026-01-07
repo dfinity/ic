@@ -166,6 +166,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
         allowance: Option<Nat>,
         fee_collector: Option<Account>,
         caller: Option<Principal>,
+        mthd: Option<String>,
     }
 
     impl IcrcOperationBuilder {
@@ -182,6 +183,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 allowance: None,
                 fee_collector: None,
                 caller: None,
+                mthd: None,
             }
         }
 
@@ -240,6 +242,11 @@ pub fn rosetta_core_operations_to_icrc1_operation(
             self
         }
 
+        pub fn with_mthd(mut self, mthd: Option<String>) -> Self {
+            self.mthd = mthd;
+            self
+        }
+
         pub fn build(self) -> anyhow::Result<crate::common::storage::types::IcrcOperation> {
             Ok(match self.icrc_operation.context("Icrc Operation type needs to be of type Mint, Burn, Transfer or Approve")? {
                 IcrcOperation::Mint => {
@@ -286,6 +293,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                 IcrcOperation::FeeCollector => crate::common::storage::types::IcrcOperation::FeeCollector{
                     fee_collector: self.fee_collector,
                     caller: self.caller,
+                    mthd: self.mthd,
                 },
             })
         }
@@ -402,6 +410,7 @@ pub fn rosetta_core_operations_to_icrc1_operation(
                     .with_icrc_operation(IcrcOperation::FeeCollector)
                     .with_fee_collector(fc_metadata.fee_collector)
                     .with_caller(fc_metadata.caller)
+                    .with_mthd(fc_metadata.mthd)
             }
         };
     }
@@ -638,6 +647,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
         crate::common::storage::types::IcrcOperation::FeeCollector {
             fee_collector,
             caller,
+            mthd,
         } => {
             operations.push(rosetta_core::objects::Operation::new(
                 0,
@@ -649,6 +659,7 @@ pub fn icrc1_operation_to_rosetta_core_operations(
                     FeeCollectorMetadata {
                         fee_collector,
                         caller,
+                        mthd,
                     }
                     .try_into()?,
                 ),

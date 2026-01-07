@@ -698,7 +698,7 @@ mod tests {
     use icrc_ledger_types::icrc1::transfer::Memo;
     use num_bigint::BigUint;
     use proptest::collection::vec;
-    use proptest::prelude::any;
+    use proptest::prelude::{Just, any};
     use proptest::prop_assert_eq;
     use proptest::{option, prop_oneof, proptest, strategy::Strategy};
     use serde_bytes::ByteBuf;
@@ -1072,6 +1072,7 @@ mod tests {
             ) => {
                 assert_eq!(fee_collector, rosetta_fee_collector, "fee_collector");
                 assert_eq!(caller, rosetta_caller, "caller");
+                assert_eq!(mthd, rosetta_mthd, "mthd");
             }
             (l, r) => panic!(
                 "Found different type of operations. Operation:{l:?} rosetta's Operation:{r:?}"

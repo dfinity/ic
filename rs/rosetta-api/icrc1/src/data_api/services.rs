@@ -1177,6 +1177,7 @@ mod test {
                                     IcrcOperation::FeeCollector {
                                         fee_collector: _,
                                         caller: _,
+                                        mthd: _,
                                     } => None,
                                 };
                             if search_transactions_request.account_identifier.is_some() {
@@ -1234,6 +1235,7 @@ mod test {
                                 IcrcOperation::FeeCollector {
                                     fee_collector: _,
                                     caller: _,
+                                    mthd: _,
                                 } => false,
                             })
                             .count();

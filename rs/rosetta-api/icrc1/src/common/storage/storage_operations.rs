@@ -457,6 +457,7 @@ pub fn update_account_balances(
                 crate::common::storage::types::IcrcOperation::FeeCollector {
                     fee_collector,
                     caller: _,
+                    mthd: _,
                 } => {
                     current_fee_collector_107 = Some(fee_collector);
                 }
