@@ -6,8 +6,8 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 use std::sync::LazyLock;
 
-#[derive(Debug)]
 /// A kernel command line with improperly-quoted argument values.
+#[derive(Debug)]
 pub struct ImproperlyQuotedValue {
     val: String,
 }
@@ -23,8 +23,8 @@ impl fmt::Display for ImproperlyQuotedValue {
     }
 }
 
-#[derive(Debug)]
 /// A value unrepresentable as a kernel command line argument value.
+#[derive(Debug)]
 pub struct UnrepresentableValue(String);
 
 impl StdError for UnrepresentableValue {}
@@ -35,8 +35,8 @@ impl fmt::Display for UnrepresentableValue {
     }
 }
 
-#[derive(Debug, Default)]
 /// Represents a correctly-parsed kernel command line.
+#[derive(Debug, Default)]
 pub struct KernelCommandLine {
     tokenized_arguments: Vec<String>,
 }
@@ -113,9 +113,8 @@ impl KernelCommandLine {
         argument: &str,
         value: Option<&str>,
     ) -> Result<(), UnrepresentableValue> {
-        let formatted_argument = Self::format_argument(argument, value)?;
-        let to_add = formatted_argument;
-        self.tokenized_arguments.push(to_add);
+        self.tokenized_arguments
+            .push(Self::format_argument(argument, value)?);
         Ok(())
     }
 
@@ -166,15 +165,15 @@ impl FromStr for KernelCommandLine {
 
     fn from_str(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
         let mut res: Vec<String> = vec![];
-        let mut curr: String = "".into();
+        let mut curr = String::new();
         let mut is_quoted = false;
         for ch in cmdline.chars() {
             match ch {
                 '"' => {
                     if is_quoted {
                         curr.push(ch);
-                        res.push(curr.clone());
-                        curr = "".into();
+                        res.push(curr);
+                        curr = String::new();
                         is_quoted = false;
                     } else {
                         curr.push(ch);
@@ -185,8 +184,8 @@ impl FromStr for KernelCommandLine {
                     if is_quoted {
                         curr.push(ch);
                     } else if !curr.is_empty() {
-                        res.push(curr.clone());
-                        curr = "".into();
+                        res.push(curr);
+                        curr = String::new();
                     }
                 }
                 _ => {
@@ -194,10 +193,10 @@ impl FromStr for KernelCommandLine {
                 }
             }
         }
-        if curr.is_empty() {
-        } else if is_quoted {
-            return Err(ImproperlyQuotedValue { val: curr });
-        } else {
+        if !curr.is_empty() {
+            if is_quoted {
+                return Err(ImproperlyQuotedValue { val: curr });
+            }
             res.push(curr);
         }
         Ok(Self {
