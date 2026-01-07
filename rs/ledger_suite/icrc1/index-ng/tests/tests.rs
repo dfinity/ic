@@ -34,6 +34,7 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
 use std::collections::HashSet;
@@ -1387,7 +1388,7 @@ fn test_fee_collector_107() {
 
     let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>, mthd: Option<String>| {
         let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
-            .with_btype("107feecol".to_string())
+            .with_btype(BTYPE_107.to_string())
             .fee_collector(fc, None, None, mthd)
             .build();
 
@@ -1411,8 +1412,7 @@ fn test_fee_collector_107() {
     assert_eq!(2, icrc1_balance_of(env, index_id, feecol_legacy));
 
     // Set 107 fee collector to burn
-    block_id =
-        add_fee_collector_107_block(block_id, None, Some("107set_fee_collector".to_string()));
+    block_id = add_fee_collector_107_block(block_id, None, Some(SET_FEE_COL_107.to_string()));
 
     // No fees collected
     block_id = add_mint_block(block_id, None, None);
@@ -1491,7 +1491,7 @@ fn test_fee_collector_107_irregular_mthd() {
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
-    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
+    add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
@@ -1503,12 +1503,12 @@ fn test_fee_collector_107_op_instead_of_mthd() {
     let feecol_107 = account(102, 0);
 
     let tx_fields = vec![
-        ("op", ICRC3Value::Text("107set_fee_collector".to_string())),
+        ("op", ICRC3Value::Text(SET_FEE_COL_107.to_string())),
         ("fee_collector", account_to_icrc3_value(&feecol_107)),
         ("ts", ICRC3Value::Nat(Nat::from(0u64))),
     ];
 
-    add_custom_block(env, ledger_id, 0, Some("107feecol"), tx_fields);
+    add_custom_block(env, ledger_id, 0, Some(BTYPE_107), tx_fields);
     let index_err_logs = wait_until_sync_is_completed_or_error(env, index_id, ledger_id)
         .expect_err(
             "unrecognized block with '107feecol' but tx.op instead of tx.mthd parsed successfully by index",
