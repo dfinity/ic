@@ -9331,10 +9331,10 @@ dependencies = [
 name = "ic-crypto-utils-threshold-sig-der"
 version = "0.9.0"
 dependencies = [
- "base64 0.13.1",
  "hex",
  "ic-crypto-internal-types",
  "ic-types",
+ "pem 3.0.6",
  "simple_asn1",
  "tempfile",
  "thiserror 2.0.17",
