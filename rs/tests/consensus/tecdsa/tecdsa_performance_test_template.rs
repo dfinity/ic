@@ -66,7 +66,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -101,17 +100,17 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
+const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 100;
-const MAX_QUEUE_SIZE: u32 = 100;
+const PRE_SIGNATURES_TO_CREATE: u32 = 40;
+const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 100.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -166,7 +165,13 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
 }
 
 pub fn setup(env: TestEnv) {
-    let nodes_count: usize = 34;
+    let nodes_count: usize = std::env::var("NODES_COUNT")
+        .or(std::env::var("DEFAULT_NODES_COUNT"))
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .expect(
+            "Failed to parse NODES_COUNT or DEFAULT_NODES_COUNT environment variable as an usize!",
+        );
 
     info!(
         env.logger(),
@@ -230,7 +235,7 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let download_p8s_data =
         std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    tecdsa_performance_test(env, true, download_p8s_data);
+    tecdsa_performance_test(env, false, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
