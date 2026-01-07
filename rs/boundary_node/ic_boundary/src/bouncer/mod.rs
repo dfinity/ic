@@ -236,7 +236,7 @@ impl Bouncer {
 
 pub fn setup(cli: &cli::Bouncer, registry: &Registry) -> Result<Arc<Bouncer>, Error> {
     let executor = Arc::new(exec::Executor::new(
-        cli.bouncer_sudo,
+        !cli.bouncer_bypass_sudo,
         cli.bouncer_sudo_path.clone(),
         cli.bouncer_nft_path.clone(),
     ));

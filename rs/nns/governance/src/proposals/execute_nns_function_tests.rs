@@ -1,5 +1,18 @@
-use crate::pb::v1::{ExecuteNnsFunction, NnsFunction};
-use crate::proposals::execute_nns_function::ValidExecuteNnsFunction;
+use crate::{
+    pb::v1::{ExecuteNnsFunction, NnsFunction},
+    proposals::{
+        ValidProposalAction,
+        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+    },
+    test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
+};
+use candid::{Encode, Nat};
+use ic_base_types::CanisterId;
+use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+use ic_nns_governance_api::SelfDescribingValue;
+use maplit::hashmap;
+use std::sync::Arc;
 
 #[test]
 fn test_execute_nns_function_try_from_errors() {
@@ -101,4 +114,119 @@ fn test_execute_nns_function_try_from_errors() {
     for (execute_nns_function, error_message) in try_from_error_test_cases {
         test_execute_nns_function_try_from_error(execute_nns_function, error_message);
     }
+}
+
+#[tokio::test]
+async fn test_to_self_describing_update_subnet_type() {
+    // Minimal CMC candid file with only update_subnet_type method
+    let cmc_candid = r#"
+type UpdateSubnetTypeArgs = variant {
+  Add : text;
+  Remove : text;
+};
+
+service : {
+  update_subnet_type : (UpdateSubnetTypeArgs) -> ();
+}
+"#;
+
+    // Create the UpdateSubnetTypeArgs::Add variant
+    #[derive(candid::CandidType)]
+    #[allow(dead_code)]
+    enum UpdateSubnetTypeArgs {
+        Add(String),
+        Remove(String),
+    }
+
+    let arg = UpdateSubnetTypeArgs::Add("application".to_string());
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UpdateSubnetType,
+        payload,
+    };
+
+    // Mock the canister_metadata call
+    let metadata_request =
+        CanisterMetadataRequest::new(CYCLES_MINTING_CANISTER_ID, "candid:service".to_string());
+    let metadata_response = CanisterMetadataResponse::new(cmc_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0,
+    ));
+
+    // Test through ValidProposalAction::to_self_describing
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    // Verify the type name and description
+    assert_eq!(result.type_name, "Update Subnet Type");
+    assert!(
+        result
+            .type_description
+            .contains("Add or remove a subnet type")
+    );
+
+    // Verify the value
+    let self_describing_value = SelfDescribingValue::from(result.value.unwrap());
+    assert_eq!(
+        self_describing_value,
+        SelfDescribingValue::Map(hashmap! {
+            "Add".to_string() => SelfDescribingValue::Text("application".to_string()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_uninstall_code() {
+    // Create the uninstall_code_args payload
+    #[derive(candid::CandidType)]
+    struct UninstallCodeArgs {
+        canister_id: CanisterId,
+        sender_canister_version: Option<u64>,
+    }
+
+    let target_canister = CanisterId::from_u64(123);
+    let arg = UninstallCodeArgs {
+        canister_id: target_canister,
+        sender_canister_version: Some(42),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UninstallCode,
+        payload,
+    };
+
+    // No canister_metadata call expected a hard-coded DID file is used instead.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Uninstall Code");
+    assert!(
+        result
+            .type_description
+            .contains("Uninstall code of a canister")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "canister_id".to_string() => SelfDescribingValue::Text(target_canister.to_string()),
+            "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::Nat(Nat::from(42_u64)),
+            ]),
+        })
+    );
 }

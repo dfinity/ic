@@ -57,6 +57,10 @@ const PROMETHEUS_CONTENT_TYPE: &str = "text/plain; version=0.0.4";
 const NODE_ID_LABEL: &str = "node_id";
 const SUBNET_ID_LABEL: &str = "subnet_id";
 const SUBNET_ID_UNKNOWN: &str = "unknown";
+
+pub(crate) const MAX_LOGGING_METHOD_NAME_LENGTH: usize = 50;
+
+/// Stores the serialized metrics for a faster scraping
 pub struct MetricsCache {
     buffer: Vec<u8>,
 }
@@ -70,9 +74,10 @@ impl MetricsCache {
     }
 }
 
-// Iterates over given metric families and removes metrics that have
-// node_id+subnet_id labels and where the corresponding nodes are
-// not present in the registry snapshot
+/// Iterates over given metric families and removes metrics that have
+/// node_id+subnet_id labels and where the corresponding nodes are
+/// no longer present in the given registry snapshot.
+/// This helps to keep the metrics clean of obsolete nodes.
 fn remove_stale_metrics(
     snapshot: Arc<RegistrySnapshot>,
     mut mfs: Vec<MetricFamily>,
@@ -106,7 +111,7 @@ fn remove_stale_metrics(
                         .map(|x| x.subnet_id.to_string() == subnet_id)
                         .unwrap_or(false),
 
-                    // If there's only subnet_id label - check if this subnet exists
+                    // If there's only subnet_id label - check if this subnet exists.
                     // TODO create a hashmap of subnets in snapshot for faster lookup, currently complexity is O(n)
                     // but since we have very few subnets currently (<40) probably it's Ok
                     (None, Some(subnet_id)) => {
@@ -129,6 +134,7 @@ fn remove_stale_metrics(
     mfs
 }
 
+/// Snapshots & encodes the metrics for the handler to export
 pub struct MetricsRunner {
     metrics_cache: Arc<RwLock<MetricsCache>>,
     registry: Registry,
@@ -144,7 +150,6 @@ pub struct MetricsRunner {
     health: Arc<dyn Health>,
 }
 
-// Snapshots & encodes the metrics for the handler to export
 impl MetricsRunner {
     pub fn new(
         metrics_cache: Arc<RwLock<MetricsCache>>,
@@ -438,7 +443,7 @@ pub async fn metrics_middleware_status(
     response
 }
 
-// middleware to log and measure proxied canister and subnet requests
+/// Middleware to log and measure proxied requests
 pub async fn metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
     Extension(request_id): Extension<RequestId>,
@@ -619,6 +624,11 @@ pub async fn metrics_middleware(
         let remote_addr_hashed = hash_fn(&remote_addr);
         let sender_hashed = hash_fn(&sender);
 
+        let method_name = ctx.method_name.as_ref().map(|name| {
+            let truncated_len = name.len().min(MAX_LOGGING_METHOD_NAME_LENGTH);
+            name[..truncated_len].to_string()
+        });
+
         // Log
         if !log_failed_requests_only || failed {
             info!(
@@ -636,7 +646,7 @@ pub async fn metrics_middleware(
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
                 sender_hashed,
                 remote_addr_hashed,
-                method = ctx.method_name,
+                method = method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
                 request_size = ctx.request_size,
@@ -672,7 +682,7 @@ pub async fn metrics_middleware(
                 "ic_canister_id": canister_id_str,
                 "ic_node_id": node_id.unwrap_or_default(),
                 "ic_subnet_id": subnet_id_str,
-                "ic_method": ctx.method_name,
+                "ic_method": method_name,
                 "request_id": request_id,
                 "request_size": ctx.request_size,
                 "request_type": request_type,
@@ -693,7 +703,7 @@ pub struct MetricsHandlerArgs {
     pub cache: Arc<RwLock<MetricsCache>>,
 }
 
-// Axum handler for /metrics endpoint
+/// Axum handler for /metrics endpoint
 pub async fn metrics_handler(
     State(MetricsHandlerArgs { cache }): State<MetricsHandlerArgs>,
 ) -> impl IntoResponse {

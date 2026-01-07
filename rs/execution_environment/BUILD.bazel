@@ -72,8 +72,6 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
     },
-    # The failure rate of this test jumped to over 10% in the week starting on 2025-11-17 so we marked it as flaky:
-    flaky = True,
     proc_macro_deps = [
         # Keep sorted.
         "@crate_index//:test-strategy",
@@ -184,7 +182,7 @@ rust_ic_test_suite(
         "@crate_index//:more-asserts",
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
-        "@crate_index//:regex",
+        "@crate_index//:regex-lite",
         "@crate_index//:rstest",
         "@crate_index//:serde",
         "@crate_index//:tokio",

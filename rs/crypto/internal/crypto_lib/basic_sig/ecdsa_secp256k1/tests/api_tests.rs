@@ -224,8 +224,8 @@ mod verify {
                 tv.is_valid,
                 "Unexpected verification result for test vector {tv:?}",
             );
-            if verify_result.is_err() {
-                assert!(verify_result.unwrap_err().is_signature_verification_error());
+            if let Err(err) = verify_result {
+                assert!(err.is_signature_verification_error());
             }
         }
     }

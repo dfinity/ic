@@ -21,7 +21,6 @@ rust_library(
     name = "icp_ledger",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "icp_ledger",
     proc_macro_deps = [

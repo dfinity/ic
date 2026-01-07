@@ -15,11 +15,11 @@ impl Default for BatchBuilder {
             batch: Batch {
                 batch_number: Height::from(0),
                 batch_summary: None,
-                requires_full_state_hash: false,
                 content: BatchContent::Data {
                     batch_messages: BatchMessages::default(),
                     chain_key_data: Default::default(),
                     consensus_responses: vec![],
+                    requires_full_state_hash: false,
                 },
                 randomness: Randomness::from([0; 32]),
                 registry_version: RegistryVersion::from(1),
@@ -49,6 +49,7 @@ impl BatchBuilder {
             batch_messages: messages,
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            requires_full_state_hash: false,
         };
         self
     }

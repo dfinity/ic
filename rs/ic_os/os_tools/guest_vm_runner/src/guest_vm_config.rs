@@ -18,7 +18,7 @@ const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log"
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
 #[cfg(not(feature = "dev"))]
-const DEFAULT_VM_MEMORY_GB: u32 = 490;
+const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_VCPUS: u32 = 64;
 const UPGRADE_VM_MEMORY_GB: u32 = 4;
@@ -214,18 +214,13 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
-            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
@@ -312,11 +307,7 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
@@ -334,11 +325,7 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "qemu".to_string(),
-                vm_nr_of_vcpus: 64,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
@@ -356,11 +343,7 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "kvm".to_string(),
@@ -378,11 +361,7 @@ mod tests {
     fn test_generate_vm_config_sev() {
         test_vm_config(
             "guestos_vm_sev.xml",
-            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 16,
-                vm_cpu: "kvm".to_string(),
-                vm_nr_of_vcpus: 56,
                 hostos_dev_settings: HostOSDevSettings {
                     vm_memory: 16,
                     vm_cpu: "kvm".to_string(),
@@ -419,6 +398,8 @@ mod tests {
     #[test]
     fn ensure_tested_with_dev() {
         // Ensure that the test is run with the dev feature enabled.
-        assert!(cfg!(feature = "dev"));
+        const {
+            assert!(cfg!(feature = "dev"));
+        };
     }
 }

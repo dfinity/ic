@@ -39,23 +39,11 @@ mod tests;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
-    SecretKeyNotFound {
-        algorithm: AlgorithmId,
-        key_id: KeyId,
-    },
-    UnsupportedAlgorithm {
-        algorithm: AlgorithmId,
-    },
-    WrongSecretKeyType {
-        algorithm: AlgorithmId,
-        secret_key_variant: String,
-    },
-    MalformedSecretKey {
-        algorithm: AlgorithmId,
-    },
-    TransientInternalError {
-        internal_error: String,
-    },
+    PublicKeyNotFound,
+    MalformedPublicKey(String),
+    SecretKeyNotFound(KeyId),
+    WrongSecretKeyType { secret_key_variant: String },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -414,9 +402,7 @@ pub trait BasicSignatureCspVault {
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
-    /// * `algorithm_id` specifies the signature algorithm
     /// * `message` is the message to be signed
-    /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
     /// # Note
@@ -427,12 +413,7 @@ pub trait BasicSignatureCspVault {
     /// of the message digest uses secret key data as an input, and so
     /// cannot be computed outside of the CspVault (cf. PureEdDSA in
     /// [RFC 8032](https://tools.ietf.org/html/rfc8032#section-5.1.6))
-    fn sign(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: Vec<u8>,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError>;
 
     /// Generates a node signing public/private key pair.
     ///
@@ -552,9 +533,7 @@ pub trait NiDkgCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError>;
 
     /// Generates a dealing which contains a share for each eligible receiver.
-    /// If `reshared_secret` is `None`, then the dealing is a sharing of a
-    /// fresh random value, otherwise it is a re-sharing of the secret
-    /// identified by `reshared_secret`.
+    /// The dealing is a sharing of a fresh random value.
     ///
     /// # Arguments
     /// * `algorithm_id` selects the algorithm suite to use for the scheme.
@@ -565,8 +544,6 @@ pub trait NiDkgCspVault {
     ///   secure keys.
     /// * `receiver_keys` is a map storing a forward-secure public key for each
     ///   receiver, indexed by their corresponding NodeIndex.
-    /// * 'maybe_resharing_secret' if `Some`, identifies the secret to be
-    ///   reshared.
     /// # Returns
     /// A new dealing.
     fn create_dealing(
@@ -576,7 +553,31 @@ pub trait NiDkgCspVault {
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+
+    /// Generates a dealing which contains a share for each eligible receiver.
+    /// The dealing is a re-sharing of the secret identified by `resharing_secret`.
+    ///
+    /// # Arguments
+    /// * `algorithm_id` selects the algorithm suite to use for the scheme.
+    /// * `dealer_index` the index associated with the dealer.
+    /// * `threshold` is the minimum number of nodes required to generate a
+    ///   valid threshold signature.
+    /// * `epoch` is a monotonic increasing counter used to select forward
+    ///   secure keys.
+    /// * `receiver_keys` is a map storing a forward-secure public key for each
+    ///   receiver, indexed by their corresponding NodeIndex.
+    /// * `resharing_secret` identifies the secret to be reshared.
+    /// # Returns
+    /// A new dealing.
+    fn create_resharing_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
     /// Computes a threshold signing key and stores it in the secret key store.

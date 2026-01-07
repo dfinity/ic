@@ -53,6 +53,7 @@ use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rewards_calculation::REWARDS_TABLE_DAYS;
 use rewards_calculation::types::NodeMetricsDailyRaw;
+use std::time::SystemTime;
 use std::{collections::BTreeMap, time::Duration};
 
 struct NodeInfo {
@@ -630,12 +631,16 @@ fn test_automated_node_provider_remuneration() {
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
         to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
-    let expected_daily_rewards_e8s_1 =
+    let expected_daily_rewards_xdrp_1 =
         (((1.0 * 24_000.0) + (2.0 * 68_000.0) + (1.0 * 11_000.0)) / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_1 =
-        expected_daily_rewards_e8s_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
+        expected_daily_rewards_xdrp_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    assert_eq!(expected_rewards_e8s_1, 108735483);
+    if expected_reward_days_covered_1 == 30 {
+        assert_eq!(expected_rewards_e8s_1, 108735483);
+    } else {
+        assert_eq!(expected_rewards_e8s_1, 112360000);
+    }
     let expected_node_provider_reward_1 = RewardNodeProvider {
         node_provider: Some(node_info_1.provider.clone()),
         amount_e8s: expected_rewards_e8s_1,
@@ -655,12 +660,16 @@ fn test_automated_node_provider_remuneration() {
     let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
         to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
     }));
-    let expected_daily_rewards_e8s_2 =
+    let expected_daily_rewards_xdrp_2 =
         (((3.0 * 68_000.0) + (1.0 * 11_000.0)) / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_2 =
-        expected_daily_rewards_e8s_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
+        expected_daily_rewards_xdrp_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    assert_eq!(expected_rewards_e8s_2, 136703225);
+    if expected_reward_days_covered_1 == 30 {
+        assert_eq!(expected_rewards_e8s_2, 136703225);
+    } else {
+        assert_eq!(expected_rewards_e8s_2, 141260000);
+    }
     let expected_node_provider_reward_2 = RewardNodeProvider {
         node_provider: Some(node_info_2.provider.clone()),
         amount_e8s: expected_rewards_e8s_2,
@@ -691,12 +700,16 @@ fn test_automated_node_provider_remuneration() {
         + 0.8 * 0.8 * 0.8 * 0.8 * average_type3_reward)
         / 5.0;
 
-    let expected_daily_rewards_e8s_3 =
+    let expected_daily_rewards_xdrp_3 =
         (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards)) / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_3 =
-        expected_daily_rewards_e8s_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
+        expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    assert_eq!(expected_rewards_e8s_3, 1205206451);
+    if expected_reward_days_covered_1 == 30 {
+        assert_eq!(expected_rewards_e8s_3, 1205206451);
+    } else {
+        assert_eq!(expected_rewards_e8s_3, 1245380000);
+    }
     let expected_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
         amount_e8s: expected_rewards_e8s_3,
@@ -875,7 +888,7 @@ fn test_automated_node_provider_remuneration() {
     );
 
     let expected_automated_rewards_e8s_1 =
-        expected_daily_rewards_e8s_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
+        expected_daily_rewards_xdrp_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
             / average_icp_xdr_conversion_rate_for_automated_rewards;
     let expected_automated_node_provider_reward_1 = RewardNodeProvider {
         node_provider: Some(node_info_1.provider.clone()),
@@ -884,7 +897,7 @@ fn test_automated_node_provider_remuneration() {
     };
 
     let expected_automated_rewards_e8s_2 =
-        expected_daily_rewards_e8s_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
+        expected_daily_rewards_xdrp_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
             / average_icp_xdr_conversion_rate_for_automated_rewards;
     let expected_automated_node_provider_reward_2 = RewardNodeProvider {
         node_provider: Some(node_info_2.provider.clone()),
@@ -893,7 +906,7 @@ fn test_automated_node_provider_remuneration() {
     };
 
     let expected_automated_rewards_e8s_3 =
-        expected_daily_rewards_e8s_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
+        expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_2
             / average_icp_xdr_conversion_rate_for_automated_rewards;
     let expected_automated_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
@@ -1012,7 +1025,7 @@ fn test_automated_node_provider_remuneration() {
         expected_reward_days_covered_3
     );
     let expected_automated_rewards_e8s_1 =
-        expected_daily_rewards_e8s_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
+        expected_daily_rewards_xdrp_1 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
             / actual_minimum_xdr_permyriad_per_icp;
 
     let expected_automated_node_provider_reward_1 = RewardNodeProvider {
@@ -1022,7 +1035,7 @@ fn test_automated_node_provider_remuneration() {
     };
 
     let expected_automated_rewards_e8s_2 =
-        expected_daily_rewards_e8s_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
+        expected_daily_rewards_xdrp_2 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
             / actual_minimum_xdr_permyriad_per_icp;
 
     let expected_automated_node_provider_reward_2 = RewardNodeProvider {
@@ -1032,7 +1045,7 @@ fn test_automated_node_provider_remuneration() {
     };
 
     let expected_automated_rewards_e8s_3 =
-        expected_daily_rewards_e8s_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
+        expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_3
             / actual_minimum_xdr_permyriad_per_icp;
 
     let expected_automated_node_provider_reward_3 = RewardNodeProvider {
@@ -1081,6 +1094,10 @@ fn add_node(
     mutation_id: u8,
     node_type: NodeRewardType,
 ) -> NodeId {
+    // Sync state machine time to current system time to ensure TLS certificates
+    // generated during node addition have valid notBefore dates
+    state_machine.set_time(SystemTime::now());
+
     let (add_node_payload, _) = prepare_add_node_payload(mutation_id, node_type);
     state_machine
         .execute_ingress_as(

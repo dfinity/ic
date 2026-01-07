@@ -1,11 +1,17 @@
+use candid::{Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
-use chrono::Utc;
 use futures::future::join_all;
+use ic_agent::Agent;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_types::PrincipalId;
+use ic_types::messages::ReplicaHealthStatus;
+use ic_universal_canister::wasm;
+use ic_utils::interfaces::management_canister::ManagementCanister;
+use slog::Logger;
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -29,6 +35,10 @@ pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
+
+const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
+
+const GIB: u64 = 1 << 30;
 
 pub async fn rejoin_test(
     env: &TestEnv,
@@ -100,7 +110,7 @@ pub async fn rejoin_test(
 pub async fn rejoin_test_large_state(
     env: TestEnv,
     allowed_failures: usize,
-    size_level: usize,
+    canister_size_gib: u64,
     num_canisters: usize,
     dkg_interval: u64,
     rejoin_node: IcNodeSnapshot,
@@ -126,15 +136,16 @@ pub async fn rejoin_test_large_state(
 
     info!(
         logger,
-        "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
-        size_level * num_canisters * 128
+        "Start writing random data to the canister stable memory for each canister. The total size of all canisters will be about {} GiB.",
+        num_canisters as u64 * canister_size_gib,
     );
-    modify_canister_heap(
+
+    write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
-        size_level,
-        num_canisters,
         false,
+        0,
+        canister_size_gib,
         0,
     )
     .await;
@@ -161,19 +172,20 @@ pub async fn rejoin_test_large_state(
         .await_status_is_unavailable()
         .expect("Node still healthy");
 
-    // Note that how the canister heap is modified is decided by the random seed.
-    // Make sure to provide a different seed than the one used in the previous `modify_canister_heap` call.
+    // Note that the canister stable memory is modified based on the random seed.
+    // Make sure to provide a different seed than the one used in the previous `write_random_data_to_stable_memory` call.
     // In the following call, we skip odd-indexed canisters so that some canisters remain the same while others change.
     info!(
         logger,
-        "Start modifying the canister heap but skip odd-indexed canisters"
+        "Start modifying canister stable memory by new random data"
     );
-    modify_canister_heap(
+
+    write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
-        size_level,
-        num_canisters,
         true,
+        0,
+        canister_size_gib,
         1,
     )
     .await;
@@ -209,6 +221,207 @@ pub async fn rejoin_test_large_state(
     store_and_read_stable(&logger, message, &universal_canister).await;
 
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+}
+
+async fn deploy_seed_canister(
+    ic00: &ManagementCanister<'_>,
+    effective_canister_id: PrincipalId,
+) -> Principal {
+    let seed_canister_id = ic00
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id.0)
+        .call_and_wait()
+        .await
+        .expect("Failed to create a seed canister")
+        .0;
+    let seed_canister_wasm_path = get_dependency_path(
+        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
+            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    );
+    let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
+        .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
+    ic00.install(&seed_canister_id, &seed_canister_wasm)
+        .await
+        .expect("Failed to install a seed canister");
+    seed_canister_id
+}
+
+async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId, logger: &Logger) {
+    let universal_canister =
+        UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
+    universal_canister
+        .update(
+            wasm()
+                .set_heartbeat(
+                    wasm()
+                        .instruction_counter_is_at_least(1_800_000_000)
+                        .build(),
+                )
+                .reply()
+                .build(),
+        )
+        .await
+        .expect("Failed to set up a busy canister.");
+}
+
+async fn deploy_canisters_for_long_rounds(
+    logger: &slog::Logger,
+    nodes: Vec<IcNodeSnapshot>,
+    num_canisters: usize,
+) {
+    let init_node = nodes[0].clone();
+    let agent = init_node.build_default_agent_async().await;
+    let ic00 = ManagementCanister::create(&agent);
+
+    let num_seed_canisters = 4;
+    info!(
+        logger,
+        "Deploying {} seed canisters on a node {} ...",
+        num_seed_canisters,
+        init_node.get_public_url()
+    );
+    let mut create_seed_canisters_futs = vec![];
+    for _ in 0..num_seed_canisters {
+        create_seed_canisters_futs.push(deploy_seed_canister(
+            &ic00,
+            init_node.effective_canister_id(),
+        ));
+    }
+    let seed_canisters = join_all(create_seed_canisters_futs).await;
+
+    let num_canisters_per_seed_canister = num_canisters / num_seed_canisters;
+    info!(
+        logger,
+        "Creating {} canisters via the seed canisters ...",
+        num_canisters_per_seed_canister * num_seed_canisters,
+    );
+    let mut create_many_canisters_futs = vec![];
+    for seed_canister_id in seed_canisters {
+        let bytes = Encode!(&num_canisters_per_seed_canister)
+            .expect("Failed to candid encode argument for a seed canister");
+        let fut = agent
+            .update(&seed_canister_id, "create_many_canisters")
+            .with_arg(bytes)
+            .call_and_wait();
+        create_many_canisters_futs.push(fut);
+    }
+    let res = join_all(create_many_canisters_futs).await;
+    for r in res {
+        r.expect("Failed to create canisters via a seed canister");
+    }
+
+    // We deploy 8 "busy" canisters: this way,
+    // there are 2 canisters per each of the 4 scheduler threads
+    // and thus every thread executes 2 x 1.8B = 3.6B instructions.
+    let num_busy_canisters = 8;
+    info!(
+        logger,
+        "Deploying {} busy canisters on a node {} ...",
+        num_busy_canisters,
+        init_node.get_public_url()
+    );
+    let mut create_busy_canisters_futs = vec![];
+    for _ in 0..num_busy_canisters {
+        create_busy_canisters_futs.push(deploy_busy_canister(
+            &agent,
+            init_node.effective_canister_id(),
+            logger,
+        ));
+    }
+    join_all(create_busy_canisters_futs).await;
+}
+
+pub async fn rejoin_test_long_rounds(
+    env: TestEnv,
+    nodes: Vec<IcNodeSnapshot>,
+    num_canisters: usize,
+    dkg_interval: u64,
+) {
+    let logger = env.logger();
+    deploy_canisters_for_long_rounds(&logger, nodes.clone(), num_canisters).await;
+
+    // Sort nodes by their average duration to process a batch.
+    let mut average_process_batch_durations = vec![];
+    for node in &nodes {
+        let duration = average_process_batch_duration(&logger, node.clone()).await;
+        average_process_batch_durations.push(duration);
+    }
+    let mut paired: Vec<_> = average_process_batch_durations
+        .into_iter()
+        .zip(nodes.into_iter())
+        .collect();
+    paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
+    let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
+
+    // The fastest node will be the reference node used to check
+    // the latest certified height of the subnet.
+    let reference_node = sorted_nodes[0].clone();
+
+    // The restarted node will be the slowest node
+    // required for consensus in terms of batch processing time:
+    // this way, the restarted node cannot catch up with the subnet
+    // without additional measures (to be implemented in the future).
+    // E.g., for `n = 13`, we have `f = 4` and the nodes at indices
+    // `0`, `1`, ..., `n - (f + 1)` are required for consensus,
+    // i.e., we restart the node at (0-based) index
+    // `n - (f + 1) = n - (n / 3 + 1)`.
+    let n = sorted_nodes.len();
+    let rejoin_node = sorted_nodes[n - (n / 3 + 1)].clone();
+
+    info!(
+        logger,
+        "Killing a node: {} ...",
+        rejoin_node.get_public_url()
+    );
+    rejoin_node.vm().kill();
+    rejoin_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
+
+    // Wait for the subnet to produce a CUP and then restart the rejoin_node.
+    // This way, the restarted node starts from that CUP
+    // and we can assert it to catch up until the next CUP.
+    info!(logger, "Waiting for a CUP ...");
+    let reference_node_status = reference_node
+        .status_async()
+        .await
+        .expect("Failed to get status of reference_node");
+    let latest_certified_height = reference_node_status
+        .certified_height
+        .expect("Failed to get certified height of reference_node")
+        .get();
+    wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
+
+    info!(logger, "Start the killed node again ...");
+    rejoin_node.vm().start();
+
+    info!(logger, "Waiting for the next CUP ...");
+    let last_cup_height = wait_for_cup(
+        &logger,
+        latest_certified_height + dkg_interval + 1,
+        reference_node.clone(),
+    )
+    .await;
+
+    let rejoin_node_status = rejoin_node
+        .status_async()
+        .await
+        .expect("Failed to get status of rejoin_node");
+    let rejoin_node_certified_height = rejoin_node_status
+        .certified_height
+        .expect("Failed to get certified height of rejoin_node")
+        .get();
+    assert!(
+        rejoin_node_certified_height >= last_cup_height,
+        "The rejoin_node certified height {} is less than the last CUP height {}.",
+        rejoin_node_certified_height,
+        last_cup_height
+    );
+    let rejoin_node_health_status = rejoin_node_status
+        .replica_health_status
+        .expect("Failed to get replica health status of rejoin_node");
+    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 }
 
 pub async fn assert_state_sync_has_happened(
@@ -274,6 +487,37 @@ pub async fn assert_state_sync_has_happened(
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
 }
 
+async fn average_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
+    let label_sum = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_sum");
+    let label_count = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_count");
+    let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;
+    let sums: Vec<_> = metrics
+        .iter()
+        .filter_map(|(k, v)| {
+            if k.starts_with(&label_sum) {
+                Some(v)
+            } else {
+                None
+            }
+        })
+        .collect();
+    let counts: Vec<_> = metrics
+        .iter()
+        .filter_map(|(k, v)| {
+            if k.starts_with(&label_count) {
+                Some(v)
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(sums.len(), counts.len());
+    sums.iter()
+        .zip(counts.iter())
+        .map(|(x, y)| x[0] / y[0])
+        .sum()
+}
+
 pub async fn fetch_metrics<T>(
     log: &slog::Logger,
     node: IcNodeSnapshot,
@@ -293,7 +537,10 @@ where
         let metrics_result = metrics.fetch::<T>().await;
         match metrics_result {
             Ok(result) => {
-                if labels.iter().all(|&label| result.contains_key(label)) {
+                if labels
+                    .iter()
+                    .all(|&label| result.iter().any(|(k, _)| k.starts_with(label)))
+                {
                     info!(log, "Metrics successfully scraped {:?}.", result);
                     return result;
                 } else {
@@ -348,7 +595,7 @@ pub async fn install_statesync_test_canisters<'a>(
         let new_logger = logger.clone();
         futures.push(async move {
             // Each canister is allocated with slightly more than 1GB of memory
-            // and the memory will later grow by the `expand_state` calls.
+            // and the memory will later grow by the `write_random_data` calls.
             let canister = new_wasm
                 .clone()
                 .install(endpoint_runtime)
@@ -370,55 +617,56 @@ pub async fn install_statesync_test_canisters<'a>(
     join_all(futures).await
 }
 
-pub async fn modify_canister_heap(
+pub async fn write_random_data_to_stable_memory(
     logger: slog::Logger,
     canisters: Vec<Canister<'_>>,
-    size_level: usize,
-    num_canisters: usize,
     skip_odd_indexed_canister: bool,
-    seed: usize,
+    write_offset: u64,
+    write_size_gib: u64,
+    seed: u64,
 ) {
-    let expansions = canisters
+    let writes = canisters
         .iter()
         .enumerate()
         .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
         .map(|(idx, canister)| {
             let logger_clone = logger.clone();
             async move {
-                for x in 1..=size_level {
-                    let seed_for_canister = idx + (x - 1) * num_canisters + seed;
-                    let payload = (x as u32, seed_for_canister as u32);
+                for x in 0..write_size_gib {
+                    let seed_for_canister = idx as u64 * 10000 + x * 100 + seed;
+                    let cur_offset = write_offset + x * GIB;
+                    let payload = (cur_offset, GIB, seed_for_canister);
 
-                    let _res: Result<u64, String> = retry_async(
-                        "Trying to expand the canister state",
+                    let _res: Result<(), String> = retry_async(
+                        "Trying to write stable memory",
                         &logger_clone,
                         Duration::from_secs(500),
                         Duration::from_secs(5),
                         async || {
                             canister
-                                .update_("expand_state", dfn_candid::candid, payload)
+                                .update_("write_random_data", dfn_candid::candid, payload)
                                 .await
                                 .map_err(|err| anyhow::anyhow!("{}", err))
                         },
                     )
                     .await
                     .unwrap_or_else(|err| {
-                        panic!("Calling expand_state() on canister {canister:?} failed: {err}",)
+                        panic!("Calling write_random_data() on canister {canister:?} at offset: {cur_offset}, failed: {err}",)
                     });
 
                     info!(
                         logger_clone,
-                        "Expanded canister {:?} {} times, it is now {}",
+                        "Wrote random data to the {}th canister {:?} {} times",
+                        idx,
                         canister,
-                        x,
-                        Utc::now()
+                        x + 1,
                     );
                 }
             }
         })
         .collect::<Vec<_>>();
 
-    join_all(expansions).await;
+    join_all(writes).await;
 }
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.

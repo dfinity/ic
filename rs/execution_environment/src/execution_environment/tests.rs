@@ -43,6 +43,7 @@ use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::assert_gt;
 use std::mem::size_of;
+use std::sync::Arc;
 
 #[cfg(test)]
 mod canister_task;
@@ -1049,6 +1050,8 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         TakeCanisterSnapshotArgs {
             canister_id: canister_id.into(),
             replace_snapshot: None,
+            uninstall_code: None,
+            sender_canister_version: None,
         }
         .encode(),
     )
@@ -1564,6 +1567,166 @@ fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
     );
 }
 
+#[test]
+fn subnet_split_cleans_in_progress_stop_canister_calls() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    //
+    // Test stop canister call with canister request origin.
+    //
+
+    // `stop_canister()` only puts the canister in state `Stopping`. The state gets
+    // changed from `Stopping` to `Stopped` (if there are no open call contexts) at
+    // the end of the round, but the test never executes a full round.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_1)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // Canister 1 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_1).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert!(own_subnet_id != other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, own_subnet_id);
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `StopCanisterCall` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates canister 1 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_1, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `StopCanisterCall` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test stop canister call with ingress origin.
+    //
+    let ingress_id = test.stop_canister(canister_id_2);
+
+    // Canister 2 is now in state `Stopping`.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_2).status()
+    );
+    // And `SubnetCallContextManager` contains one `StopCanisterCall`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // A no-op subnet split (no canisters migrated).
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `StopCanisterCall` and does not change the ingress state.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert_eq!(
+        test.ingress_status(&ingress_id),
+        IngressStatus::Known {
+            receiver: ic00::IC_00.get(),
+            user_id: test.user_id(),
+            time: test.time(),
+            state: IngressState::Processing,
+        } // As opposed to `Known::Failed`.
+    );
+
+    // Simulate a subnet split that migrates canister 2 to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id_2, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Should have removed the `StopCanisterCall` and set the ingress state to `Failed`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&ingress_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {canister_id_2} migrated during a subnet split"),
+        ))
+    );
+}
+
 /// Ensures that in-progress stop canister calls are left in a consistent state
 /// after a subnet split: i.e. there is no stop canister call that is tracked by
 /// a canister, but not by the subnet call context manager; or the other way
@@ -1699,7 +1862,8 @@ fn canister_snapshots_after_split() {
     );
 
     // Take canister snapshot for each canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_1, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),
@@ -1707,7 +1871,8 @@ fn canister_snapshots_after_split() {
     );
     test.execute_subnet_message();
 
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_2, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id_2, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         Encode!(&args).unwrap(),

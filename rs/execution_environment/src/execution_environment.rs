@@ -1586,7 +1586,7 @@ impl ExecutionEnvironment {
                                                 sender,
                                                 &state,
                                                 args,
-                                                self.config.fetch_canister_logs_filter,
+                                                self.config.log_memory_store_feature,
                                             )
                                         })
                                         .map(|resp| {
@@ -1626,7 +1626,7 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let canister_id = args.get_canister_id();
                     let (result, instructions_used) = self.take_canister_snapshot(
-                        *msg.sender(),
+                        msg.canister_change_origin(args.get_sender_canister_version()),
                         &mut state,
                         args,
                         registry_settings.subnet_size,
@@ -1703,48 +1703,79 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
-                let res = ReadCanisterSnapshotMetadataArgs::decode(payload).and_then(|args| {
-                    match self.config.canister_snapshot_download {
-                        FlagStatus::Disabled => Err(UserError::new(
-                            ErrorCode::UnknownManagementMessage,
-                            "Not yet implemented".to_string(),
-                        )),
+                match ReadCanisterSnapshotMetadataArgs::decode(payload) {
+                    Ok(args) => match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => {
+                            let e = UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            );
+                            ExecuteSubnetMessageResult::Finished {
+                                response: Err(e),
+                                refund: msg.take_cycles(),
+                            }
+                        }
                         FlagStatus::Enabled => {
                             let canister_id = args.get_canister_id();
-                            self.read_canister_snapshot_metadata(*msg.sender(), &state, args)
-                                .map(|x| (x, Some(canister_id)))
+                            let (res, instructions_used) = self.read_canister_snapshot_metadata(
+                                *msg.sender(),
+                                &state,
+                                args,
+                                round_limits,
+                            );
+                            let res = res.map(|x| (x, Some(canister_id)));
+                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                                response: res,
+                                refund: msg.take_cycles(),
+                            };
+                            let state =
+                                self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            return (state, Some(instructions_used));
                         }
-                    }
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+                    },
+                    Err(e) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(e),
+                        refund: msg.take_cycles(),
+                    },
                 }
             }
 
             Ok(Ic00Method::ReadCanisterSnapshotData) => {
-                let res = ReadCanisterSnapshotDataArgs::decode(payload).and_then(|args| match self
-                    .config
-                    .canister_snapshot_download
-                {
-                    FlagStatus::Disabled => Err(UserError::new(
-                        ErrorCode::UnknownManagementMessage,
-                        "Not yet implemented".to_string(),
-                    )),
-                    FlagStatus::Enabled => {
-                        let canister_id = args.get_canister_id();
-                        self.read_snapshot_data(
-                            *msg.sender(),
-                            &mut state,
-                            args,
-                            registry_settings.subnet_size,
-                        )
-                        .map(|res| (res, Some(canister_id)))
-                    }
-                });
-                ExecuteSubnetMessageResult::Finished {
-                    response: res,
-                    refund: msg.take_cycles(),
+                match ReadCanisterSnapshotDataArgs::decode(payload) {
+                    Err(e) => ExecuteSubnetMessageResult::Finished {
+                        response: Err(e),
+                        refund: msg.take_cycles(),
+                    },
+                    Ok(args) => match self.config.canister_snapshot_download {
+                        FlagStatus::Disabled => {
+                            let err = UserError::new(
+                                ErrorCode::UnknownManagementMessage,
+                                "Not yet implemented".to_string(),
+                            );
+                            ExecuteSubnetMessageResult::Finished {
+                                response: Err(err),
+                                refund: msg.take_cycles(),
+                            }
+                        }
+                        FlagStatus::Enabled => {
+                            let canister_id = args.get_canister_id();
+                            let (result, instructions_used) = self.read_snapshot_data(
+                                *msg.sender(),
+                                &mut state,
+                                args,
+                                registry_settings.subnet_size,
+                                round_limits,
+                            );
+                            let result = result.map(|res| (res, Some(canister_id)));
+                            let msg_result = ExecuteSubnetMessageResult::Finished {
+                                response: result,
+                                refund: msg.take_cycles(),
+                            };
+                            let state =
+                                self.finish_subnet_message_execution(state, msg, msg_result, since);
+                            return (state, Some(instructions_used));
+                        }
+                    },
                 }
             }
 
@@ -1848,6 +1879,8 @@ impl ExecutionEnvironment {
         //   - `InstallChunkedCode`
         //   - `TakeCanisterSnapshot`
         //   - `LoadCanisterSnapshot`
+        //   - `ReadCanisterSnapshotData`
+        //   - `ReadCanisterSnapshotMetadata`
         //   - `SignWithECDSA`
         // If you modify code below, please also update
         // these cases.
@@ -2495,7 +2528,7 @@ impl ExecutionEnvironment {
     /// Creates a new canister snapshot and inserts it into `ReplicatedState`.
     fn take_canister_snapshot(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         state: &mut ReplicatedState,
         args: TakeCanisterSnapshotArgs,
         subnet_size: usize,
@@ -2519,11 +2552,13 @@ impl ExecutionEnvironment {
         let resource_saturation =
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let replace_snapshot = args.replace_snapshot();
+        let uninstall_code = args.uninstall_code().unwrap_or_default();
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
-            sender,
+            origin,
             &mut canister,
             replace_snapshot,
+            uninstall_code,
             state,
             round_limits,
             &resource_saturation,
@@ -2532,7 +2567,16 @@ impl ExecutionEnvironment {
         state.put_canister_state(canister);
 
         match result {
-            Ok((response, instructions_used)) => (Ok(response.encode()), instructions_used),
+            Ok((response, rejects, instructions_used)) => {
+                crate::util::process_responses(
+                    rejects,
+                    state,
+                    Arc::clone(&self.ingress_history_writer),
+                    self.log.clone(),
+                    self.canister_not_found_error(),
+                );
+                (Ok(response.encode()), instructions_used)
+            }
             Err(err) => (Err(err.into()), NumInstructions::new(0)),
         }
     }
@@ -2657,31 +2701,35 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: ReadCanisterSnapshotDataArgs,
         subnet_size: usize,
-    ) -> Result<Vec<u8>, UserError> {
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut canister = match state.take_canister_state(&canister_id) {
             None => {
-                return Err(UserError::new(
-                    ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", &canister_id),
-                ));
+                return (
+                    Err(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} not found.", &canister_id),
+                    )),
+                    NumInstructions::new(0),
+                );
             }
             Some(canister) => canister,
         };
 
-        let result = self
-            .canister_manager
-            .read_snapshot_data(
-                sender,
-                &mut canister,
-                args.get_snapshot_id(),
-                args.kind,
-                state,
-                subnet_size,
-            )
-            .map(|res| Encode!(&res).unwrap())
-            .map_err(UserError::from);
+        let result = match self.canister_manager.read_snapshot_data(
+            sender,
+            &mut canister,
+            args.get_snapshot_id(),
+            args.kind,
+            state,
+            subnet_size,
+            round_limits,
+        ) {
+            Ok((result, num_instructions)) => (Ok(Encode!(&result).unwrap()), num_instructions),
+            Err(err) => (Err(UserError::from(err)), NumInstructions::new(0)),
+        };
 
         // Put canister back.
         state.put_canister_state(canister);
@@ -2740,13 +2788,23 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &ReplicatedState,
         args: ReadCanisterSnapshotMetadataArgs,
-    ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister(args.get_canister_id(), state)?;
+        round_limits: &mut RoundLimits,
+    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+        let canister = match get_canister(args.get_canister_id(), state) {
+            Ok(canister) => canister,
+            Err(e) => return (Err(e), NumInstructions::new(0)),
+        };
         let snapshot_id = args.get_snapshot_id();
-        self.canister_manager
-            .read_snapshot_metadata(sender, snapshot_id, canister, state)
-            .map(|res| Encode!(&res).unwrap())
-            .map_err(UserError::from)
+        match self.canister_manager.read_snapshot_metadata(
+            sender,
+            snapshot_id,
+            canister,
+            state,
+            round_limits,
+        ) {
+            Ok((response, instructions)) => (Ok(Encode!(&response).unwrap()), instructions),
+            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+        }
     }
 
     fn create_snapshot_from_metadata(
@@ -2830,10 +2888,9 @@ impl ExecutionEnvironment {
         );
         // Put canister back.
         state.put_canister_state(canister);
-
         match result {
-            Ok(instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
-            Err(e) => (Err(UserError::from(e)), NumInstructions::new(0)),
+            (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
+            (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
         }
     }
 
@@ -3262,7 +3319,7 @@ impl ExecutionEnvironment {
     ) -> Result<PublicKey, UserError> {
         derive_threshold_public_key(
             subnet_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller,
                 derivation_path,
             },

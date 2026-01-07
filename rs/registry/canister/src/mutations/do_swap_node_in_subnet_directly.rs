@@ -22,8 +22,12 @@ use crate::{
     registry::Registry,
 };
 
-pub const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
-pub const NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS: u64 = 4;
+const NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS: u64 = 24;
+pub const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL: Duration =
+    Duration::from_secs(NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS * 60 * 60);
+pub const NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL: Duration =
+    Duration::from_secs(NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS * 60 * 60);
 
 struct SwapRateLimiter {
     subnet_limiter: InMemoryRateLimiter<SubnetId>,
@@ -333,10 +337,10 @@ impl Display for SwapError {
                 SwapError::SubnetNotFoundForNode { old_node_id } =>
                     format!("Node {old_node_id} is not a member of any subnet."),
                 SwapError::SubnetRateLimited { subnet_id } => format!(
-                    "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
+                    "Subnet {subnet_id} had a swap performed within last {NODE_SWAPS_SUBNET_CAPACITY_INTERVAL_HOURS} hours. Try again later."
                 ),
                 SwapError::OperatorRateLimitedOnSubnet { subnet_id, caller } => format!(
-                    "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
+                    "Caller {caller} performed a swap on subnet {subnet_id} within last {NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL_HOURS} hours. Try again later."
                 ),
                 SwapError::SubnetSizeMismatch { subnet_id } => format!(
                     "Subnet {subnet_id} changed size after performing the swap which shouldn't happen"
@@ -477,6 +481,8 @@ mod tests {
         let mut registry = Registry::new();
 
         let _temp = temporarily_enable_node_swapping();
+        test_set_swapping_whitelisted_callers(vec![]);
+        test_set_swapping_enabled_subnets(vec![]);
 
         let payload = valid_payload();
 
@@ -643,6 +649,7 @@ mod tests {
         let (old_node_id, new_node_id, subnet_id, node_operator_id, mut registry) =
             setup_registry_for_test(false);
         test_set_swapping_enabled_subnets(vec![subnet_id]);
+        test_set_swapping_whitelisted_callers(vec![]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(new_node_id.get()),

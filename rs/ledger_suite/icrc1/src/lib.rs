@@ -52,6 +52,7 @@ pub enum Operation<Tokens: TokensType> {
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
+        mthd: Option<String>,
     },
 }
 
@@ -73,7 +74,9 @@ struct FlattenedTransaction<Tokens: TokensType> {
     pub memo: Option<Memo>,
 
     // [Operation] fields.
-    pub op: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub op: Option<String>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,66 +118,114 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     caller: Option<Principal>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
     type Error = String;
 
     fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
-        let operation = match value.op.as_str() {
-            "burn" => Operation::Burn {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `burn` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `burn` operations")?,
-                spender: value.spender,
-                fee: value.fee,
-            },
-            "mint" => Operation::Mint {
-                to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `mint` operations")?,
-                fee: value.fee,
-            },
-            "xfer" => Operation::Transfer {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `xfer` operation")?,
-                spender: value.spender,
-                to: value.to.ok_or("`to` field required for `xfer` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `xfer` operations")?,
-                fee: value.fee,
-            },
-            "approve" => Operation::Approve {
-                from: value
-                    .from
-                    .ok_or("`from` field required for `approve` operation")?,
-                spender: value
-                    .spender
-                    .ok_or("`spender` field required for `approve` operation")?,
-                amount: value
-                    .amount
-                    .ok_or("`amount` required for `approve` operations")?,
-                expected_allowance: value.expected_allowance,
-                expires_at: value.expires_at,
-                fee: value.fee,
-            },
-            "107set_fee_collector" => Operation::FeeCollector {
+        let created_at_time = value.created_at_time;
+        let memo = value.memo.clone();
+        // This conversion is only done for the ledger internal deduplication window, so we can
+        // assume that the tx.op is always Some.
+        let operation = Operation::try_from(value)?;
+
+        Ok(Transaction {
+            operation,
+            created_at_time,
+            memo,
+        })
+    }
+}
+
+impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
+    for Transaction<Tokens>
+{
+    type Error = String;
+
+    fn try_from(
+        btype_and_tx: (Option<String>, FlattenedTransaction<Tokens>),
+    ) -> Result<Self, Self::Error> {
+        let (btype, value) = btype_and_tx;
+        let btype_str = btype.as_deref();
+
+        let created_at_time = value.created_at_time;
+        let memo = value.memo.clone();
+
+        let operation = match btype_str {
+            Some("107feecol") => Operation::FeeCollector {
                 fee_collector: value.fee_collector,
                 caller: value.caller,
+                mthd: value.mthd,
             },
-            unknown_op => return Err(format!("Unknown operation name {unknown_op}")),
+            _ => Operation::try_from(value)
+                .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
         };
         Ok(Transaction {
             operation,
-            created_at_time: value.created_at_time,
-            memo: value.memo,
+            created_at_time,
+            memo,
         })
+    }
+}
+
+impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Operation<Tokens> {
+    type Error = String;
+
+    fn try_from(value: FlattenedTransaction<Tokens>) -> Result<Self, Self::Error> {
+        if let Some(op) = value.op.as_deref() {
+            match op {
+                "burn" => Ok(Operation::Burn {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `burn` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `burn` operations")?,
+                    spender: value.spender,
+                    fee: value.fee,
+                }),
+                "mint" => Ok(Operation::Mint {
+                    to: value.to.ok_or("`to` field required for `mint` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `mint` operations")?,
+                    fee: value.fee,
+                }),
+                "xfer" => Ok(Operation::Transfer {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `xfer` operation")?,
+                    spender: value.spender,
+                    to: value.to.ok_or("`to` field required for `xfer` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `xfer` operations")?,
+                    fee: value.fee,
+                }),
+                "approve" => Ok(Operation::Approve {
+                    from: value
+                        .from
+                        .ok_or("`from` field required for `approve` operation")?,
+                    spender: value
+                        .spender
+                        .ok_or("`spender` field required for `approve` operation")?,
+                    amount: value
+                        .amount
+                        .ok_or("`amount` required for `approve` operations")?,
+                    expected_allowance: value.expected_allowance,
+                    expires_at: value.expires_at,
+                    fee: value.fee,
+                }),
+                unknown_op => Err(format!("Unknown operation name {unknown_op}")),
+            }
+        } else {
+            Err("No operation specified".to_string())
+        }
     }
 }
 
@@ -186,13 +237,12 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             created_at_time: t.created_at_time,
             memo: t.memo,
             op: match &t.operation {
-                Burn { .. } => "burn",
-                Mint { .. } => "mint",
-                Transfer { .. } => "xfer",
-                Approve { .. } => "approve",
-                FeeCollector { .. } => "107set_fee_collector",
-            }
-            .into(),
+                Burn { .. } => Some("burn".to_string()),
+                Mint { .. } => Some("mint".to_string()),
+                Transfer { .. } => Some("xfer".to_string()),
+                Approve { .. } => Some("approve".to_string()),
+                FeeCollector { .. } => None,
+            },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
                 _ => None,
@@ -236,6 +286,10 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             caller: match &t.operation {
                 FeeCollector { caller, .. } => caller.to_owned(),
+                _ => None,
+            },
+            mthd: match &t.operation {
+                FeeCollector { mthd, .. } => mthd.to_owned(),
                 _ => None,
             },
         }
@@ -477,7 +531,38 @@ impl<Tokens: TokensType> Transaction<Tokens> {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(Deserialize)]
+#[serde(bound = "")]
+struct BlockWithFlattenedTransaction<Tokens: TokensType> {
+    #[serde(rename = "phash")]
+    #[serde(default)]
+    parent_hash: Option<HashOf<EncodedBlock>>,
+
+    #[serde(rename = "tx")]
+    tx: FlattenedTransaction<Tokens>,
+
+    #[serde(rename = "fee")]
+    #[serde(default)]
+    effective_fee: Option<Tokens>,
+
+    #[serde(rename = "ts")]
+    timestamp: u64,
+
+    #[serde(default)]
+    #[serde(rename = "fee_col")]
+    #[serde(with = "compact_account::opt")]
+    fee_collector: Option<Account>,
+
+    #[serde(default)]
+    #[serde(rename = "fee_col_block")]
+    fee_collector_block_index: Option<u64>,
+
+    #[serde(default)]
+    #[serde(rename = "btype")]
+    btype: Option<String>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Serialize)]
 #[serde(bound = "")]
 pub struct Block<Tokens: TokensType> {
     #[serde(rename = "phash")]
@@ -506,6 +591,34 @@ pub struct Block<Tokens: TokensType> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "btype")]
     pub btype: Option<String>,
+}
+
+impl<'de, Tokens: TokensType> Deserialize<'de> for Block<Tokens> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        let block_with_flattened_transaction =
+            BlockWithFlattenedTransaction::deserialize(deserializer)?;
+
+        let transaction = Transaction::try_from((
+            block_with_flattened_transaction.btype.clone(),
+            block_with_flattened_transaction.tx,
+        ))
+        .map_err(|e| D::Error::custom(format!("Failed to deserialize transaction: {}", e)))?;
+
+        Ok(Block {
+            parent_hash: block_with_flattened_transaction.parent_hash,
+            transaction,
+            effective_fee: block_with_flattened_transaction.effective_fee,
+            timestamp: block_with_flattened_transaction.timestamp,
+            fee_collector: block_with_flattened_transaction.fee_collector,
+            fee_collector_block_index: block_with_flattened_transaction.fee_collector_block_index,
+            btype: block_with_flattened_transaction.btype,
+        })
+    }
 }
 
 type TaggedBlock<Tokens> = Required<Block<Tokens>, 55799>;

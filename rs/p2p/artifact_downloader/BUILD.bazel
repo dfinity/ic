@@ -29,10 +29,12 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
+    "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
     "@crate_index//:futures",
     "@crate_index//:http-body-util",
     "@crate_index//:mockall",
@@ -68,6 +70,7 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":artifact_downloader",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/interfaces",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",

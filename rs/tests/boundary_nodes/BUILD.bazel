@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,7 +7,6 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/integration_test_common",
@@ -32,7 +31,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/subnet_update_workload",
@@ -45,8 +44,7 @@ system_test_nns(
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS +
-                   CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
+    runtime_deps = CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
@@ -138,7 +136,7 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     tags = ["manual"],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -160,7 +158,7 @@ system_test(
     tags = [
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -181,7 +179,7 @@ system_test(
     tags = [
         "manual",
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -195,7 +193,6 @@ system_test_nns(
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps = GRAFANA_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/canister_client",

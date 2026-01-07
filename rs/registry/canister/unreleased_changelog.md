@@ -9,8 +9,6 @@ on the process that this file is part of, see
 
 ## Added
 
-* Temporary logging for when add_node traps.
-
 ## Changed
 
 ## Deprecated
@@ -18,5 +16,7 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
+
+* Display correct error message for node swaps in case of rate limit errors
 
 ## Security

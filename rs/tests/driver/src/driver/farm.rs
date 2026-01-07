@@ -506,11 +506,11 @@ pub enum HostFeature {
     DC(String),
     Host(String),
     AmdSevSnp,
-    SnsLoadTest,
     Performance,
     IoPerformance,
     Dell,
     Supermicro,
+    DMZ,
 }
 
 impl Serialize for HostFeature {
@@ -530,21 +530,21 @@ impl Serialize for HostFeature {
                 serializer.serialize_str(&host_feature)
             }
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
-            HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
             HostFeature::Performance => serializer.serialize_str(PERFORMANCE),
             HostFeature::IoPerformance => serializer.serialize_str(IO_PERFORMANCE),
             HostFeature::Dell => serializer.serialize_str(DLL),
             HostFeature::Supermicro => serializer.serialize_str(SPM),
+            HostFeature::DMZ => serializer.serialize_str(DMZ),
         }
     }
 }
 
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
-const SNS_LOAD_TEST: &str = "SNS-load-test";
 const PERFORMANCE: &str = "performance";
 const IO_PERFORMANCE: &str = "io-performance";
 const DLL: &str = "dll";
 const SPM: &str = "spm";
+const DMZ: &str = "dmz";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -557,21 +557,22 @@ impl<'de> Deserialize<'de> for HostFeature {
             Some(("host", host)) => Ok(HostFeature::Host(host.to_owned())),
             _ => match input.as_str() {
                 AMD_SEV_SNP => Ok(HostFeature::AmdSevSnp),
-                SNS_LOAD_TEST => Ok(HostFeature::SnsLoadTest),
                 PERFORMANCE => Ok(HostFeature::Performance),
                 IO_PERFORMANCE => Ok(HostFeature::IoPerformance),
                 DLL => Ok(HostFeature::Dell),
                 SPM => Ok(HostFeature::Supermicro),
+                DMZ => Ok(HostFeature::DMZ),
                 _ => Err(Error::unknown_variant(
                     &input,
                     &[
                         "dc=<dc-name>",
                         "host=<host-name>",
                         AMD_SEV_SNP,
-                        SNS_LOAD_TEST,
                         PERFORMANCE,
+                        IO_PERFORMANCE,
                         DLL,
                         SPM,
+                        DMZ,
                     ],
                 )),
             },

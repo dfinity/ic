@@ -947,6 +947,8 @@ pub async fn agent_with_client_identity(
         .with_url(url)
         .with_http_client(client)
         .with_identity(identity)
+        // Setting a large polling time for the sake of long-running update calls.
+        .with_max_polling_time(Duration::from_secs(3600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -1574,9 +1576,17 @@ impl LogStream {
     where
         P: Fn(&IcNodeSnapshot, &str) -> bool,
     {
+        self.find(predicate).await.map(|_| ())
+    }
+
+    /// Find and return the first log line that satisfies the given predicate
+    pub async fn find<P>(&mut self, predicate: P) -> std::io::Result<(IcNodeSnapshot, String)>
+    where
+        P: Fn(&IcNodeSnapshot, &str) -> bool,
+    {
         while let Some((node, line)) = self.read().await? {
             if predicate(&node, &line) {
-                return Ok(());
+                return Ok((node, line));
             }
         }
 

@@ -232,7 +232,8 @@ type Transaction = record {
 type FeeCollector = record {
   caller : opt principal;
   fee_collector : opt Account;
-  ts : opt nat64
+  ts : opt nat64;
+  mthd : opt text
 };
 
 type Burn = record {

@@ -5,13 +5,20 @@ use ic_crypto_test_utils_ni_dkg::{
     NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces::crypto::{LoadTranscriptResult, NiDkgAlgorithm};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
-use ic_types::crypto::vetkd::*;
+use ic_types::crypto::vetkd::VetKdEncryptedKey;
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
+use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
+use ic_types::crypto::vetkd::VetKdKeyShareCombinationError;
+use ic_types::crypto::vetkd::VetKdKeyShareCreationError;
+use ic_types::crypto::vetkd::VetKdKeyShareVerificationError;
+use ic_types::crypto::vetkd::VetKdKeyVerificationError;
 use ic_types::{CanisterId, NodeId};
 use ic_types_test_utils::ids::canister_test_id;
 use rand::prelude::*;
@@ -77,14 +84,14 @@ impl VetKDTestServer {
 
     fn create_key_shares<R: Rng + CryptoRng>(
         &self,
-        vetkd_args: &VetKdArgs,
+        vetkd_args: &VetKdArgsOwned,
         _rng: &mut R,
     ) -> Result<BTreeMap<NodeId, VetKdEncryptedKeyShare>, VetKdKeyShareCreationError> {
         let mut key_shares = BTreeMap::new();
 
         for creator in self.config.receivers().get() {
             let crypto = crypto_for(*creator, &self.env.crypto_components);
-            let key_share = crypto.create_encrypted_key_share(vetkd_args.clone())?;
+            let key_share = crypto.create_encrypted_key_share(vetkd_args.as_ref())?;
             key_shares.insert(*creator, key_share);
         }
 
@@ -94,13 +101,13 @@ impl VetKDTestServer {
     fn verify_key_shares<R: Rng + CryptoRng>(
         &self,
         shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
-        vetkd_args: &VetKdArgs,
+        vetkd_args: &VetKdArgsOwned,
         rng: &mut R,
     ) -> Result<(), VetKdKeyShareVerificationError> {
         let (_verifier_id, verifier) = self.random_node(rng);
 
         for (node_id, share) in shares {
-            verifier.verify_encrypted_key_share(*node_id, share, vetkd_args)?
+            verifier.verify_encrypted_key_share(*node_id, share, &vetkd_args.as_ref())?
         }
 
         Ok(())
@@ -109,23 +116,23 @@ impl VetKDTestServer {
     fn combine_key_shares<R: Rng + CryptoRng>(
         &self,
         shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
-        vetkd_args: &VetKdArgs,
+        vetkd_args: &VetKdArgsOwned,
         rng: &mut R,
     ) -> Result<(NodeId, VetKdEncryptedKey), VetKdKeyShareCombinationError> {
         let (combiner_id, combiner) = self.random_node(rng);
         combiner
-            .combine_encrypted_key_shares(shares, vetkd_args)
+            .combine_encrypted_key_shares(shares, &vetkd_args.as_ref())
             .map(|ek| (combiner_id, ek))
     }
 
     fn verify_encrypted_key<R: Rng + CryptoRng>(
         &self,
         ek: &VetKdEncryptedKey,
-        vetkd_args: &VetKdArgs,
+        vetkd_args: &VetKdArgsOwned,
         rng: &mut R,
     ) -> Result<(), VetKdKeyVerificationError> {
         let (_verifier_id, verifier) = self.random_node(rng);
-        verifier.verify_encrypted_key(ek, vetkd_args)
+        verifier.verify_encrypted_key(ek, &vetkd_args.as_ref())
     }
 }
 
@@ -161,13 +168,11 @@ impl VetKDTestClient {
         }
     }
 
-    fn create_args(&self, dkg_id: &NiDkgId) -> VetKdArgs {
-        VetKdArgs {
+    fn create_args(&self, dkg_id: &NiDkgId) -> VetKdArgsOwned {
+        VetKdArgsOwned {
             ni_dkg_id: dkg_id.clone(),
-            context: VetKdDerivationContext {
-                caller: self.caller.get(),
-                context: self.context.clone(),
-            },
+            caller: self.caller.get(),
+            context: self.context.clone(),
             input: self.input.clone(),
             transport_public_key: self.tpk.clone(),
         }
@@ -533,7 +538,7 @@ mod verify_encrypted_key {
     use super::*;
 
     #[test]
-    fn should_err_with_invalidargumentencryptedkey_if_encrypted_key_is_invalid() {
+    fn should_err_if_encrypted_key_is_invalid() {
         let mut rng = reproducible_rng();
         let server = VetKDTestServer::new(&mut rng);
         let client = VetKDTestClient::new(&mut rng, &server);
@@ -558,7 +563,12 @@ mod verify_encrypted_key {
 
         match server.verify_encrypted_key(&ek, &vetkd_args, &mut rng) {
             Ok(_) => panic!("Unexpected success"),
-            Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => { /* expected */ }
+            Err(VetKdKeyVerificationError::InvalidArgumentEncryptedKey) => {
+                // expected if invalid key cannot be deserialized
+            }
+            Err(VetKdKeyVerificationError::VerificationError) => {
+                // expected if invalid key can be deserialized
+            }
             Err(e) => panic!("Unexpected error {:?}", e),
         }
     }
@@ -653,18 +663,18 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
     for node_id in config.receivers().get() {
         let result = crypto_for(*node_id, crypto_components).load_transcript(transcript);
 
-        if result.is_err() {
-            panic!(
-                "failed to load transcript {} for node {}: {}",
-                transcript,
-                *node_id,
-                result.unwrap_err()
-            );
-        }
-
-        if let Some(expected_status) = expected_status {
-            let result = result.unwrap();
-            assert_eq!(result, expected_status);
+        match result {
+            Ok(status) => {
+                if let Some(expected_status) = expected_status {
+                    assert_eq!(status, expected_status);
+                }
+            }
+            Err(err) => {
+                panic!(
+                    "failed to load transcript {} for node {}: {}",
+                    transcript, *node_id, err
+                );
+            }
         }
     }
 }

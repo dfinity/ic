@@ -47,14 +47,13 @@ slog-term = { workspace = true }
 tempfile = { workspace = true }
 wasm-encoder = { workspace = true }
 wasmparser = { workspace = true }
-wasmtime = { version = "38.0.3", default-features = false, features = [
+wasmtime = { version = "40.0.0", default-features = false, features = [
     'cranelift',
     'gc',
     'gc-null',
     'parallel-compilation',
     'runtime',
 ] }
-wasmtime-environ = "38.0.3"
 wirm = { workspace = true }
 
 # Wasmtime depends on 0.4.2 but specifies 0.4.1 in the toml file.

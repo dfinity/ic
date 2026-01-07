@@ -223,6 +223,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                 batch_messages: BatchMessages::default(),
                 chain_key_data,
                 consensus_responses,
+                requires_full_state_hash,
             },
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
@@ -238,6 +239,7 @@ pub(crate) fn deliver_batches_with_result_processor(
                         .unwrap_or_default(),
                     chain_key_data,
                     consensus_responses,
+                    requires_full_state_hash,
                 }
             }
         };
@@ -281,7 +283,6 @@ pub(crate) fn deliver_batches_with_result_processor(
                 next_checkpoint_height,
                 current_interval_length,
             }),
-            requires_full_state_hash,
             content: batch_content,
             randomness,
 
@@ -569,7 +570,7 @@ mod tests {
         const TARGET_ID: NiDkgTargetId = NiDkgTargetId::new([8; 32]);
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![
+        let transcripts_for_remote_subnets = [
             (
                 NiDkgId {
                     start_block_height: Height::from(0),
@@ -623,7 +624,7 @@ mod tests {
         });
 
         // Build some transcipts with matching ids and tags
-        let transcripts_for_remote_subnets = vec![(
+        let transcripts_for_remote_subnets = [(
             NiDkgId {
                 start_block_height: Height::from(0),
                 dealer_subnet: subnet_test_id(0),

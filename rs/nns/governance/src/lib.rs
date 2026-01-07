@@ -208,6 +208,13 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
+        = const { Cell::new(false) };
+
+    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    // This covers both taking and loading canister snapshots.
+    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 }
 
@@ -219,7 +226,7 @@ thread_local! {
 }
 
 thread_local! {
-    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub(crate) fn are_performance_based_rewards_enabled() -> bool {
@@ -282,6 +289,34 @@ pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
     Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
+}
+
+pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
+    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
+}
+
+pub fn are_canister_snapshot_proposals_enabled() -> bool {
+    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -504,8 +539,7 @@ pub fn encode_metrics(
         .proposals
         .values()
         // Exclude ManageNeuron proposals.
-        .filter(|proposal_data| !proposal_data.is_manage_neuron())
-        .next_back();
+        .rfind(|proposal_data| !proposal_data.is_manage_neuron());
     let mut total_deciding_voting_power = 0.0;
     let mut total_potential_voting_power = 0.0;
     if let Some(most_recent_proposal) = &most_recent_proposal {

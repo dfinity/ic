@@ -24,9 +24,9 @@ pub struct DerivationContext {
 
 // Prefix-freeness is not required, as the domain separator is used with XMD,
 // which includes the domain separator's length as a distinct input.
-const DERIVATION_CANISTER_DST: &[u8; 33] = b"ic-vetkd-bls12-381-g2-canister-id";
+const DERIVATION_CANISTER_DST: &str = "ic-vetkd-bls12-381-g2-canister-id";
 
-const DERIVATION_CONTEXT_DST: &[u8; 29] = b"ic-vetkd-bls12-381-g2-context";
+const DERIVATION_CONTEXT_DST: &str = "ic-vetkd-bls12-381-g2-context";
 
 impl DerivationContext {
     /// Create a new derivation context
@@ -41,7 +41,7 @@ impl DerivationContext {
         }
     }
 
-    fn hash_to_scalar(input1: &[u8], input2: &[u8], domain_sep: &'static [u8]) -> Scalar {
+    fn hash_to_scalar(input1: &[u8], input2: &[u8], domain_sep: &'static str) -> Scalar {
         let combined_input = {
             let mut c = Vec::with_capacity(2 * 8 + input1.len() + input2.len());
             c.extend_from_slice(&(input1.len() as u64).to_be_bytes());
@@ -61,7 +61,7 @@ impl DerivationContext {
             DERIVATION_CANISTER_DST,
         );
 
-        let canister_key = G2Affine::generator() * &offset + master_pk;
+        let canister_key = G2Affine::from(G2Affine::generator() * &offset + master_pk);
 
         if let Some(context) = &self.context {
             let context_offset =
@@ -70,7 +70,7 @@ impl DerivationContext {
             offset += context_offset;
             (G2Affine::from(canister_key_with_context), offset)
         } else {
-            (G2Affine::from(canister_key), offset)
+            (canister_key, offset)
         }
     }
 }
@@ -232,13 +232,13 @@ impl EncryptedKey {
         let l = LagrangeCoefficients::at_zero(&NodeIndices::from_map(nodes));
 
         let c1 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.1.c1).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| i.1.c1.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c2 = l
-            .interpolate_g2(&nodes.iter().map(|i| &i.1.c2).collect::<Vec<_>>())
+            .interpolate_g2(&nodes.iter().map(|i| i.1.c2.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
         let c3 = l
-            .interpolate_g1(&nodes.iter().map(|i| &i.1.c3).collect::<Vec<_>>())
+            .interpolate_g1(&nodes.iter().map(|i| i.1.c3.clone()).collect::<Vec<_>>())
             .expect("Number of nodes and shares guaranteed equal");
 
         Ok(Self { c1, c2, c3 })
@@ -435,7 +435,7 @@ impl EncryptedKeyShare {
     ) -> bool {
         let (dpk, offset) = context.derive_key(master_pk);
 
-        let derived_node_key = G2Affine::from(G2Affine::generator() * &offset + node_pk);
+        let derived_node_key = G2Affine::from(G2Affine::generator().mul_vartime(&offset) + node_pk);
 
         let msg = G1Affine::augmented_hash(&dpk, input);
 
