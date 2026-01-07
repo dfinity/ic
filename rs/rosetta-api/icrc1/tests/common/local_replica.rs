@@ -69,10 +69,10 @@ pub fn icrc_ledger_default_args_builder() -> InitArgsBuilder {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         })
-        .with_metadata_entry(MetadataKey::parse(NAT_META_KEY).unwrap(), NAT_META_VALUE)
-        .with_metadata_entry(MetadataKey::parse(INT_META_KEY).unwrap(), INT_META_VALUE)
-        .with_metadata_entry(MetadataKey::parse(TEXT_META_KEY).unwrap(), TEXT_META_VALUE)
-        .with_metadata_entry(MetadataKey::parse(BLOB_META_KEY).unwrap(), BLOB_META_VALUE)
+        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
+        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
+        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
+        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
 }
 
 // Return the wasm of the icrc ledger

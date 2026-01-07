@@ -230,8 +230,10 @@ impl InitArgsBuilder {
         self
     }
 
-    pub fn with_metadata_entry(mut self, name: impl ToString, value: impl Into<Value>) -> Self {
-        self.0.metadata.push((name.to_string(), value.into()));
+    pub fn with_metadata_entry(mut self, key: &str, value: impl Into<Value>) -> Self {
+        let metadata_key = MetadataKey::parse(key)
+            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        self.0.metadata.push((metadata_key, value.into()));
         self
     }
 

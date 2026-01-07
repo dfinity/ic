@@ -606,7 +606,7 @@ impl SnsInitPayload {
 
         if let Some(token_logo) = &self.token_logo {
             payload_builder = payload_builder.with_metadata_entry(
-                ICRC1_TOKEN_LOGO_KEY.to_string(),
+                ICRC1_TOKEN_LOGO_KEY,
                 MetadataValue::Text(token_logo.clone()),
             );
         }
