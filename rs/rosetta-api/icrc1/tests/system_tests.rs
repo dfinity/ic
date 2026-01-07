@@ -40,6 +40,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -895,7 +896,7 @@ async fn set_fee_col_107(
         builder = builder.with_parent_hash(prev_block_hash);
     }
     let fee_col_block = builder
-        .with_btype("107feecol".to_string())
+        .with_btype(BTYPE_107.to_string())
         .fee_collector(fee_col, None, None, None)
         .build();
     let block_index = add_block(agent, ledger_canister_id, &fee_col_block)

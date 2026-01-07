@@ -6,6 +6,7 @@ use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -597,7 +598,7 @@ pub fn store_blocks(
                 caller: _,
                 mthd: _,
             } => (
-                "107feecol",
+                BTYPE_107,
                 None,
                 None,
                 None,

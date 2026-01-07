@@ -6,6 +6,7 @@ use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::{
     icrc::generic_value::Value,
     icrc1::{account::Account, transfer::Memo},
@@ -432,7 +433,7 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                     expires_at,
                 })
             }
-            "107feecol" => {
+            BTYPE_107 => {
                 let fee_collector: Option<Account> =
                     get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
                 let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
@@ -529,7 +530,7 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 caller,
                 mthd,
             } => {
-                map.insert("op".to_string(), Value::text("107feecol"));
+                map.insert("op".to_string(), Value::text(BTYPE_107));
                 if let Some(fee_collector) = fee_collector {
                     map.insert("fee_collector".to_string(), Value::from(fee_collector));
                 }
@@ -696,6 +697,7 @@ mod tests {
     use icrc_ledger_types::icrc::generic_value::Value;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc107::schema::SET_FEE_COL_107;
     use num_bigint::BigUint;
     use proptest::collection::vec;
     use proptest::prelude::{Just, any};
@@ -789,8 +791,8 @@ mod tests {
             option::of(arb_principal()), // caller
             prop_oneof![
                 Just(None),
-                Just(Some("107feecol".to_string())),
-                Just(Some("107set_fee_collector".to_string())),
+                Just(Some(BTYPE_107.to_string())),
+                Just(Some(SET_FEE_COL_107.to_string())),
                 Just(Some("other_mthd".to_string()))
             ],
         )
@@ -856,7 +858,7 @@ mod tests {
                             fee_collector: _,
                             caller: _,
                             mthd: _,
-                        } => Some("107feecol".to_string()),
+                        } => Some(BTYPE_107.to_string()),
                         _ => None,
                     },
                 },
