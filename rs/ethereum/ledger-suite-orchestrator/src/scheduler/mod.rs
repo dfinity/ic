@@ -929,7 +929,7 @@ fn icrc1_ledger_init_arg(
         token_name: ledger_init_arg.token_name,
         token_symbol: ledger_init_arg.token_symbol,
         metadata: vec![(
-            MetadataKey::ICRC1_LOGO.to_string(),
+            MetadataKey::parse(MetadataKey::ICRC1_LOGO).unwrap(),
             LedgerMetadataValue::from(ledger_init_arg.token_logo),
         )],
         archive_options: icrc1_archive_options(
