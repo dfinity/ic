@@ -416,7 +416,3 @@ pub fn only_one<T, I: IntoIterator<Item = T>>(iter: I) -> T {
     );
     result
 }
-
-pub fn expect_only_one<T, I: IntoIterator<Item = T>>(iter: I) {
-    only_one(iter);
-}

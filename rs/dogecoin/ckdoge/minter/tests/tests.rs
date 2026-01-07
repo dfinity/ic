@@ -227,7 +227,7 @@ mod withdrawal {
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE,
         MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value, expect_only_one
+        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
@@ -258,7 +258,7 @@ mod withdrawal {
             )
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction_in_mempool()
-            .assert_sent_transactions(expect_only_one)
+            .assert_sent_transactions(|txs| {only_one(txs);})
             .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_single_transaction()
     }
@@ -497,7 +497,7 @@ fn should_estimate_withdrawal_fee() {
 
 mod post_upgrade {
     use ic_ckdoge_minter::lifecycle::init::Network;
-    use ic_ckdoge_minter_test_utils::{LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, only_one, DogecoinUsers, expect_only_one};
+    use ic_ckdoge_minter_test_utils::{LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, only_one, DogecoinUsers };
     use icrc_ledger_types::icrc1::account::Account;
 
     #[test]
@@ -539,7 +539,7 @@ mod post_upgrade {
             )
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction_in_mempool()
-            .assert_sent_transactions(expect_only_one)
+            .assert_sent_transactions(|txs| {only_one(txs);})
             .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_single_transaction();
 
