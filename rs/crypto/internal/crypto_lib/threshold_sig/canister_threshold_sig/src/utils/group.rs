@@ -850,7 +850,7 @@ impl EccPoint {
     /// and performs one step for the scalar-point multiplication.
     /// This function must be called as many times as the length of
     /// the NAF representation of the scalar.
-    ///     
+    ///
     /// Warning: this function leaks information about the scalars via
     /// side channels. Do not use this function with secret scalars.
     fn scalar_mul_step_vartime(
@@ -1060,6 +1060,7 @@ impl EccPoint {
 
         let mut buckets: Vec<EccPoint> = (0..Window::MAX).map(|_| id.clone()).collect();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..num_windows {
             for j in 0..point_scalar_pairs.len() {
                 let bucket_index = windows[j][i] as usize;

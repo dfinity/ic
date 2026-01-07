@@ -26,7 +26,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:fab0aadaabca3ac87408e0f09ea73190fc294058bddf215838b7f48c40abbf2f
+      image: ghcr.io/dfinity/ic-build@sha256:812dfb075771687cf56b99064081bbdddc4f3d5571c7801d0903fff9efad4cbc
       options: >-
          -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 90
@@ -88,6 +88,7 @@ jobs:
           elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
               # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
               # branch
+              release_build="false"
               diff_only="false"
               skip_long_tests="false"
           elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
