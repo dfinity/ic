@@ -11,11 +11,11 @@ use std::{
     sync::Arc,
 };
 
-use crate::CertificationVersion;
-
 use super::types;
+use crate::CertificationVersion;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, Payload, RejectSignals, STREAM_SUPPORTED_FLAGS, StreamFlagBits,
+    Bytes, Cycles, Funds, Payload, Refund, RejectSignals, RequestMetadata, STREAM_SUPPORTED_FLAGS,
+    StreamFlagBits,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::time::CoarseTime;
@@ -68,6 +68,73 @@ impl TryFrom<RequestOrResponseV21> for ic_types::messages::StreamMessage {
             } => Ok(Self::Response(Arc::new(response.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
                 "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{other:?}`"
+            ))),
+        }
+    }
+}
+
+/// Canonical representation of `ic_types::messages::StreamMessage`at certification version V22.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamMessageV22 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<RequestV22>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response: Option<ResponseV22>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund: Option<Refund>,
+}
+
+impl From<(&ic_types::messages::StreamMessage, CertificationVersion)> for StreamMessageV22 {
+    fn from(
+        (message, certification_version): (
+            &ic_types::messages::StreamMessage,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        use ic_types::messages::StreamMessage::*;
+        match message {
+            Request(request) => Self {
+                request: Some((request.as_ref(), certification_version).into()),
+                response: None,
+                refund: None,
+            },
+            Response(response) => Self {
+                request: None,
+                response: Some((response.as_ref(), certification_version).into()),
+                refund: None,
+            },
+            Refund(refund) => Self {
+                request: None,
+                response: None,
+                refund: Some((refund.as_ref(), certification_version).into()),
+            },
+        }
+    }
+}
+
+impl TryFrom<StreamMessageV22> for ic_types::messages::StreamMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(message: StreamMessageV22) -> Result<Self, Self::Error> {
+        match message {
+            StreamMessageV22 {
+                request: Some(request),
+                response: None,
+                refund: None,
+            } => Ok(Self::Request(Arc::new(request.try_into()?))),
+            StreamMessageV22 {
+                request: None,
+                response: Some(response),
+                refund: None,
+            } => Ok(Self::Response(Arc::new(response.try_into()?))),
+            StreamMessageV22 {
+                request: None,
+                response: None,
+                refund: Some(refund),
+            } => Ok(Self::Refund(Arc::new(refund.try_into()?))),
+            other => Err(ProxyDecodeError::Other(format!(
+                "StreamMessage: expected exactly one of `request`, `response` or `refund` to be `Some(_)`, got `{other:?}`"
             ))),
         }
     }
@@ -144,6 +211,77 @@ impl TryFrom<RequestV19> for ic_types::messages::Request {
     }
 }
 
+/// Canonical representation of `ic_types::messages::Request` at certification version V22.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestV22 {
+    #[serde(with = "serde_bytes")]
+    pub receiver: Bytes,
+    #[serde(with = "serde_bytes")]
+    pub sender: Bytes,
+    pub sender_reply_callback: u64,
+    pub payment: Funds,
+    pub method_name: String,
+    #[serde(with = "serde_bytes")]
+    pub method_payload: Bytes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycles_payment: Option<Cycles>,
+    // TODO(MR-642): Remove `Option` from `metadata`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<RequestMetadata>,
+    #[serde(skip_serializing_if = "types::is_zero", default)]
+    pub deadline: u32,
+}
+
+impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV22 {
+    fn from(
+        (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
+    ) -> Self {
+        let funds = Funds {
+            cycles: (&request.payment, certification_version).into(),
+            icp: 0,
+        };
+        Self {
+            receiver: request.receiver.get().to_vec(),
+            sender: request.sender.get().to_vec(),
+            sender_reply_callback: request.sender_reply_callback.get(),
+            payment: funds,
+            method_name: request.method_name.clone(),
+            method_payload: request.method_payload.clone(),
+            cycles_payment: None,
+            metadata: Some((&request.metadata).into()),
+            deadline: request.deadline.as_secs_since_unix_epoch(),
+        }
+    }
+}
+
+impl TryFrom<RequestV22> for ic_types::messages::Request {
+    type Error = ProxyDecodeError;
+
+    fn try_from(request: RequestV22) -> Result<Self, Self::Error> {
+        let payment = match request.cycles_payment {
+            Some(cycles) => cycles,
+            None => request.payment.cycles,
+        }
+        .try_into()?;
+
+        Ok(Self {
+            receiver: ic_types::CanisterId::unchecked_from_principal(
+                request.receiver.as_slice().try_into()?,
+            ),
+            sender: ic_types::CanisterId::unchecked_from_principal(
+                request.sender.as_slice().try_into()?,
+            ),
+            sender_reply_callback: request.sender_reply_callback.into(),
+            payment,
+            method_name: request.method_name,
+            method_payload: request.method_payload,
+            metadata: request.metadata.map_or_else(Default::default, From::from),
+            deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
+        })
+    }
+}
+
 /// Canonical representation of `ic_types::messages::Response` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -185,6 +323,68 @@ impl TryFrom<ResponseV19> for ic_types::messages::Response {
     type Error = ProxyDecodeError;
 
     fn try_from(response: ResponseV19) -> Result<Self, Self::Error> {
+        let refund = match response.cycles_refund {
+            Some(cycles) => cycles,
+            None => response.refund.cycles,
+        }
+        .try_into()?;
+
+        Ok(Self {
+            originator: ic_types::CanisterId::unchecked_from_principal(
+                response.originator.as_slice().try_into()?,
+            ),
+            respondent: ic_types::CanisterId::unchecked_from_principal(
+                response.respondent.as_slice().try_into()?,
+            ),
+            originator_reply_callback: response.originator_reply_callback.into(),
+            refund,
+            response_payload: response.response_payload.try_into()?,
+            deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
+        })
+    }
+}
+
+/// Canonical representation of `ic_types::messages::Response` at certification version V22.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResponseV22 {
+    #[serde(with = "serde_bytes")]
+    pub originator: Bytes,
+    #[serde(with = "serde_bytes")]
+    pub respondent: Bytes,
+    pub originator_reply_callback: u64,
+    pub refund: Funds,
+    pub response_payload: Payload,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycles_refund: Option<Cycles>,
+    #[serde(skip_serializing_if = "types::is_zero", default)]
+    pub deadline: u32,
+}
+
+impl From<(&ic_types::messages::Response, CertificationVersion)> for ResponseV22 {
+    fn from(
+        (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
+    ) -> Self {
+        let funds = Funds {
+            cycles: (&response.refund, certification_version).into(),
+            icp: 0,
+        };
+        Self {
+            originator: response.originator.get().to_vec(),
+            respondent: response.respondent.get().to_vec(),
+            originator_reply_callback: response.originator_reply_callback.get(),
+            refund: funds,
+            response_payload: (&response.response_payload, certification_version).into(),
+            cycles_refund: None,
+            deadline: response.deadline.as_secs_since_unix_epoch(),
+        }
+    }
+}
+
+impl TryFrom<ResponseV22> for ic_types::messages::Response {
+    type Error = ProxyDecodeError;
+
+    fn try_from(response: ResponseV22) -> Result<Self, Self::Error> {
         let refund = match response.cycles_refund {
             Some(cycles) => cycles,
             None => response.refund.cycles,

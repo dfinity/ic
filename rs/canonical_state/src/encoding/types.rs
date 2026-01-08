@@ -113,7 +113,8 @@ pub struct Request {
     #[serde(with = "serde_bytes")]
     pub sender: Bytes,
     pub sender_reply_callback: u64,
-    pub payment: Funds,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payment: Option<Funds>,
     pub method_name: String,
     #[serde(with = "serde_bytes")]
     pub method_payload: Bytes,
@@ -135,7 +136,8 @@ pub struct Response {
     #[serde(with = "serde_bytes")]
     pub respondent: Bytes,
     pub originator_reply_callback: u64,
-    pub refund: Funds,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund: Option<Funds>,
     pub response_payload: Payload,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_refund: Option<Cycles>,
@@ -468,18 +470,27 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
+        let cycles_payment: Cycles = (&request.payment, certification_version).into();
         let funds = Funds {
-            cycles: (&request.payment, certification_version).into(),
+            cycles: cycles_payment.clone(),
             icp: 0,
         };
         Self {
             receiver: request.receiver.get().to_vec(),
             sender: request.sender.get().to_vec(),
             sender_reply_callback: request.sender_reply_callback.get(),
-            payment: funds,
+            payment: if certification_version >= CertificationVersion::V23 {
+                None
+            } else {
+                Some(funds)
+            },
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
-            cycles_payment: None,
+            cycles_payment: if certification_version >= CertificationVersion::V23 {
+                Some(cycles_payment)
+            } else {
+                None
+            },
             metadata: Some((&request.metadata).into()),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
@@ -490,9 +501,9 @@ impl TryFrom<Request> for ic_types::messages::Request {
     type Error = ProxyDecodeError;
 
     fn try_from(request: Request) -> Result<Self, Self::Error> {
-        let payment = match request.cycles_payment {
-            Some(cycles) => cycles,
-            None => request.payment.cycles,
+        let payment = match request.payment {
+            Some(payment) => payment.cycles,
+            None => request.cycles_payment.unwrap_or_default(),
         }
         .try_into()?;
 
@@ -517,17 +528,26 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
+        let cycles_refund: Cycles = (&response.refund, certification_version).into();
         let funds = Funds {
-            cycles: (&response.refund, certification_version).into(),
+            cycles: cycles_refund.clone(),
             icp: 0,
         };
         Self {
             originator: response.originator.get().to_vec(),
             respondent: response.respondent.get().to_vec(),
             originator_reply_callback: response.originator_reply_callback.get(),
-            refund: funds,
+            refund: if certification_version >= CertificationVersion::V23 {
+                None
+            } else {
+                Some(funds)
+            },
             response_payload: (&response.response_payload, certification_version).into(),
-            cycles_refund: None,
+            cycles_refund: if certification_version >= CertificationVersion::V23 {
+                Some(cycles_refund)
+            } else {
+                None
+            },
             deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -537,9 +557,9 @@ impl TryFrom<Response> for ic_types::messages::Response {
     type Error = ProxyDecodeError;
 
     fn try_from(response: Response) -> Result<Self, Self::Error> {
-        let refund = match response.cycles_refund {
-            Some(cycles) => cycles,
-            None => response.refund.cycles,
+        let refund = match response.refund {
+            Some(refund) => refund.cycles,
+            None => response.cycles_refund.unwrap_or_default(),
         }
         .try_into()?;
 
