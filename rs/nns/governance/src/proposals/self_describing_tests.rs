@@ -392,9 +392,7 @@ fn test_derive_single_tuple_enum() {
 fn test_derive_mixed_enum_unit_variant() {
     assert_self_describing_value_is(
         TestMixedEnum::Empty,
-        SelfDescribingValue::Map(hashmap! {
-            "Empty".to_string() => SelfDescribingValue::Null,
-        }),
+        SelfDescribingValue::Text("Empty".to_string()),
     );
 }
 
