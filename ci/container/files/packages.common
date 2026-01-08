@@ -23,9 +23,6 @@ sudo
 jq
 rclone
 time
-podman # rosetta-release.yml
-rsync # container-base-images.yml
-lcov # used for bazel coverage
 
 # RUST
 gcc
@@ -64,6 +61,7 @@ libsystemd-dev
 libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
+podman
 zstd
 
 # Unknown

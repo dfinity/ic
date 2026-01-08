@@ -131,6 +131,7 @@ jobs:
         shell: bash
         run: |
           set -xeuo pipefail
+          apt-get update && apt-get install -y rsync
           find artifacts
           rsync -rv artifacts/ .
           rm -rf artifacts

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+# Ensure lcov is installed
+if ! command -v lcov >/dev/null 2>&1; then
+    echo "lcov not found, installing..."
+    apt-get update && apt-get install -y lcov
+fi
+
 bazel query --universe_scope=//... \
     "kind(test, //rs/...) except kind(test, allrdeps(attr('tags', 'canister', //rs/...)))" \
     >cov_targets.txt
