@@ -222,7 +222,7 @@ impl TryFrom<Value> for IcrcBlock {
         let fee_collector = get_opt_field::<Account>(&map, &[], "fee_col")?;
         let fee_collector_block_index = get_opt_field::<u64>(&map, &[], "fee_col_block")?;
         let transaction = map.get("tx").ok_or(anyhow!("Missing field 'tx'"))?.clone();
-        let transaction = IcrcTransaction::try_from(transaction)?;
+        let transaction = IcrcTransaction::try_from((btype.clone(), transaction))?;
 
         Ok(Self {
             parent_hash,
@@ -304,16 +304,19 @@ impl IcrcTransaction {
     }
 }
 
-impl TryFrom<Value> for IcrcTransaction {
+impl TryFrom<(Option<String>, Value)> for IcrcTransaction {
     type Error = anyhow::Error;
 
-    fn try_from(value: Value) -> anyhow::Result<Self> {
+    fn try_from(btype_and_tx: (Option<String>, Value)) -> anyhow::Result<Self> {
         const FIELD_PREFIX: &[&str] = &["tx"];
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = btype_and_tx
+            .1
+            .as_map()
+            .map_err(|err| anyhow!("{:?}", err))?;
 
         let created_at_time = get_opt_field::<u64>(&map, FIELD_PREFIX, "ts")?;
         let memo = get_opt_field::<ByteBuf>(&map, FIELD_PREFIX, "memo")?.map(Memo);
-        let operation = IcrcOperation::try_from(map)?;
+        let operation = IcrcOperation::try_from((btype_and_tx.0, map))?;
         Ok(Self {
             operation,
             created_at_time,
@@ -376,79 +379,89 @@ pub enum IcrcOperation {
     },
 }
 
-impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
+impl TryFrom<(Option<String>, BTreeMap<String, Value>)> for IcrcOperation {
     type Error = anyhow::Error;
 
-    fn try_from(map: BTreeMap<String, Value>) -> anyhow::Result<Self> {
+    fn try_from(btype_and_map: (Option<String>, BTreeMap<String, Value>)) -> anyhow::Result<Self> {
         const FIELD_PREFIX: &[&str] = &["tx"];
+        let map = btype_and_map.1;
         let amount: Option<Nat> = get_opt_field(&map, FIELD_PREFIX, "amt")?;
         let fee: Option<Nat> = get_opt_field(&map, FIELD_PREFIX, "fee")?;
-        match get_field::<String>(&map, FIELD_PREFIX, "op")?.as_str() {
-            "burn" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
-                Ok(Self::Burn {
-                    from,
-                    spender,
-                    amount: amount
-                        .ok_or_else(|| anyhow!("Missing field 'amt' for Burn operation"))?,
-                    fee,
-                })
+        let op = if let Some(tx_op) = get_opt_field::<String>(&map, FIELD_PREFIX, "op")? {
+            Some(tx_op)
+        } else {
+            btype_and_map.0
+        };
+        if let Some(op) = op {
+            match op.as_str() {
+                "burn" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
+                    Ok(Self::Burn {
+                        from,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Burn operation"))?,
+                        fee,
+                    })
+                }
+                "mint" => {
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    Ok(Self::Mint {
+                        to,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Mint operation"))?,
+                        fee,
+                    })
+                }
+                "xfer" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
+                    let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
+                    Ok(Self::Transfer {
+                        from,
+                        to,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Transfer operation"))?,
+                        fee,
+                    })
+                }
+                "approve" => {
+                    let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
+                    let spender: Account = get_field(&map, FIELD_PREFIX, "spender")?;
+                    let expected_allowance: Option<Nat> =
+                        get_opt_field(&map, FIELD_PREFIX, "expected_allowance")?;
+                    let expires_at = get_opt_field::<u64>(&map, FIELD_PREFIX, "expires_at")?;
+                    Ok(Self::Approve {
+                        from,
+                        spender,
+                        amount: amount
+                            .ok_or_else(|| anyhow!("Missing field 'amt' for Approve operation"))?,
+                        fee,
+                        expected_allowance,
+                        expires_at,
+                    })
+                }
+                BTYPE_107 => {
+                    let fee_collector: Option<Account> =
+                        get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
+                    let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
+                    let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
+                    Ok(Self::FeeCollector {
+                        fee_collector,
+                        caller,
+                        mthd,
+                    })
+                }
+                found => {
+                    bail!(
+                        "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                    )
+                }
             }
-            "mint" => {
-                let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                Ok(Self::Mint {
-                    to,
-                    amount: amount
-                        .ok_or_else(|| anyhow!("Missing field 'amt' for Mint operation"))?,
-                    fee,
-                })
-            }
-            "xfer" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                let spender: Option<Account> = get_opt_field(&map, FIELD_PREFIX, "spender")?;
-                Ok(Self::Transfer {
-                    from,
-                    to,
-                    spender,
-                    amount: amount
-                        .ok_or_else(|| anyhow!("Missing field 'amt' for Transfer operation"))?,
-                    fee,
-                })
-            }
-            "approve" => {
-                let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
-                let spender: Account = get_field(&map, FIELD_PREFIX, "spender")?;
-                let expected_allowance: Option<Nat> =
-                    get_opt_field(&map, FIELD_PREFIX, "expected_allowance")?;
-                let expires_at = get_opt_field::<u64>(&map, FIELD_PREFIX, "expires_at")?;
-                Ok(Self::Approve {
-                    from,
-                    spender,
-                    amount: amount
-                        .ok_or_else(|| anyhow!("Missing field 'amt' for Approve operation"))?,
-                    fee,
-                    expected_allowance,
-                    expires_at,
-                })
-            }
-            BTYPE_107 => {
-                let fee_collector: Option<Account> =
-                    get_opt_field(&map, FIELD_PREFIX, "fee_collector")?;
-                let caller: Option<Principal> = get_opt_field(&map, FIELD_PREFIX, "caller")?;
-                let mthd: Option<String> = get_opt_field(&map, FIELD_PREFIX, "mthd")?;
-                Ok(Self::FeeCollector {
-                    fee_collector,
-                    caller,
-                    mthd,
-                })
-            }
-            found => {
-                bail!(
-                    "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
-                )
-            }
+        } else {
+            bail!("Operation type not specified as block type or 'op' field")
         }
     }
 }
@@ -530,7 +543,6 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 caller,
                 mthd,
             } => {
-                map.insert("op".to_string(), Value::text(BTYPE_107));
                 if let Some(fee_collector) = fee_collector {
                     map.insert("fee_collector".to_string(), Value::from(fee_collector));
                 }
@@ -868,7 +880,11 @@ mod tests {
     #[test]
     fn test_operation_value_codec() {
         proptest!(|(op in arb_op().no_shrink())| {
-            let actual_op = match IcrcOperation::try_from(BTreeMap::from(op.clone())) {
+            let btype = match op {
+                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
+            let actual_op = match IcrcOperation::try_from((btype, BTreeMap::from(op.clone()))) {
                 Ok(actual_op) => actual_op,
                 Err(err) => panic!("{err:?}"),
             };
@@ -879,7 +895,11 @@ mod tests {
     #[test]
     fn test_transaction_value_codec() {
         proptest!(|(tx in arb_transaction().no_shrink())| {
-            let actual_tx = match IcrcTransaction::try_from(Value::from(tx.clone())) {
+            let btype = match tx.operation {
+                IcrcOperation::FeeCollector { .. } => Some(BTYPE_107.to_string()),
+                _ => None,
+            };
+            let actual_tx = match IcrcTransaction::try_from((btype, Value::from(tx.clone()))) {
                 Ok(actual_tx) => actual_tx,
                 Err(err) => panic!("{err:?}"),
             };
