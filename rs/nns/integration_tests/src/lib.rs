@@ -136,6 +136,9 @@ mod subnet_rental_canister;
 mod stop_or_start_canister;
 
 #[cfg(test)]
+mod take_canister_snapshot;
+
+#[cfg(test)]
 mod api_boundary_node_queries;
 
 #[cfg(test)]
