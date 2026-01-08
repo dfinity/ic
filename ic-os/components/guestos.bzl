@@ -59,6 +59,8 @@ component_files = {
     Label("guestos/init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
     Label("guestos/init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
     Label("guestos/init/setup-encryption/systemd-fsck@dev-mapper-var_crypt.service"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service",
+    Label("guestos/init/setup-encryption/retry-var-failure.service"): "/etc/systemd/system/retry-var-failure.service",
+    Label("guestos/init/setup-encryption/retry-var-failure.sh"): "/opt/ic/bin/retry-var-failure.sh",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
     Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",
