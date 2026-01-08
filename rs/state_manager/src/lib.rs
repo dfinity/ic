@@ -808,6 +808,9 @@ struct CertificationMetadata {
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
+    /// Set to `true` if `StateManagerImpl::commit_and_certify`
+    /// pushes the state snapshot to `StateManagerImpl::states`.
+    state_snapshot_available: bool,
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
@@ -1811,6 +1814,7 @@ impl StateManagerImpl {
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         state: &ReplicatedState,
+        state_snapshot_available: bool,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
         let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state))?;
@@ -1829,6 +1833,7 @@ impl StateManagerImpl {
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certified_state_hash,
             certification: None,
+            state_snapshot_available,
         })
     }
 
@@ -1850,7 +1855,7 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            let certification = Self::compute_certification_metadata(metrics, log, &state)
+            let certification = Self::compute_certification_metadata(metrics, log, &state, true)
                 .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
             info!(
                 log,
@@ -1991,6 +1996,7 @@ impl StateManagerImpl {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
             hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certification: None,
+            state_snapshot_available: true,
         };
 
         let mut states = self.states.write();
@@ -2204,8 +2210,9 @@ impl StateManagerImpl {
             }
         }
 
-        let tip_height = self.tip_height.load(Ordering::Relaxed);
-        let last_certification_height_to_keep = min(last_height_to_keep, Height::new(tip_height));
+        let latest_certified_height = self.latest_certified_height.load(Ordering::Relaxed);
+        let last_certification_height_to_keep =
+            min(last_height_to_keep, Height::new(latest_certified_height));
         let mut certifications_metadata = states
             .certifications_metadata
             .split_off(&last_certification_height_to_keep);
@@ -2229,7 +2236,13 @@ impl StateManagerImpl {
             .certifications_metadata
             .iter()
             .rev()
-            .find_map(|(h, m)| m.certification.as_ref().map(|_| *h))
+            .find_map(|(h, m)| {
+                if m.certification.is_some() && m.state_snapshot_available {
+                    Some(*h)
+                } else {
+                    None
+                }
+            })
             .unwrap_or(Self::INITIAL_STATE_HEIGHT);
 
         self.latest_certified_height
@@ -2990,6 +3003,7 @@ impl StateManager for StateManagerImpl {
                 hash_tree: None,
                 certified_state_hash: certification.signed.content.hash.clone().get(),
                 certification: Some(certification),
+                state_snapshot_available: false,
             };
             states.certifications_metadata.insert(height, metadata);
         }
@@ -3214,7 +3228,7 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .entry(height)
                 .or_insert_with(|| {
-                    Self::compute_certification_metadata(&self.metrics, &self.log, &state)
+                    Self::compute_certification_metadata(&self.metrics, &self.log, &state, false)
                         .unwrap_or_else(|err| {
                             fatal!(self.log, "Failed to compute hash tree: {:?}", err)
                         })
@@ -3247,7 +3261,7 @@ impl StateManager for StateManagerImpl {
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &state)
+            Self::compute_certification_metadata(&self.metrics, &self.log, &state, true)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         if scope == CertificationScope::Full {
