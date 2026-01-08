@@ -275,10 +275,21 @@ fn convert_self_describing_action(
 
     let type_name = Some(type_name.clone());
     let type_description = Some(type_description.clone());
+
+    let paths_to_omit =         if omit_create_service_nervous_system_logos {
+        vec![
+            RecordPath { fields_names: vec!["logo"] },
+            RecordPath {
+                fields_names: vec!["ledger_parameters", "token_logo"],
+            },
+        ]
+    } else {
+        vec![]
+    };
     let value = value.as_ref().map(|value| {
         convert_self_describing_value(
             value,
-            &PathToOmit::default_paths_to_omit(omit_create_service_nervous_system_logos),
+            paths_to_omit,
         )
     });
 
@@ -289,33 +300,44 @@ fn convert_self_describing_action(
     }
 }
 
-struct PathToOmit {
+
+/// For example, suppose we have
+///
+/// ```
+/// struct Plane {
+///     wing: Wing,
+///     landing_gear: LandingGear,
+/// }
+///
+/// struct LandingGear {
+///    wheel: Wheel,
+/// }
+///
+/// struct Wheel {
+///     tire: Tire,
+/// }
+///
+/// let plane: Plane = ...;
+/// ```
+///
+/// To reach the `Tire` from `plane`, we can use the path
+/// `vec!["landing_gear", "wheel", "tire"]`, because `plane.landing_gear.wheel.tire`
+/// evaluates to the `Tire`.
+#[derive(Clone)]
+struct RecordPath { 
     // Must have at least one element.
-    path: Vec<&'static str>,
+    fields_names: Vec<&'static str>,
 }
 
 enum OmitAction {
     DoNothing,
     OmitCurrent,
-    OmitDescendant(PathToOmit),
+    OmitDescendant(RecordPath),
 }
 
-impl PathToOmit {
-    fn default_paths_to_omit(omit_create_service_nervous_system_logos: bool) -> Vec<Self> {
-        if omit_create_service_nervous_system_logos {
-            vec![
-                Self { path: vec!["logo"] },
-                Self {
-                    path: vec!["ledger_parameters", "token_logo"],
-                },
-            ]
-        } else {
-            vec![]
-        }
-    }
-
+impl RecordPath {
     fn matches(&self, field_name: &str) -> OmitAction {
-        let Some((&first, rest)) = self.path.split_first() else {
+        let Some((&first, rest)) = self.fields_names.split_first() else {
             // This should never happen, but we handle it anyway.
             return OmitAction::DoNothing;
         };
@@ -325,15 +347,15 @@ impl PathToOmit {
         if rest.is_empty() {
             return OmitAction::OmitCurrent;
         }
-        OmitAction::OmitDescendant(PathToOmit {
-            path: rest.to_vec(),
+        OmitAction::OmitDescendant(RecordPath {
+            fields_names: rest.to_vec(),
         })
     }
 }
 
 fn convert_self_describing_field(
     field_name: &str,
-    paths_to_omit: &[PathToOmit],
+    paths_to_omit: Vec<RecordPath>,
     original_value: &pb::SelfDescribingValue,
 ) -> pb_api::SelfDescribingValue {
     let match_results = paths_to_omit
@@ -353,16 +375,22 @@ fn convert_self_describing_field(
             _ => None,
         })
         .collect::<Vec<_>>();
-    convert_self_describing_value(original_value, &descendant_paths_to_omit)
+    convert_self_describing_value(original_value, descendant_paths_to_omit)
 }
 
 fn convert_self_describing_value(
     item: &pb::SelfDescribingValue,
-    paths_to_omit: &[PathToOmit],
+    paths_to_omit: Vec<RecordPath>,
 ) -> pb_api::SelfDescribingValue {
-    let pb::SelfDescribingValue { value: Some(value) } = item else {
+    let pb::SelfDescribingValue { value } = item;
+
+    // This should be unreacheable, because we always construct a SelfDescribingValue with a value.
+    // Ideally the type should be non-optional, but prost always generates an optional field for
+    // messages.
+    let Some(value) = value else {
         return pb_api::SelfDescribingValue::Map(HashMap::new());
     };
+
     match value {
         pb::self_describing_value::Value::Blob(v) => pb_api::SelfDescribingValue::Blob(v.clone()),
         pb::self_describing_value::Value::Text(v) => pb_api::SelfDescribingValue::Text(v.clone()),
@@ -378,16 +406,21 @@ fn convert_self_describing_value(
         pb::self_describing_value::Value::Array(v) => pb_api::SelfDescribingValue::Array(
             v.values
                 .iter()
-                .map(|value| convert_self_describing_value(value, &[]))
+                .map(|value| convert_self_describing_value(value, vec![]))
                 .collect(),
         ),
+
+        // This is where `paths_to_omit` takes effect - the resursion (calling
+        // `convert_self_describing_value` happens indirectly through
+        // `convert_self_describing_field`, which calls `convert_self_describing_value` if the field
+        // should not be omitted.
         pb::self_describing_value::Value::Map(v) => pb_api::SelfDescribingValue::Map(
             v.values
                 .iter()
                 .map(|(k, v)| {
                     (
                         k.clone(),
-                        convert_self_describing_field(k, paths_to_omit, v),
+                        convert_self_describing_field(k, paths_to_omit.clone(), v),
                     )
                 })
                 .collect(),
@@ -395,15 +428,11 @@ fn convert_self_describing_value(
     }
 }
 
-// This is only used for tests, because the `pb::SelfDescribingValue` can be large, and a direct
-// conversion would most likely involve cloning the source value. Previously, we had an issue where
-// it caused too many instructions due to the cloning, even when the large fields were omitted after
-// cloning. The `cfg(test)` can be removed, however, if we decide to use SelfDescribingValue in
-// other scenarios where there is less concern about cloning large fields. Ideally, we would
+// To avoid cloning large values in production, this is only available in tests.
 #[cfg(test)]
 impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
     fn from(value: pb::SelfDescribingValue) -> Self {
-        convert_self_describing_value(&value, &[])
+        convert_self_describing_value(&value, vec![])
     }
 }
 
@@ -674,7 +703,6 @@ mod tests {
 
     #[test]
     fn test_self_describing_value_omit_logos() {
-        // Not all fields are included in the test, for simplicity.
         let create_service_nervous_system = CreateServiceNervousSystem {
             name: Some("some name".to_string()),
             logo: Some(Image {
