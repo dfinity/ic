@@ -43,6 +43,7 @@ liblmdb-dev
 liblzma-dev
 
 # IC-OS
+clang
 cryptsetup-bin
 dosfstools # provides mkfs.vfat
 faketime
