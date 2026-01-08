@@ -32,6 +32,8 @@ jobs:
 
       - name: Login to Docker
         run: |
+          # install podman
+          apt-get -y install podman
           # --compat-auth-file is required by rules_oci/crane.
           mkdir -p "$HOME/.docker"
           podman login \

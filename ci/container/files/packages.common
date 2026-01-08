@@ -23,7 +23,6 @@ sudo
 jq
 rclone
 time
-podman # rosetta-release.yml
 rsync # container-base-images.yml
 lcov # used for bazel coverage
 
