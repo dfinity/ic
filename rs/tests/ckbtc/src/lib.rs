@@ -131,7 +131,7 @@ fn ckbtc_config<Network: IcRpcClientType>(env: TestEnv) {
                             curve: EcdsaCurve::Secp256k1,
                             name: TEST_KEY_LOCAL.to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 10,
+                        pre_signatures_to_create_in_advance: Some(10),
                         max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                     }],
                     signature_request_timeout_ns: None,
