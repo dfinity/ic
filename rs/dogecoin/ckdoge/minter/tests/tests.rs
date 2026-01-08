@@ -224,9 +224,8 @@ mod withdrawal {
         lifecycle::init::Network,
     };
     use ic_ckdoge_minter_test_utils::{
-        DOGECOIN_ADDRESS_1, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE,
-        MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
+        DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup,
+        USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -376,25 +375,25 @@ mod withdrawal {
 
     #[test]
     fn should_resubmit_transaction_when_many_utxos() {
-        // Step 1: deposit btc
+        // Step 1: deposit doge
         // Create many utxos that exceeds threshold by 2 so that after consuming
         // one, the remaining available count is still greater than the threshold.
         // This is to make sure utxo count optimization is triggered.
         const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
 
-        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+        let setup = Setup::new(Network::Regtest).with_doge_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
         let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT + 1;
-        let utxos = utxos_with_value(&[deposit_value; COUNT]);
 
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxos.clone())
+            .dogecoin_send_transaction([deposit_value; COUNT])
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_update_balance()
             .expect_mint();
 
@@ -411,7 +410,10 @@ mod withdrawal {
         setup
             .withdrawal_flow()
             .ledger_approve_minter(account, withdrawal_amount)
-            .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
+            .minter_retrieve_doge_with_approval(
+                withdrawal_amount,
+                DogecoinUsers::WithdrawalRecipientUser.address().to_string(),
+            )
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction_in_mempool()
             //also ensures the resubmission transaction uses 2 inputs.
@@ -420,6 +422,7 @@ mod withdrawal {
                 assert_eq!(sent.len(), 2);
                 sent.iter().for_each(|tx| assert_eq!(tx.input.len(), 2));
             })
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_transaction_by(|sent| &sent[1]);
     }
 
