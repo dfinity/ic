@@ -86,7 +86,7 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
 
 pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
     let highest_processed_block = storage_client
-        .get_highest_block_idx_in_account_balance_table()
+        .get_highest_processed_block_idx()
         .map_err(|e| Error::unable_to_find_block(&e))?
         .ok_or_else(|| {
             Error::unable_to_find_block(&"Highest processed block not found".to_owned())
@@ -538,7 +538,7 @@ pub fn initial_sync_is_completed(
         synched.unwrap()
     } else {
         let block_count = storage_client.get_block_count();
-        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
+        let highest_index = storage_client.get_highest_processed_block_idx();
         *synched = Some(match (block_count, highest_index) {
             // If the blockchain contains no blocks we mark it as not completed
             (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
@@ -1167,15 +1167,28 @@ mod test {
                         };
 
                         // We make sure that the service returns the correct number of transactions for each account
-                        search_transactions_request.account_identifier = Some(
-                            match rosetta_blocks[0].block.transaction.operation {
-                                IcrcOperation::Transfer { from, .. } => from,
-                                IcrcOperation::Mint { to, .. } => to,
-                                IcrcOperation::Burn { from, .. } => from,
-                                IcrcOperation::Approve { from, .. } => from,
+                        for block in &rosetta_blocks {
+                            search_transactions_request.account_identifier =
+                                match block.block.transaction.operation {
+                                    IcrcOperation::Transfer { from, .. } => Some(from.into()),
+                                    IcrcOperation::Mint { to, .. } => Some(to.into()),
+                                    IcrcOperation::Burn { from, .. } => Some(from.into()),
+                                    IcrcOperation::Approve { from, .. } => Some(from.into()),
+                                    IcrcOperation::FeeCollector {
+                                        fee_collector: _,
+                                        caller: _,
+                                        mthd: _,
+                                    } => None,
+                                };
+                            if search_transactions_request.account_identifier.is_some() {
+                                break;
                             }
-                            .into(),
-                        );
+                        }
+                        if search_transactions_request.account_identifier.is_none() {
+                            // Only fee collector blocks found, we cannot search for transactions by accounts.
+                            // This situation is similar to blockchain.is_empty() above.
+                            return Ok(());
+                        }
 
                         let num_of_transactions_with_account = rosetta_blocks
                             .iter()
@@ -1219,6 +1232,11 @@ mod test {
                                             .try_into()
                                             .unwrap(),
                                     ),
+                                IcrcOperation::FeeCollector {
+                                    fee_collector: _,
+                                    caller: _,
+                                    mthd: _,
+                                } => false,
                             })
                             .count();
 
@@ -1545,6 +1563,7 @@ mod test {
                 timestamp: 1000,
                 fee_collector: None,
                 fee_collector_block_index: None,
+                btype: None,
             },
             0,
         )];
@@ -1613,6 +1632,7 @@ mod test {
                     timestamp: 1000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 0,
             ),
@@ -1632,6 +1652,7 @@ mod test {
                     timestamp: 2000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 1,
             ),
@@ -1782,6 +1803,7 @@ mod test {
                     timestamp: 1000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 1: Transfer 300 from main account to subaccount1
@@ -1804,6 +1826,7 @@ mod test {
                     timestamp: 2000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 2: Transfer 200 from main account to subaccount2
@@ -1826,6 +1849,7 @@ mod test {
                     timestamp: 3000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
             // Block 3: Transfer 150 from subaccount1 to other_account
@@ -1848,6 +1872,7 @@ mod test {
                     timestamp: 4000,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
             },
         ];
@@ -2138,6 +2163,7 @@ mod test {
                     timestamp: 1,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 0,
             ),
@@ -2158,6 +2184,7 @@ mod test {
                     timestamp: 2,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 1,
             ),
@@ -2178,6 +2205,7 @@ mod test {
                     timestamp: 3,
                     fee_collector: None,
                     fee_collector_block_index: None,
+                    btype: None,
                 },
                 2,
             ),
@@ -2290,6 +2318,7 @@ mod test {
                         timestamp: 1,
                         fee_collector: None,
                         fee_collector_block_index: None,
+                        btype: None,
                     },
                     block_id,
                 )];
@@ -2317,6 +2346,7 @@ mod test {
                         timestamp: 1,
                         fee_collector: None,
                         fee_collector_block_index: None,
+                        btype: None,
                     },
                     block_id,
                 )];
