@@ -1,9 +1,8 @@
 use crate::{
     canister_manager::uninstall_canister,
     execution_environment::{
-        ExecuteCanisterResult, ExecutionEnvironment, SubnetMessageInstructions,
-        RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions,
-        execute_canister,
+        ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
+        SubnetMessageInstructions, as_num_instructions, as_round_instructions, execute_canister,
     },
     ic00_permissions::Ic00MethodPermissions,
     metrics::MeasurementScope,
