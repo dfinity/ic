@@ -1,6 +1,6 @@
 use crate::DOGE;
-use bitcoin::dogecoin;
 use bitcoin::hashes::Hash;
+use bitcoin::{Amount, dogecoin};
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_bitcoin_canister_mock::{PushUtxosToAddress, Utxo};
 use ic_btc_adapter_test_utils::bitcoind::Daemon;
@@ -139,7 +139,7 @@ impl DogecoinDaemon {
         let _txid = self.send_transaction(
             &DogecoinUsers::Miner1,
             &DogecoinUsers::DepositUser.address(),
-            BLOCK_REWARD,
+            vec![BLOCK_REWARD],
         );
         self.mine_blocks_to(&DogecoinUsers::Miner2, 1);
     }
@@ -174,21 +174,65 @@ impl DogecoinDaemon {
         );
     }
 
-    pub fn send_transaction(
+    /// Send a single transaction with potentially multiple outputs: one for each amount to the given recipient.
+    pub fn send_transaction<I: IntoIterator<Item = u64>>(
         &self,
         from: &DogecoinUsers,
         to: &dogecoin::Address,
-        amount: u64,
+        amounts: I,
     ) -> bitcoin::Txid {
         self.await_ok(|dogecoind| dogecoind.import_private_key(from.private_key(), from.label()));
-        self.await_ok(|dogecoind| {
-            dogecoind.send(
-                &from.address(),
-                to,
-                bitcoin::Amount::from_sat(amount),
-                bitcoin::Amount::ZERO,
-            )
-        })
+        let from_address = from.address();
+        let fee = bitcoin::Amount::ZERO;
+        let unspent =
+            self.await_ok(|dogecoind| dogecoind.list_unspent(Some(0), Some(&[&from_address])));
+        let total_unspent: Amount = unspent.iter().map(|x| x.amount).sum();
+        let mut outputs: Vec<(&dogecoin::Address, Amount)> = amounts
+            .into_iter()
+            .map(|amount| (to, Amount::from_sat(amount)))
+            .collect();
+        let total_amount = outputs
+            .iter()
+            .map(|(_address, amount)| amount)
+            .copied()
+            .sum();
+        assert!(
+            total_unspent >= total_amount,
+            "BUG: trying to spend {total_amount} when only {total_unspent} is available"
+        );
+
+        if total_unspent > total_amount + fee {
+            outputs.push((&from_address, total_unspent - total_amount - fee));
+        }
+        let tx = bitcoin::Transaction {
+            version: bitcoin::transaction::Version::ONE,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: unspent
+                .into_iter()
+                .map(|input| bitcoin::transaction::TxIn {
+                    previous_output: bitcoin::transaction::OutPoint {
+                        txid: input.txid,
+                        vout: input.vout,
+                    },
+                    script_sig: bitcoin::ScriptBuf::new(),
+                    sequence: bitcoin::Sequence::ENABLE_RBF_NO_LOCKTIME,
+                    witness: bitcoin::Witness::default(),
+                })
+                .collect(),
+            output: outputs
+                .into_iter()
+                .map(|(address, amount)| bitcoin::TxOut {
+                    value: amount,
+                    script_pubkey: address.script_pubkey(),
+                })
+                .collect(),
+        };
+        let signed_tx = self.await_ok(|dogecoind| dogecoind.sign_raw_transaction(&tx, None));
+        self.await_ok(|dogecoind| dogecoind.send_raw_transaction::<&[u8]>(signed_tx.hex.as_ref()))
+    }
+
+    pub fn mempool(&self) -> Vec<bitcoin::Txid> {
+        self.await_ok(|dogecoind| dogecoind.get_raw_mempool())
     }
 
     pub fn await_ok<F, T>(&self, call: F) -> T

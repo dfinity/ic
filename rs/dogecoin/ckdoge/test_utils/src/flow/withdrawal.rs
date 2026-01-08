@@ -1,11 +1,11 @@
+use crate::BLOCK_TIME;
 use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
-use crate::{BLOCK_TIME, DogecoinUsers};
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
 use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
-use ic_bitcoin_canister_mock::{OutPoint, Utxo};
+use ic_bitcoin_canister_mock::Utxo;
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::event::RetrieveDogeRequest;
 use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
@@ -312,8 +312,6 @@ where
         WithdrawalFlowEnd {
             setup: self.setup,
             retrieve_doge_id: self.retrieve_doge_id,
-            change_amount,
-            minter_address,
             sent_transactions: vec![tx],
         }
     }
@@ -342,7 +340,7 @@ where
             matches!(tx_status, RetrieveDogeStatus::Reimbursed(_))
         });
 
-        let mempool = self.setup.as_ref().dogecoin().mempool();
+        let mempool = self.setup.as_ref().dogecoind().mempool();
         assert_eq!(
             mempool.len(),
             0,
@@ -393,8 +391,6 @@ where
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
     retrieve_doge_id: RetrieveDogeOk,
-    change_amount: u64,
-    minter_address: bitcoin::dogecoin::Address,
     sent_transactions: Vec<bitcoin::Transaction>,
 }
 

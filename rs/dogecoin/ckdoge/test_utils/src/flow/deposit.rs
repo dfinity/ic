@@ -93,14 +93,9 @@ where
     ) -> UpdateBalanceFlow<S> {
         let dogecoind = self.setup.as_ref().dogecoind();
         let mut deposit_transactions = BTreeSet::new();
-        for amount in amounts {
-            let txid = dogecoind.send_transaction(
-                &DogecoinUsers::DepositUser,
-                &self.deposit_address,
-                amount,
-            );
-            deposit_transactions.insert(Txid::from(txid.to_byte_array()));
-        }
+        let txid =
+            dogecoind.send_transaction(&DogecoinUsers::DepositUser, &self.deposit_address, amounts);
+        deposit_transactions.insert(Txid::from(txid.to_byte_array()));
 
         UpdateBalanceFlow {
             setup: self.setup,
@@ -238,7 +233,7 @@ where
         let last_mint_index = *mint_indexes.last_key_value().unwrap().0;
         assert_eq!(
             last_mint_index,
-            first_mint_index + self.deposit_transactions.len() as u64 - 1,
+            first_mint_index + deposit_utxos.len() as u64 - 1,
             "Range of mint indexes on ledger is not continuous"
         );
         let expected_mints: Vec<_> = mint_indexes
