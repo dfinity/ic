@@ -35,7 +35,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc::metadata_key::MetadataKey,
+    icrc::metadata_key::{Checked, MetadataKey, Unchecked},
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
 use icrc_ledger_types::{
@@ -231,8 +231,9 @@ impl InitArgsBuilder {
     }
 
     pub fn with_metadata_entry(mut self, key: &str, value: impl Into<Value>) -> Self {
-        let metadata_key =
-            MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        let metadata_key = MetadataKey::parse(key)
+            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"))
+            .into_unchecked();
         self.0.metadata.push((metadata_key, value.into()));
         self
     }
@@ -277,7 +278,7 @@ pub struct InitArgs {
     pub decimals: Option<u8>,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(MetadataKey, Value)>,
+    pub metadata: Vec<(MetadataKey<Unchecked>, Value)>,
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
@@ -343,7 +344,7 @@ impl ChangeArchiveOptions {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Vec<(MetadataKey, Value)>>,
+    pub metadata: Option<Vec<(MetadataKey<Unchecked>, Value)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -589,7 +590,7 @@ pub struct Ledger {
 
     token_symbol: String,
     token_name: String,
-    metadata: Vec<(MetadataKey, StoredValue)>,
+    metadata: Vec<(MetadataKey<Checked>, StoredValue)>,
     #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
 
@@ -645,9 +646,15 @@ pub fn wasm_token_type() -> String {
     Tokens::TYPE.to_string()
 }
 
+/// Validates and converts unchecked metadata keys to checked keys.
+///
+/// # Arguments
+/// * `arg_metadata` - Metadata with unchecked keys from init/upgrade args
+/// * `require_valid` - If true, traps on invalid keys. If false, uses assume_checked() for backwards compat.
 fn map_metadata_or_trap(
-    arg_metadata: Vec<(MetadataKey, Value)>,
-) -> Vec<(MetadataKey, StoredValue)> {
+    arg_metadata: Vec<(MetadataKey<Unchecked>, Value)>,
+    require_valid: bool,
+) -> Vec<(MetadataKey<Checked>, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
@@ -661,9 +668,22 @@ fn map_metadata_or_trap(
         .into_iter()
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(format!("Metadata field {k} is reserved and cannot be set"));
+                ic_cdk::trap(&format!(
+                    "Metadata field {} is reserved and cannot be set",
+                    k.as_str()
+                ));
             }
-            (k, StoredValue::from(v))
+            let checked_key = if require_valid {
+                // Store the key string before consuming k, in case we need it for the error message
+                let key_str = k.as_str().to_string();
+                match k.require_valid() {
+                    Ok(checked) => checked,
+                    Err(e) => ic_cdk::trap(&format!("invalid metadata key '{}': {}", key_str, e)),
+                }
+            } else {
+                k.assume_checked()
+            };
+            (checked_key, StoredValue::from(v))
         })
         .collect()
 }
@@ -709,7 +729,7 @@ impl Ledger {
             token_symbol,
             token_name,
             decimals: decimals.unwrap_or_else(default_decimals),
-            metadata: map_metadata_or_trap(metadata),
+            metadata: map_metadata_or_trap(metadata, true), // require_valid=true for init
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
             maximum_number_of_accounts: 0,
@@ -949,7 +969,10 @@ impl Ledger {
 
     pub fn upgrade(&mut self, sink: impl Sink + Clone, args: UpgradeArgs) {
         if let Some(upgrade_metadata_args) = args.metadata {
-            self.metadata = map_metadata_or_trap(upgrade_metadata_args);
+            // Only enforce strict validation if existing metadata has no invalid keys.
+            // This allows ledgers with legacy invalid keys to still be upgraded.
+            let existing_all_valid = self.metadata.iter().all(|(k, _)| k.is_valid());
+            self.metadata = map_metadata_or_trap(upgrade_metadata_args, existing_all_valid);
         }
         if let Some(token_name) = args.token_name {
             self.token_name = token_name;

@@ -2653,7 +2653,9 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             assert_eq!(
                 ledger.metadata,
                 vec![(
-                    MetadataKey::parse(ICRC1_TOKEN_LOGO_KEY).unwrap(),
+                    MetadataKey::parse(ICRC1_TOKEN_LOGO_KEY)
+                        .unwrap()
+                        .into_unchecked(),
                     MetadataValue::Text(token_logo.clone())
                 )]
             )
