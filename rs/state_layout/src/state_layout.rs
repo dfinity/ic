@@ -1920,20 +1920,31 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             }
         };
 
-        let mut paths =
+        let paths =
             dir_list_recursive(checkpoint_path, &mut thread_pool).map_err(convert_io_err)?;
-        // Remove the unverified checkpoint marker from the list of paths,
-        // since another thread might also be validating the checkpoint and may have already deleted the marker.
-        // Marking the unverified marker as read-only is unnecessary for this function's purpose and may cause an error.
-        paths.retain(|p| p != &self.unverified_checkpoint_marker());
 
         let files_traversed = paths.len();
 
+        let unverified_marker = self.unverified_checkpoint_marker();
         let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
-            let was_made_readonly = mark_readonly_if_file(p)?;
-            #[cfg(not(target_os = "linux"))]
-            sync_path(p)?;
-            Ok::<bool, std::io::Error>(was_made_readonly)
+            match mark_readonly_if_file(p) {
+                Ok(was_made_readonly) => {
+                    #[cfg(not(target_os = "linux"))]
+                    sync_path(p)?;
+                    Ok::<bool, std::io::Error>(was_made_readonly)
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // The unverified checkpoint marker may be deleted by another thread during concurrent validation.
+                    // This is the only file that can be safely deleted during this operation.
+                    debug_assert_eq!(
+                        *p, &unverified_marker,
+                        "Only the unverified checkpoint marker should be deleted during marking files readonly, but {:?} was not found",
+                        p
+                    );
+                    Ok(false)
+                }
+                Err(e) => Err(e),
+            }
         });
 
         let files_made_readonly = results
