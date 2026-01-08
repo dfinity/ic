@@ -116,7 +116,6 @@ use ic_nns_governance_api::{
     },
     subnet_rental::SubnetRentalRequest,
 };
-use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
