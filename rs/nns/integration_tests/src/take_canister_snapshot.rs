@@ -94,8 +94,8 @@ fn test_take_canister_snapshot() {
         "{first_proposal_info:#?}",
     );
 
-    // Step 3A.2: Verify that a snapshot was created, by calling
-    // list_canister_snapshots.
+    // Step 3A.2: Fetch the current set of snapshots (of the Governance
+    // canister).
     let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> = update_with_sender(
         &state_machine,
         CanisterId::ic_00(), // management "canister".
@@ -107,15 +107,17 @@ fn test_take_canister_snapshot() {
         ROOT_CANISTER_ID.get(), // caller
     )
     .expect("Failed to list snapshots");
-    assert_eq!(
-        list_canister_snapshots_response.len(),
-        1,
-        "{list_canister_snapshots_response:#?}"
-    );
 
-    // Step 3A.3. Take a closer look at the snapshot.
+    // Step 3A.3: Inspect the snapshots.
     #[track_caller]
-    fn assert_snapshot_checks_out(snapshot: &CanisterSnapshotResponse) {
+    fn assert_snapshot_checks_out(snapshots: &[CanisterSnapshotResponse]) {
+        assert_eq!(
+            snapshots.len(),
+            1,
+            "{snapshots:#?}"
+        );
+
+        let snapshot = &snapshots[0];
         let CanisterSnapshotResponse {
             id,
             taken_at_timestamp,
@@ -136,8 +138,8 @@ fn test_take_canister_snapshot() {
 
         assert!(total_size > 100_000_000, "{snapshot:#?}");
     }
+    assert_snapshot_checks_out(&list_canister_snapshots_response);
     let first_snapshot = &list_canister_snapshots_response[0];
-    assert_snapshot_checks_out(first_snapshot);
 
     // Step 2B: Run the code under test (again). This time, instead of JUST
     // taking a snapshot, replace an existing one.
@@ -178,6 +180,8 @@ fn test_take_canister_snapshot() {
 
     // Step 3B: Verify results.
 
+    // Similar to case A, the first time we took a snapshot. The more
+    // interesting assert comes after this...
     let list_canister_snapshots_response: Vec<CanisterSnapshotResponse> = update_with_sender(
         &state_machine,
         CanisterId::ic_00(),
@@ -186,19 +190,11 @@ fn test_take_canister_snapshot() {
         ROOT_CANISTER_ID.get(),
     )
     .expect("Failed to list snapshots after replace");
-
-    assert_eq!(
-        list_canister_snapshots_response.len(),
-        1,
-        "{list_canister_snapshots_response:#?}"
-    );
-
-    // Inspect current (new) snapshot.
+    assert_snapshot_checks_out(&list_canister_snapshots_response);
     let second_snapshot = &list_canister_snapshots_response[0];
-    assert_snapshot_checks_out(second_snapshot);
 
-    // Assert that the first snapshot got clobbered (by the second). This is the
-    // REALLY interesting assert in case B.
+    // Here is the interesting verification in case B: Here, it is asserted that
+    // the first snapshot got CLOBBERED by the second.
     assert_ne!(
         second_snapshot.snapshot_id(),
         first_snapshot.snapshot_id(),
