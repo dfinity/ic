@@ -116,9 +116,12 @@ impl BootstrapOptions {
         }
 
         let mut mcopy_cmd = Command::new("mcopy");
-        mcopy_cmd.arg("-i").arg(out_file).arg("-o");
-        mcopy_cmd.args(&files_to_copy);
-        mcopy_cmd.arg("::");
+        mcopy_cmd
+            .arg("-i")
+            .arg(out_file)
+            .arg("-o")
+            .args(&files_to_copy)
+            .arg("::");
 
         if !mcopy_cmd
             .status()
