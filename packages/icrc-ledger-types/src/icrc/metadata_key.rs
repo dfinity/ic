@@ -333,12 +333,12 @@ mod tests {
     }
 
     #[test]
-    fn test_metadata_key_serialize_deserialize() {
-        let key = MetadataKey::parse("icrc1:name").unwrap();
-        let json = serde_json::to_string(&key).unwrap();
-        assert_eq!(json, "\"icrc1:name\"");
+    fn test_metadata_key_candid_roundtrip() {
+        use candid::{Decode, Encode};
 
-        let deserialized: MetadataKey = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized, key);
+        let key = MetadataKey::parse("icrc1:name").unwrap();
+        let encoded = Encode!(&key).unwrap();
+        let decoded = Decode!(&encoded, MetadataKey).unwrap();
+        assert_eq!(decoded, key);
     }
 }

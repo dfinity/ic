@@ -667,7 +667,7 @@ fn map_metadata_or_trap(
         .into_iter()
         .map(|(key_str, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&key_str.as_str()) {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "Metadata field {} is reserved and cannot be set",
                     key_str
                 ));
@@ -675,7 +675,7 @@ fn map_metadata_or_trap(
             let metadata_key = if require_valid {
                 match MetadataKey::parse(&key_str) {
                     Ok(key) => key,
-                    Err(e) => ic_cdk::trap(&format!("invalid metadata key '{}': {}", key_str, e)),
+                    Err(e) => ic_cdk::trap(format!("invalid metadata key '{}': {}", key_str, e)),
                 }
             } else {
                 // For backwards compat with ledgers that have legacy invalid keys
