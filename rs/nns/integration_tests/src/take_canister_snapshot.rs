@@ -1,12 +1,13 @@
-use candid::{CandidType, Encode};
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types_private::{CanisterSnapshotResponse, ListCanisterSnapshotArgs};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::ProposalStatus;
 use ic_nns_governance_api::{
-    ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest,
-    manage_neuron_response::Command,
+    ExecuteNnsFunction, MakeProposalRequest, Motion, NnsFunction, ProposalActionRequest,
+    ProposalInfo, manage_neuron_response::Command,
 };
+use ic_nns_handler_root_interface::{LoadCanisterSnapshotRequest, TakeCanisterSnapshotRequest};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
@@ -16,19 +17,10 @@ use ic_nns_test_utils::{
         update_with_sender,
     },
 };
-use serde::Deserialize;
 use std::time::{Duration, SystemTime};
 
-// Defined in ic_nns_handler_root_interface, but redefined here to avoid extra dependencies
-// for the test target if not already present.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
-pub struct TakeCanisterSnapshotRequest {
-    pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<Vec<u8>>,
-}
-
 #[test]
-fn test_take_canister_snapshot() {
+fn test_take_and_load_canister_snapshot() {
     // Step 1: Prepare the world: Set up the NNS canisters and get the neuron.
 
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -195,5 +187,160 @@ fn test_take_canister_snapshot() {
         second_snapshot.snapshot_id(),
         first_snapshot.snapshot_id(),
         "{second_snapshot:#?}\n\nvs.\n\n{first_snapshot:#?}"
+    );
+
+    // Step 1C: Prepare the world for LoadCanisterSnapshot. This consists of
+    // submitting a "marker" (Motion) proposal. It will get blown away by the
+    // LoadCanisterSnapshot proposal, because it is being created after the
+    // snapshot loaded by the LoadCanisterSnapshot proposal.
+    let make_marker_response = nns_governance_make_proposal(
+        &state_machine,
+        neuron.principal_id,
+        neuron.neuron_id,
+        &MakeProposalRequest {
+            title: Some("Marker Proposal".to_string()),
+            summary: "This is a marker proposal.".to_string(),
+            url: "https://forum.dfinity.org/marker-proposal".to_string(),
+            action: Some(ProposalActionRequest::Motion(Motion {
+                motion_text: "This proposal should disappear after snapshot load".to_string(),
+            })),
+        },
+    );
+    let marker_proposal_id = match make_marker_response.command.as_ref().unwrap() {
+        Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("{make_marker_response:#?}"),
+    };
+    nns_wait_for_proposal_execution(&state_machine, marker_proposal_id.id);
+
+    // Verify marker exists. After loading the snapshot, this won't work anymore.
+    let _marker_info: ProposalInfo =
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, marker_proposal_id.id);
+
+    // Step 2C: Run the code under test by passing a LoadCanisterSnapshot
+    // proposal. (As is often the case in tests, the proposal passes right away
+    // due to the proposal being made by a neuron with overwhelming voting
+    // power.)
+
+    // Step 2C.1: Assemble MakeProposalRequest.
+    let payload = Encode!(&LoadCanisterSnapshotRequest {
+        canister_id: target_canister_id.get(),
+        // Remember, this snapshot (second_snapshot) was taken BEFORE the marker
+        // proposal.
+        snapshot_id: second_snapshot.snapshot_id().to_vec(),
+    })
+    .unwrap();
+    let action = ProposalActionRequest::ExecuteNnsFunction(ExecuteNnsFunction {
+        nns_function: NnsFunction::LoadCanisterSnapshot as i32,
+        payload,
+    });
+    let make_proposal_request = MakeProposalRequest {
+        title: Some("Restore Governance Canister to Snapshot 2".to_string()),
+        summary: r#"This will clobber the "marker" motion proposal."#.to_string(),
+        url: "https://forum.dfinity.org/restore-governance-canister-to-snapshot-2".to_string(),
+        action: Some(action),
+    };
+
+    // Step 2C.2: Submit the proposal.
+    let make_proposal_response = nns_governance_make_proposal(
+        &state_machine,
+        neuron.principal_id,
+        neuron.neuron_id,
+        &make_proposal_request,
+    );
+    let load_proposal_id = match make_proposal_response.command.as_ref().unwrap() {
+        Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("{make_proposal_response:#?}"),
+    };
+
+    // Step 3C: Verify LoadCanisterSnapshot execution.
+
+    // Step 3C.1: Poll until the LoadCanisterSnapshot proposal vanishes (or it
+    // is marked as fail). If LoadCanisterSnapshot proposals work correctly,
+    // then the LoadCanisterSnapshot proposal itself would disappear, because
+    // that proposal itself is not in the (Governance canister) snapshot.
+    let mut done = false;
+    for _ in 0..50 {
+        // Fetch the LoadCanisterSnapshot proposal.
+        let response_bytes = state_machine
+            .execute_ingress_as(
+                PrincipalId::new_anonymous(),
+                GOVERNANCE_CANISTER_ID,
+                "get_proposal_info",
+                Encode!(&load_proposal_id.id).unwrap(),
+            )
+            .unwrap();
+        let result = match response_bytes {
+            ic_types::ingress::WasmResult::Reply(bytes) => bytes,
+            ic_types::ingress::WasmResult::Reject(reason) => {
+                panic!("get_proposal_info rejected: {reason}")
+            }
+        };
+        let proposal_info: Option<ProposalInfo> =
+            candid::Decode!(&result, Option<ProposalInfo>).unwrap();
+
+        // If the proposal is suddenly missing, that's actually a sign that it
+        // worked. In any case, it means we can now proceed with the rest of
+        // verification.
+        if proposal_info.is_none() {
+            println!(
+                "As expected, the LoadCanisterSnapshot proposal vanished \
+                 (as a result of its own execution!).",
+            );
+            done = true;
+            break;
+        }
+
+        // Exit early if proposal execution failed, since this is a terminal
+        // state. This is "just" an optimization in that this whole test would
+        // fail even if we deleted this chunk.
+        let status = ProposalStatus::try_from(proposal_info.unwrap().status);
+        if status == Ok(ProposalStatus::Failed) {
+            panic!("Load Snapshot Proposal failed execution!");
+        }
+
+        // Sleep before polling again.
+        state_machine.advance_time(Duration::from_secs(10));
+        state_machine.tick();
+    }
+    assert!(
+        done,
+        "Timeout waiting for Load Snapshot Proposal to vanish \
+         (as a result of correct execution).",
+    );
+
+    // Step 3C.2: Verify that the MARKER (motion) proposal has (also) been blown
+    // away (not just the LoadCanisterSnapshot proposal).
+    let response_bytes = state_machine
+        .execute_ingress_as(
+            PrincipalId::new_anonymous(),
+            GOVERNANCE_CANISTER_ID,
+            "get_proposal_info",
+            Encode!(&marker_proposal_id.id).unwrap(),
+        )
+        .unwrap();
+    let result = match response_bytes {
+        ic_types::ingress::WasmResult::Reply(bytes) => bytes,
+        ic_types::ingress::WasmResult::Reject(reason) => {
+            panic!("get_proposal_info rejected: {reason}")
+        }
+    };
+    let final_marker_proposal_status: Option<ProposalInfo> =
+        candid::Decode!(&result, Option<ProposalInfo>).unwrap();
+    assert_eq!(
+        final_marker_proposal_status, None,
+        "Marker proposal {} should have been wiped out by snapshot load, \
+         but it still exists: {:#?}",
+        marker_proposal_id.id, final_marker_proposal_status
+    );
+
+    // Step 3C.3: Verify that the first proposal is still there (albeit moot,
+    // since the second proposal clobbered the snapshot created by the first
+    // proposal.)
+    let first_proposal_info =
+        nns_governance_get_proposal_info_as_anonymous(&state_machine, first_proposal_id.id);
+    assert_eq!(
+        ProposalStatus::try_from(first_proposal_info.status),
+        Ok(ProposalStatus::Executed),
+        "First proposal should still exist and be executed: {first_proposal_info:#?}",
     );
 }
