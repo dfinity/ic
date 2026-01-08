@@ -3315,6 +3315,17 @@ impl StateManager for StateManagerImpl {
                 prev_hash, hash,
                 "Committed state @{height} twice with different hashes: first with {prev_hash:?}, then with {hash:?}",
             );
+            if prev_hash != hash {
+                if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
+                    error!(
+                        self.log,
+                        "Failed to mark state @{} diverged: {}", height, err
+                    );
+                }
+                panic!(
+                    "Committed state @{height} with hash {hash:?} which is different from {prev_hash:?} computed or delivered before"
+                );
+            }
         }
 
         if !states
