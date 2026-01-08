@@ -33,7 +33,7 @@ fn test_prost_enum_to_self_describing() {
         let prost_enum = SelfDescribingProstEnum::<Topic>::new(value);
         assert_eq!(
             SelfDescribingValue::from(SelfDescribingValuePb::from(prost_enum)),
-            SelfDescribingValue::Text(expected.to_string())
+            SelfDescribingValue::from(expected)
         );
     }
 }
@@ -46,7 +46,7 @@ fn test_motion_to_self_describing() {
     assert_proposal_action_self_describing_value_is(
         motion,
         SelfDescribingValue::Map(hashmap! {
-            "motion_text".to_string() => SelfDescribingValue::Text("This is a motion".to_string()),
+            "motion_text".to_string() => SelfDescribingValue::from("This is a motion"),
         }),
     );
 }
@@ -63,8 +63,8 @@ fn test_approve_genesis_kyc_to_self_describing() {
         approve_genesis_kyc,
         SelfDescribingValue::Map(hashmap! {
             "principals".to_string() => SelfDescribingValue::Array(vec![
-                SelfDescribingValue::Text("6fyp7-3ibaa-aaaaa-aaaap-4ai".to_string()),
-                SelfDescribingValue::Text("djduj-3qcaa-aaaaa-aaaap-4ai".to_string()),
+                SelfDescribingValue::from("6fyp7-3ibaa-aaaaa-aaaap-4ai"),
+                SelfDescribingValue::from("djduj-3qcaa-aaaaa-aaaap-4ai"),
             ]),
         }),
     );
@@ -72,8 +72,6 @@ fn test_approve_genesis_kyc_to_self_describing() {
 
 #[test]
 fn test_network_economics_to_self_describing_all_fields() {
-    use SelfDescribingValue::*;
-
     assert_self_describing_value_is(
         NetworkEconomics {
             // We want to avoid the reject_cost_e8s from being set to the same value as the
@@ -83,51 +81,51 @@ fn test_network_economics_to_self_describing_all_fields() {
         },
         SelfDescribingValue::Map(hashmap! {
             "reject_cost_e8s".to_string() =>
-                Nat(candid::Nat::from(1_000_000_000_u64)),
+                SelfDescribingValue::from(1_000_000_000_u64),
             "neuron_minimum_stake_e8s".to_string() =>
-                Nat(candid::Nat::from(100_000_000_u64)),
+                SelfDescribingValue::from(100_000_000_u64),
             "neuron_management_fee_per_proposal_e8s".to_string() =>
-                Nat(candid::Nat::from(1_000_000_u64)),
+                SelfDescribingValue::from(1_000_000_u64),
             "minimum_icp_xdr_rate".to_string() =>
-                Nat(candid::Nat::from(100_u64)),
+                SelfDescribingValue::from(100_u64),
             "neuron_spawn_dissolve_delay_seconds".to_string() =>
-                Nat(candid::Nat::from(604_800_u64)),
+                SelfDescribingValue::from(604_800_u64),
             "maximum_node_provider_rewards_e8s".to_string() =>
-                Nat(candid::Nat::from(100_000_000_000_000_u64)),
+                SelfDescribingValue::from(100_000_000_000_000_u64),
             "transaction_fee_e8s".to_string() =>
-                Nat(candid::Nat::from(10_000_u64)),
+                SelfDescribingValue::from(10_000_u64),
             "max_proposals_to_keep_per_topic".to_string() =>
-                Nat(candid::Nat::from(100_u32)),
+                SelfDescribingValue::from(100_u32),
             "neurons_fund_economics".to_string() =>
-                Map(hashmap! {
+                SelfDescribingValue::Map(hashmap! {
                     "max_theoretical_neurons_fund_participation_amount_xdr".to_string() =>
-                        Text("750_000.0".to_string()),
+                        SelfDescribingValue::from("750_000.0"),
                     "neurons_fund_matched_funding_curve_coefficients".to_string() =>
-                        Map(hashmap! {
+                        SelfDescribingValue::Map(hashmap! {
                             "contribution_threshold_xdr".to_string() =>
-                                Text("75_000.0".to_string()),
+                                SelfDescribingValue::from("75_000.0"),
                             "one_third_participation_milestone_xdr".to_string() =>
-                                Text("225_000.0".to_string()),
+                                SelfDescribingValue::from("225_000.0"),
                             "full_participation_milestone_xdr".to_string() =>
-                                Text("375_000.0".to_string()),
+                                SelfDescribingValue::from("375_000.0"),
                         }),
                     "minimum_icp_xdr_rate".to_string() =>
-                        Map(hashmap! {
-                            "basis_points".to_string() => Nat(candid::Nat::from(10000_u64)),
+                        SelfDescribingValue::Map(hashmap! {
+                            "basis_points".to_string() => SelfDescribingValue::from(10000_u64),
                         }),
                     "maximum_icp_xdr_rate".to_string() =>
-                        Map(hashmap! {
-                            "basis_points".to_string() => Nat(candid::Nat::from(1000000_u64)),
+                        SelfDescribingValue::Map(hashmap! {
+                            "basis_points".to_string() => SelfDescribingValue::from(1000000_u64),
                         }),
                 }),
             "voting_power_economics".to_string() =>
-                Map(hashmap! {
+                SelfDescribingValue::Map(hashmap! {
                     "start_reducing_voting_power_after_seconds".to_string() =>
-                        Nat(candid::Nat::from(15_778_800_u64)),
+                        SelfDescribingValue::from(15_778_800_u64),
                     "clear_following_after_seconds".to_string() =>
-                        Nat(candid::Nat::from(2_629_800_u64)),
+                        SelfDescribingValue::from(2_629_800_u64),
                     "neuron_minimum_dissolve_delay_to_vote_seconds".to_string() =>
-                        Nat(candid::Nat::from(15_778_800_u64)),
+                        SelfDescribingValue::from(15_778_800_u64),
                 }),
         }),
     );
@@ -135,8 +133,6 @@ fn test_network_economics_to_self_describing_all_fields() {
 
 #[test]
 fn test_network_economics_to_self_describing_minimal() {
-    use SelfDescribingValue::*;
-
     assert_self_describing_value_is(
         NetworkEconomics {
             neurons_fund_economics: None,
@@ -146,27 +142,27 @@ fn test_network_economics_to_self_describing_minimal() {
             reject_cost_e8s: 1_000_000_000_u64,
             ..NetworkEconomics::with_default_values()
         },
-        Map(hashmap! {
+        SelfDescribingValue::Map(hashmap! {
             "reject_cost_e8s".to_string() =>
-                Nat(candid::Nat::from(1_000_000_000_u64)),
+                SelfDescribingValue::from(1_000_000_000_u64),
             "neuron_minimum_stake_e8s".to_string() =>
-                Nat(candid::Nat::from(100_000_000_u64)),
+                SelfDescribingValue::from(100_000_000_u64),
             "neuron_management_fee_per_proposal_e8s".to_string() =>
-                Nat(candid::Nat::from(1_000_000_u64)),
+                SelfDescribingValue::from(1_000_000_u64),
             "minimum_icp_xdr_rate".to_string() =>
-                Nat(candid::Nat::from(100_u64)),
+                SelfDescribingValue::from(100_u64),
             "neuron_spawn_dissolve_delay_seconds".to_string() =>
-                Nat(candid::Nat::from(604_800_u64)),
+                SelfDescribingValue::from(604_800_u64),
             "maximum_node_provider_rewards_e8s".to_string() =>
-                Nat(candid::Nat::from(100_000_000_000_000_u64)),
+                SelfDescribingValue::from(100_000_000_000_000_u64),
             "transaction_fee_e8s".to_string() =>
-                Nat(candid::Nat::from(10_000_u64)),
+                SelfDescribingValue::from(10_000_u64),
             "max_proposals_to_keep_per_topic".to_string() =>
-                Nat(candid::Nat::from(100_u32)),
+                SelfDescribingValue::from(100_u32),
             "neurons_fund_economics".to_string() =>
-                Null,
+                SelfDescribingValue::Null,
             "voting_power_economics".to_string() =>
-                Null,
+                SelfDescribingValue::Null,
         }),
     );
 }
@@ -363,8 +359,8 @@ fn test_derive_named_struct() {
             count: Some(42),
         },
         SelfDescribingValue::Map(hashmap! {
-            "name".to_string() => SelfDescribingValue::Text("test".to_string()),
-            "count".to_string() => SelfDescribingValue::Nat(candid::Nat::from(42u64)),
+            "name".to_string() => SelfDescribingValue::from("test"),
+            "count".to_string() => SelfDescribingValue::from(42_u64),
         }),
     );
 }
@@ -376,10 +372,7 @@ fn test_derive_all_unit_enum() {
         (TestAllUnitEnum::VariantB, "VariantB"),
         (TestAllUnitEnum::VariantC, "VariantC"),
     ] {
-        assert_self_describing_value_is(
-            variant,
-            SelfDescribingValue::Text(expected_name.to_string()),
-        );
+        assert_self_describing_value_is(variant, SelfDescribingValue::from(expected_name));
     }
 }
 
