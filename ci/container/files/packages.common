@@ -28,16 +28,10 @@ rsync # container-base-images.yml
 lcov # used for bazel coverage
 
 # RUST
-libssl-dev
-libunwind-dev
-libusb-1.0-0-dev
-libsqlite3-dev
-zlib1g-dev
+pkg-config
 libclang-18-dev
 protobuf-compiler
 llvm
-liblmdb-dev
-liblzma-dev
 
 # Other code dependencies
 clang
