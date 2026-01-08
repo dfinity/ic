@@ -276,9 +276,11 @@ fn convert_self_describing_action(
     let type_name = Some(type_name.clone());
     let type_description = Some(type_description.clone());
 
-    let paths_to_omit =         if omit_create_service_nervous_system_logos {
+    let paths_to_omit = if omit_create_service_nervous_system_logos {
         vec![
-            RecordPath { fields_names: vec!["logo"] },
+            RecordPath {
+                fields_names: vec!["logo"],
+            },
             RecordPath {
                 fields_names: vec!["ledger_parameters", "token_logo"],
             },
@@ -286,12 +288,9 @@ fn convert_self_describing_action(
     } else {
         vec![]
     };
-    let value = value.as_ref().map(|value| {
-        convert_self_describing_value(
-            value,
-            paths_to_omit,
-        )
-    });
+    let value = value
+        .as_ref()
+        .map(|value| convert_self_describing_value(value, paths_to_omit));
 
     pb_api::SelfDescribingProposalAction {
         type_name,
@@ -299,7 +298,6 @@ fn convert_self_describing_action(
         value,
     }
 }
-
 
 /// For example, suppose we have
 ///
@@ -324,7 +322,7 @@ fn convert_self_describing_action(
 /// `vec!["landing_gear", "wheel", "tire"]`, because `plane.landing_gear.wheel.tire`
 /// evaluates to the `Tire`.
 #[derive(Clone)]
-struct RecordPath { 
+struct RecordPath {
     // Must have at least one element.
     fields_names: Vec<&'static str>,
 }
@@ -384,10 +382,10 @@ fn convert_self_describing_value(
 ) -> pb_api::SelfDescribingValue {
     let pb::SelfDescribingValue { value } = item;
 
-    // This should be unreacheable, because we always construct a SelfDescribingValue with a value.
-    // Ideally the type should be non-optional, but prost always generates an optional field for
-    // messages.
     let Some(value) = value else {
+        // This should be unreacheable, because we always construct a SelfDescribingValue with a value.
+        // Ideally the type should be non-optional, but prost always generates an optional field for
+        // messages.
         return pb_api::SelfDescribingValue::Map(HashMap::new());
     };
 
@@ -428,7 +426,9 @@ fn convert_self_describing_value(
     }
 }
 
-// To avoid cloning large values in production, this is only available in tests.
+// To avoid cloning large values in production, this is only available in tests. Since multiple
+// tests need to convert SelfDescribingValue to `api::SelfDescribingValue`, we define it here rather
+// than in each test.
 #[cfg(test)]
 impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
     fn from(value: pb::SelfDescribingValue) -> Self {
