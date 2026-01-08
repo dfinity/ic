@@ -4,6 +4,7 @@ use config_types::GuestOSConfig;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tempfile::TempDir;
 
 /// Configuration options for GuestOS bootstrap image/tar creation.
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
@@ -136,7 +137,7 @@ impl BootstrapOptions {
 
     /// Build a bootstrap directory with this configuration.
     /// Returns a TempDir containing all bootstrap files.
-    fn build_bootstrap_dir(&self) -> Result<tempfile::TempDir> {
+    fn build_bootstrap_dir(&self) -> Result<TempDir> {
         let bootstrap_dir = tempfile::tempdir().context("Failed to create temporary directory")?;
 
         if let Some(guestos_config) = &self.guestos_config {
