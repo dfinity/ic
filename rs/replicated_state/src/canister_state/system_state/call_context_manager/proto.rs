@@ -26,12 +26,12 @@ impl TryFrom<pb::CallContext> for CallContext {
         // `available_cycles` is not set.
         let available_cycles =
             match try_from_option_field(value.available_cycles, "CallContext::available_cycles") {
-                Ok(res) => res,
+                Ok(available_cycles) => available_cycles,
                 Err(_) => try_from_option_field::<_, Funds, _>(
                     value.available_funds,
                     "CallContext::available_funds",
                 )
-                .map(|mut res| res.take_cycles())?,
+                .map(|available_funds| available_funds.cycles())?,
             };
 
         Ok(Self {
