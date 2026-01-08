@@ -30,6 +30,7 @@ lcov # used for bazel coverage
 # RUST
 pkg-config
 libclang-18-dev
+libusb-1.0-0-dev
 protobuf-compiler
 llvm
 
