@@ -1769,11 +1769,15 @@ impl StateManagerImpl {
             .iter()
             .rev()
             .find_map(|(height, metadata)| {
-                let (hash_tree, _) = metadata.hash_tree.as_ref()?;
-                metadata
-                    .certification
-                    .clone()
-                    .map(|certification| (*height, certification, Arc::clone(hash_tree)))
+                if metadata.state_snapshot_available {
+                    let (hash_tree, _) = metadata.hash_tree.as_ref()?;
+                    metadata
+                        .certification
+                        .clone()
+                        .map(|certification| (*height, certification, Arc::clone(hash_tree)))
+                } else {
+                    None
+                }
             })
             .or_else(|| {
                 warn!(every_n_seconds => 5,
@@ -2975,12 +2979,15 @@ impl StateManager for StateManagerImpl {
                     hash, certification.signed.content.hash
                 );
             }
-            let latest_certified =
-                update_latest_height(&self.latest_certified_height, certification.height);
 
-            self.metrics
-                .latest_certified_height
-                .set(latest_certified as i64);
+            if metadata.state_snapshot_available {
+                let latest_certified =
+                    update_latest_height(&self.latest_certified_height, certification.height);
+                self.metrics
+                    .latest_certified_height
+                    .set(latest_certified as i64);
+            }
+
             if let Some((_, certification_requested_at)) = metadata.hash_tree {
                 self.metrics
                     .certification_duration
@@ -3260,7 +3267,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
+        let mut certification_metadata =
             Self::compute_certification_metadata(&self.metrics, &self.log, &state, true)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
@@ -3325,7 +3332,8 @@ impl StateManager for StateManagerImpl {
                 .make_contiguous()
                 .sort_by_key(|snapshot| snapshot.height);
 
-            if states.certifications_metadata.contains_key(&height) {
+            if let Some(metadata) = states.certifications_metadata.remove(&height) {
+                certification_metadata.certification = metadata.certification;
                 update_latest_height(&self.latest_certified_height, height);
             }
 
