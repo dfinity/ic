@@ -22,7 +22,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:983a02b1360e0215d519e749c4393c9c0f31589a461e992bf4b693cc30363320
+      image: ghcr.io/dfinity/ic-build@sha256:36d93ca6c83cd4160b2e03738365899cfb15347b06e87f460803917cfa5b9209
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     environment: DockerHub
