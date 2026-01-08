@@ -418,7 +418,7 @@ impl PrivateKey {
     pub fn sign_message_with_der_encoded_sig(&self, message: &[u8]) -> Vec<u8> {
         use p256::ecdsa::{Signature, signature::Signer};
         let sig: Signature = self.key.sign(message);
-        sig.to_der().to_bytes().to_vec()
+        sig.to_der().as_bytes().to_vec()
     }
 
     /// Sign a message digest

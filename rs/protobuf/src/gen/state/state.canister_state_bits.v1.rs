@@ -5,6 +5,8 @@ pub struct CallContext {
     pub responded: bool,
     #[prost(message, optional, tag = "6")]
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
