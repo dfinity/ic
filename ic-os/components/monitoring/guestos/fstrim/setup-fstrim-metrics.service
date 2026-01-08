@@ -5,7 +5,9 @@ Before=node_exporter.service
 [Service]
 Type=oneshot
 ExecStart=/opt/ic/bin/fstrim_tool --target /var/lib/ic/crypto --metrics /run/node_exporter/collector_textfile/fstrim.prom --initialize_metrics_only
-DeviceAllow=/dev/sda
+# Allow access to normal & virtualized block devices
+DeviceAllow=block-sd
+DeviceAllow=block-virtblk
 IPAddressDeny=any
 LockPersonality=yes
 MemoryDenyWriteExecute=yes

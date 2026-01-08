@@ -20,7 +20,7 @@ esac
 
 # Mount the config partition
 mkdir -p /mnt
-mount -t ext4 /dev/sda3 /mnt
+mount -t ext4 /dev/disk/by-partuuid/a5ba3816-beaa-d74d-993e-cfa5aa6ba1f6 /mnt
 
 # If it contains a saved machine-id, then use it. Otherwise, setting to
 # "uninitialized" will cause systemd to treat this as a first boot.

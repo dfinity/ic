@@ -1,8 +1,8 @@
 /dev/rootfs /   ext4    ro,errors=remount-ro   0   1
 tmpfs    /tmp    tmpfs   defaults 0   2
-/dev/sda1   /boot/efi   vfat    defaults    0   2
-/dev/sda2   /boot/grub  vfat    defaults    0   2
-/dev/sda3   /boot/config    ext4    defaults,sync    0   2
+/dev/disk/by-partuuid/b78084e2-3363-1346-8c25-d426f26b8928   /boot/efi   vfat    defaults    0   2
+/dev/disk/by-partuuid/6788e4cf-f456-104e-9a34-a2c58cfb0ee6   /boot/grub  vfat    defaults    0   2
+/dev/disk/by-partuuid/a5ba3816-beaa-d74d-993e-cfa5aa6ba1f6   /boot/config    ext4    defaults,sync    0   2
 /dev/mapper/var_crypt   /var  ext4    defaults    0   2
 # If you add a new mount that depends on /dev/mapper/store, don't forget to add it to maybe-disable-store-mounts.service
 /dev/mapper/store-shared--backup   /var/lib/ic/backup    ext4 defaults,context=system_u:object_r:ic_data_t:s0  0   2

@@ -19,4 +19,4 @@ WantedBy=local-fs.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-data-encryption.sh
-ExecStop=/usr/bin/systemd-cryptsetup detach 'sda10-crypt'
+ExecStop=/usr/bin/systemd-cryptsetup detach 'store-crypt'

@@ -10,7 +10,7 @@ pub const DEFAULT_PREVIOUS_SEV_KEY_PATH: &str = "/var/alternative_store.keyfile"
 // We depend on the values of these constants in bash scripts and config files so be careful
 // when changing them!
 const VAR_CRYPT_NAME: &str = "var_crypt";
-const STORE_CRYPT_NAME: &str = "sda10-crypt";
+const STORE_CRYPT_NAME: &str = "store-crypt";
 
 pub trait DiskEncryption {
     /// Opens an encrypted device and activates it under /dev/mapper/`crypt_name`.
