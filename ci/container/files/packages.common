@@ -28,6 +28,7 @@ rsync # container-base-images.yml
 lcov # used for bazel coverage
 
 # RUST
+gcc
 pkg-config
 libclang-18-dev
 libusb-1.0-0-dev
