@@ -11,8 +11,8 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 attestation = { path = "../../attestation" }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
 der = { workspace = true }
 guest_disk = { path = "../../os_tools/guest_disk" }
 guest_upgrade_shared = { path = "../shared" }

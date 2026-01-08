@@ -4,7 +4,7 @@ version = "1.0.0"
 edition.workspace = true
 
 [dependencies]
-ic-types = { path = "../../types/types" }
+ic-types = { path = "../../../types/types" }
 macaddr = { workspace = true }
 url = { workspace = true }
 serde = { workspace = true }

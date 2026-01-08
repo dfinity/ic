@@ -107,7 +107,7 @@ else
     exit 1
 fi
 
-/opt/ic/bin/config populate-nns-public-key
+/opt/ic/bin/config_tool populate-nns-public-key
 
 # Create file under /run/config/guest_vm_type, this can be used to add ConditionPathExists conditions to systemd units
 guest_vm_type="$(jq -r ".guest_vm_type" /run/config/config.json)"

@@ -2643,7 +2643,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "config"
+name = "config_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
@@ -5471,7 +5471,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "ic-sys",
  "ic_device",
@@ -5491,7 +5491,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
- "config",
+ "config_tool",
  "config_types",
  "der 0.7.9",
  "guest_disk",
@@ -5519,7 +5519,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
- "config",
+ "config_tool",
  "config_types",
  "der 0.7.9",
  "guest_upgrade_shared",
@@ -5581,7 +5581,7 @@ dependencies = [
  "anyhow",
  "askama",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "deterministic_ips",
  "devicemapper",
@@ -5614,7 +5614,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "indoc 1.0.9",
  "network",
@@ -5997,7 +5997,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "deterministic_ips",
  "itertools 0.12.1",
@@ -14803,7 +14803,7 @@ dependencies = [
  "canister-test",
  "chrono",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "crossbeam-channel",
  "cycles-minting-canister",
@@ -19187,7 +19187,7 @@ dependencies = [
  "backoff",
  "candid",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -21474,7 +21474,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
- "config",
+ "config_tool",
  "config_types",
  "ic_sev",
  "remote_attestation_shared",
@@ -22977,7 +22977,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "partition_tools",
  "serde_json",
@@ -22992,7 +22992,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
- "config",
+ "config_tool",
  "config_types",
  "deterministic_ips",
  "network",

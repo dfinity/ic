@@ -4,9 +4,9 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/ic_os/config_types",
-    "//rs/ic_os/deterministic_ips",
-    "//rs/ic_os/network",
+    "//rs/ic_os/config/types:config_types",
+    "//rs/ic_os/networking/deterministic_ips",
+    "//rs/ic_os/networking/network",
     "//rs/ic_os/os_tools/manual_guestos_recovery",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
@@ -30,7 +30,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib"],
 )
 
 rust_binary(
@@ -43,7 +43,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib_dev"],
 )
 
 rust_test(

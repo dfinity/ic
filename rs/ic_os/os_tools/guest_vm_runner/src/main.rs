@@ -397,7 +397,7 @@ impl GuestVmService {
         let metrics_writer = MetricsWriter::new(PathBuf::from(Self::metrics_path(guest_vm_type)));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
         let console_tty1 = File::options()
             .write(true)
