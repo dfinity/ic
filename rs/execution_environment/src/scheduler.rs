@@ -1,7 +1,7 @@
 use crate::{
     canister_manager::uninstall_canister,
     execution_environment::{
-        ExecuteCanisterResult, ExecutionEnvironment, MessageExecutionInstructions,
+        ExecuteCanisterResult, ExecutionEnvironment, SubnetMessageInstructions,
         RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions,
         execute_canister,
     },
@@ -336,7 +336,7 @@ impl SchedulerImpl {
         replica_version: &ReplicaVersion,
         measurement_scope: &MeasurementScope,
         chain_key_data: &ChainKeyData,
-    ) -> (ReplicatedState, Option<MessageExecutionInstructions>) {
+    ) -> (ReplicatedState, Option<SubnetMessageInstructions>) {
         let instruction_limits = get_instructions_limits_for_subnet_message(&self.config, &msg);
 
         let instructions_before = round_limits.instructions();
