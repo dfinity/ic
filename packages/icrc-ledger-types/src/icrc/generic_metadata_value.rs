@@ -27,15 +27,6 @@ impl MetadataValue {
     /// # Panics
     ///
     /// Panics if the key is not a valid metadata key format.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use icrc_ledger_types::icrc::generic_metadata_value::{MetadataKey, MetadataValue};
-    ///
-    /// let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token");
-    /// assert_eq!(entry.0.as_str(), "icrc1:name");
-    /// ```
     pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey, Self) {
         let metadata_key =
             MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));

@@ -59,9 +59,9 @@ impl std::error::Error for MetadataKeyError {}
 /// assert_eq!(key.as_str(), "icrc1:name");
 ///
 /// // Parse from string
-/// let key = MetadataKey::parse("myapp:version").unwrap();
+/// let key = MetadataKey::parse("myapp:decimals").unwrap();
 /// assert_eq!(key.namespace(), "myapp");
-/// assert_eq!(key.key(), "version");
+/// assert_eq!(key.key(), "decimals");
 /// ```
 #[derive(
     CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash,
@@ -69,24 +69,25 @@ impl std::error::Error for MetadataKeyError {}
 pub struct MetadataKey(String);
 
 impl MetadataKey {
-    /// The reserved namespace for ICRC-1 standard keys.
-    pub const ICRC1_NAMESPACE: &'static str = "icrc1";
-
     // ==================== ICRC-1 Standard Keys ====================
 
-    /// The human-readable name of the token (e.g., "Internet Computer Protocol").
+    /// The name of the token.
+    /// When present, should be the same as the result of the icrc1_name query call.
     pub const ICRC1_NAME: &'static str = "icrc1:name";
 
-    /// The ticker symbol of the token (e.g., "ICP").
+    /// The token currency code (see ISO-4217).
+    /// When present, should be the same as the result of the icrc1_symbol query call.
     pub const ICRC1_SYMBOL: &'static str = "icrc1:symbol";
 
-    /// The number of decimals the token uses.
+    /// The number of decimals the token uses. For example, 8 means to divide the token amount by 108 to get its user representation.
+    /// When present, should be the same as the result of the icrc1_decimals query call.
     pub const ICRC1_DECIMALS: &'static str = "icrc1:decimals";
 
     /// The default transfer fee.
+    /// When present, should be the same as the result of the icrc1_fee query call.
     pub const ICRC1_FEE: &'static str = "icrc1:fee";
 
-    /// A logo for the token (typically a data URI with an image).
+    /// The URL of the token logo. The value can contain the actual image if it's a Data URL.
     pub const ICRC1_LOGO: &'static str = "icrc1:logo";
 
     /// The maximum length of a memo in bytes.
@@ -94,15 +95,15 @@ impl MetadataKey {
 
     // ==================== ICRC-103 Keys ====================
 
-    /// Whether public allowances are enabled.
+    /// Whether allowance data is public or not.
     pub const ICRC103_PUBLIC_ALLOWANCES: &'static str = "icrc103:public_allowances";
 
-    /// The maximum value for the take operation.
+    /// The maximum number of allowances the ledger will return in response to a query.
     pub const ICRC103_MAX_TAKE_VALUE: &'static str = "icrc103:max_take_value";
 
     // ==================== ICRC-106 Keys ====================
 
-    /// The principal of the index canister associated with this ledger.
+    /// The textual representation of the principal of the associated index canister.
     pub const ICRC106_INDEX_PRINCIPAL: &'static str = "icrc106:index_principal";
 
     /// Creates a new metadata key from namespace and key parts.
@@ -142,7 +143,6 @@ impl MetadataKey {
         if key.is_empty() {
             return Err(MetadataKeyError::EmptyKey);
         }
-        // Namespace is already validated by taking everything before the first colon
         Ok(Self(s.to_string()))
     }
 
@@ -165,16 +165,6 @@ impl MetadataKey {
     /// Returns the full key as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-
-    /// Returns whether this key uses the reserved `icrc1` namespace.
-    pub fn is_icrc1(&self) -> bool {
-        self.namespace() == Self::ICRC1_NAMESPACE
-    }
-
-    /// Consumes the key and returns the inner string.
-    pub fn into_string(self) -> String {
-        self.0
     }
 }
 
@@ -206,15 +196,13 @@ mod tests {
         assert_eq!(key.namespace(), "icrc1");
         assert_eq!(key.key(), "name");
         assert_eq!(key.as_str(), "icrc1:name");
-        assert!(key.is_icrc1());
     }
 
     #[test]
     fn test_metadata_key_parse() {
-        let key = MetadataKey::parse("myapp:version").unwrap();
+        let key = MetadataKey::parse("myapp:decimals").unwrap();
         assert_eq!(key.namespace(), "myapp");
-        assert_eq!(key.key(), "version");
-        assert!(!key.is_icrc1());
+        assert_eq!(key.key(), "decimals");
     }
 
     #[test]
