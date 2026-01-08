@@ -4810,8 +4810,11 @@ impl Governance {
                     .map_err(invalid_proposal_error)?;
             }
             ValidNnsFunction::TakeCanisterSnapshot => {
-                Self::validate_take_canister_snapshot_payload(&update.payload)
-                    .map_err(invalid_proposal_error)?;
+                if !are_canister_snapshot_proposals_enabled() {
+                    return Err(invalid_proposal_error(
+                        "TakeCanisterSnapshot proposals are not yet enabled.".to_string(),
+                    ));
+                }
             }
             _ => {}
         };
@@ -4883,30 +4886,6 @@ impl Governance {
         decoded_payload
             .validate()
             .map_err(|e| format!("The given AddOrRemoveDataCentersProposalPayload is invalid: {e}"))
-    }
-
-    fn validate_take_canister_snapshot_payload(payload: &[u8]) -> Result<(), String> {
-        if !are_canister_snapshot_proposals_enabled() {
-            return Err("TakeCanisterSnapshot proposals are not yet enabled.".to_string());
-        }
-
-        let _request = Decode!([decoder_config()]; payload, TakeCanisterSnapshotRequest)
-            .map_err(|err| format!("Invalid TakeCanisterSnapshotRequest: {err}"))?;
-
-        // Ideally, we would verify that the Root canister (or maybe the
-        // Governance canister?) is a controller of _request.canister_id, but
-        // that would require async (or we have to hard-code a list of known
-        // controllees); whereas, currently, proposal validation is sync, and
-        // changing it to async is fraught with peril...
-        //
-        // Ditto for _request.replace_snapshot. It can be None, but if it is
-        // Some, it must be some snapshot belonging to _request.canister_id.
-        //
-        // Not performaing these checks is not catastrophic; it just means that
-        // when the proposal is executed, no snapshot will be generated. In that
-        // case, all they need to do is make a another proposal.
-
-        Ok(())
     }
 
     fn validate_create_service_nervous_system(
