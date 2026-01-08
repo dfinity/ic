@@ -63,7 +63,7 @@ function copy_config_files() {
     fi
 
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
-    /opt/ic/bin/config generate-hostos-config
+    /opt/ic/bin/config_tool generate-hostos-config
     log_and_halt_installation_on_error "${?}" "Unable to generate hostos configuration."
 
     echo "* Copying 'config-hostos.json' to hostOS config partition..."

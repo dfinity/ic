@@ -134,7 +134,7 @@ setup_config() {
 
     # Preload and create config
     /opt/ic/bin/preload-config.sh
-    /opt/ic/bin/config create-setupos-config
+    /opt/ic/bin/config_tool create-setupos-config
 
     echo "Copying configuration files to target partition..."
 

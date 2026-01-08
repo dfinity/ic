@@ -19,7 +19,7 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     let is_icrc107_nonendpoint_transaction = and(vec![
         is_map(),
         item(
-            "op",
+            "mthd",
             Optional,
             and(vec![is_text(), is_not(Value::text(SET_FEE_COL_107))]),
         ),
@@ -29,7 +29,7 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     ]);
     let is_icrc107_endpoint_transaction = and(vec![
         is_map(),
-        item("op", Required, is(Value::text(SET_FEE_COL_107))),
+        item("mthd", Required, is(Value::text(SET_FEE_COL_107))),
         item("fee_collector", Optional, is_account()),
         item("ts", Required, is_timestamp.clone()),
         item("caller", Required, is_principal()),

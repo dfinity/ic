@@ -1680,12 +1680,12 @@ pub fn arb_nonendpoint_fee_collector_tx_params() -> impl Strategy<
             Just(Some("random_str".to_string()))
         ],
     )
-        .prop_map(|(ts, fee_collector, caller, op)| {
+        .prop_map(|(ts, fee_collector, caller, mthd)| {
             let caller = caller.map(|mut c| {
                 c.push(0x00);
                 Principal::try_from_slice(&c[..]).unwrap()
             });
-            (fee_collector, caller, ts, op)
+            (fee_collector, caller, ts, mthd)
         })
 }
 

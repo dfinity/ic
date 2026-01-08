@@ -1,5 +1,5 @@
 {
-  "checksum": "d154dd0e371170ad8d3c57a751b807c9e2920d800fdd658238acadec4f95a70d",
+  "checksum": "9c005befd32524877226bd906ddced21caba9dd7f97158fe334855a7a1e03d6f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21926,7 +21926,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-bigint-dig 0.8.4",
+              "id": "num-bigint-dig 0.9.1",
               "target": "num_bigint_dig"
             },
             {
@@ -22594,10 +22594,6 @@
             {
               "id": "wat 1.240.0",
               "target": "wat"
-            },
-            {
-              "id": "wee_alloc 0.4.5",
-              "target": "wee_alloc"
             },
             {
               "id": "which 4.4.0",
@@ -48464,44 +48460,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "memory_units 0.4.0": {
-      "name": "memory_units",
-      "version": "0.4.0",
-      "package_url": "https://github.com/pepyakin/memory_units",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/memory_units/0.4.0/download",
-          "sha256": "8452105ba047068f40ff7093dd1d9da90898e63dd61736462e9cdda6a90ad3c3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "memory_units",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "memory_units",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.4.0"
-      },
-      "license": "MPL-2.0",
-      "license_ids": [
-        "MPL-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "merlin 3.0.0": {
       "name": "merlin",
       "version": "3.0.0",
@@ -51559,12 +51517,9 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "i128",
             "prime",
             "rand",
-            "serde",
-            "std",
             "u64_digit",
             "zeroize"
           ],
@@ -51605,10 +51560,6 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.228",
-              "target": "serde"
-            },
-            {
               "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
@@ -51621,6 +51572,120 @@
         },
         "edition": "2021",
         "version": "0.8.4"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT/Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "num-bigint-dig 0.9.1": {
+      "name": "num-bigint-dig",
+      "version": "0.9.1",
+      "package_url": "https://github.com/dignifiedquire/num-bigint",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/num-bigint-dig/0.9.1/download",
+          "sha256": "a7f9a86e097b0d187ad0e65667c2f58b9254671e86e7dbb78036b16692eae099"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_bigint_dig",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "num_bigint_dig",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "prime",
+            "rand",
+            "serde",
+            "std",
+            "u64_digit"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "libm 0.2.15",
+              "target": "libm"
+            },
+            {
+              "id": "num-bigint-dig 0.9.1",
+              "target": "build_script_build"
+            },
+            {
+              "id": "num-integer 0.1.46",
+              "target": "num_integer"
+            },
+            {
+              "id": "num-iter 0.1.45",
+              "target": "num_iter"
+            },
+            {
+              "id": "num-traits 0.2.19",
+              "target": "num_traits"
+            },
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "smallvec 1.15.1",
+              "target": "smallvec"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -92039,104 +92104,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "wee_alloc 0.4.5": {
-      "name": "wee_alloc",
-      "version": "0.4.5",
-      "package_url": "https://github.com/rustwasm/wee_alloc",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/wee_alloc/0.4.5/download",
-          "sha256": "dbb3b5a6b2bb17cb6ad44a2e68a43e8d2722c997da10e928665c72ec6c0a0b8e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wee_alloc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "wee_alloc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "size_classes"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 0.1.10",
-              "target": "cfg_if"
-            },
-            {
-              "id": "memory_units 0.4.0",
-              "target": "memory_units"
-            },
-            {
-              "id": "wee_alloc 0.4.5",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {
-            "cfg(all(unix, not(target_arch = \"wasm32\")))": [
-              {
-                "id": "libc 0.2.177",
-                "target": "libc"
-              }
-            ],
-            "cfg(target_os = \"windows\")": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2015",
-        "version": "0.4.5"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MPL-2.0",
-      "license_ids": [
-        "MPL-2.0"
-      ],
-      "license_file": null
-    },
     "which 4.4.0": {
       "name": "which",
       "version": "4.4.0",
@@ -98515,12 +98482,6 @@
     "cfg(all(target_family = \"wasm\", target_os = \"unknown\"))": [
       "wasm32-unknown-unknown"
     ],
-    "cfg(all(unix, not(target_arch = \"wasm32\")))": [
-      "aarch64-apple-darwin",
-      "aarch64-unknown-linux-gnu",
-      "x86_64-apple-darwin",
-      "x86_64-unknown-linux-gnu"
-    ],
     "cfg(all(unix, not(target_os = \"android\"), not(target_vendor = \"apple\"), not(target_arch = \"wasm32\")))": [
       "aarch64-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
@@ -98927,7 +98888,7 @@
     "nftables 0.4.1",
     "nix 0.24.3",
     "num-bigint 0.4.6",
-    "num-bigint-dig 0.8.4",
+    "num-bigint-dig 0.9.1",
     "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
@@ -99100,7 +99061,6 @@
     "wasmtime 40.0.0",
     "wast 240.0.0",
     "wat 1.240.0",
-    "wee_alloc 0.4.5",
     "which 4.4.0",
     "wirm 2.1.0",
     "wsl 0.1.0",

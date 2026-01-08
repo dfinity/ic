@@ -1,9 +1,4 @@
 // NOTE: We should try to reuse dfn_core::api here.
-// use `wee_alloc` as the global allocator.
-extern crate wee_alloc;
-
-#[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc<'_> = wee_alloc::WeeAlloc::INIT;
 
 #[allow(clippy::unused_unit)]
 mod ic0 {

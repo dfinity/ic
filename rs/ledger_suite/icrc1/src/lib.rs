@@ -52,7 +52,7 @@ pub enum Operation<Tokens: TokensType> {
     FeeCollector {
         fee_collector: Option<Account>,
         caller: Option<Principal>,
-        op: Option<String>,
+        mthd: Option<String>,
     },
 }
 
@@ -118,6 +118,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     caller: Option<Principal>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mthd: Option<String>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -156,7 +160,7 @@ impl<Tokens: TokensType> TryFrom<(Option<String>, FlattenedTransaction<Tokens>)>
             Some(TRANSACTION_FEE_COLLECTOR) => Operation::FeeCollector {
                 fee_collector: value.fee_collector,
                 caller: value.caller,
-                op: value.op,
+                mthd: value.mthd,
             },
             _ => Operation::try_from(value)
                 .map_err(|e| format!("{} and/or unknown btype {:?}", e, btype_str))?,
@@ -237,7 +241,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => Some("mint".to_string()),
                 Transfer { .. } => Some("xfer".to_string()),
                 Approve { .. } => Some("approve".to_string()),
-                FeeCollector { op, .. } => op.clone(),
+                FeeCollector { .. } => None,
             },
             from: match &t.operation {
                 Transfer { from, .. } | Burn { from, .. } | Approve { from, .. } => Some(*from),
@@ -282,6 +286,10 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             caller: match &t.operation {
                 FeeCollector { caller, .. } => caller.to_owned(),
+                _ => None,
+            },
+            mthd: match &t.operation {
+                FeeCollector { mthd, .. } => mthd.to_owned(),
                 _ => None,
             },
         }
