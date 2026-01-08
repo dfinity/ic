@@ -2214,9 +2214,8 @@ impl StateManagerImpl {
             }
         }
 
-        let latest_certified_height = self.latest_certified_height.load(Ordering::Relaxed);
         let last_certification_height_to_keep =
-            min(last_height_to_keep, Height::new(latest_certified_height));
+            min(last_height_to_keep, self.latest_certified_height());
         let mut certifications_metadata = states
             .certifications_metadata
             .split_off(&last_certification_height_to_keep);
