@@ -83,7 +83,8 @@ class GithubApi:
             raise RuntimeError("Dependency submission not possible because GITHUB_TOKEN not set")
 
         detector = GHSubDetector("bazel-rust-detector", "0.0.1", "https://github.com/dfinity/ic")
-        job = GHSubJob(os.environ["GITHUB_RUN_ID"], f'{os.environ['GITHUB_WORKFLOW']} / {os.environ['GITHUB_JOB']}')
+        correlator = "Bazel Dependency Submission / bazel-dependency-submission"
+        job = GHSubJob(os.environ["GITHUB_RUN_ID"], correlator)
 
         manifests = []
         for basedir, filepath in toml_lock_filenames:

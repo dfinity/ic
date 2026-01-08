@@ -181,6 +181,7 @@ members = [
     "rs/ic_os/networking/deterministic_ips",
     "rs/ic_os/networking/network",
     "rs/ic_os/networking/nss_icos",
+    "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics/fstrim_tool",
     "rs/ic_os/metrics/metrics_tool",
     "rs/ic_os/metrics/nft_exporter",

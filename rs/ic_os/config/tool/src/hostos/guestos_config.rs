@@ -127,37 +127,21 @@ fn guestos_recovery_config(recovery_file_path: &Path) -> Result<Option<RecoveryC
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, ICOSSettings, Ipv6Config,
-        NetworkSettings,
-    };
+    use config_types::{DeterministicIpv6Config, HostOSConfig, Ipv6Config, NetworkSettings};
     use std::net::Ipv6Addr;
     use tempfile::tempdir;
 
     fn hostos_config_for_test() -> HostOSConfig {
         HostOSConfig {
-            config_version: "1.0.0".to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
                     prefix: "2001:db8::".to_string(),
                     prefix_length: 64,
                     gateway: "2001:db8::1".parse().unwrap(),
                 }),
-                ipv4_config: None,
-                domain_name: None,
+                ..Default::default()
             },
-            icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Testnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
-            },
-            hostos_settings: Default::default(),
-            guestos_settings: Default::default(),
+            ..HostOSConfig::default()
         }
     }
     #[test]
