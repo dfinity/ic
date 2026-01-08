@@ -806,16 +806,19 @@ mod test {
         expected = "KeyConfig.pre_signatures_to_create_in_advance must be specified for key ecdsa:Secp256k1:some_key_name"
     )]
     fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
-        let key_config = KeyConfig {
-            key_id: Some(MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = recover_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::Ecdsa(EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: "some_key_name".to_string(),
-            })),
-            pre_signatures_to_create_in_advance: None,
-            max_queue_size: Some(155),
-        };
+            }),
+            None,
+        );
 
-        let _ = KeyConfigInternal::try_from(key_config).unwrap();
+        futures::executor::block_on(registry.do_recover_subnet(payload));
     }
 
     #[test]
@@ -823,15 +826,40 @@ mod test {
         expected = "KeyConfig.pre_signatures_to_create_in_advance must not be specified for key vetkd:Bls12_381_G2:some_key_name"
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
-        let key_config = KeyConfig {
-            key_id: Some(MasterPublicKeyId::VetKd(VetKdKeyId {
+        let mut registry = invariant_compliant_registry(0);
+        let subnet_id = subnet_test_id(1000);
+
+        let payload = recover_subnet_payload_with_key_config(
+            subnet_id,
+            MasterPublicKeyId::VetKd(VetKdKeyId {
                 curve: VetKdCurve::Bls12_381_G2,
                 name: "some_key_name".to_string(),
-            })),
-            pre_signatures_to_create_in_advance: Some(99),
-            max_queue_size: Some(155),
-        };
+            }),
+            Some(99),
+        );
 
-        let _ = KeyConfigInternal::try_from(key_config).unwrap();
+        futures::executor::block_on(registry.do_recover_subnet(payload));
+    }
+
+    fn recover_subnet_payload_with_key_config(
+        subnet_id: SubnetId,
+        key_id: MasterPublicKeyId,
+        pre_signatures_to_create_in_advance: Option<u32>,
+    ) -> RecoverSubnetPayload {
+        let mut payload = get_default_recover_subnet_payload(subnet_id);
+        payload.chain_key_config = Some(InitialChainKeyConfig {
+            key_configs: vec![KeyConfigRequest {
+                key_config: Some(KeyConfig {
+                    key_id: Some(key_id),
+                    pre_signatures_to_create_in_advance,
+                    max_queue_size: Some(155),
+                }),
+                subnet_id: Some(subnet_id.get()),
+            }],
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
+        });
+        payload
     }
 }
