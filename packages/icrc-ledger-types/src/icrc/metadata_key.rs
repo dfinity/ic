@@ -181,10 +181,9 @@ impl MetadataKey {
     /// Panics if the key does not contain a colon (i.e., was created with `unchecked_from_string`
     /// with an invalid format).
     pub fn namespace(&self) -> &str {
-        self.0
-            .find(':')
-            .map(|pos| &self.0[..pos])
-            .expect("BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?")
+        self.0.find(':').map(|pos| &self.0[..pos]).expect(
+            "BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?",
+        )
     }
 
     /// Returns the key part (after the namespace).
@@ -194,10 +193,9 @@ impl MetadataKey {
     /// Panics if the key does not contain a colon (i.e., was created with `unchecked_from_string`
     /// with an invalid format).
     pub fn key(&self) -> &str {
-        self.0
-            .find(':')
-            .map(|pos| &self.0[pos + 1..])
-            .expect("BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?")
+        self.0.find(':').map(|pos| &self.0[pos + 1..]).expect(
+            "BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?",
+        )
     }
 }
 
