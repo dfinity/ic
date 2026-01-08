@@ -508,7 +508,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21"]);
 }
 pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
@@ -3882,7 +3882,7 @@ pub fn expect_icrc2_disabled(
         "ICRC-2 features are not enabled on the ledger.",
     );
     let standards = supported_standards(env, canister_id);
-    assert_eq!(standards.len(), 2);
+    assert_eq!(standards.len(), 3);
     assert_eq!(standards[0].name, "ICRC-1");
 }
 
@@ -3955,7 +3955,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21"]);
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
