@@ -1160,11 +1160,18 @@ fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllow
 #[update]
 async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetFeeCollectorError> {
     let caller = ic_cdk::api::caller();
+
+    if !ic_cdk::api::is_controller(&caller) {
+        return Err(SetFeeCollectorError::AccessDenied(
+            "The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string(),
+        ));
+    }
+
     let tx = Transaction {
         operation: Operation::FeeCollector {
             fee_collector: arg.fee_collector,
             caller: Some(caller),
-            op: Some(SET_FEE_COL_107.to_string()),
+            mthd: Some(SET_FEE_COL_107.to_string()),
         },
         created_at_time: Some(arg.created_at_time),
         memo: None,
