@@ -1919,7 +1919,9 @@ pub struct WaitForQuietState {
 /// NetworkEconomics to 0.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    ic_nns_governance_derive_self_describing::SelfDescribing, Clone, PartialEq, ::prost::Message,
+)]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
     /// proposal will cost.
@@ -1979,6 +1981,7 @@ pub struct NetworkEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     Copy,
     PartialEq,
@@ -2024,6 +2027,7 @@ pub struct VotingPowerEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2061,6 +2065,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2233,6 +2238,7 @@ pub struct OpenSnsTokenSwap {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2268,6 +2274,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2289,6 +2296,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -2305,6 +2313,7 @@ pub mod create_service_nervous_system {
                 candid::Deserialize,
                 serde::Serialize,
                 comparable::Comparable,
+                ic_nns_governance_derive_self_describing::SelfDescribing,
                 Clone,
                 PartialEq,
                 ::prost::Message,
@@ -2329,6 +2338,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2343,6 +2353,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2358,6 +2369,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2413,6 +2425,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2431,6 +2444,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2452,6 +2466,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -2495,6 +2510,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -4133,7 +4149,7 @@ pub struct FinalizeDisburseMaturity {
     ::prost::Message,
 )]
 pub struct SelfDescribingValue {
-    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub value: ::core::option::Option<self_describing_value::Value>,
 }
 /// Nested message and enum types in `SelfDescribingValue`.
@@ -4161,6 +4177,8 @@ pub mod self_describing_value {
         Array(super::SelfDescribingValueArray),
         #[prost(message, tag = "6")]
         Map(super::SelfDescribingValueMap),
+        #[prost(message, tag = "7")]
+        Null(super::Empty),
     }
 }
 #[derive(

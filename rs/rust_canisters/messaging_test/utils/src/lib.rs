@@ -67,7 +67,8 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
         (
             arb_simple_call(CallConfig {
                 receivers: vec![receiver],
-                call_bytes_range: 0..=MAX_INGRESS_PAYLOAD_SIZE,
+                call_bytes_range: 0..=(*config.call_bytes_range.end())
+                    .min(MAX_INGRESS_PAYLOAD_SIZE),
                 ..config.clone()
             }),
             proptest::collection::vec(arb_simple_call(config.clone()), config.call_tree_size),

@@ -812,7 +812,7 @@ mod tests {
                     .expiry_time(time)
                     .build();
 
-                let ingress_messages = vec![m1.clone(), m2, m3];
+                let ingress_messages = [m1.clone(), m2, m3];
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
@@ -1534,7 +1534,7 @@ mod tests {
                     certified_height: Height::from(0),
                 };
 
-                let ingress_messages = vec![m1.clone(), m2.clone(), m3, m4];
+                let ingress_messages = [m1.clone(), m2.clone(), m3, m4];
 
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);

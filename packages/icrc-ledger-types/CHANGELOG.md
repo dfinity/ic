@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Add ICRC-107 fee collector transaction type.
+- Add ICRC-107 fee collector transaction type and schema.
 
 ## 0.1.12
 

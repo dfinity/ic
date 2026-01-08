@@ -2774,7 +2774,7 @@ fn convert_guest_launch_measurement_metadata_from_pb_to_pb_api(
     item: PbGuestLaunchMeasurementMetadata,
 ) -> pb_api::GuestLaunchMeasurementMetadata {
     pb_api::GuestLaunchMeasurementMetadata {
-        kernel_cmdline: Some(item.kernel_cmdline),
+        kernel_cmdline: item.kernel_cmdline,
     }
 }
 
@@ -2782,7 +2782,7 @@ fn convert_guest_launch_measurement_metadata_from_pb_api_to_pb(
     item: pb_api::GuestLaunchMeasurementMetadata,
 ) -> PbGuestLaunchMeasurementMetadata {
     PbGuestLaunchMeasurementMetadata {
-        kernel_cmdline: item.kernel_cmdline.unwrap_or_default(),
+        kernel_cmdline: item.kernel_cmdline,
     }
 }
 
@@ -4202,6 +4202,7 @@ impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
                     .map(|(k, v)| (k, Self::from(v)))
                     .collect(),
             ),
+            pb::self_describing_value::Value::Null(_) => Self::Null,
         }
     }
 }
@@ -4230,6 +4231,9 @@ impl From<pb_api::SelfDescribingValue> for pb::SelfDescribingValue {
                 pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
                     values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
                 })
+            }
+            pb_api::SelfDescribingValue::Null => {
+                pb::self_describing_value::Value::Null(pb::Empty {})
             }
         };
         Self { value: Some(value) }

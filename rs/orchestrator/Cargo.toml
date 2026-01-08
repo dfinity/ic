@@ -11,7 +11,7 @@ assert_matches = { workspace = true }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
-config = { path = "../ic_os/config" }
+config_tool = { path = "../ic_os/config/tool" }
 clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"

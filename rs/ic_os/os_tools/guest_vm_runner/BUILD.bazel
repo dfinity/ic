@@ -6,11 +6,11 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 DEPENDENCIES = [
     # Keep sorted.
     ":build_script",
-    "//rs/ic_os/config_types",
-    "//rs/ic_os/deterministic_ips",
+    "//rs/ic_os/boot/grub",
+    "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/device",
-    "//rs/ic_os/grub",
-    "//rs/ic_os/metrics_tool",
+    "//rs/ic_os/metrics/metrics_tool",
+    "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/sev",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
@@ -21,6 +21,8 @@ DEPENDENCIES = [
     "@crate_index//:memchr",
     "@crate_index//:nix",
     "@crate_index//:regex-lite",
+    "@crate_index//:strum",
+    "@crate_index//:sysinfo",
     "@crate_index//:systemd",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
@@ -38,7 +40,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 cargo_build_script(
     name = "build_script",
@@ -54,7 +58,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib"],
 )
 
 rust_binary(
@@ -66,7 +70,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES + ["//rs/ic_os/config:config_lib_dev"],
+    deps = DEPENDENCIES + ["//rs/ic_os/config/tool:config_lib_dev"],
 )
 
 # You can update the XML config golden files with

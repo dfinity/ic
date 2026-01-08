@@ -16,7 +16,10 @@ use ic_ckbtc_minter::fees::{BitcoinFeeEstimator, FeeEstimator};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::logs::Priority;
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::queries::{
+    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, DecodedMemo, EstimateFeeArg, MemoType,
+    RetrieveBtcStatusRequest, WithdrawalFee,
+};
 use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
@@ -1518,6 +1521,30 @@ impl CkBtcSetup {
             "memo not found in mint"
         );
     }
+
+    pub fn decode_ledger_memo(
+        &self,
+        memo_type: MemoType,
+        encoded_memo: Vec<u8>,
+    ) -> DecodeLedgerMemoResult {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "decode_ledger_memo",
+                        Encode!(&DecodeLedgerMemoArgs {
+                            memo_type,
+                            encoded_memo
+                        })
+                        .unwrap()
+                    )
+                    .expect("failed to call decode_ledger_memo")
+            ),
+            DecodeLedgerMemoResult
+        )
+        .unwrap()
+    }
 }
 
 impl CanisterHttpQuery<UserError> for &CkBtcSetup {
@@ -1918,6 +1945,49 @@ fn test_transaction_resubmission_finalize_middle() {
 }
 
 #[test]
+fn test_transaction_resubmission_after_upgrade() {
+    let (ckbtc, block_index, _, tx) = test_transaction_resubmission_finalize_setup();
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    // Upgrade
+    let upgrade_args = UpgradeArgs::default();
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.minter_id,
+            minter_wasm(),
+            Encode!(&minter_arg).unwrap(),
+        )
+        .expect("Failed to upgrade the minter canister");
+
+    // Upgrade should not trigger resubmission
+    ckbtc.assert_for_n_ticks("no resubmission before the delay", 20, |ckbtc| {
+        ckbtc.mempool().len() == 1
+    });
+
+    // Wait for the transaction resubmission
+    ckbtc.env.advance_time(MIN_RESUBMISSION_DELAY / 2);
+
+    let mempool = ckbtc.tick_until("mempool has a replacement transaction", 10, |ckbtc| {
+        let mempool = ckbtc.mempool();
+        (mempool.len() > 1).then_some(mempool)
+    });
+
+    let new_txid = ckbtc.await_btc_transaction(block_index, 10);
+    let new_tx = mempool
+        .get(&new_txid)
+        .expect("the pool does not contain the new transaction");
+
+    assert_replacement_transaction(&tx, new_tx);
+
+    // Finalize the new transaction
+    ckbtc.finalize_transaction(new_tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
+    ckbtc.minter_self_check();
+}
+
+#[test]
 fn test_utxo_consolidation_burn_failure() {
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 100;
@@ -2019,6 +2089,13 @@ fn test_utxo_consolidation_multiple() {
     );
     let transfer_index = result.0.to_u64().unwrap();
 
+    // Set fee percentiles so that the 25th percentile is 2000 and the median (50th) is 5000.
+    // We set the first 40 percentiles to 2000 and the rest to 5000.
+    let fees: Vec<u64> = std::iter::repeat_n(2000, 40)
+        .chain(std::iter::repeat_n(5000, 60))
+        .collect();
+    ckbtc.set_fee_percentiles(&fees);
+
     // Test two consolidations
     for i in 1..=2 {
         // Upgrade to trigger consolidation task by setting a lower threshold.
@@ -2071,6 +2148,18 @@ fn test_utxo_consolidation_multiple() {
         let new_fee_account_balance = ckbtc.get_ledger_account_balance(&fee_account);
         assert_eq!(fee_account_balance, new_fee_account_balance + burn_amount);
         fee_account_balance = new_fee_account_balance;
+
+        // Verify that the fee rate corresponds to the 25th percentile (2000).
+        // Since signatures length vary slightly, we check if the rate is close to 2000.
+        // It definitely shouldn't be close to 5000 (the median).
+        let tx_fee = total_input - total_output;
+        let vsize = tx.vsize();
+        let fee_rate = tx_fee * 1000 / vsize as u64;
+        assert!(
+            (1900..2100).contains(&fee_rate),
+            "Fee rate {} should be around 2000 (25th percentile), not 5000 (median)",
+            fee_rate
+        );
 
         // Finalize the new transaction.
         ckbtc.finalize_transaction(tx);
@@ -2355,7 +2444,7 @@ fn test_taproot_transaction_finalization() {
 fn test_ledger_memo() {
     let ckbtc = CkBtcSetup::new();
 
-    // Step 1: deposit ckBTC
+    // Step 1: deposit ckBTC and test decoding a Mint memo
 
     let deposit_value = 100_000_000;
     let utxo = Utxo {
@@ -2380,18 +2469,24 @@ fn test_ledger_memo() {
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
 
-    use ic_ckbtc_minter::memo::MintMemo;
-    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
-    assert_eq!(
-        decoded_data,
-        MintMemo::Convert {
-            txid: Some(&(1..=32).collect::<Vec<u8>>()),
-            vout: Some(1),
-            kyt_fee: Some(CHECK_FEE),
-        }
-    );
+    // Test decoding the Mint memo using the decode_ledger_memo endpoint
+    let decoded_result = ckbtc.decode_ledger_memo(MemoType::Mint, memo.0.to_vec());
 
-    // Step 2: request a withdrawal
+    assert!(decoded_result.is_ok(), "Failed to decode mint memo");
+    if let Ok(Some(DecodedMemo::Mint(Some(mint_memo)))) = decoded_result {
+        assert_matches!(
+            mint_memo,
+            ic_ckbtc_minter::queries::MintMemo::Convert {
+                txid: Some(_),
+                vout: Some(1),
+                kyt_fee: Some(CHECK_FEE),
+            }
+        );
+    } else {
+        panic!("Expected Mint memo, got something else");
+    }
+
+    // Step 2: request a withdrawal and test decoding a Burn memo
 
     let withdrawal_amount = 50_000_000;
     let withdrawal_account = ckbtc.withdrawal_account(user.into());
@@ -2408,19 +2503,40 @@ fn test_ledger_memo() {
     };
     let res = ckbtc.get_transactions(get_transaction_request);
     let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
-    use ic_ckbtc_minter::memo::{BurnMemo, Status};
 
-    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
-    // `retrieve_btc` incurs no check fee
-    assert_eq!(
-        decoded_data,
-        BurnMemo::Convert {
-            address: Some(&btc_address),
-            kyt_fee: None,
-            status: Some(Status::Accepted),
-        },
-        "memo not found in burn"
+    // Test decoding the Burn memo using the decode_ledger_memo endpoint
+    let decoded_result = ckbtc.decode_ledger_memo(MemoType::Burn, memo.0.to_vec());
+
+    assert!(decoded_result.is_ok(), "Failed to decode burn memo");
+    if let Ok(Some(DecodedMemo::Burn(Some(burn_memo)))) = decoded_result {
+        assert_matches!(
+            burn_memo,
+            ic_ckbtc_minter::queries::BurnMemo::Convert {
+                address: Some(_),
+                kyt_fee: None,
+                status: Some(ic_ckbtc_minter::queries::Status::Accepted),
+            }
+        );
+    } else {
+        panic!("Expected Burn memo, got something else");
+    }
+
+    // Step 3: test decoding invalid memo smoke test
+
+    let decoded_result =
+        ckbtc.decode_ledger_memo(MemoType::Mint, vec![0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+    assert!(
+        decoded_result.is_err(),
+        "Expected error when decoding invalid memo"
     );
+    if let Err(Some(err)) = decoded_result {
+        // Verify that the error message indicates the memo couldn't be decoded
+        assert_matches!(
+            err,
+            ic_ckbtc_minter::queries::DecodeLedgerMemoError::InvalidMemo(_)
+        );
+    }
 }
 
 #[test]

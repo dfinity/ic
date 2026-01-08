@@ -59,9 +59,9 @@ pub fn mock_sev_host_firmware() -> MockSevHostFirmware {
     let mut mock_firmware = MockSevHostFirmware::new();
     mock_firmware
         .expect_snp_platform_status()
-        .return_once(|| Ok(mock_snp_platform_status()));
+        .returning(|| Ok(mock_snp_platform_status()));
     mock_firmware
         .expect_get_identifier()
-        .return_once(|| Ok(mock_chip_id()));
+        .returning(|| Ok(mock_chip_id()));
     mock_firmware
 }

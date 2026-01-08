@@ -6,11 +6,15 @@ use crate::state::read_state;
 use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
+use crate::{CKBTC_LEDGER_MEMO_SIZE, memo};
 use candid::CandidType;
 use ic_btc_interface::Utxo;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
+
+#[cfg(test)]
+mod tests;
 
 #[derive(CandidType, Deserialize)]
 pub struct RetrieveBtcStatusRequest {
@@ -165,5 +169,165 @@ pub fn http_request(req: HttpRequest) -> HttpResponse {
                 .build()
         }
         _ => HttpResponseBuilder::not_found().build(),
+    }
+}
+
+#[derive(Clone, Copy, Debug, CandidType, Serialize, Deserialize)]
+pub enum MemoType {
+    Burn,
+    Mint,
+}
+
+#[derive(Debug, CandidType, Serialize, Deserialize)]
+pub struct DecodeLedgerMemoArgs {
+    pub memo_type: MemoType,
+    pub encoded_memo: Vec<u8>,
+}
+
+impl DecodeLedgerMemoArgs {
+    fn validate_input(&self) -> Result<(), String> {
+        if self.encoded_memo.len() > CKBTC_LEDGER_MEMO_SIZE as usize {
+            Err(format!(
+                "Memo longer than permitted length {}",
+                CKBTC_LEDGER_MEMO_SIZE
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum Status {
+    /// The minter accepted a retrieve_btc request.
+    Accepted,
+    /// The minter rejected a retrieve_btc due to a failed Bitcoin check.
+    Rejected,
+    CallFailed,
+}
+
+impl From<memo::Status> for Status {
+    fn from(value: memo::Status) -> Self {
+        match value {
+            memo::Status::Accepted => Self::Accepted,
+            memo::Status::Rejected => Self::Rejected,
+            memo::Status::CallFailed => Self::CallFailed,
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum MintMemo {
+    Convert {
+        txid: Option<Vec<u8>>,
+        vout: Option<u32>,
+        kyt_fee: Option<u64>,
+    },
+    Kyt,
+    KytFail {
+        kyt_fee: Option<u64>,
+        status: Option<Status>,
+        associated_burn_index: Option<u64>,
+    },
+    ReimburseWithdrawal {
+        withdrawal_id: u64,
+    },
+}
+
+impl<'a> From<memo::MintMemo<'a>> for MintMemo {
+    fn from(m: memo::MintMemo<'a>) -> Self {
+        match m {
+            memo::MintMemo::Convert {
+                txid,
+                vout,
+                kyt_fee,
+            } => MintMemo::Convert {
+                txid: txid.map(|t| t.to_vec()),
+                vout,
+                kyt_fee,
+            },
+            #[allow(deprecated)]
+            memo::MintMemo::Kyt => MintMemo::Kyt,
+            #[allow(deprecated)]
+            memo::MintMemo::KytFail {
+                kyt_fee,
+                status,
+                associated_burn_index,
+            } => MintMemo::KytFail {
+                kyt_fee,
+                status: status.map(Status::from),
+                associated_burn_index,
+            },
+            memo::MintMemo::ReimburseWithdrawal { withdrawal_id } => {
+                MintMemo::ReimburseWithdrawal { withdrawal_id }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum BurnMemo {
+    Convert {
+        address: Option<String>,
+        kyt_fee: Option<u64>,
+        status: Option<Status>,
+    },
+    Consolidate {
+        value: u64,
+        inputs: u64,
+    },
+}
+
+impl<'a> From<memo::BurnMemo<'a>> for BurnMemo {
+    fn from(m: memo::BurnMemo<'a>) -> Self {
+        match m {
+            memo::BurnMemo::Convert {
+                address,
+                kyt_fee,
+                status,
+            } => BurnMemo::Convert {
+                address: address.map(|a| a.to_string()),
+                kyt_fee,
+                status: status.map(Status::from),
+            },
+            memo::BurnMemo::Consolidate { value, inputs } => {
+                BurnMemo::Consolidate { value, inputs }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum DecodedMemo {
+    Mint(Option<MintMemo>),
+    Burn(Option<BurnMemo>),
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, Serialize, Deserialize)]
+pub enum DecodeLedgerMemoError {
+    InvalidMemo(String),
+}
+
+pub type DecodeLedgerMemoResult = Result<Option<DecodedMemo>, Option<DecodeLedgerMemoError>>;
+
+pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    args.validate_input()
+        .map_err(DecodeLedgerMemoError::InvalidMemo)?;
+
+    match args.memo_type {
+        MemoType::Burn => match minicbor::decode::<memo::BurnMemo>(&args.encoded_memo) {
+            Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(BurnMemo::from(burn_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding BurnMemo: {}",
+                err
+            )))),
+        },
+        MemoType::Mint => match minicbor::decode::<memo::MintMemo>(&args.encoded_memo) {
+            Ok(mint_memo) => Ok(Some(DecodedMemo::Mint(Some(MintMemo::from(mint_memo))))),
+            Err(err) => Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+                "Error decoding MintMemo: {}",
+                err
+            )))),
+        },
     }
 }
