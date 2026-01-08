@@ -120,9 +120,6 @@ ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
 
-# Add cargo-audit
-ARG CARGO_AUDIT_VERSION=0.22.0
-RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
 
