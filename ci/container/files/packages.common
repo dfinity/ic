@@ -13,11 +13,6 @@ vim
 retry
 zip
 
-# Bitcoin core (for bitcoin adapter integration test)
-libtool
-libevent-dev
-libboost-dev
-
 # GitHub CI
 sudo
 jq
