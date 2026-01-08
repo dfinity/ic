@@ -103,7 +103,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout 3f3d9bfac750f82f424185ac5b32a756cfd45ad9
+git checkout e446c64d99a97e38166be23ff2bfade997d15ff7
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ledger-suite-orchestrator-canister.wasm.gz
 ```
