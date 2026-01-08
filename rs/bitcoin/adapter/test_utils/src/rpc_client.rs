@@ -529,6 +529,22 @@ impl<T: RpcClientType> RpcClient<T> {
             .expect("BUG: Failed to deserialize transaction"))
     }
 
+    pub fn set_transaction_priority_in_mempool(
+        &self,
+        txid: &Txid,
+        priority_delta: i32,
+        fee_delta: i32,
+    ) -> Result<bool> {
+        self.call(
+            "prioritisetransaction",
+            &[
+                into_json(txid)?,
+                into_json(priority_delta)?,
+                into_json(fee_delta)?,
+            ],
+        )
+    }
+
     pub fn add_node(&self, addr: &str) -> Result<()> {
         self.call("addnode", &[into_json(addr)?, into_json("add")?])
     }

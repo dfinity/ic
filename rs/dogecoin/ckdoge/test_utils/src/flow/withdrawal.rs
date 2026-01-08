@@ -214,11 +214,10 @@ where
 {
     pub fn dogecoin_await_transaction_in_mempool(self) -> WithdrawalFlowEnd<S> {
         let minter = self.setup.as_ref().minter();
-        let txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
+        let txid =
+            minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index, |_| true);
         let dogecoin = self.setup.as_ref().dogecoind();
-        let tx = dogecoin.await_ok(|daemon| {
-            daemon.get_raw_transaction_from_mempool(&bitcoin::Txid::from_byte_array(txid.into()))
-        });
+        let tx = dogecoin.get_raw_transaction_from_mempool(txid);
 
         let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
             let sent_tx_event = minter
@@ -454,17 +453,17 @@ where
         );
         let setup = self.setup.as_ref();
         let minter = setup.minter();
-        let dogecoin = setup.dogecoin();
-        let mempool_before = dogecoin.mempool();
+        let dogecoin = setup.dogecoind();
         setup
             .env
             .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
-        let mut mempool_after =
-            dogecoin.await_mempool(|mempool| mempool.len() > mempool_before.len());
 
         let old_transaction = self.sent_transactions.last().unwrap();
         let old_txid = Txid::from(old_transaction.compute_txid().to_byte_array());
-        let new_txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
+        let new_txid = minter
+            .await_submitted_doge_transaction(self.retrieve_doge_id.block_index, |txid| {
+                txid != &old_txid
+            });
         let _replaced_tx_event = minter
             .assert_that_events()
             .extract_exactly_one(
@@ -472,11 +471,46 @@ where
                     CkDogeMinterEventType::ReplacedDogeTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
                     if event_old_txid == &old_txid && event_new_txid == &new_txid),
             );
-        let new_tx = mempool_after
-            .remove(&new_txid)
-            .expect("BUG: did not find resubmit transaction");
+
+        let new_tx = dogecoin.get_raw_transaction_from_mempool(new_txid);
         assert_replacement_transaction(old_transaction, &new_tx);
         self.sent_transactions.push(new_tx);
+        self
+    }
+
+    /// Try to drop a transaction from the mempool.
+    ///
+    /// There doesn't seem to be an easy way to do this.
+    /// Resubmitted transactions use higher fees according to the RBF rule and automatically evict conflicting transactions with lower fees.
+    /// The only way to test scenarios where the original transaction is actually mined is:
+    /// 1) manually decrease the priority of the resubmitted transaction
+    /// 2) re-send the other transactions to the mempool
+    pub fn dogecoin_drop_transaction_in_mempool<F>(self, selector: F) -> Self
+    where
+        F: FnOnce(&[bitcoin::Transaction]) -> &bitcoin::Transaction,
+    {
+        let tx_to_drop = selector(&self.sent_transactions);
+        let txid_to_drop = tx_to_drop.compute_txid();
+        let dogecoin = self.setup.as_ref().dogecoind();
+
+        dogecoin.deprioritize_transaction_from_mempool(&txid_to_drop);
+
+        self.sent_transactions
+            .iter()
+            .filter(|tx| tx != &tx_to_drop)
+            .for_each(|tx| {
+                println!(
+                    "[dogecoin_drop_transaction_in_mempool] Re-add transaction {} to the mempool",
+                    tx.compute_txid()
+                );
+                dogecoin.await_ok(|d| d.send_raw_transaction(&bitcoin::consensus::serialize(tx)));
+            });
+
+        let mempool = dogecoin.await_ok(|d| d.get_raw_mempool());
+        assert!(
+            !mempool.contains(&txid_to_drop),
+            "BUG: failed to drop transaction {txid_to_drop}"
+        );
         self
     }
 

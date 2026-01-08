@@ -231,6 +231,21 @@ impl DogecoinDaemon {
         self.await_ok(|dogecoind| dogecoind.send_raw_transaction::<&[u8]>(signed_tx.hex.as_ref()))
     }
 
+    pub fn get_raw_transaction_from_mempool(
+        &self,
+        txid: ic_ckdoge_minter::Txid,
+    ) -> bitcoin::Transaction {
+        self.await_ok(|daemon| {
+            daemon.get_raw_transaction_from_mempool(&bitcoin::Txid::from_byte_array(txid.into()))
+        })
+    }
+
+    pub fn deprioritize_transaction_from_mempool(&self, txid: &bitcoin::Txid) {
+        self.await_ok(|daemon| {
+            daemon.set_transaction_priority_in_mempool(txid, i32::MIN, i32::MIN)
+        });
+    }
+
     pub fn mempool(&self) -> Vec<bitcoin::Txid> {
         self.await_ok(|dogecoind| dogecoind.get_raw_mempool())
     }

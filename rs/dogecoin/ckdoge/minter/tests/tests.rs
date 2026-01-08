@@ -223,7 +223,6 @@ mod withdrawal {
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
         lifecycle::init::Network,
     };
-    use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE,
         MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
@@ -316,26 +315,35 @@ mod withdrawal {
             setup
                 .deposit_flow()
                 .minter_get_dogecoin_deposit_address(account)
-                .dogecoin_simulate_transaction(vec![utxo.clone()])
+                .dogecoin_send_transaction(vec![RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE])
+                .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
                 .minter_update_balance()
                 .expect_mint();
 
             setup
                 .withdrawal_flow()
                 .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
-                .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+                .minter_retrieve_doge_with_approval(
+                    RETRIEVE_DOGE_MIN_AMOUNT,
+                    DogecoinUsers::WithdrawalRecipientUser.address().to_string(),
+                )
                 .expect_withdrawal_request_accepted()
                 .dogecoin_await_transaction_in_mempool()
-                .assert_sent_transactions(|sent| {
-                    assert_uses_utxos(only_one(sent), vec![utxo.clone()])
+                .assert_sent_transactions(|txs| {
+                    only_one(txs);
                 })
         }
 
-        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+        let setup = Setup::new(Network::Regtest).with_doge_balance();
 
         deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
             .assert_sent_transactions(|sent| assert_eq!(sent.len(), 2))
+            .dogecoin_drop_transaction_in_mempool(|sent| {
+                // Drop the last transaction.
+                &sent[1]
+            })
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_transaction_by(|sent| {
                 // Finalize the oldest transaction, the first one that was sent.
                 &sent[0]
@@ -344,6 +352,7 @@ mod withdrawal {
         deposit_and_withdraw(&setup, 43)
             .minter_await_resubmission()
             .assert_sent_transactions(|sent| assert_eq!(sent.len(), 2))
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_transaction_by(|sent| {
                 // Finalize the newest transaction, the last one that was sent.
                 &sent[1]
@@ -353,6 +362,12 @@ mod withdrawal {
             .minter_await_resubmission()
             .minter_await_resubmission()
             .assert_sent_transactions(|sent| assert_eq!(sent.len(), 3))
+            .dogecoin_drop_transaction_in_mempool(|sent| {
+                // Drop the last transaction.
+                // Due to RBF, the middle transaction uses a higher fee than the 1st transaction and should be mined
+                &sent[2]
+            })
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
             .minter_await_finalized_transaction_by(|sent| {
                 // Finalize the middle transaction, the second one (out-of-3) that was sent.
                 &sent[1]
