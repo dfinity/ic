@@ -62,13 +62,6 @@ RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}
     echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
-# Add yq
-ARG YQ_BIN="/usr/local/bin/yq"
-ARG YQ_VERSION="4.34.1"
-RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o "${YQ_BIN}" && \
-    echo "c5a92a572b3bd0024c7b1fe8072be3251156874c05f017c23f9db7b3254ae71a  ${YQ_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${YQ_BIN}"
-
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
