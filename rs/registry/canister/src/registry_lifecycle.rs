@@ -823,13 +823,19 @@ mod test {
             .get(subnet_key_1.as_bytes(), registry.latest_version())
             .unwrap();
         let subnet_record_1_after = SubnetRecordPb::decode(&registry_value_1.value[..]).unwrap();
-        assert!(subnet_record_1_after.chain_key_config.is_some());
-        let key_config_1 = &subnet_record_1_after
-            .chain_key_config
-            .as_ref()
-            .unwrap()
-            .key_configs[0];
-        assert_eq!(key_config_1.pre_signatures_to_create_in_advance, None);
+        let expected_subnet_record_1 = {
+            let mut subnet_record_1_clone = subnet_record_1.clone();
+            subnet_record_1_clone
+                .chain_key_config
+                .as_mut()
+                .unwrap()
+                .key_configs
+                .get_mut(0)
+                .unwrap()
+                .pre_signatures_to_create_in_advance = None;
+            subnet_record_1_clone
+        };
+        assert_eq!(subnet_record_1_after, expected_subnet_record_1);
 
         // Verify subnet_id_2 was NOT migrated (not in the migration list)
         let subnet_key_2 = make_subnet_record_key(subnet_id_2);
@@ -837,15 +843,8 @@ mod test {
             .get(subnet_key_2.as_bytes(), registry.latest_version())
             .unwrap();
         let subnet_record_2_after = SubnetRecordPb::decode(&registry_value_2.value[..]).unwrap();
-        assert!(subnet_record_2_after.chain_key_config.is_some());
-        let key_config_2 = &subnet_record_2_after
-            .chain_key_config
-            .as_ref()
-            .unwrap()
-            .key_configs[0];
         assert_eq!(
-            key_config_2.pre_signatures_to_create_in_advance,
-            Some(0),
+            subnet_record_2_after, subnet_record_2,
             "Subnet not in migration list should not be affected"
         );
 
@@ -855,15 +854,8 @@ mod test {
             .get(subnet_key_3.as_bytes(), registry.latest_version())
             .unwrap();
         let subnet_record_3_after = SubnetRecordPb::decode(&registry_value_3.value[..]).unwrap();
-        assert!(subnet_record_3_after.chain_key_config.is_some());
-        let key_config_3 = &subnet_record_3_after
-            .chain_key_config
-            .as_ref()
-            .unwrap()
-            .key_configs[0];
         assert_eq!(
-            key_config_3.pre_signatures_to_create_in_advance,
-            Some(10),
+            subnet_record_3_after, subnet_record_3,
             "Subnet with vetKD key having non-zero value should not be affected"
         );
 
@@ -873,15 +865,8 @@ mod test {
             .get(subnet_key_4.as_bytes(), registry.latest_version())
             .unwrap();
         let subnet_record_4_after = SubnetRecordPb::decode(&registry_value_4.value[..]).unwrap();
-        assert!(subnet_record_4_after.chain_key_config.is_some());
-        let key_config_4 = &subnet_record_4_after
-            .chain_key_config
-            .as_ref()
-            .unwrap()
-            .key_configs[0];
         assert_eq!(
-            key_config_4.pre_signatures_to_create_in_advance,
-            Some(10),
+            subnet_record_4_after, subnet_record_4,
             "Subnet with non-vetKD key should not be affected"
         );
     }
