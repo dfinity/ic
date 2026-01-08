@@ -233,6 +233,26 @@ fn load_canister_snapshot_bench<M: criterion::measurement::Measurement>(
     });
 }
 
+fn read_canister_snapshot_metadata_bench<M: criterion::measurement::Measurement>(
+    group: &mut BenchmarkGroup<M>,
+    bench_name: &str,
+    canister_size: u64,
+) {
+    group.bench_function(bench_name, |b| {
+        b.iter_batched(
+            || env_and_canister_snapshot(canister_size),
+            |(env, canister_id, snapshot_id)| {
+                let args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+                let _ = env
+                    .read_canister_snapshot_metadata(&args)
+                    .expect("Error reading snapshot metadata");
+                env
+            },
+            BatchSize::SmallInput,
+        );
+    });
+}
+
 fn read_canister_snapshot_data_bench<M: criterion::measurement::Measurement>(
     group: &mut BenchmarkGroup<M>,
     bench_name: &str,
@@ -355,6 +375,12 @@ pub fn benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("load_canister_snapshot");
     for (name, size) in sizes {
         load_canister_snapshot_bench(&mut group, name, size);
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("read_canister_snapshot_metadata");
+    for (name, size) in sizes {
+        read_canister_snapshot_metadata_bench(&mut group, name, size);
     }
     group.finish();
 

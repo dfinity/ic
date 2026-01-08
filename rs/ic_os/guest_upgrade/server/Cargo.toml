@@ -5,8 +5,8 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 attestation = { path = "../../attestation" }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
 der = { workspace = true }
 guest_upgrade_shared = { path = "../shared" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
@@ -26,4 +26,3 @@ rustls = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true, features = ["add-extension", "util"] }
 http-body-util = { workspace = true }
-

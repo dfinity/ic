@@ -144,8 +144,8 @@ impl LocallyDescribableProposalAction for UpdateCanisterSettings {
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("canister_id", self.canister_id)
-            .add_field_with_empty_as_fallback("settings", self.settings.clone())
+            .add_field("canister_id", self.canister_id)
+            .add_field("settings", self.settings.clone())
             .build()
     }
 }
@@ -426,17 +426,15 @@ mod tests {
                 "canister_id".to_string() => Text(SNS_WASM_CANISTER_ID.get().to_string()),
                 "settings".to_string() => Map(hashmap! {
                     "controllers".to_string() => Array(vec![
-                            Array(vec![
-                                Text(ROOT_CANISTER_ID.get().to_string()),
-                                Text(LEDGER_CANISTER_ID.get().to_string()),
-                            ]),
+                        Text(ROOT_CANISTER_ID.get().to_string()),
+                        Text(LEDGER_CANISTER_ID.get().to_string()),
                     ]),
-                    "memory_allocation".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 32))]),
-                    "wasm_memory_limit".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 31))]),
-                    "wasm_memory_threshold".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 30))]),
-                    "compute_allocation".to_string() => Array(vec![Nat(candid::Nat::from(10_u64))]),
-                    "freezing_threshold".to_string() => Array(vec![Nat(candid::Nat::from(100_u64))]),
-                    "log_visibility".to_string() => Array(vec![Text("Public".to_string())]),
+                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 32)),
+                    "wasm_memory_limit".to_string() => Nat(candid::Nat::from(1_u64 << 31)),
+                    "wasm_memory_threshold".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
+                    "compute_allocation".to_string() => Nat(candid::Nat::from(10_u64)),
+                    "freezing_threshold".to_string() => Nat(candid::Nat::from(100_u64)),
+                    "log_visibility".to_string() => Text("Public".to_string()),
                 }),
             })
         );
@@ -462,13 +460,13 @@ mod tests {
             SelfDescribingValue::Map(hashmap! {
                 "canister_id".to_string() => Text(LEDGER_CANISTER_ID.get().to_string()),
                 "settings".to_string() => Map(hashmap! {
-                    "controllers".to_string() => Array(vec![]),
-                    "memory_allocation".to_string() => Array(vec![Nat(candid::Nat::from(1_u64 << 30))]),
-                    "compute_allocation".to_string() => Array(vec![]),
-                    "freezing_threshold".to_string() => Array(vec![]),
-                    "wasm_memory_limit".to_string() => Array(vec![]),
-                    "wasm_memory_threshold".to_string() => Array(vec![]),
-                    "log_visibility".to_string() => Array(vec![]),
+                    "controllers".to_string() => Null,
+                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
+                    "compute_allocation".to_string() => Null,
+                    "freezing_threshold".to_string() => Null,
+                    "wasm_memory_limit".to_string() => Null,
+                    "wasm_memory_threshold".to_string() => Null,
+                    "log_visibility".to_string() => Null,
                 }),
             })
         );

@@ -224,8 +224,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         let mut retry = 0;
         let encoded_block = loop {
             let tip_block = canister.query_raw_block(tip_index).await?;
-            if tip_block.is_some() {
-                break Ok(tip_block.unwrap());
+            if let Some(tip_block) = tip_block {
+                break Ok(tip_block);
             }
             if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
                 break Err(format!(

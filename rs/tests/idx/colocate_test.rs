@@ -101,6 +101,7 @@ fn setup(env: TestEnv) {
         .arg(runfiles)
         .arg("--dereference")
         .arg("--exclude=rs/tests/colocate_test_bin")
+        .arg("--exclude=rs/tests/run_systest.sh")
         .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
         // Avoid packing in ic-os images. Those are runtime dependencies for the
         // top-level test runner which uploads them to shared storage; after that

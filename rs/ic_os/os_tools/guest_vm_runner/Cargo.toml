@@ -7,12 +7,12 @@ name = "guest_vm_runner"
 path = "src/main.rs"
 
 [dependencies]
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
-deterministic_ips = { path = "../../deterministic_ips" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
 ic_device = { path = "../../device" }
-grub = { path = "../../grub" }
-ic-metrics-tool = { path = "../../metrics_tool" }
+grub = { path = "../../boot/grub" }
+ic-metrics-tool = { path = "../../metrics/metrics_tool" }
 ic_sev = { path = "../../sev" }
 
 anyhow = { workspace = true }
@@ -24,6 +24,8 @@ macaddr = { workspace = true }
 memchr = { workspace = true }
 nix = { workspace = true }
 regex = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
 sysinfo = { workspace = true }
 thiserror = { workspace = true }
 tempfile = { workspace = true }
@@ -36,7 +38,7 @@ systemd = { workspace = true }
 virt = { workspace = true }
 
 [features]
-dev = ["config/dev"]
+dev = ["config_tool/dev"]
 skip_default_tests = []
 integration_tests = []
 upgrade_device_mapper_test = []

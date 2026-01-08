@@ -110,8 +110,8 @@ impl LocallyDescribableProposalAction for StopOrStartCanister {
         let action = action.map(SelfDescribingProstEnum::<CanisterAction>::new);
 
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("canister_id", *canister_id)
-            .add_field_with_empty_as_fallback("action", action)
+            .add_field("canister_id", *canister_id)
+            .add_field("action", action)
             .build()
     }
 }

@@ -1,4 +1,8 @@
-use crate::pb::v1::CreateServiceNervousSystem;
+use crate::{
+    pb::v1::{CreateServiceNervousSystem, SelfDescribingValue},
+    proposals::self_describing::LocallyDescribableProposalAction,
+};
+
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 
 impl CreateServiceNervousSystem {
@@ -22,5 +26,14 @@ impl CreateServiceNervousSystem {
             duration,
             swap_approved_timestamp_seconds,
         )
+    }
+}
+
+impl LocallyDescribableProposalAction for CreateServiceNervousSystem {
+    const TYPE_NAME: &'static str = "Create Service Nervous System (SNS)";
+    const TYPE_DESCRIPTION: &'static str = "Create a new Service Nervous System (SNS).";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
     }
 }

@@ -185,8 +185,8 @@ impl LocallyDescribableProposalAction for KnownNeuron {
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
-            .add_field_with_empty_as_fallback("neuron_id", self.id.map(|id| id.id))
-            .add_field_with_empty_as_fallback("known_neuron_data", self.known_neuron_data.clone())
+            .add_field("neuron_id", self.id.map(|id| id.id))
+            .add_field("known_neuron_data", self.known_neuron_data.clone())
             .build()
     }
 }

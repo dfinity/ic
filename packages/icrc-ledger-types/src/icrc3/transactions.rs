@@ -70,7 +70,7 @@ pub struct FeeCollector {
     pub fee_collector: Option<Account>,
     pub caller: Option<Principal>,
     pub ts: Option<u64>,
-    pub op: Option<String>,
+    pub mthd: Option<String>,
 }
 
 // Representation of a Transaction which supports the Icrc1 Standard functionalities

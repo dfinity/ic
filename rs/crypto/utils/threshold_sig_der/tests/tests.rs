@@ -173,14 +173,16 @@ fn test_pem_missing_end_header() {
 }
 
 #[test]
-fn test_pem_too_short() {
+fn test_pem_empty_content() {
     use std::io::Write;
 
+    // Valid PEM structure but with no content between the headers.
+    // The pem crate parses this successfully, then DER parsing fails on empty content.
     let bad_pem = "-----BEGIN PUBLIC KEY-----\n-----END PUBLIC KEY-----\n";
     let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
     tmpfile.write_all(bad_pem.as_bytes()).unwrap();
     let result = parse_threshold_sig_key_from_pem_file(tmpfile.path());
-    assert!(matches!(result, Err(KeyConversionError::InvalidPem(_))));
+    assert!(matches!(result, Err(KeyConversionError::InvalidDer(_))));
 }
 
 #[test]
@@ -193,7 +195,7 @@ fn test_pem_invalid_base64() {
     let mut tmpfile = tempfile::NamedTempFile::new().unwrap();
     tmpfile.write_all(bad_pem.as_bytes()).unwrap();
     let result = parse_threshold_sig_key_from_pem_file(tmpfile.path());
-    assert!(matches!(result, Err(KeyConversionError::InvalidBase64(_))));
+    assert!(matches!(result, Err(KeyConversionError::InvalidPem(_))));
 }
 
 #[test]

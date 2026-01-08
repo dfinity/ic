@@ -1,11 +1,9 @@
-use candid::Principal;
 use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
     generic_transaction_from_generic_block,
 };
 use ic_icrc1::{Block, Transaction, hash};
-use ic_icrc1_test_utils::icrc3::BlockBuilder;
-use ic_icrc1_test_utils::{arb_account, arb_amount, arb_block, arb_small_amount, blocks_strategy};
+use ic_icrc1_test_utils::{arb_amount, arb_block, arb_small_amount, blocks_strategy};
 use ic_icrc1_tokens_u64::U64;
 use ic_icrc1_tokens_u256::U256;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
@@ -13,6 +11,7 @@ use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
+use ic_ledger_suite_state_machine_tests::arb_fee_collector_block;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use proptest::prelude::*;
 
@@ -174,38 +173,6 @@ fn arb_token_u256() -> impl Strategy<Value = U256> {
     (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
 }
 
-pub fn arb_fee_collector_block<Tokens>() -> impl Strategy<Value = ICRC3Value>
-where
-    Tokens: TokensType,
-{
-    (
-        any::<u64>(),
-        any::<u64>(),
-        any::<Option<[u8; 32]>>(),
-        proptest::option::of(arb_account()),
-        proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
-        any::<Option<u64>>(),
-        prop_oneof![Just(None), Just(Some("107set_fee_collector".to_string()))],
-    )
-        .prop_map(
-            |(block_id, block_ts, parent_hash, fee_collector, caller, tx_ts, op_name)| {
-                let caller = caller.map(|mut c| {
-                    c.push(0x00);
-                    Principal::try_from_slice(&c[..]).unwrap()
-                });
-                let builder = BlockBuilder::<Tokens>::new(block_id, block_ts)
-                    .with_btype("107feecol".to_string());
-                let builder = match parent_hash {
-                    Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
-                    None => builder,
-                };
-                builder
-                    .fee_collector(fee_collector, caller, tx_ts, op_name)
-                    .build()
-            },
-        )
-}
-
 #[test_strategy::proptest]
 fn test_encoding_decoding_fee_collector_block_u64(
     #[strategy(arb_fee_collector_block::<U64>())] original_block: ICRC3Value,
@@ -237,6 +204,7 @@ mod block_encoding_stability {
     use ic_ledger_core::Tokens;
     use icrc_ledger_types::icrc::generic_value::ICRC3Value;
     use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 
     #[test]
     fn test_approve_block() {
@@ -273,20 +241,20 @@ mod block_encoding_stability {
 
     #[test]
     fn test_fee_collector_block() {
-        const EXPECTED_BLOCK: &str = "d9d9f7a465627479706569313037666565636f6c657068617368582043434343434343434343434343434343434343434343434343434343434343436274731a00bc614e627478a46663616c6c65724a0200000000000000fe016d6665655f636f6c6c6563746f72824a0100000000000000fe0158202525252525252525252525252525252525252525252525252525252525252525626f70743130377365745f6665655f636f6c6c6563746f726274731a0154cbf7";
+        const EXPECTED_BLOCK: &str = "d9d9f7a465627479706569313037666565636f6c657068617368582043434343434343434343434343434343434343434343434343434343434343436274731a00bc614e627478a46663616c6c65724a0200000000000000fe016d6665655f636f6c6c6563746f72824a0100000000000000fe0158202525252525252525252525252525252525252525252525252525252525252525646d746864743130377365745f6665655f636f6c6c6563746f726274731a0154cbf7";
 
         let account = Account {
             owner: PrincipalId::new_user_test_id(1).0,
             subaccount: Some([37u8; 32]),
         };
         let builder = BlockBuilder::<Tokens>::new(1, 12345678)
-            .with_btype("107feecol".to_string())
+            .with_btype(BTYPE_107.to_string())
             .with_parent_hash(vec![67u8; 32])
             .fee_collector(
                 Some(account),
                 Some(PrincipalId::new_user_test_id(2).0),
                 Some(22334455u64),
-                Some("107set_fee_collector".to_string()),
+                Some(SET_FEE_COL_107.to_string()),
             );
         assert_block_encoding(builder.build(), EXPECTED_BLOCK);
     }

@@ -12,7 +12,7 @@ tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 attestation = { path = "../../attestation" }
 remote_attestation_shared = { path = "../shared" }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
 ic_sev = { path = "../../sev" }
 sev = { workspace = true }

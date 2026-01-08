@@ -231,10 +231,12 @@ pub mod arbitrary {
     use crate::{
         WithdrawalFee,
         address::BitcoinAddress,
+        memo::{BurnMemo, MintMemo, Status},
         reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+            ChangeOutput, LedgerBurnIndex, Mode, ReimbursementReason, RetrieveBtcRequest,
+            SuspendedReason,
             eventlog::{EventType, ReplacedReason},
         },
         tx,
@@ -265,6 +267,99 @@ pub mod arbitrary {
                 }
             })
         };
+    }
+
+    pub(crate) fn burn_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        prop_oneof![burn_convert_memo(), burn_consolidate_memo()]
+    }
+
+    pub(crate) fn burn_consolidate_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (any::<u64>(), any::<u64>())
+            .prop_map(|(value, inputs)| BurnMemo::Consolidate { value, inputs })
+    }
+
+    pub(crate) fn burn_convert_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (
+            option::of("[a-z0-9]{20,62}"),
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+        )
+            .prop_map(|(address, kyt_fee, status)| {
+                BurnMemo::Convert {
+                    address: address.as_ref().map(|s| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static str = Box::leak(s.clone().into_boxed_str());
+                        leaked
+                    }),
+                    kyt_fee,
+                    status,
+                }
+            })
+    }
+
+    pub(crate) fn mint_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        prop_oneof![
+            mint_convert_memo(),
+            mint_kyt_memo(),
+            mint_kyt_fail_memo(),
+            mint_reimburse_withdrawal_memo()
+        ]
+    }
+
+    pub(crate) fn mint_convert_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(proptest::collection::vec(any::<u8>(), 32)),
+            option::of(any::<u32>()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(|(txid, vout, kyt_fee)| {
+                MintMemo::Convert {
+                    txid: txid.as_ref().map(|v| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static [u8] = Box::leak(v.clone().into_boxed_slice());
+                        leaked
+                    }),
+                    vout,
+                    kyt_fee,
+                }
+            })
+    }
+
+    pub(crate) fn mint_kyt_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        #[allow(deprecated)]
+        Just(MintMemo::Kyt)
+    }
+
+    #[allow(deprecated)]
+    pub(crate) fn mint_kyt_fail_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(
+                |(kyt_fee, status, associated_burn_index)| MintMemo::KytFail {
+                    kyt_fee,
+                    status,
+                    associated_burn_index,
+                },
+            )
+    }
+
+    pub(crate) fn mint_reimburse_withdrawal_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        any::<u64>().prop_map(|withdrawal_id| MintMemo::ReimburseWithdrawal {
+            withdrawal_id: LedgerBurnIndex::from(withdrawal_id),
+        })
+    }
+
+    pub(crate) fn memo_status() -> impl Strategy<Value = Status> {
+        prop_oneof![
+            Just(Status::Accepted),
+            Just(Status::Rejected),
+            Just(Status::CallFailed),
+        ]
     }
 
     fn amount() -> impl Strategy<Value = Satoshi> {

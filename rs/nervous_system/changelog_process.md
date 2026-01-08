@@ -26,7 +26,7 @@ The next section describes how these files are maintained.
    ```bash
    PROPOSAL_ID=???
 
-   ./rs/nervous_system/tools/helpers/add-release-to-changelog.sh $PROPOSAL_ID
+   ./rs/nervous_system/tools/release/add-release-to-changelog.sh $PROPOSAL_ID
    ```
 
 If your new code is not active in release builds (because it is behind a feature

@@ -357,8 +357,7 @@ fn build_tagged_transcripts_map(
     transcripts
         .iter()
         .map(|transcript_pb| {
-            let transcript =
-                NiDkgTranscript::try_from(transcript_pb).map_err(ProxyDecodeError::Other)?;
+            let transcript = NiDkgTranscript::try_from(transcript_pb)?;
             Ok((transcript.dkg_id.dkg_tag.clone(), transcript))
         })
         .collect::<Result<BTreeMap<_, _>, _>>()
@@ -411,9 +410,9 @@ fn build_transcript_result(
         .as_ref()
         .ok_or("Val missing in DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?
     {
-        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => {
-            Ok(Ok(NiDkgTranscript::try_from(transcript)?))
-        }
+        pb::ni_dkg_transcript_result::Val::Transcript(transcript) => Ok(Ok(
+            NiDkgTranscript::try_from(transcript).map_err(|e| e.to_string())?,
+        )),
         pb::ni_dkg_transcript_result::Val::ErrorString(error_string) => {
             Ok(Err(std::str::from_utf8(error_string)
                 .map_err(|e| format!("Failed to convert ErrorString: {e:?}"))?
@@ -432,8 +431,7 @@ impl TryFrom<pb::Summary> for DkgSummary {
                 .configs
                 .into_iter()
                 .map(|config| NiDkgConfig::try_from(config).map(|c| (c.dkg_id.clone(), c)))
-                .collect::<Result<BTreeMap<_, _>, _>>()
-                .map_err(ProxyDecodeError::Other)?,
+                .collect::<Result<BTreeMap<_, _>, _>>()?,
             current_transcripts: build_tagged_transcripts_map(&summary.current_transcripts)?,
             next_transcripts: build_tagged_transcripts_map(&summary.next_transcripts)?,
             interval_length: Height::from(summary.interval_length),
