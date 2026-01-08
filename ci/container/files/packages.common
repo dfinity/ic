@@ -13,9 +13,6 @@ vim
 retry
 zip
 
-# Bitcoin core (for bitcoin adapter integration test)
-libtool
-
 # GitHub CI
 sudo
 jq
@@ -58,6 +55,7 @@ libcryptsetup-dev
 libdevmapper-dev
 libselinux-dev
 libsystemd-dev
+libtool
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
 mtools # used for mcopy and mmd
