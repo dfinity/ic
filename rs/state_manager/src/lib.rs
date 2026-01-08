@@ -81,6 +81,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
+    collections::btree_map::Entry,
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     sync::Mutex,
 };
@@ -169,6 +170,9 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
+    latest_subnet_certified_height: IntGauge,
+    no_clone_count: IntCounter,
+    no_hash_count: IntCounter,
 }
 
 #[derive(Clone)]
@@ -449,6 +453,21 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
+        let latest_subnet_certified_height = metrics_registry.int_gauge(
+            "state_manager_latest_subnet_certified_height",
+            "Height of the latest validated certification.",
+        );
+
+        let no_clone_count = metrics_registry.int_counter(
+            "state_manager_no_clone_count",
+            "Number of committed states that were not cloned and stored as snapshots.",
+        );
+
+        let no_hash_count = metrics_registry.int_counter(
+            "state_manager_no_hash_count",
+            "Number of committed states that were not hashed as their hash was already available.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -473,6 +492,9 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
+            latest_subnet_certified_height,
+            no_clone_count,
+            no_hash_count,
         }
     }
 
@@ -2109,7 +2131,11 @@ impl StateManagerImpl {
             "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
         );
 
-        update_latest_height(&self.latest_subnet_certified_height, last_height_to_keep);
+        let latest_subnet_certified_height =
+            update_latest_height(&self.latest_subnet_certified_height, last_height_to_keep);
+        self.metrics
+            .latest_subnet_certified_height
+            .set(latest_subnet_certified_height as i64);
 
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
@@ -3127,7 +3153,11 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_inmemory_states_below"])
             .start_timer();
 
-        update_latest_height(&self.latest_subnet_certified_height, requested_height);
+        let latest_subnet_certified_height =
+            update_latest_height(&self.latest_subnet_certified_height, requested_height);
+        self.metrics
+            .latest_subnet_certified_height
+            .set(latest_subnet_certified_height as i64);
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
@@ -3230,15 +3260,18 @@ impl StateManager for StateManagerImpl {
                 );
             }
 
-            states
-                .certifications_metadata
-                .entry(height)
-                .or_insert_with(|| {
+            self.metrics.no_clone_count.inc();
+
+            if let Entry::Vacant(e) = states.certifications_metadata.entry(height) {
+                let certification_metadata =
                     Self::compute_certification_metadata(&self.metrics, &self.log, &state, false)
                         .unwrap_or_else(|err| {
                             fatal!(self.log, "Failed to compute hash tree: {:?}", err)
-                        })
-                });
+                        });
+                e.insert(certification_metadata);
+            } else {
+                self.metrics.no_hash_count.inc();
+            }
 
             states.tip = Some((height, state));
             self.tip_height.store(height.get(), Ordering::Relaxed);
