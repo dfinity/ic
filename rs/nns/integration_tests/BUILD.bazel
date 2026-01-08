@@ -18,6 +18,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
     "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
     "//rs/node_rewards/canister/api",
     "//rs/registry/canister/api",

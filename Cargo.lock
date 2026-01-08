@@ -12429,6 +12429,7 @@ dependencies = [
  "ic-nns-governance-init",
  "ic-nns-gtc",
  "ic-nns-handler-root",
+ "ic-nns-handler-root-interface",
  "ic-nns-test-utils",
  "ic-nns-test-utils-golden-nns-state",
  "ic-nns-test-utils-macros",

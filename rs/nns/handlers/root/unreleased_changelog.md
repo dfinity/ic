@@ -9,7 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added `take_canister_snapshot` method. It is only callable by the Governance canister though.
+* Added `take_canister_snapshot`, and `load_canister_snapshot` methods. These
+  are only callable by the Governance canister though. What these do is
+  proxy/immediately forward to methods of the same name in the Management
+  (pseudo-)canister.
 
 ## Changed
 
