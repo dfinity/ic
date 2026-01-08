@@ -120,19 +120,6 @@ ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
 
-# Add Rust/Cargo support
-RUN mkdir -p /tmp/rust-version/
-COPY rust-toolchain.toml /tmp/rust-version/rust-toolchain.toml
-# Read the channel from the toolchain file
-RUN sed </tmp/rust-version/rust-toolchain.toml -n 's/^channel = "\(.*\)"$/\1/p' > /tmp/rust-version/version
-RUN echo "Rust version:" "$(cat /tmp/rust-version/version)"
-RUN curl --fail https://sh.rustup.rs -sSf \
-    | sh -s -- -y --default-toolchain "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" --no-modify-path && \
-    rustup default "$(cat /tmp/rust-version/version)-x86_64-unknown-linux-gnu" && \
-    rustup target add wasm32-unknown-unknown && \
-    rustup component add clippy
-RUN rm -rf /tmp/rust-version
-
 # Add cargo-audit
 ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
