@@ -252,18 +252,14 @@ impl From<api::RewardNodeProvider> for pb::RewardNodeProvider {
     }
 }
 
-impl From<pb::reward_node_provider::RewardToNeuron>
-    for api::reward_node_provider::RewardToNeuron
-{
+impl From<pb::reward_node_provider::RewardToNeuron> for api::reward_node_provider::RewardToNeuron {
     fn from(item: pb::reward_node_provider::RewardToNeuron) -> Self {
         Self {
             dissolve_delay_seconds: item.dissolve_delay_seconds,
         }
     }
 }
-impl From<api::reward_node_provider::RewardToNeuron>
-    for pb::reward_node_provider::RewardToNeuron
-{
+impl From<api::reward_node_provider::RewardToNeuron> for pb::reward_node_provider::RewardToNeuron {
     fn from(item: api::reward_node_provider::RewardToNeuron) -> Self {
         Self {
             dissolve_delay_seconds: item.dissolve_delay_seconds,
@@ -556,18 +552,14 @@ impl From<api::ManageNeuronRequest> for pb::ManageNeuron {
     }
 }
 
-impl From<pb::manage_neuron::IncreaseDissolveDelay>
-    for api::manage_neuron::IncreaseDissolveDelay
-{
+impl From<pb::manage_neuron::IncreaseDissolveDelay> for api::manage_neuron::IncreaseDissolveDelay {
     fn from(item: pb::manage_neuron::IncreaseDissolveDelay) -> Self {
         Self {
             additional_dissolve_delay_seconds: item.additional_dissolve_delay_seconds,
         }
     }
 }
-impl From<api::manage_neuron::IncreaseDissolveDelay>
-    for pb::manage_neuron::IncreaseDissolveDelay
-{
+impl From<api::manage_neuron::IncreaseDissolveDelay> for pb::manage_neuron::IncreaseDissolveDelay {
     fn from(item: api::manage_neuron::IncreaseDissolveDelay) -> Self {
         Self {
             additional_dissolve_delay_seconds: item.additional_dissolve_delay_seconds,
@@ -1308,9 +1300,7 @@ impl From<pb::governance_error::ErrorType> for api::governance_error::ErrorType 
             pb::governance_error::ErrorType::NotAuthorized => {
                 api::governance_error::ErrorType::NotAuthorized
             }
-            pb::governance_error::ErrorType::NotFound => {
-                api::governance_error::ErrorType::NotFound
-            }
+            pb::governance_error::ErrorType::NotFound => api::governance_error::ErrorType::NotFound,
             pb::governance_error::ErrorType::InvalidCommand => {
                 api::governance_error::ErrorType::InvalidCommand
             }
@@ -1330,9 +1320,7 @@ impl From<pb::governance_error::ErrorType> for api::governance_error::ErrorType 
             pb::governance_error::ErrorType::PreconditionFailed => {
                 api::governance_error::ErrorType::PreconditionFailed
             }
-            pb::governance_error::ErrorType::External => {
-                api::governance_error::ErrorType::External
-            }
+            pb::governance_error::ErrorType::External => api::governance_error::ErrorType::External,
             pb::governance_error::ErrorType::LedgerUpdateOngoing => {
                 api::governance_error::ErrorType::LedgerUpdateOngoing
             }
@@ -1370,9 +1358,7 @@ impl From<api::governance_error::ErrorType> for pb::governance_error::ErrorType 
             api::governance_error::ErrorType::NotAuthorized => {
                 pb::governance_error::ErrorType::NotAuthorized
             }
-            api::governance_error::ErrorType::NotFound => {
-                pb::governance_error::ErrorType::NotFound
-            }
+            api::governance_error::ErrorType::NotFound => pb::governance_error::ErrorType::NotFound,
             api::governance_error::ErrorType::InvalidCommand => {
                 pb::governance_error::ErrorType::InvalidCommand
             }
@@ -1392,9 +1378,7 @@ impl From<api::governance_error::ErrorType> for pb::governance_error::ErrorType 
             api::governance_error::ErrorType::PreconditionFailed => {
                 pb::governance_error::ErrorType::PreconditionFailed
             }
-            api::governance_error::ErrorType::External => {
-                pb::governance_error::ErrorType::External
-            }
+            api::governance_error::ErrorType::External => pb::governance_error::ErrorType::External,
             api::governance_error::ErrorType::LedgerUpdateOngoing => {
                 pb::governance_error::ErrorType::LedgerUpdateOngoing
             }
@@ -2090,13 +2074,9 @@ impl From<pb::Topic> for api::TopicToFollow {
             pb::Topic::IcOsVersionDeployment => api::TopicToFollow::IcOsVersionDeployment,
             pb::Topic::IcOsVersionElection => api::TopicToFollow::IcOsVersionElection,
             pb::Topic::SnsAndCommunityFund => api::TopicToFollow::SnsAndCommunityFund,
-            pb::Topic::ApiBoundaryNodeManagement => {
-                api::TopicToFollow::ApiBoundaryNodeManagement
-            }
+            pb::Topic::ApiBoundaryNodeManagement => api::TopicToFollow::ApiBoundaryNodeManagement,
             pb::Topic::SubnetRental => api::TopicToFollow::SubnetRental,
-            pb::Topic::ProtocolCanisterManagement => {
-                api::TopicToFollow::ProtocolCanisterManagement
-            }
+            pb::Topic::ProtocolCanisterManagement => api::TopicToFollow::ProtocolCanisterManagement,
             pb::Topic::ServiceNervousSystemManagement => {
                 api::TopicToFollow::ServiceNervousSystemManagement
             }
@@ -2120,16 +2100,12 @@ impl From<api::TopicToFollow> for pb::Topic {
             api::TopicToFollow::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
             api::TopicToFollow::IcOsVersionElection => pb::Topic::IcOsVersionElection,
             api::TopicToFollow::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
-            api::TopicToFollow::ApiBoundaryNodeManagement => {
-                pb::Topic::ApiBoundaryNodeManagement
-            }
+            api::TopicToFollow::ApiBoundaryNodeManagement => pb::Topic::ApiBoundaryNodeManagement,
             api::TopicToFollow::SubnetRental => pb::Topic::SubnetRental,
             api::TopicToFollow::ApplicationCanisterManagement => {
                 pb::Topic::ApplicationCanisterManagement
             }
-            api::TopicToFollow::ProtocolCanisterManagement => {
-                pb::Topic::ProtocolCanisterManagement
-            }
+            api::TopicToFollow::ProtocolCanisterManagement => pb::Topic::ProtocolCanisterManagement,
             api::TopicToFollow::ServiceNervousSystemManagement => {
                 pb::Topic::ServiceNervousSystemManagement
             }
@@ -2404,8 +2380,7 @@ impl From<pb::create_service_nervous_system::swap_parameters::NeuronBasketConstr
         }
     }
 }
-impl
-    From<api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters>
+impl From<api::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters>
     for pb::create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters
 {
     fn from(
@@ -3546,9 +3521,7 @@ impl From<pb::audit_event::reset_aging::NeuronDissolveState>
     fn from(item: pb::audit_event::reset_aging::NeuronDissolveState) -> Self {
         match item {
             pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => {
-                api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
-                    v,
-                )
+                api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
             }
             pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
                 api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
@@ -3561,8 +3534,14 @@ impl From<api::audit_event::reset_aging::NeuronDissolveState>
 {
     fn from(item: api::audit_event::reset_aging::NeuronDissolveState) -> Self {
         match item {
-            api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            api::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                v,
+            ) => {
+                pb::audit_event::reset_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v)
+            }
+            api::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
+                pb::audit_event::reset_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            }
         }
     }
 }
@@ -3595,8 +3574,16 @@ impl From<pb::audit_event::restore_aging::NeuronDissolveState>
 {
     fn from(item: pb::audit_event::restore_aging::NeuronDissolveState) -> Self {
         match item {
-            pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                v,
+            ) => {
+                api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                    v,
+                )
+            }
+            pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
+                api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            }
         }
     }
 }
@@ -3605,8 +3592,16 @@ impl From<api::audit_event::restore_aging::NeuronDissolveState>
 {
     fn from(item: api::audit_event::restore_aging::NeuronDissolveState) -> Self {
         match item {
-            api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v) => pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(v),
-            api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            api::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                v,
+            ) => {
+                pb::audit_event::restore_aging::NeuronDissolveState::WhenDissolvedTimestampSeconds(
+                    v,
+                )
+            }
+            api::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v) => {
+                pb::audit_event::restore_aging::NeuronDissolveState::DissolveDelaySeconds(v)
+            }
         }
     }
 }
@@ -3900,13 +3895,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
                 api::NnsFunction::ClearProvisionalWhitelist
             }
             pb::NnsFunction::RemoveNodesFromSubnet => api::NnsFunction::RemoveNodesFromSubnet,
-            pb::NnsFunction::SetAuthorizedSubnetworks => {
-                api::NnsFunction::SetAuthorizedSubnetworks
-            }
+            pb::NnsFunction::SetAuthorizedSubnetworks => api::NnsFunction::SetAuthorizedSubnetworks,
             pb::NnsFunction::SetFirewallConfig => api::NnsFunction::SetFirewallConfig,
-            pb::NnsFunction::UpdateNodeOperatorConfig => {
-                api::NnsFunction::UpdateNodeOperatorConfig
-            }
+            pb::NnsFunction::UpdateNodeOperatorConfig => api::NnsFunction::UpdateNodeOperatorConfig,
             pb::NnsFunction::StopOrStartNnsCanister => api::NnsFunction::StopOrStartNnsCanister,
             pb::NnsFunction::RemoveNodes => api::NnsFunction::RemoveNodes,
             pb::NnsFunction::UninstallCode => api::NnsFunction::UninstallCode,
@@ -3920,9 +3911,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::AddFirewallRules => api::NnsFunction::AddFirewallRules,
             pb::NnsFunction::RemoveFirewallRules => api::NnsFunction::RemoveFirewallRules,
             pb::NnsFunction::UpdateFirewallRules => api::NnsFunction::UpdateFirewallRules,
-            pb::NnsFunction::PrepareCanisterMigration => {
-                api::NnsFunction::PrepareCanisterMigration
-            }
+            pb::NnsFunction::PrepareCanisterMigration => api::NnsFunction::PrepareCanisterMigration,
             pb::NnsFunction::CompleteCanisterMigration => {
                 api::NnsFunction::CompleteCanisterMigration
             }
@@ -3935,9 +3924,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 api::NnsFunction::UpdateSnsWasmSnsSubnetIds
             }
-            pb::NnsFunction::UpdateAllowedPrincipals => {
-                api::NnsFunction::UpdateAllowedPrincipals
-            }
+            pb::NnsFunction::UpdateAllowedPrincipals => api::NnsFunction::UpdateAllowedPrincipals,
             pb::NnsFunction::RetireReplicaVersion => api::NnsFunction::RetireReplicaVersion,
             pb::NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 api::NnsFunction::InsertSnsWasmUpgradePathEntries
@@ -3949,9 +3936,7 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::UpdateElectedHostosVersions => {
                 api::NnsFunction::UpdateElectedHostosVersions
             }
-            pb::NnsFunction::UpdateNodesHostosVersion => {
-                api::NnsFunction::UpdateNodesHostosVersion
-            }
+            pb::NnsFunction::UpdateNodesHostosVersion => api::NnsFunction::UpdateNodesHostosVersion,
             pb::NnsFunction::HardResetNnsRootToVersion => {
                 api::NnsFunction::HardResetNnsRootToVersion
             }
@@ -3972,13 +3957,9 @@ impl From<pb::NnsFunction> for api::NnsFunction {
             pb::NnsFunction::ReviseElectedHostosVersions => {
                 api::NnsFunction::ReviseElectedHostosVersions
             }
-            pb::NnsFunction::DeployHostosToSomeNodes => {
-                api::NnsFunction::DeployHostosToSomeNodes
-            }
+            pb::NnsFunction::DeployHostosToSomeNodes => api::NnsFunction::DeployHostosToSomeNodes,
             pb::NnsFunction::SubnetRentalRequest => api::NnsFunction::SubnetRentalRequest,
-            pb::NnsFunction::PauseCanisterMigrations => {
-                api::NnsFunction::PauseCanisterMigrations
-            }
+            pb::NnsFunction::PauseCanisterMigrations => api::NnsFunction::PauseCanisterMigrations,
             pb::NnsFunction::UnpauseCanisterMigrations => {
                 api::NnsFunction::UnpauseCanisterMigrations
             }
@@ -4009,13 +3990,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::ClearProvisionalWhitelist
             }
             api::NnsFunction::RemoveNodesFromSubnet => pb::NnsFunction::RemoveNodesFromSubnet,
-            api::NnsFunction::SetAuthorizedSubnetworks => {
-                pb::NnsFunction::SetAuthorizedSubnetworks
-            }
+            api::NnsFunction::SetAuthorizedSubnetworks => pb::NnsFunction::SetAuthorizedSubnetworks,
             api::NnsFunction::SetFirewallConfig => pb::NnsFunction::SetFirewallConfig,
-            api::NnsFunction::UpdateNodeOperatorConfig => {
-                pb::NnsFunction::UpdateNodeOperatorConfig
-            }
+            api::NnsFunction::UpdateNodeOperatorConfig => pb::NnsFunction::UpdateNodeOperatorConfig,
             api::NnsFunction::StopOrStartNnsCanister => pb::NnsFunction::StopOrStartNnsCanister,
             api::NnsFunction::RemoveNodes => pb::NnsFunction::RemoveNodes,
             api::NnsFunction::UninstallCode => pb::NnsFunction::UninstallCode,
@@ -4029,9 +4006,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::AddFirewallRules => pb::NnsFunction::AddFirewallRules,
             api::NnsFunction::RemoveFirewallRules => pb::NnsFunction::RemoveFirewallRules,
             api::NnsFunction::UpdateFirewallRules => pb::NnsFunction::UpdateFirewallRules,
-            api::NnsFunction::PrepareCanisterMigration => {
-                pb::NnsFunction::PrepareCanisterMigration
-            }
+            api::NnsFunction::PrepareCanisterMigration => pb::NnsFunction::PrepareCanisterMigration,
             api::NnsFunction::CompleteCanisterMigration => {
                 pb::NnsFunction::CompleteCanisterMigration
             }
@@ -4044,9 +4019,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 pb::NnsFunction::UpdateSnsWasmSnsSubnetIds
             }
-            api::NnsFunction::UpdateAllowedPrincipals => {
-                pb::NnsFunction::UpdateAllowedPrincipals
-            }
+            api::NnsFunction::UpdateAllowedPrincipals => pb::NnsFunction::UpdateAllowedPrincipals,
             api::NnsFunction::RetireReplicaVersion => pb::NnsFunction::RetireReplicaVersion,
             api::NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 pb::NnsFunction::InsertSnsWasmUpgradePathEntries
@@ -4058,9 +4031,7 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::UpdateElectedHostosVersions => {
                 pb::NnsFunction::UpdateElectedHostosVersions
             }
-            api::NnsFunction::UpdateNodesHostosVersion => {
-                pb::NnsFunction::UpdateNodesHostosVersion
-            }
+            api::NnsFunction::UpdateNodesHostosVersion => pb::NnsFunction::UpdateNodesHostosVersion,
             api::NnsFunction::HardResetNnsRootToVersion => {
                 pb::NnsFunction::HardResetNnsRootToVersion
             }
@@ -4081,13 +4052,9 @@ impl From<api::NnsFunction> for pb::NnsFunction {
             api::NnsFunction::ReviseElectedHostosVersions => {
                 pb::NnsFunction::ReviseElectedHostosVersions
             }
-            api::NnsFunction::DeployHostosToSomeNodes => {
-                pb::NnsFunction::DeployHostosToSomeNodes
-            }
+            api::NnsFunction::DeployHostosToSomeNodes => pb::NnsFunction::DeployHostosToSomeNodes,
             api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
-            api::NnsFunction::PauseCanisterMigrations => {
-                pb::NnsFunction::PauseCanisterMigrations
-            }
+            api::NnsFunction::PauseCanisterMigrations => pb::NnsFunction::PauseCanisterMigrations,
             api::NnsFunction::UnpauseCanisterMigrations => {
                 pb::NnsFunction::UnpauseCanisterMigrations
             }
