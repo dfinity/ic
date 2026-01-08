@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize, Int, Nat};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
-pub use crate::icrc::metadata_key::{Checked, MetadataKey, MetadataKeyError, Unchecked};
+pub use crate::icrc::metadata_key::{MetadataKey, MetadataKeyError};
 
 /// Variant type for the `icrc1_metadata` endpoint values. The corresponding metadata keys are
 /// arbitrary Unicode strings and must follow the pattern `<namespace>:<key>`, where `<namespace>`
@@ -27,7 +27,7 @@ impl MetadataValue {
     /// # Panics
     ///
     /// Panics if the key is not a valid metadata key format.
-    pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey<Checked>, Self) {
+    pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey, Self) {
         let metadata_key =
             MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
         (metadata_key, val.into())

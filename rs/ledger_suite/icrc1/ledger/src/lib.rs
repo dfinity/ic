@@ -35,7 +35,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc::metadata_key::{Checked, MetadataKey, Unchecked},
+    icrc::metadata_key::MetadataKey,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
 use icrc_ledger_types::{
@@ -231,10 +231,10 @@ impl InitArgsBuilder {
     }
 
     pub fn with_metadata_entry(mut self, key: &str, value: impl Into<Value>) -> Self {
-        let metadata_key = MetadataKey::parse(key)
-            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"))
-            .into_unchecked();
-        self.0.metadata.push((metadata_key, value.into()));
+        // Validate the key format at build time
+        MetadataKey::parse(key)
+            .unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
+        self.0.metadata.push((key.to_string(), value.into()));
         self
     }
 
@@ -278,7 +278,7 @@ pub struct InitArgs {
     pub decimals: Option<u8>,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(MetadataKey<Unchecked>, Value)>,
+    pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
@@ -344,7 +344,7 @@ impl ChangeArchiveOptions {
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Vec<(MetadataKey<Unchecked>, Value)>>,
+    pub metadata: Option<Vec<(String, Value)>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -590,7 +590,7 @@ pub struct Ledger {
 
     token_symbol: String,
     token_name: String,
-    metadata: Vec<(MetadataKey<Checked>, StoredValue)>,
+    metadata: Vec<(MetadataKey, StoredValue)>,
     #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
 
@@ -646,15 +646,15 @@ pub fn wasm_token_type() -> String {
     Tokens::TYPE.to_string()
 }
 
-/// Validates and converts unchecked metadata keys to checked keys.
+/// Validates and converts string metadata keys to checked keys.
 ///
 /// # Arguments
-/// * `arg_metadata` - Metadata with unchecked keys from init/upgrade args
-/// * `require_valid` - If true, traps on invalid keys. If false, uses assume_checked() for backwards compat.
+/// * `arg_metadata` - Metadata with string keys from init/upgrade args
+/// * `require_valid` - If true, traps on invalid keys. If false, accepts any key for backwards compat.
 fn map_metadata_or_trap(
-    arg_metadata: Vec<(MetadataKey<Unchecked>, Value)>,
+    arg_metadata: Vec<(String, Value)>,
     require_valid: bool,
-) -> Vec<(MetadataKey<Checked>, StoredValue)> {
+) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
         METADATA_NAME,
@@ -666,24 +666,23 @@ fn map_metadata_or_trap(
     ];
     arg_metadata
         .into_iter()
-        .map(|(k, v)| {
-            if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
+        .map(|(key_str, v)| {
+            if DISALLOWED_METADATA_FIELDS.contains(&key_str.as_str()) {
                 ic_cdk::trap(&format!(
                     "Metadata field {} is reserved and cannot be set",
-                    k.as_str()
+                    key_str
                 ));
             }
-            let checked_key = if require_valid {
-                // Store the key string before consuming k, in case we need it for the error message
-                let key_str = k.as_str().to_string();
-                match k.require_valid() {
-                    Ok(checked) => checked,
+            let metadata_key = if require_valid {
+                match MetadataKey::parse(&key_str) {
+                    Ok(key) => key,
                     Err(e) => ic_cdk::trap(&format!("invalid metadata key '{}': {}", key_str, e)),
                 }
             } else {
-                k.assume_checked()
+                // For backwards compat with ledgers that have legacy invalid keys
+                MetadataKey::unchecked_from_string(key_str)
             };
-            (checked_key, StoredValue::from(v))
+            (metadata_key, StoredValue::from(v))
         })
         .collect()
 }

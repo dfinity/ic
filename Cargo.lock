@@ -16373,6 +16373,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
+ "serde_json",
  "sha2 0.10.9",
  "strum 0.26.3",
  "strum_macros 0.26.4",

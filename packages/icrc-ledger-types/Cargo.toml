@@ -32,3 +32,4 @@ time = { workspace = true }
 assert_matches = { workspace = true }
 hex = { workspace = true }
 proptest = { workspace = true }
+serde_json = { workspace = true }
