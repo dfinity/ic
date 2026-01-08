@@ -17,6 +17,17 @@ use ic_nns_constants::{
 };
 use std::sync::Arc;
 
+/// A partial Candid interface for the management canister (ic_00) that contains the necessary
+/// methods for all the ExecuteNnsFunction proposals. Currently, only the uninstall_code method is
+/// supported.
+const PARTIAL_IC_00_CANDID: &str = r#"type uninstall_code_args = record {
+    canister_id : principal;
+    sender_canister_version : opt nat64;
+};
+service ic : {
+    uninstall_code : (uninstall_code_args) -> ();
+}"#;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidExecuteNnsFunction {
     pub nns_function: ValidNnsFunction,
@@ -72,6 +83,13 @@ impl ValidExecuteNnsFunction {
 
     async fn get_candid_source(&self, env: Arc<dyn Environment>) -> Result<String, String> {
         let (canister_id, _method_name) = self.nns_function.canister_and_function();
+
+        // The management canister (ic_00) doesn't expose candid:service metadata, so we return a
+        // hard-coded DID file for it.
+        if canister_id == CanisterId::ic_00() {
+            return Ok(PARTIAL_IC_00_CANDID.to_string());
+        }
+
         let request = CanisterMetadataRequest::new(canister_id, "candid:service".to_string());
         let encoded_request = Encode!(&request).expect("Failed to encode payload");
         let response = env

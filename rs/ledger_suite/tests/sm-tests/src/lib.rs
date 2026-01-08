@@ -7,10 +7,12 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_http_types::{HttpRequest, HttpResponse};
-use ic_icrc1::blocks::encoded_block_to_generic_block;
+use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation, Transaction, hash::Hash};
 use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg, valid_transactions_strategy};
+use ic_icrc1_test_utils::{
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, valid_transactions_strategy,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -39,6 +41,7 @@ use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmRe
 use ic_types::Cycles;
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
@@ -59,6 +62,8 @@ use icrc_ledger_types::icrc21::requests::{
 use icrc_ledger_types::icrc21::responses::{ConsentMessage, FieldsDisplay, Value as Icrc21Value};
 use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
+use icrc_ledger_types::icrc107;
+use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -610,7 +615,7 @@ pub fn check_icrc3_supported_block_types(
     block_types.sort();
     let mut expected_block_types = vec!["1burn", "1mint", "1xfer", "2approve", "2xfer"];
     if supports_107 {
-        expected_block_types.push("107feecol");
+        expected_block_types.push(BTYPE_107);
         expected_block_types.sort();
     }
     assert_eq!(block_types, expected_block_types);
@@ -1659,6 +1664,99 @@ pub fn block_encoding_agreed_with_the_icrc3_schema<Tokens: TokensType>() {
             let encoded_block = block.encode();
             let generic_block = encoded_block_to_generic_block(&encoded_block);
             if let Err(errors) = icrc3::schema::validate(&generic_block) {
+                panic!("generic_block: {generic_block:?}, errors:\n{errors}");
+            }
+            Ok(())
+        })
+        .unwrap();
+}
+
+pub fn arb_nonendpoint_fee_collector_tx_params() -> impl Strategy<
+    Value = (
+        Option<Account>,
+        Option<Principal>,
+        Option<u64>,
+        Option<String>,
+    ),
+> {
+    (
+        proptest::option::of(any::<u64>()),
+        proptest::option::of(arb_account()),
+        proptest::option::of(proptest::collection::vec(any::<u8>(), 28)),
+        prop_oneof![
+            Just(None),
+            Just(Some(BTYPE_107.to_string())),
+            Just(Some("random_str".to_string()))
+        ],
+    )
+        .prop_map(|(ts, fee_collector, caller, mthd)| {
+            let caller = caller.map(|mut c| {
+                c.push(0x00);
+                Principal::try_from_slice(&c[..]).unwrap()
+            });
+            (fee_collector, caller, ts, mthd)
+        })
+}
+
+pub fn arb_endpoint_fee_collector_tx_params() -> impl Strategy<
+    Value = (
+        Option<Account>,
+        Option<Principal>,
+        Option<u64>,
+        Option<String>,
+    ),
+> {
+    (
+        any::<u64>(),
+        proptest::option::of(arb_account()),
+        proptest::collection::vec(any::<u8>(), 28),
+    )
+        .prop_map(|(ts, fee_collector, caller)| {
+            let mut caller = caller;
+            caller.push(0x00);
+            (
+                fee_collector,
+                Some(Principal::try_from_slice(&caller[..]).unwrap()),
+                Some(ts),
+                Some(SET_FEE_COL_107.to_string()),
+            )
+        })
+}
+
+pub fn arb_fee_collector_block<Tokens>() -> impl Strategy<Value = ICRC3Value>
+where
+    Tokens: TokensType,
+{
+    (
+        any::<u64>(),
+        any::<u64>(),
+        any::<Option<[u8; 32]>>(),
+        prop_oneof![
+            arb_nonendpoint_fee_collector_tx_params(),
+            arb_endpoint_fee_collector_tx_params()
+        ],
+    )
+        .prop_map(|(block_id, block_ts, parent_hash, tx)| {
+            let builder =
+                BlockBuilder::<Tokens>::new(block_id, block_ts).with_btype(BTYPE_107.to_string());
+            let builder = match parent_hash {
+                Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
+                None => builder,
+            };
+            builder.fee_collector(tx.0, tx.1, tx.2, tx.3).build()
+        })
+}
+
+pub fn block_encoding_agreed_with_the_icrc107_schema<Tokens: TokensType>() {
+    let mut runner = TestRunner::new(TestRunnerConfig {
+        max_shrink_iters: 0,
+        ..Default::default()
+    });
+    runner
+        .run(&arb_fee_collector_block::<Tokens>(), |block| {
+            let encoded_block = generic_block_to_encoded_block(block.clone().into()).expect("");
+            let generic_block = encoded_block_to_generic_block(&encoded_block);
+            if let Err(errors) = icrc107::schema::validate(&generic_block) {
                 panic!("generic_block: {generic_block:?}, errors:\n{errors}");
             }
             Ok(())
