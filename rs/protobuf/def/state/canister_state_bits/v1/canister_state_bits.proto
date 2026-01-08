@@ -14,6 +14,9 @@ enum SnapshotSource {
 }
 
 message CallContext {
+  reserved 6;
+  reserved "available_funds";
+
   message Ingress {
     types.v1.UserId user_id = 1;
     bytes message_id = 2;
@@ -43,7 +46,6 @@ message CallContext {
     Query user_query = 12;
   }
   bool responded = 5;
-  state.queues.v1.Funds available_funds = 6;
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
@@ -168,9 +170,10 @@ message StopCanisterContext {
   }
 
   message Canister {
+    reserved 3;
+    reserved "funds";
     types.v1.CanisterId sender = 1;
     uint64 reply_callback = 2;
-    state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
     optional uint64 call_id = 5;
     // If non-zero, this is a best-effort canister update call.

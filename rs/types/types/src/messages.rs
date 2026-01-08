@@ -237,34 +237,13 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         cycles,
                         deadline_seconds,
                     },
-                ) => {
-                    // To maintain backwards compatibility we fall back to reading from `funds` if
-                    // `cycles` is not set.
-                    let cycles = match try_from_option_field(
-                        cycles,
-                        "StopCanisterContext::Canister::cycles",
-                    ) {
-                        Ok(cycles) => cycles,
-                        Err(_) => {
-                            let mut funds: Funds = try_from_option_field(
-                                funds,
-                                "StopCanisterContext::Canister::funds",
-                            )?;
-                            funds.take_cycles()
-                        }
-                    };
-
-                    StopCanisterContext::Canister {
-                        sender: try_from_option_field(
-                            sender,
-                            "StopCanisterContext::Canister::sender",
-                        )?,
-                        reply_callback: CallbackId::from(reply_callback),
-                        call_id: call_id.map(StopCanisterCallId::from),
-                        cycles,
-                        deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
-                    }
-                }
+                ) => StopCanisterContext::Canister {
+                    sender: try_from_option_field(sender, "StopCanisterContext::Canister::sender")?,
+                    reply_callback: CallbackId::from(reply_callback),
+                    call_id: call_id.map(StopCanisterCallId::from),
+                    cycles: try_from_option_field(cycles, "StopCanisterContext::Canister::cycles")?,
+                    deadline: CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
+                },
             };
         Ok(stop_canister_context)
     }

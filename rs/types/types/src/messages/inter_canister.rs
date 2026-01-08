@@ -816,7 +816,6 @@ impl From<&Request> for pb_queues::Request {
             receiver: Some(pb_types::CanisterId::from(req.receiver)),
             sender: Some(pb_types::CanisterId::from(req.sender)),
             sender_reply_callback: req.sender_reply_callback.get(),
-            payment: Some((&Funds::new(req.payment)).into()),
             method_name: req.method_name.clone(),
             method_payload: req.method_payload.clone(),
             cycles_payment: Some((req.payment).into()),
@@ -841,19 +840,11 @@ impl TryFrom<pb_queues::Request> for Request {
     type Error = ProxyDecodeError;
 
     fn try_from(req: pb_queues::Request) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `payment` if
-        // `cycles_payment` is not set.
-        let payment = match try_from_option_field(req.cycles_payment, "Request::cycles_payment") {
-            Ok(res) => res,
-            Err(_) => try_from_option_field::<_, Funds, _>(req.payment, "Request::payment")
-                .map(|mut res| res.take_cycles())?,
-        };
-
         Ok(Self {
             receiver: try_from_option_field(req.receiver, "Request::receiver")?,
             sender: try_from_option_field(req.sender, "Request::sender")?,
             sender_reply_callback: req.sender_reply_callback.into(),
-            payment,
+            payment: try_from_option_field(req.cycles_payment, "Request::cycles_payment"),
             method_name: req.method_name,
             method_payload: req.method_payload,
             metadata: req.metadata.map_or_else(Default::default, From::from),
@@ -893,7 +884,6 @@ impl From<&Response> for pb_queues::Response {
             originator: Some(pb_types::CanisterId::from(rep.originator)),
             respondent: Some(pb_types::CanisterId::from(rep.respondent)),
             originator_reply_callback: rep.originator_reply_callback.get(),
-            refund: Some((&Funds::new(rep.refund)).into()),
             response_payload: Some(pb_queues::response::ResponsePayload::from(
                 &rep.response_payload,
             )),
@@ -907,19 +897,11 @@ impl TryFrom<pb_queues::Response> for Response {
     type Error = ProxyDecodeError;
 
     fn try_from(rep: pb_queues::Response) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `refund` if
-        // `cycles_refund` is not set.
-        let refund = match try_from_option_field(rep.cycles_refund, "Response::cycles_refund") {
-            Ok(res) => res,
-            Err(_) => try_from_option_field::<_, Funds, _>(rep.refund, "Response::refund")
-                .map(|mut res| res.take_cycles())?,
-        };
-
         Ok(Self {
             originator: try_from_option_field(rep.originator, "Response::originator")?,
             respondent: try_from_option_field(rep.respondent, "Response::respondent")?,
             originator_reply_callback: rep.originator_reply_callback.into(),
-            refund,
+            refund: try_from_option_field(rep.cycles_refund, "Response::cycles_refund")?,
             response_payload: try_from_option_field(
                 rep.response_payload,
                 "Response::response_payload",

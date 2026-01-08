@@ -3,8 +3,6 @@
 pub struct CallContext {
     #[prost(bool, tag = "5")]
     pub responded: bool,
-    #[prost(message, optional, tag = "6")]
-    pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
@@ -272,8 +270,6 @@ pub mod stop_canister_context {
         pub sender: ::core::option::Option<super::super::super::super::types::v1::CanisterId>,
         #[prost(uint64, tag = "2")]
         pub reply_callback: u64,
-        #[prost(message, optional, tag = "3")]
-        pub funds: ::core::option::Option<super::super::super::queues::v1::Funds>,
         #[prost(message, optional, tag = "4")]
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
         #[prost(uint64, optional, tag = "5")]

@@ -67,10 +67,12 @@ message RequestMetadata {
 }
 
 message Request {
+  reserved 4;
+  reserved "payment";
+
   types.v1.CanisterId receiver = 1;
   types.v1.CanisterId sender = 2;
   uint64 sender_reply_callback = 3;
-  Funds payment = 4;
   string method_name = 5;
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
@@ -87,10 +89,12 @@ message RejectContext {
 }
 
 message Response {
+  reserved 4;
+  reserved "refund";
+
   types.v1.CanisterId originator = 1;
   types.v1.CanisterId respondent = 2;
   uint64 originator_reply_callback = 3;
-  Funds refund = 4;
   oneof response_payload {
     bytes data = 5;
     RejectContext reject = 6;
