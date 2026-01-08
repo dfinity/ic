@@ -3882,7 +3882,7 @@ pub fn expect_icrc2_disabled(
         "ICRC-2 features are not enabled on the ledger.",
     );
     let standards = supported_standards(env, canister_id);
-    assert_eq!(standards.len(), 2);
+    assert_eq!(standards.len(), 3);
     assert_eq!(standards[0].name, "ICRC-1");
 }
 
