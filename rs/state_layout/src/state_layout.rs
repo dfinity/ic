@@ -1171,8 +1171,8 @@ impl StateLayout {
         self.remove_checkpoint_sync(height, ())
     }
 
-    /// Removes a checkpoint for a given height if it exists and it is not the latest checkpoint.
-    /// Crashes in debug if removal of the last checkpoint is ever attempted or the checkpoint is
+    /// Removes a checkpoint for a given height if it exists and it is not the latest verified checkpoint.
+    /// Crashes in debug if removal of the last verified checkpoint is ever attempted or the checkpoint is
     /// not found.
     ///
     /// Postcondition:
@@ -2032,7 +2032,7 @@ impl CheckpointLayout<ReadOnly> {
         // This is strict prerequisite for the manifest computation.
         sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
             path: self.0.root.clone(),
-            message: "Failed to sync checkpoint directory for the creation of the unverified checkpoint marker".to_string(),
+            message: "Failed to sync checkpoint directory for the removal of the unverified checkpoint marker".to_string(),
             io_err: err,
         })
     }
@@ -2048,7 +2048,33 @@ impl CheckpointLayout<ReadOnly> {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let _result = self.mark_files_readonly_and_sync(thread_pool)?;
+        self.remove_state_sync_checkpoint_marker()?;
         self.remove_unverified_checkpoint_marker()
+    }
+
+    fn remove_state_sync_checkpoint_marker(&self) -> Result<(), LayoutError> {
+        let marker = self.state_sync_checkpoint_marker();
+        if !marker.exists() {
+            return Ok(());
+        }
+        match std::fs::remove_file(&marker) {
+            Err(err) if err.kind() != std::io::ErrorKind::NotFound => {
+                return Err(LayoutError::IoError {
+                    path: marker.to_path_buf(),
+                    message: "failed to remove file from disk".to_string(),
+                    io_err: err,
+                });
+            }
+            _ => {}
+        }
+
+        // Sync the directory to make sure the marker is removed from disk.
+        // This is strict prerequisite for the manifest computation.
+        sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
+            path: self.0.root.clone(),
+            message: "Failed to sync checkpoint directory for the removal of the state sync checkpoint marker".to_string(),
+            io_err: err,
+        })
     }
 }
 

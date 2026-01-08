@@ -466,7 +466,7 @@ fn lazy_wasms() {
 fn rejoining_node_doesnt_accumulate_states() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
-            for i in 1..=3 {
+            for i in 1..=5 {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(
@@ -497,11 +497,11 @@ fn rejoining_node_doesnt_accumulate_states() {
                 );
             }
 
-            dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.remove_states_below(height(5));
             dst_state_manager.flush_deallocation_channel();
             assert_eq!(
                 verified_or_state_sync_checkpoint_heights(&dst_state_manager),
-                vec![height(3)]
+                vec![height(1), height(5)]
             );
 
             assert_error_counters(src_metrics);
@@ -4956,7 +4956,6 @@ fn can_commit_below_state_sync() {
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
 
-            // Since state sync checkpoint@2 is unverified, checkpoint @1 remains as the most recent unverified checkpoint.
             dst_state_manager.remove_states_below(height(2));
             dst_state_manager.flush_deallocation_channel();
             assert_eq!(
@@ -4964,7 +4963,7 @@ fn can_commit_below_state_sync() {
                     .state_layout()
                     .verified_or_state_sync_checkpoint_heights()
                     .unwrap(),
-                vec![height(1), height(2)]
+                vec![height(2)]
             );
 
             dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);

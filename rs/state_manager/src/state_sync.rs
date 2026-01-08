@@ -3,7 +3,7 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT, LABEL_LOAD_CHECKPOINT,
     LABEL_MARK_FILES_READONLY_AND_SYNC, LABEL_ON_SYNCED_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
     StateSyncRefs,
     manifest::build_file_group_chunks,
@@ -92,52 +92,87 @@ impl StateSync {
         );
         let state_sync_metrics = &self.state_manager.metrics.state_sync_metrics;
 
-        let timer = state_sync_metrics
-            .step_duration
-            .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
-            .start_timer();
         let ro_layout = self
             .state_manager
             .state_layout
             .checkpoint_in_verification(height)
             .expect("failed to create checkpoint layout");
 
-        let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-        let state = match crate::checkpoint::load_checkpoint(
-            &ro_layout,
-            self.state_manager.own_subnet_type,
-            &self.state_manager.metrics.checkpoint_metrics,
-            Some(&mut thread_pool),
-            self.state_manager.get_fd_factory(),
-        ) {
-            Ok(state) => state,
-            Err(err) => {
-                fatal!(
-                    self.log,
-                    "Failed to load checkpoint @height {}: {}",
-                    height,
-                    err
-                );
-            }
-        };
-        drop(timer);
-
-        let timer = state_sync_metrics
-            .step_duration
-            .with_label_values(&[LABEL_MARK_FILES_READONLY_AND_SYNC])
-            .start_timer();
-
-        ro_layout
-            .mark_files_readonly_and_sync(Some(&mut thread_pool))
+        let verified_checkpoint_heights = self
+            .state_manager
+            .state_layout
+            .verified_checkpoint_heights()
             .unwrap_or_else(|err| {
                 fatal!(
                     self.log,
-                    "Failed to mark files readonly and sync for checkpoint @height {}: {}",
-                    height,
+                    "Failed to get verified checkpoint heights: {}",
                     err
                 );
             });
-        drop(timer);
+
+        let state = if verified_checkpoint_heights.is_empty() {
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
+                .start_timer();
+            match crate::checkpoint::load_checkpoint_and_validate_parallel(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
+                        height,
+                        err
+                    );
+                }
+            }
+        } else {
+            let timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_LOAD_CHECKPOINT])
+                .start_timer();
+            let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+            let state = match crate::checkpoint::load_checkpoint(
+                &ro_layout,
+                self.state_manager.own_subnet_type,
+                &self.state_manager.metrics.checkpoint_metrics,
+                Some(&mut thread_pool),
+                self.state_manager.get_fd_factory(),
+            ) {
+                Ok(state) => state,
+                Err(err) => {
+                    fatal!(
+                        self.log,
+                        "Failed to load checkpoint @height {}: {}",
+                        height,
+                        err
+                    );
+                }
+            };
+            drop(timer);
+
+            let _timer = state_sync_metrics
+                .step_duration
+                .with_label_values(&[LABEL_MARK_FILES_READONLY_AND_SYNC])
+                .start_timer();
+
+            ro_layout
+                .mark_files_readonly_and_sync(Some(&mut thread_pool))
+                .unwrap_or_else(|err| {
+                    fatal!(
+                        self.log,
+                        "Failed to mark files readonly and sync for checkpoint @height {}: {}",
+                        height,
+                        err
+                    );
+                });
+            state
+        };
 
         let _timer = state_sync_metrics
             .step_duration

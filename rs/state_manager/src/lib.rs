@@ -134,6 +134,7 @@ const LABEL_PREALLOCATE_DIRECTORIES: &str = "preallocate_directories";
 const LABEL_PREALLOCATE_FILES: &str = "preallocate_files";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
 const LABEL_LOAD_AND_VALIDATE_CHECKPOINT: &str = "load_and_validate_checkpoint";
+const LABEL_LOAD_CHECKPOINT: &str = "load_checkpoint";
 const LABEL_MARK_FILES_READONLY_AND_SYNC: &str = "mark_files_readonly_and_sync";
 const LABEL_ON_SYNCED_CHECKPOINT: &str = "on_synced_checkpoint";
 const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
@@ -2162,10 +2163,19 @@ impl StateManagerImpl {
         // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
         let checkpoint_heights_to_keep: BTreeSet<Height> = states
             .states_metadata
-            .keys()
-            .copied()
-            .filter(|height| {
-                *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
+            .iter()
+            .filter_map(|(height, state_metadata)| {
+                if *height < last_checkpoint_to_keep {
+                    return None;
+                }
+                let checkpoint_layout = state_metadata.checkpoint_layout.as_ref()?;
+                // Exclude state sync checkpoints to prevent accumulation during state sync loops.
+                // If a state sync checkpoint is the latest, it is still protected via `latest_manifest_height`.
+                // Regular unverified checkpoints don't need special handling as they block new checkpoint creation and therefore won't accumulate.
+                if checkpoint_layout.is_created_via_state_sync() {
+                    return None;
+                }
+                Some(*height)
             })
             .chain(latest_manifest_height)
             .chain(latest_verified_checkpoint_with_manifest_height)
