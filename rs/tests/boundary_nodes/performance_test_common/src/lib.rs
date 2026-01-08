@@ -10,7 +10,6 @@ use ic_system_test_driver::{
     driver::{
         farm::HostFeature,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
@@ -40,10 +39,6 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
@@ -68,8 +63,6 @@ pub fn setup(env: TestEnv) {
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
-
-    env.sync_with_prometheus();
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.

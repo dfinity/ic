@@ -27,6 +27,8 @@ system_test_nns(
         "vcpus": 16,
     },
     enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
     ],
@@ -135,6 +137,8 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -154,7 +158,9 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
@@ -175,7 +181,9 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

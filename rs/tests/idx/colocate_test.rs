@@ -242,6 +242,11 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
+    let metrics_flag = match env::var("ENABLE_METRICS") {
+        Ok(val) if val == "1" || val.eq_ignore_ascii_case("true") => "--enable-metrics".to_string(),
+        _ => "".to_string(),
+    };
+
     let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
         "--no-logs".to_string()
     } else {
@@ -298,6 +303,7 @@ docker run \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
     --group-base-name {colocated_test} \
+    {metrics_flag} \
     {logs_flag} \
     {exclude_logs_args} \
     run
