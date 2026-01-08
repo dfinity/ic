@@ -6,6 +6,7 @@ edition.workspace = true
 anyhow = { workspace = true }
 candid = { workspace = true }
 der = { workspace = true, features = ["alloc", "derive", "std"] }
+hex = { workspace = true }
 itertools = { workspace = true }
 pem = { workspace = true }
 prost = { workspace = true }
@@ -15,7 +16,7 @@ sev = { workspace = true }
 thiserror = { workspace = true }
 tonic = { workspace = true }
 
-config_types = { path = "../config_types" }
+config_types = { path = "../config/types" }
 ic_sev = { path = "../sev" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }

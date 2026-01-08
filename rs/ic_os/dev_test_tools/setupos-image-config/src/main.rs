@@ -8,11 +8,11 @@ use std::{
 
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
-use config::setupos::config_ini::ConfigIniSettings;
+use config_tool::setupos::config_ini::ConfigIniSettings;
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::setupos::deployment_json::DeploymentSettings;
+use config_tool::setupos::deployment_json::DeploymentSettings;
 use config_types::DeploymentEnvironment;
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::write_config;
