@@ -398,12 +398,6 @@ mod tests {
         expected = "must specify 'pre_signatures_to_create_in_advance' for key ecdsa:Secp256k1:some_key_name"
     )]
     fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
-        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
-        let height = 107428000;
-        let time_ns = 1719241477392602354;
-        let state_hash =
-            "5d6601ac575f565b7c61d6bf5f9b25fa503bf7d756210a9a1fe8d8a32967f2e5".to_string();
-
         let initial_chain_key_configs_to_request = r#"[{
                 "key_id": "ecdsa:Secp256k1:some_key_name",
                 "max_queue_size": "155",
@@ -411,14 +405,8 @@ mod tests {
             }]"#
         .to_string();
 
-        let cmd = ProposeToUpdateRecoveryCupCmd {
-            initial_chain_key_configs_to_request: Some(initial_chain_key_configs_to_request),
-            signature_request_timeout_ns: Some(111),
-            ..empty_propose_to_recover_subnet_cmd(subnet_id, height, time_ns, state_hash)
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload_for_subnet(subnet_id);
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
     }
 
     #[test]
@@ -426,12 +414,6 @@ mod tests {
         expected = "must not specify 'pre_signatures_to_create_in_advance' for key vetkd:Bls12_381_G2:some_key_name"
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
-        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
-        let height = 107428000;
-        let time_ns = 1719241477392602354;
-        let state_hash =
-            "5d6601ac575f565b7c61d6bf5f9b25fa503bf7d756210a9a1fe8d8a32967f2e5".to_string();
-
         let initial_chain_key_configs_to_request = r#"[{
                 "key_id": "vetkd:Bls12_381_G2:some_key_name",
                 "pre_signatures_to_create_in_advance": "99",
@@ -440,13 +422,7 @@ mod tests {
             }]"#
         .to_string();
 
-        let cmd = ProposeToUpdateRecoveryCupCmd {
-            initial_chain_key_configs_to_request: Some(initial_chain_key_configs_to_request),
-            signature_request_timeout_ns: Some(111),
-            ..empty_propose_to_recover_subnet_cmd(subnet_id, height, time_ns, state_hash)
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload_for_subnet(subnet_id);
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
     }
 }

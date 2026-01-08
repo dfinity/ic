@@ -493,16 +493,8 @@ mod tests {
             }]"#
         .to_string();
 
-        let cmd = ProposeToCreateSubnetCmd {
-            initial_chain_key_configs_to_request: Some(initial_chain_key_configs_to_request),
-            replica_version_id: Some(ReplicaVersion::default()),
-            signature_request_timeout_ns: Some(111),
-            features: Some(SubnetFeatures::default()),
-            ..empty_propose_to_create_subnet_cmd()
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload();
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
     }
 
     #[test]
@@ -518,15 +510,7 @@ mod tests {
             }]"#
         .to_string();
 
-        let cmd = ProposeToCreateSubnetCmd {
-            initial_chain_key_configs_to_request: Some(initial_chain_key_configs_to_request),
-            replica_version_id: Some(ReplicaVersion::default()),
-            signature_request_timeout_ns: Some(111),
-            features: Some(SubnetFeatures::default()),
-            ..empty_propose_to_create_subnet_cmd()
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload();
+        let _ = parse_key_config_requests_option(&Some(initial_chain_key_configs_to_request));
     }
 }

@@ -769,26 +769,14 @@ mod tests {
         expected = "must specify 'pre_signatures_to_create_in_advance' for key ecdsa:Secp256k1:some_key_name"
     )]
     fn should_panic_when_key_requiring_pre_signatures_is_missing_pre_signatures_to_create() {
-        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
-        let subnet_record = SubnetRecord {
-            chain_key_config: None,
-            ..Default::default()
-        };
-
         let chain_key_configs_to_generate = r#"[{
                 "key_id": "ecdsa:Secp256k1:some_key_name",
                 "max_queue_size": "155"
             }]"#
         .to_string();
 
-        let cmd = ProposeToUpdateSubnetCmd {
-            chain_key_configs_to_generate: Some(chain_key_configs_to_generate),
-            signature_request_timeout_ns: Some(111),
-            ..empty_propose_to_update_subnet_cmd(subnet_id)
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload_for_subnet(subnet_id, subnet_record);
+        let _ = parse_chain_key_configs_option(&Some(chain_key_configs_to_generate));
     }
 
     #[test]
@@ -796,12 +784,6 @@ mod tests {
         expected = "must not specify 'pre_signatures_to_create_in_advance' for key vetkd:Bls12_381_G2:some_key_name"
     )]
     fn should_panic_when_key_not_requiring_pre_signatures_has_pre_signatures_to_create() {
-        let subnet_id = SubnetId::from(PrincipalId::new_user_test_id(1));
-        let subnet_record = SubnetRecord {
-            chain_key_config: None,
-            ..Default::default()
-        };
-
         let chain_key_configs_to_generate = r#"[{
                 "key_id": "vetkd:Bls12_381_G2:some_key_name",
                 "pre_signatures_to_create_in_advance": "99",
@@ -809,13 +791,7 @@ mod tests {
             }]"#
         .to_string();
 
-        let cmd = ProposeToUpdateSubnetCmd {
-            chain_key_configs_to_generate: Some(chain_key_configs_to_generate),
-            signature_request_timeout_ns: Some(111),
-            ..empty_propose_to_update_subnet_cmd(subnet_id)
-        };
-
         // This should panic when parsing the key config
-        let _ = cmd.new_payload_for_subnet(subnet_id, subnet_record);
+        let _ = parse_chain_key_configs_option(&Some(chain_key_configs_to_generate));
     }
 }
