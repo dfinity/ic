@@ -498,6 +498,9 @@ enum NnsFunction {
 
   // Take a canister snapshot.
   NNS_FUNCTION_TAKE_CANISTER_SNAPSHOT = 56;
+
+  // Load a canister snapshot.
+  NNS_FUNCTION_LOAD_CANISTER_SNAPSHOT = 57;
 }
 
 // Payload of a proposal that calls a function on another NNS

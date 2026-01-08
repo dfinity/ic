@@ -154,6 +154,7 @@ pub enum ValidNnsFunction {
     UnpauseCanisterMigrations,
     SetSubnetOperationalLevel,
     TakeCanisterSnapshot,
+    LoadCanisterSnapshot,
 }
 
 impl ValidNnsFunction {
@@ -283,6 +284,7 @@ impl ValidNnsFunction {
                 (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
             }
             ValidNnsFunction::TakeCanisterSnapshot => (ROOT_CANISTER_ID, "take_canister_snapshot"),
+            ValidNnsFunction::LoadCanisterSnapshot => (ROOT_CANISTER_ID, "load_canister_snapshot"),
         }
     }
 
@@ -338,13 +340,13 @@ impl ValidNnsFunction {
             | ValidNnsFunction::HardResetNnsRootToVersion
             | ValidNnsFunction::BitcoinSetConfig
             | ValidNnsFunction::PauseCanisterMigrations
-            | ValidNnsFunction::UnpauseCanisterMigrations => Topic::ProtocolCanisterManagement,
+            | ValidNnsFunction::UnpauseCanisterMigrations
+            | ValidNnsFunction::TakeCanisterSnapshot
+            | ValidNnsFunction::LoadCanisterSnapshot => Topic::ProtocolCanisterManagement,
 
             ValidNnsFunction::AddSnsWasm | ValidNnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
             }
-
-            ValidNnsFunction::TakeCanisterSnapshot => Topic::ProtocolCanisterManagement,
         }
     }
 
@@ -402,6 +404,7 @@ impl ValidNnsFunction {
             ValidNnsFunction::UnpauseCanisterMigrations => "Unpause Canister Migrations",
             ValidNnsFunction::SetSubnetOperationalLevel => "Set Subnet Operational Level",
             ValidNnsFunction::TakeCanisterSnapshot => "Take Canister Snapshot",
+            ValidNnsFunction::LoadCanisterSnapshot => "Load Canister Snapshot",
         }
     }
 
@@ -633,6 +636,13 @@ impl ValidNnsFunction {
                  For an introduction to canister snapshots in general, see \
                  https://docs.internetcomputer.org/building-apps/canister-management/snapshots ."
             }
+            ValidNnsFunction::LoadCanisterSnapshot => {
+                "A proposal to load a canister snapshot into a canister controlled the NNS. \
+                 In other words, to restore the canister to an earlier recorded state, \
+                 which including the code and memory (including stable memory). \
+                 For an introduction to canister snapshots in general, see \
+                 https://docs.internetcomputer.org/building-apps/canister-management/snapshots ."
+            }
         }
     }
 }
@@ -722,6 +732,7 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
                 Ok(ValidNnsFunction::SetSubnetOperationalLevel)
             }
             NnsFunction::TakeCanisterSnapshot => Ok(ValidNnsFunction::TakeCanisterSnapshot),
+            NnsFunction::LoadCanisterSnapshot => Ok(ValidNnsFunction::LoadCanisterSnapshot),
 
             // Obsolete functions - based on check_obsolete
             NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {

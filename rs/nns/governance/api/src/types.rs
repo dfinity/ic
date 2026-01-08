@@ -4206,6 +4206,8 @@ pub enum NnsFunction {
     /// controlled by the NNS Root canister. This restriction could be relaxed
     /// later. See nns/.../root.did for the payload type.
     TakeCanisterSnapshot = 56,
+    /// Loads a canister snapshot.
+    LoadCanisterSnapshot = 57,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4290,6 +4292,7 @@ impl NnsFunction {
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
             NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
             NnsFunction::TakeCanisterSnapshot => "NNS_FUNCTION_TAKE_CANISTER_SNAPSHOT",
+            NnsFunction::LoadCanisterSnapshot => "NNS_FUNCTION_LOAD_CANISTER_SNAPSHOT",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4371,6 +4374,7 @@ impl NnsFunction {
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
             "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             "NNS_FUNCTION_TAKE_CANISTER_SNAPSHOT" => Some(Self::TakeCanisterSnapshot),
+            "NNS_FUNCTION_LOAD_CANISTER_SNAPSHOT" => Some(Self::LoadCanisterSnapshot),
             _ => None,
         }
     }

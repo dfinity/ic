@@ -4815,6 +4815,13 @@ impl Governance {
                     ));
                 }
             }
+            ValidNnsFunction::LoadCanisterSnapshot => {
+                if !are_canister_snapshot_proposals_enabled() {
+                    return Err(invalid_proposal_error(
+                        "LoadCanisterSnapshot proposals are not yet enabled.".to_string(),
+                    ));
+                }
+            }
             _ => {}
         };
 

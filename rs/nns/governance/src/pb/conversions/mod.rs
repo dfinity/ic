@@ -3988,6 +3988,7 @@ impl From<pb::NnsFunction> for pb_api::NnsFunction {
                 pb_api::NnsFunction::SetSubnetOperationalLevel
             }
             pb::NnsFunction::TakeCanisterSnapshot => pb_api::NnsFunction::TakeCanisterSnapshot,
+            pb::NnsFunction::LoadCanisterSnapshot => pb_api::NnsFunction::LoadCanisterSnapshot,
         }
     }
 }
@@ -4098,6 +4099,7 @@ impl From<pb_api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::SetSubnetOperationalLevel
             }
             pb_api::NnsFunction::TakeCanisterSnapshot => pb::NnsFunction::TakeCanisterSnapshot,
+            pb_api::NnsFunction::LoadCanisterSnapshot => pb::NnsFunction::LoadCanisterSnapshot,
         }
     }
 }
