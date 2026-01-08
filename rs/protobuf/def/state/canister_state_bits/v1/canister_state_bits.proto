@@ -46,6 +46,7 @@ message CallContext {
     Query user_query = 12;
   }
   bool responded = 5;
+  state.queues.v1.Cycles available_cycles = 13;
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;

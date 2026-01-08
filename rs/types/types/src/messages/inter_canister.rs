@@ -1,5 +1,5 @@
 use crate::{
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
+    CanisterId, CountBytes, Cycles, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
 };
@@ -844,7 +844,7 @@ impl TryFrom<pb_queues::Request> for Request {
             receiver: try_from_option_field(req.receiver, "Request::receiver")?,
             sender: try_from_option_field(req.sender, "Request::sender")?,
             sender_reply_callback: req.sender_reply_callback.into(),
-            payment: try_from_option_field(req.cycles_payment, "Request::cycles_payment"),
+            payment: try_from_option_field(req.cycles_payment, "Request::cycles_payment")?,
             method_name: req.method_name,
             method_payload: req.method_payload,
             metadata: req.metadata.map_or_else(Default::default, From::from),

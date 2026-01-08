@@ -19,7 +19,7 @@ pub use self::http::{
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
+use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -199,7 +199,6 @@ impl From<&StopCanisterContext> for pb::StopCanisterContext {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
                         call_id: call_id.map(|id| id.get()),
-                        funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
                         deadline_seconds: deadline.as_secs_since_unix_epoch(),
                     },
@@ -233,7 +232,6 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         sender,
                         reply_callback,
                         call_id,
-                        funds,
                         cycles,
                         deadline_seconds,
                     },

@@ -3,6 +3,8 @@
 pub struct CallContext {
     #[prost(bool, tag = "5")]
     pub responded: bool,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
