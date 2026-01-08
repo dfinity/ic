@@ -191,6 +191,8 @@ fn fix_node_operators_corrupted(registry: &Registry) -> Vec<RegistryMutation> {
     mutations
 }
 
+// TODO(CRP-2973): Delete this after it has been released.
+// (Deletion need not take place right away.)
 fn fix_vetkd_pre_signatures_field(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 
