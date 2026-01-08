@@ -508,7 +508,7 @@ where
         standards.push(standard.name);
     }
     standards.sort();
-    assert_eq!(standards, vec!["ICRC-1", "ICRC-2", "ICRC-21"]);
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-10", "ICRC-2", "ICRC-21"]);
 }
 pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
