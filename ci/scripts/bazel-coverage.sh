@@ -4,7 +4,7 @@ set -eEuo pipefail
 # Ensure lcov is installed
 if ! command -v lcov >/dev/null 2>&1; then
     echo "lcov not found, installing..."
-    apt-get update && apt-get install -y lcov
+    sudo apt-get update && sudo apt-get install -y lcov
 fi
 
 bazel query --universe_scope=//... \
