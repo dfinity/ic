@@ -4572,6 +4572,18 @@ pub enum SelfDescribingValue {
     Map(HashMap<String, SelfDescribingValue>),
 }
 
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<u64> for SelfDescribingValue {
+    fn from(value: u64) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
