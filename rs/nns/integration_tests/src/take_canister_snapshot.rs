@@ -111,11 +111,7 @@ fn test_take_canister_snapshot() {
     // Step 3A.3: Inspect the snapshots.
     #[track_caller]
     fn assert_snapshot_checks_out(snapshots: &[CanisterSnapshotResponse]) {
-        assert_eq!(
-            snapshots.len(),
-            1,
-            "{snapshots:#?}"
-        );
+        assert_eq!(snapshots.len(), 1, "{snapshots:#?}");
 
         let snapshot = &snapshots[0];
         let CanisterSnapshotResponse {
