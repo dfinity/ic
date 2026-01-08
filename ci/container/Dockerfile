@@ -3,21 +3,18 @@
 FROM ghcr.io/dfinity/library/ubuntu@sha256:985be7c735afdf6f18aaa122c23f87d989c30bba4e9aa24c8278912aac339a8d
 ENV TZ=UTC
 
+# copy config files
 ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
+COPY ./ci/container/files/gitconfig /etc/gitconfig
+COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+
+# Todo: split out essential packages from application-level packages
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
-
-# install afl & gsutils deps for bazel-fuzzers
-RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
-    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" | tee -a /etc/apt/sources.list.d/llvm.list && \
-    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] http://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
-    curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg  add - && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends lld-18 llvm-18 llvm-18-dev clang-18 libclang-rt-18-dev google-cloud-cli \
-    gcc-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-plugin-dev libstdc++-$(gcc --version|head -n1|sed 's/\..*//'|sed 's/.* //')-dev
 
 # Install a version of google-android-platform-tools-installer with e2fsdroid
 RUN export DEBIAN_FRONTEND=noninteractive && \
@@ -65,13 +62,6 @@ RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}
     echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
     chmod +x "${BUF_BIN}"
 
-# Add yq
-ARG YQ_BIN="/usr/local/bin/yq"
-ARG YQ_VERSION="4.34.1"
-RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" -o "${YQ_BIN}" && \
-    echo "c5a92a572b3bd0024c7b1fe8072be3251156874c05f017c23f9db7b3254ae71a  ${YQ_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${YQ_BIN}"
-
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
@@ -96,18 +86,21 @@ RUN groupadd -g 1001 buildifier && useradd -ms /bin/bash -u 1001 -g 1001 -G ubun
     # CI before script requires sudo \
     echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Add gitconfig
-COPY ./ci/container/files/gitconfig /etc/gitconfig
-
-# Install AFLplusplus
-ARG AFLPLUSPLUS_RELEASE_VERSION=v4.21c
-RUN mkdir -p /afl && \
+# Install AFLplusplus for fuzzing
+# LLVM is only a build time dependency now since we link the fuzzer lib from the hermetic toolchain directly
+ARG AFLPLUSPLUS_RELEASE_VERSION=v4.35c
+ARG LLVM_VERSION=21
+RUN curl -L "https://apt.llvm.org/llvm-snapshot.gpg.key" | apt-key add - && \
+    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-${LLVM_VERSION} main" | tee -a /etc/apt/sources.list.d/llvm.list && \
+    apt -yq update && \
+    apt -yqq install --no-install-recommends lld-${LLVM_VERSION} llvm-${LLVM_VERSION} llvm-${LLVM_VERSION}-dev clang-${LLVM_VERSION} libclang-rt-${LLVM_VERSION}-dev && \
+    mkdir -p /afl && \
     chown -R ubuntu:ubuntu /afl && \
     cd /afl && \
     git clone --depth=1 --branch=${AFLPLUSPLUS_RELEASE_VERSION} https://github.com/AFLplusplus/AFLplusplus.git && \
     cd AFLplusplus && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make all && \
-    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-18 CC=/usr/bin/clang-18 CXX=/usr/bin/clang++-18 make install && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make all && \
+    STATIC=1 LLVM_CONFIG=/usr/bin/llvm-config-${LLVM_VERSION} CC=/usr/bin/clang-${LLVM_VERSION} CXX=/usr/bin/clang++-${LLVM_VERSION} make install && \
     mv afl-fuzz afl-showmap  /afl && \
     cd .. && rm -rf AFLplusplus
 
@@ -120,10 +113,7 @@ COPY ./ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh && \
     echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-
 USER ubuntu
-
 # Set PATH for ubuntu user
 ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 
@@ -148,9 +138,6 @@ ARG CARGO_AUDIT_VERSION=0.22.0
 RUN cargo install cargo-audit --version ${CARGO_AUDIT_VERSION}
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./ci/container/files/zshrc /home/ubuntu/.zshrc
-
-# Read in the build-ci script
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
 
 WORKDIR /
 # Use buildifier (uid 1001) if /entrypoint.sh is overriden

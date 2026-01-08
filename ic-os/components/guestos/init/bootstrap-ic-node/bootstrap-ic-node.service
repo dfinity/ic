@@ -14,7 +14,7 @@ RequiredBy=setup-ssh-user-keys.service
 [Service]
 Type=oneshot
 RemainAfterExit=true
-ExecStart=/opt/ic/bin/config bootstrap-ic-node
+ExecStart=/opt/ic/bin/config_tool bootstrap-ic-node
 Restart=on-failure
 RestartSec=10
 

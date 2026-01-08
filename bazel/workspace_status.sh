@@ -22,9 +22,8 @@ else
 fi
 
 # Used as farm metadata
-test -n "${CI_JOB_NAME:-}" && echo "STABLE_FARM_JOB_NAME ${CI_JOB_NAME}"
-if [[ -n "${USER:-}" ]]; then
-    echo "STABLE_FARM_USER ${USER}"
-elif [[ -n "${HOSTUSER:-}" ]]; then
-    echo "STABLE_FARM_USER ${HOSTUSER}"
+STABLE_FARM_METADATA="USER=${USER:-${HOSTUSER:-anonymous}}"
+if [ -n "${CI_JOB_NAME:-}" ]; then
+    STABLE_FARM_METADATA="$STABLE_FARM_METADATA;JOB_NAME=$CI_JOB_NAME"
 fi
+echo "STABLE_FARM_METADATA $STABLE_FARM_METADATA"

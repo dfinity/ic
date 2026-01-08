@@ -2084,7 +2084,7 @@ fn response_callback_succeeds_with_memory_reservation() {
     // Verify that the response callback allocated at least 80MB.
     assert!(
         available_memory_before_finishing_callback
-            > test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+            >= test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
     );
 }
 
@@ -2214,7 +2214,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     // Verify that the cleanup callback allocated at least 80MB.
     assert!(
         available_memory_before_finishing_callback
-            > test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+            >= test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
     )
 }
 
