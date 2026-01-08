@@ -7,14 +7,16 @@ use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
+use crate::{CanisterRuntime, ECDSAPublicKey, management, signature, tx};
 pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
+use icrc_ledger_types::icrc1::account::Account;
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
 pub const TX_VERSION: u32 = 2;
 
 /// The length of the public key.
-pub const PUBKEY_LEN: usize = 32;
+pub const PUBKEY_LEN: usize = 33;
 
 // The marker indicating the segregated witness encoding.
 const MARKER: u8 = 0;
@@ -340,20 +342,36 @@ impl<'a> TxSigHasher<'a> {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct UnsignedTransaction {
     pub inputs: Vec<UnsignedInput>,
     pub outputs: Vec<TxOut>,
     pub lock_time: u32,
 }
 
-impl UnsignedTransaction {
-    pub fn txid(&self) -> Txid {
-        Sha256::hash(&encode_into(self, Sha256::new())).into()
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct SignedRawTransaction {
+    signed_tx: Vec<u8>,
+    txid: Txid,
+}
+
+impl SignedRawTransaction {
+    pub fn new(signed_tx: Vec<u8>, txid: Txid) -> Self {
+        Self { signed_tx, txid }
     }
 
-    pub fn serialized_len(&self) -> usize {
-        encode_into(self, CountBytes::default())
+    pub fn txid(&self) -> Txid {
+        self.txid
+    }
+
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.signed_tx
+    }
+}
+
+impl AsRef<[u8]> for SignedRawTransaction {
+    fn as_ref(&self) -> &[u8] {
+        &self.signed_tx
     }
 }
 
@@ -382,6 +400,15 @@ impl SignedTransaction {
 
     pub fn wtxid(&self) -> [u8; 32] {
         Sha256::hash(&encode_into(self, Sha256::new()))
+    }
+
+    /// Computes the [`Txid`].
+    ///
+    /// Hashes the transaction **excluding** the segwit data (i.e. the marker, flag bytes, and the
+    /// witness fields themselves). For non-segwit transactions which do not have any segwit data,
+    /// this will be equal to [`Self::wtxid`].
+    pub fn compute_txid(&self) -> Txid {
+        Txid::from(Sha256::hash(&encode_into(&BaseTxView(self), Sha256::new())))
     }
 
     /// Returns the virtual transaction size that nodes use to compute fees.
@@ -545,5 +572,71 @@ impl Encode for SignedTransaction {
                 .encode(buf);
         }
         self.lock_time.encode(buf)
+    }
+}
+
+pub struct BitcoinTransactionSigner {
+    key_name: String,
+    ecdsa_public_key: ECDSAPublicKey,
+}
+
+impl BitcoinTransactionSigner {
+    pub fn new(key_name: String, ecdsa_public_key: ECDSAPublicKey) -> Self {
+        Self {
+            key_name,
+            ecdsa_public_key,
+        }
+    }
+
+    pub async fn sign_transaction<R: CanisterRuntime>(
+        &self,
+        unsigned_tx: crate::tx::UnsignedTransaction,
+        accounts: Vec<Account>,
+        runtime: &R,
+    ) -> Result<SignedRawTransaction, management::CallError> {
+        use crate::address::{derivation_path, derive_public_key_from_account};
+
+        assert_eq!(
+            unsigned_tx.inputs.len(),
+            accounts.len(),
+            "BUG: expected on account per input"
+        );
+
+        let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
+        let sighasher = tx::TxSigHasher::new(&unsigned_tx);
+        for (input, account) in unsigned_tx.inputs.iter().zip(accounts) {
+            let outpoint = &input.previous_output;
+
+            let path = derivation_path(&account)
+                .into_iter()
+                .map(|buf| buf.to_vec())
+                .collect();
+            let pubkey = ByteBuf::from(
+                derive_public_key_from_account(&self.ecdsa_public_key, &account).public_key,
+            );
+            let pkhash = tx::hash160(&pubkey);
+
+            let sighash = sighasher.sighash(input, &pkhash);
+
+            let sec1_signature =
+                management::sign_with_ecdsa(self.key_name.clone(), path, sighash, runtime).await?;
+
+            signed_inputs.push(tx::SignedInput {
+                signature: signature::EncodedSignature::from_sec1(&sec1_signature),
+                pubkey,
+                previous_output: outpoint.clone(),
+                sequence: input.sequence,
+            });
+        }
+
+        let signed_tx = tx::SignedTransaction {
+            inputs: signed_inputs,
+            outputs: unsigned_tx.outputs,
+            lock_time: unsigned_tx.lock_time,
+        };
+        Ok(SignedRawTransaction::new(
+            signed_tx.serialize(),
+            signed_tx.compute_txid(),
+        ))
     }
 }
