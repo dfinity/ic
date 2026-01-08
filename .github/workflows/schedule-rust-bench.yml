@@ -24,7 +24,7 @@ jobs:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:131f1e6e516467583e66958f292865fda25f44fd422a5b55fdc63e4a2c100baa
+      image: ghcr.io/dfinity/ic-build@sha256:edf5aee92f8ccc359f8241550acb86195dcdb4145cc0ec8f8f8e4f7228d59f6b
       # running on bare metal machine using ubuntu user
       options: --user ubuntu --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
     timeout-minutes: 720 # 12 hours
