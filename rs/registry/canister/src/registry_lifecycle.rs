@@ -240,14 +240,32 @@ fn fix_vetkd_pre_signatures_field(registry: &Registry) -> Vec<RegistryMutation> 
         let mut subnet_record_needs_update = false;
         if let Some(ref mut chain_key_config) = subnet_record_pb.chain_key_config {
             for key_config in &mut chain_key_config.key_configs {
-                // Check if this is a vetKD key
-                let is_vetkd_key = if let Some(key_id_pb) = &key_config.key_id {
-                    matches!(key_id_pb.key_id, Some(KeyId::Vetkd(_)))
-                } else {
-                    false
+                // Skip if not a valid vetKD key.
+                match &key_config.key_id {
+                    Some(key_id) => {
+                        match &key_id.key_id {
+                            Some(KeyId::Vetkd(_)) => { /* proceed */ }
+                            Some(_) => continue,
+                            None => {
+                                ic_cdk::println!(
+                                    "Warning: KeyConfig::key_id.key_id in \
+                                     subnet {subnet_id} is unexpectedly `None`. \
+                                     Skipping"
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                    None => {
+                        ic_cdk::println!(
+                            "Warning: KeyConfig::key_id in subnet {subnet_id} \
+                            is unexpectedly `None`. Skipping."
+                        );
+                        continue;
+                    }
                 };
 
-                if is_vetkd_key && key_config.pre_signatures_to_create_in_advance == Some(0) {
+                if key_config.pre_signatures_to_create_in_advance == Some(0) {
                     key_config.pre_signatures_to_create_in_advance = None;
                     subnet_record_needs_update = true;
                     ic_cdk::println!(
