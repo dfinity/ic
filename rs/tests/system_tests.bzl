@@ -34,10 +34,6 @@ def _run_system_test(ctx):
         if value.startswith("$"):
             env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
 
-    # Used by the run script and by farm to read metadata
-    env["FARM_METADATA_PATH"] = ctx.info_file.short_path
-    data.append(ctx.info_file)
-
     # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
     # script, and not passed directly to the test.
 
@@ -342,6 +338,8 @@ def system_test(
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True) if guestos != "mainnet_latest_dev" else icos_dev_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True)
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["hash" if guestos != "mainnet_latest_dev" else "dev_hash"]
+
+    env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
 
     deps = list(runtime_deps)
     if logs:
