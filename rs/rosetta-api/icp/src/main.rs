@@ -337,12 +337,15 @@ async fn main() -> std::io::Result<()> {
         warn!("Data certificate will not be verified due to missing root key");
     }
 
-    let canister_config =
-        ParsedCanisterConfig::from_config(opt.canister, &environment, network_config.is_mainnet_url)
-            .unwrap_or_else(|e| {
-                error!("Configuration error: {}", e);
-                std::process::exit(1);
-            });
+    let canister_config = ParsedCanisterConfig::from_config(
+        opt.canister,
+        &environment,
+        network_config.is_mainnet_url,
+    )
+    .unwrap_or_else(|e| {
+        error!("Configuration error: {}", e);
+        std::process::exit(1);
+    });
 
     info!("Token symbol set to {}", canister_config.token_symbol);
 
