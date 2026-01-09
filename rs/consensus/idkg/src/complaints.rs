@@ -1510,7 +1510,7 @@ mod tests {
                 assert!(is_handle_invalid(
                     &change_set,
                     &msg_id_1,
-                    "Duplicate complaint"
+                    "Duplicate complaint in unvalidated batch"
                 ));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
