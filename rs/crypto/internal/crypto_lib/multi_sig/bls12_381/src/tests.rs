@@ -300,7 +300,7 @@ mod advanced_functionality {
     }
 }
 
-mod verification_failures {
+mod verification_tests {
     use super::*;
     use crate::types::{
         CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes,
