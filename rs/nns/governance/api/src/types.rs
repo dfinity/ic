@@ -4584,6 +4584,12 @@ impl From<u64> for SelfDescribingValue {
     }
 }
 
+impl From<u32> for SelfDescribingValue {
+    fn from(value: u32) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
