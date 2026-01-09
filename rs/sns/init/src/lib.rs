@@ -1939,10 +1939,7 @@ mod test {
         IdealMatchedParticipationFunction, LinearScalingCoefficient,
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     };
-    use icrc_ledger_types::{
-        icrc::generic_metadata_value::MetadataValue,
-        icrc1::account::Account,
-    };
+    use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
     use pretty_assertions::assert_eq;
     use std::{
