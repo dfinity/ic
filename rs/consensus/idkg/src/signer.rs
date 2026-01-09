@@ -1684,7 +1684,7 @@ mod tests {
                 assert!(is_handle_invalid(
                     &change_set,
                     &msg_id_2,
-                    "Duplicate signature share"
+                    "Duplicate signature share:"
                 ));
             })
         })

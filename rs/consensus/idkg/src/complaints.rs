@@ -1409,7 +1409,7 @@ mod tests {
                 assert!(is_handle_invalid(
                     &change_set,
                     &msg_id,
-                    "Duplicate complaint"
+                    "Duplicate complaint:"
                 ));
             })
         })
@@ -1825,7 +1825,11 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id, "Duplicate opening"));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate opening:"
+                ));
             })
         })
     }
@@ -1889,7 +1893,7 @@ mod tests {
                 assert!(is_handle_invalid(
                     &change_set,
                     &msg_id_2,
-                    "Duplicate opening"
+                    "Duplicate opening in unvalidated batch"
                 ));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));

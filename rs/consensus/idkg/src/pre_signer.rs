@@ -1973,7 +1973,7 @@ mod tests {
                 assert!(is_handle_invalid(
                     &change_set,
                     &msg_id_2,
-                    "Duplicate dealing"
+                    "Duplicate dealing:"
                 ));
             })
         })
@@ -2038,13 +2038,13 @@ mod tests {
                     assert!(is_handle_invalid(
                         &change_set,
                         &msg_id_2_b,
-                        "Duplicate dealing"
+                        "Duplicate dealing:"
                     ));
                 } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
                     assert!(is_handle_invalid(
                         &change_set,
                         &msg_id_2_a,
-                        "Duplicate dealing"
+                        "Duplicate dealing in unvalidated batch"
                     ));
                 } else {
                     panic!("Neither dealing was accepted");
@@ -2456,8 +2456,15 @@ mod tests {
                         || is_moved_to_validated(&change_set, &msg_id_2_dupl)
                 );
                 assert!(
-                    is_handle_invalid(&change_set, &msg_id_2, "Duplicate support")
-                        || is_handle_invalid(&change_set, &msg_id_2_dupl, "Duplicate support")
+                    is_handle_invalid(
+                        &change_set,
+                        &msg_id_2,
+                        "Duplicate support in unvalidated batch"
+                    ) || is_handle_invalid(
+                        &change_set,
+                        &msg_id_2_dupl,
+                        "Duplicate support in unvalidated batch"
+                    )
                 );
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
@@ -2701,7 +2708,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id, "Duplicate support"));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate support in unvalidated batch"
+                ));
 
                 // The original validated dealing support should still be there
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
@@ -2722,7 +2733,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id, "Duplicate support"));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate support:"
+                ));
             })
         })
     }
