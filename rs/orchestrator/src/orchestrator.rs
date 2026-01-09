@@ -752,7 +752,7 @@ impl TaskTracker {
                         error!(self.logger, "Task `{task_name}` panicked: {err}");
                         self.metrics
                             .critical_error_task_failed
-                            .with_label_values(&[&task_name, "panic"])
+                            .with_label_values(&[task_name.as_str(), "panic"])
                             .inc();
                     } else {
                         info!(self.logger, "Task `{task_name}` was cancelled");

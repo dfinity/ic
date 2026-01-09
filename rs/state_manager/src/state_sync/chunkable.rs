@@ -1780,8 +1780,8 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
             .state_sync_metrics
             .add_chunk_duration
             .with_label_values(&[
-                &state_before,
-                &state_after,
+                state_before.as_str(),
+                state_after.as_str(),
                 if success { "ok" } else { "err" },
             ])
             .observe(started_at.elapsed().as_secs_f64());

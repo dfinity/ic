@@ -259,7 +259,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                     metrics
                         .http_request_duration
-                        .with_label_values(&[&status.to_string(), request_http_method.as_str()])
+                        .with_label_values(&[status.to_string().as_str(), request_http_method.as_str()])
                         .observe(adapter_req_timer.elapsed().as_secs_f64());
 
                     validate_http_headers_and_body(

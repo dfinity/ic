@@ -20,4 +20,4 @@ ic-logger = { path = "../logger" }
 slog = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-procfs = { version = "^0.9", default-features = false }
+procfs = { workspace = true }
