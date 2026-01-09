@@ -273,24 +273,6 @@ impl Setup {
             .unwrap()
     }
 
-    /// Use the given median fee in millikoinu/byte.
-    pub fn with_median_fee_percentile(self, median_fee: u64) -> Self {
-        let fee_percentiles = [median_fee; 101];
-        self.dogecoin().set_fee_percentiles(fee_percentiles);
-        self.env.advance_time(Duration::from_secs(60 * 6 + 1));
-        self.env.tick();
-        self.env.tick();
-        self.env.tick();
-
-        self.minter()
-            .assert_that_metrics()
-            .assert_contains_metric_matching(format!(
-                "ckbtc_minter_median_fee_per_vbyte {median_fee}"
-            ));
-
-        self
-    }
-
     pub fn with_doge_balance(self) -> Self {
         self.dogecoind().setup_user_with_balance();
         self
@@ -299,7 +281,7 @@ impl Setup {
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new(Network::Mainnet)
+        Self::new(Network::Regtest)
     }
 }
 

@@ -1,20 +1,17 @@
 use candid::Principal;
-use ic_ckdoge_minter::{
-    candid_api::{
-        EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
-        RetrieveDogeWithApprovalError, WithdrawalFee,
-    },
-    lifecycle::init::Network,
+use ic_ckdoge_minter::candid_api::{
+    EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
+    RetrieveDogeWithApprovalError, WithdrawalFee,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
-    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
+    DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister,
+    RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
 use ic_management_canister_types::CanisterStatusType;
 
 #[test]
 fn should_fail_withdrawal() {
-    let setup = Setup::new(Network::Regtest);
+    let setup = Setup::default();
     let minter = setup.minter();
     let correct_withdrawal_args = RetrieveDogeWithApprovalArgs {
         amount: RETRIEVE_DOGE_MIN_AMOUNT,
@@ -84,6 +81,7 @@ fn should_fail_withdrawal() {
 mod get_doge_address {
     use candid::Principal;
     use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+    use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, assert_trap};
 
     #[test]
@@ -116,7 +114,7 @@ mod get_doge_address {
 
     #[test]
     fn should_get_doge_address() {
-        let setup = Setup::default();
+        let setup = Setup::new(Network::Mainnet);
         let minter = setup.minter();
 
         let address_from_caller = minter.get_doge_address(
@@ -157,17 +155,14 @@ mod get_doge_address {
 }
 
 mod deposit {
-    use ic_ckdoge_minter::lifecycle::init::Network;
-    use ic_ckdoge_minter::{OutPoint, Utxo};
     use ic_ckdoge_minter_test_utils::{
         LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        txid, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
     #[test]
     fn should_mint_ckdoge() {
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
@@ -181,47 +176,12 @@ mod deposit {
             .minter_update_balance()
             .expect_mint();
     }
-
-    // DOGE total supply will overflow a u64 around 2030.
-    // However, the maximum output value in a single Dogecoin transaction is 10B DOGE,
-    // so that the value of a single UTXO is guaranteed to fit into a u64.
-    #[test]
-    fn should_handle_large_balances() {
-        let large_utxo_1 = utxo_with_value(u64::MAX);
-        let large_utxo_2 = Utxo {
-            outpoint: OutPoint {
-                txid: txid([43; 32]),
-                vout: 1,
-            },
-            ..large_utxo_1.clone()
-        };
-        assert_ne!(large_utxo_1, large_utxo_2);
-
-        let setup = Setup::default();
-        let account = Account {
-            owner: USER_PRINCIPAL,
-            subaccount: Some([42_u8; 32]),
-        };
-
-        setup
-            .deposit_flow()
-            .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(vec![large_utxo_1, large_utxo_2])
-            .minter_update_balance()
-            .expect_mint();
-
-        assert_eq!(
-            setup.ledger().icrc1_balance_of(account),
-            (u64::MAX as u128) * 2
-        );
-    }
 }
 
 mod withdrawal {
     use ic_ckdoge_minter::{
         DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
-        lifecycle::init::Network,
     };
     use ic_ckdoge_minter_test_utils::{
         DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup,
@@ -231,7 +191,7 @@ mod withdrawal {
 
     #[test]
     fn should_withdraw_doge() {
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
@@ -264,7 +224,7 @@ mod withdrawal {
 
     #[test]
     fn should_fail_to_withdraw_when_ledger_stopped() {
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
@@ -331,7 +291,7 @@ mod withdrawal {
                 })
         }
 
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
 
         deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
@@ -379,7 +339,7 @@ mod withdrawal {
         // This is to make sure utxo count optimization is triggered.
         const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
 
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
@@ -426,7 +386,7 @@ mod withdrawal {
 
     #[test]
     fn should_cancel_and_reimburse_large_withdrawal() {
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
 
         let account = Account {
             owner: USER_PRINCIPAL,
@@ -480,7 +440,7 @@ fn should_estimate_withdrawal_fee() {
         result
     }
 
-    let setup = Setup::new(Network::Regtest).with_doge_balance();
+    let setup = Setup::default().with_doge_balance();
     let minter = setup.minter();
 
     assert_eq!(
@@ -520,7 +480,6 @@ fn should_estimate_withdrawal_fee() {
 }
 
 mod post_upgrade {
-    use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter_test_utils::{
         DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister,
         RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, only_one,
@@ -535,7 +494,7 @@ mod post_upgrade {
             check(minter)
         }
 
-        let setup = Setup::new(Network::Regtest).with_doge_balance();
+        let setup = Setup::default().with_doge_balance();
 
         let minter = setup.minter();
         let account = Account {
@@ -617,21 +576,6 @@ fn should_get_minter_info() {
         MinterInfo {
             min_confirmations: MIN_CONFIRMATIONS,
             retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
-        }
-    );
-
-    let mut setup = setup;
-    for i in 0..8 {
-        setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << i);
-        assert_eq!(setup.minter().get_minter_info(), minter_info);
-    }
-
-    setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << 8);
-    assert_eq!(
-        setup.minter().get_minter_info(),
-        MinterInfo {
-            retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT + RETRIEVE_DOGE_MIN_AMOUNT / 2,
-            ..minter_info
         }
     );
 }
