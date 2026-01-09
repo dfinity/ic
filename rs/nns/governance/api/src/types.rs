@@ -4584,6 +4584,12 @@ impl From<u64> for SelfDescribingValue {
     }
 }
 
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue::Blob(value)
+    }
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
