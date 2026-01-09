@@ -16,11 +16,13 @@ fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
         rng.fill_bytes(&mut buf);
         buf[0] |= 0x80; // set compressed bit
         buf[0] &= 0xBF; // clear infinity bit
-        if let Ok(pt) = G1Affine::deserialize_unchecked(&buf) {
-            if !pt.is_torsion_free() {
+
+        match G1Affine::deserialize_unchecked(&buf) {
+            Ok(pt) if !pt.is_torsion_free() => {
                 return pt;
             }
-        }
+            _ => {}
+        };
     }
 }
 
@@ -31,11 +33,13 @@ fn non_torsion_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Affine {
         rng.fill_bytes(&mut buf);
         buf[0] |= 0x80; // set compressed bit
         buf[0] &= 0xBF; // clear infinity bit
-        if let Ok(pt) = G2Affine::deserialize_unchecked(&buf) {
-            if !pt.is_torsion_free() {
+
+        match G2Affine::deserialize_unchecked(&buf) {
+            Ok(pt) if !pt.is_torsion_free() => {
                 return pt;
             }
-        }
+            _ => {}
+        };
     }
 }
 
