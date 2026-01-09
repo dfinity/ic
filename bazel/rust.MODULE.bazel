@@ -1050,6 +1050,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "alloc",
         "arithmetic",
         "ecdsa",
         "pem",
