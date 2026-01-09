@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::pin::pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use strum_macros::AsRefStr;
 use sysinfo::{ProcessRefreshKind, RefreshKind};
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -61,7 +62,8 @@ const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
 const GUESTOS_BOOT_FAILURE_MARKER: &str = "GUESTOS BOOT FAILURE";
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum GuestVMType {
     Default,
     Upgrade,
@@ -395,7 +397,7 @@ impl GuestVmService {
         let metrics_writer = MetricsWriter::new(PathBuf::from(Self::metrics_path(guest_vm_type)));
         let libvirt_connection = Connect::open(None).context("Failed to connect to libvirt")?;
         let hostos_config: HostOSConfig =
-            config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
+            config_tool::deserialize_config(config_tool::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
         let console_tty1 = File::options()
             .write(true)
@@ -501,7 +503,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         1.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 virtual_machine
             }
             Err(err) => {
@@ -510,7 +513,8 @@ impl GuestVmService {
                         "hostos_guestos_service_start",
                         0.0,
                         "GuestOS virtual machine define state",
-                    )])?;
+                    )
+                    .add_label("vm_type", self.guest_vm_type.as_ref())])?;
                 return Err(err);
             }
         };
@@ -1017,35 +1021,26 @@ mod tests {
 
     fn valid_hostos_config() -> HostOSConfig {
         HostOSConfig {
-            config_version: "".to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
                     prefix: "2001:db8::".to_string(),
                     prefix_length: 64,
                     gateway: "2001:db8::1".parse().unwrap(),
                 }),
-                ipv4_config: None,
-                domain_name: None,
+                ..Default::default()
             },
             icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
             hostos_settings: HostOSSettings {
-                verbose: false,
                 hostos_dev_settings: HostOSDevSettings {
-                    vm_memory: 16,
                     vm_cpu: "qemu".to_string(),
-                    vm_nr_of_vcpus: 56,
+                    ..Default::default()
                 },
+                ..Default::default()
             },
-            guestos_settings: Default::default(),
+            ..HostOSConfig::default()
         }
     }
 
@@ -1074,7 +1069,7 @@ mod tests {
         service.wait_for_systemd_ready().await;
 
         service
-            .check_metrics_contains("hostos_guestos_service_start 1")
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 1")
             .unwrap();
         service.check_vm_running().unwrap();
         service
@@ -1126,7 +1121,7 @@ mod tests {
             .unwrap_err();
 
         service
-            .check_metrics_contains("hostos_guestos_service_start 0")
+            .check_metrics_contains("hostos_guestos_service_start{vm_type=\"default\"} 0")
             .unwrap();
         service.check_vm_not_exists().unwrap();
         service

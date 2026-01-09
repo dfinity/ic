@@ -1031,7 +1031,7 @@ mod tests {
 
         // Set up the IDKG pool. Pool has shares for requests 0, 1, 2.
         // Only the share for request 0 is issued by us
-        let shares = vec![
+        let shares = [
             create_signature_share(&key_id, NODE_1, ids[0]),
             create_signature_share(&key_id, NODE_2, ids[1]),
             create_signature_share(&key_id, NODE_3, ids[2]),

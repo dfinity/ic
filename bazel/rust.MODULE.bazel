@@ -990,7 +990,7 @@ crate.spec(
 crate.spec(
     features = ["prime"],
     package = "num-bigint-dig",
-    version = "^0.8",
+    version = "^0.9",
 )
 crate.spec(
     package = "num-rational",
@@ -1050,6 +1050,7 @@ crate.spec(
 crate.spec(
     default_features = False,
     features = [
+        "alloc",
         "arithmetic",
         "ecdsa",
         "pem",
@@ -1875,10 +1876,6 @@ crate.spec(
 crate.spec(
     package = "wat",
     version = "^1.240.0",
-)
-crate.spec(
-    package = "wee_alloc",
-    version = "^0.4.3",
 )
 crate.spec(
     package = "which",
