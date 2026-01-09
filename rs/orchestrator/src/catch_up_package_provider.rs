@@ -72,13 +72,10 @@ impl LocalCUPReader {
 
     /// Returns the locally persisted CUP in deserialized form
     pub(crate) fn get_local_cup(&self) -> Option<CatchUpPackage> {
-        match self.get_local_cup_proto() {
-            None => None,
-            Some(cup_proto) => (&cup_proto)
-                .try_into()
-                .map_err(|err| warn!(self.logger, "Deserialization of CUP failed: {}", err))
-                .ok(),
-        }
+        let local_cup_proto = self.get_local_cup_proto()?;
+        CatchUpPackage::try_from(&local_cup_proto)
+            .inspect_err(|err| warn!(self.logger, "Deserialization of CUP failed: {}", err))
+            .ok()
     }
 
     /// Returns the locally persisted CUP in protobuf form
@@ -89,7 +86,7 @@ impl LocalCUPReader {
         }
         match File::open(&path) {
             Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
-                .map_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
+                .inspect_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
                 .ok(),
             Err(err) => {
                 warn!(self.logger, "Couldn't open file {:?}: {:?}", path, err);
