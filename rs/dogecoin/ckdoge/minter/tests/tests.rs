@@ -225,7 +225,7 @@ mod withdrawal {
     };
     use ic_ckdoge_minter_test_utils::{
         DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, RETRIEVE_DOGE_MIN_AMOUNT, Setup,
-        USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value,
+        USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -302,14 +302,12 @@ mod withdrawal {
         // To avoid recreating a fresh setup for each call, which is an expensive operation,
         // we reuse the same setup. The independence of the flows is ensured by the `id` parameter,
         // which is assumed to be unique across all calls to that method.
-        // This `id` is used to target a unique ledged account and uniquely identifies the used UTXOs.
-        fn deposit_and_withdraw(setup: &Setup, id: u8) -> WithdrawalFlowEnd<&Setup> {
+        // This `id` is used to target a unique ledged account.
+        fn deposit_and_withdraw(setup: &Setup, subaccount: u8) -> WithdrawalFlowEnd<&Setup> {
             let account = Account {
                 owner: USER_PRINCIPAL,
-                subaccount: Some([id; 32]),
+                subaccount: Some([subaccount; 32]),
             };
-            let mut utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
-            utxo.outpoint.txid = txid([id; 32]);
 
             setup
                 .deposit_flow()
