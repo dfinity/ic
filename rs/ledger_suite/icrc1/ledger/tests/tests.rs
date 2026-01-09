@@ -25,7 +25,6 @@ use ic_ledger_suite_state_machine_tests_constants::{
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc::generic_value::Value;
-use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::Allowance;
@@ -54,13 +53,13 @@ pub struct LegacyInitArgs {
     pub transfer_fee: u64,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(MetadataKey, MetadataValue)>,
+    pub metadata: Vec<(String, MetadataValue)>,
     pub archive_options: ArchiveOptions,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct LegacyUpgradeArgs {
-    pub metadata: Option<Vec<(MetadataKey, MetadataValue)>>,
+    pub metadata: Option<Vec<(String, MetadataValue)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<u64>,
