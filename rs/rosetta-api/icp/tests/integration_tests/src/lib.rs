@@ -107,7 +107,9 @@ pub async fn start_rosetta(
     }
 
     if !port_file.exists() {
-        panic!("Rosetta did not create port file within timeout. Check if Rosetta crashed during startup.");
+        panic!(
+            "Rosetta did not create port file within timeout. Check if Rosetta crashed during startup."
+        );
     }
 
     let port = std::fs::read_to_string(&port_file)
