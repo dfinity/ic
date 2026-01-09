@@ -28,10 +28,8 @@ enum Environment {
     #[clap(help = "Production ledger canister on mainnet")]
     Production,
     #[clap(help = "Test ledger canister on mainnet")]
-    Test,
-    #[clap(name = "deprecated-testnet", help = "Testnet environment (deprecated)")]
     #[default]
-    DeprecatedTestnet,
+    Test,
 }
 
 #[derive(Debug, Parser)]
@@ -83,17 +81,14 @@ struct ParsedNetworkConfig {
 }
 
 impl ParsedNetworkConfig {
-    fn from_config(config: NetworkConfig, environment: &Environment) -> Result<Self, String> {
-        const DEPRECATED_TESTNET_URL: &str = "https://exchanges.testnet.dfinity.network";
+    fn from_config(config: NetworkConfig) -> Result<Self, String> {
         const MAINNET_URL: &str = "https://ic0.app";
         const MAINNET_ROOT_KEY: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 
+        let is_mainnet_url = config.ic_url.is_none();
         let url_str = match &config.ic_url {
             Some(url_str) => url_str.as_str(),
-            None => match environment {
-                Environment::DeprecatedTestnet => DEPRECATED_TESTNET_URL,
-                Environment::Production | Environment::Test => MAINNET_URL,
-            },
+            None => MAINNET_URL,
         };
         let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {e}"))?;
 
@@ -103,13 +98,14 @@ impl ParsedNetworkConfig {
                     .map_err(|e| format!("Unable to parse root key from file: {e}"))?,
             ),
             None => {
-                match environment {
-                    Environment::Production | Environment::Test => {
-                        // The mainnet root key
-                        let decoded = base64::decode(MAINNET_ROOT_KEY).unwrap();
-                        Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
-                    }
-                    Environment::DeprecatedTestnet => None,
+                if is_mainnet_url {
+                    // Use the mainnet root key when connecting to mainnet
+                    let decoded = base64::decode(MAINNET_ROOT_KEY).unwrap();
+                    Some(parse_threshold_sig_key_from_der(&decoded).unwrap())
+                } else {
+                    // When a custom --ic-url is provided without --root-key,
+                    // skip certificate verification (e.g., for local test replicas)
+                    None
                 }
             }
         };
@@ -152,7 +148,7 @@ impl ParsedCanisterConfig {
                         format!("Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}")
                     })?,
                 ),
-                Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,
+                Environment::Production => LEDGER_CANISTER_ID,
             },
         };
 
@@ -160,9 +156,7 @@ impl ParsedCanisterConfig {
             Some(explicit_value) => explicit_value,
             None => match environment {
                 Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
-                Environment::Production | Environment::DeprecatedTestnet => {
-                    DEFAULT_TOKEN_SYMBOL.to_string()
-                }
+                Environment::Production => DEFAULT_TOKEN_SYMBOL.to_string(),
             },
         };
 
@@ -189,10 +183,9 @@ struct Opt {
     #[clap(
         short = 'e',
         long = "environment",
-        default_value = "deprecated-testnet",
-        help = "Environment preset that configures network and canister settings."
+        help = "Environment preset that configures network and canister settings. Defaults to 'test' if not specified."
     )]
-    environment: Environment,
+    environment: Option<Environment>,
 
     #[clap(flatten)]
     server: ServerConfig,
@@ -286,27 +279,21 @@ async fn main() -> std::io::Result<()> {
         warn!("--log-config-file is deprecated and ignored")
     }
 
-    // Check for conflicting flags
-    if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
+    // Check for conflicting flags: both --mainnet and --environment cannot be specified together
+    if opt.mainnet && opt.environment.is_some() {
         eprintln!(
             "Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet."
         );
         std::process::exit(1);
     }
 
-    // Handle mainnet flag by treating it as environment production
+    // Determine the environment: --mainnet flag (deprecated) takes precedence, then --environment, then default to Test
     let environment = if opt.mainnet {
         warn!("--mainnet flag is deprecated. Please use --environment production instead.");
         Environment::Production
     } else {
-        opt.environment
+        opt.environment.unwrap_or(Environment::Test)
     };
-
-    if environment == Environment::DeprecatedTestnet {
-        warn!(
-            "deprecated-testnet environment is deprecated. Please use --environment test instead."
-        );
-    }
 
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
@@ -319,11 +306,10 @@ async fn main() -> std::io::Result<()> {
     info!("Listening on {}:{}", opt.server.address, listen_port);
     let addr = format!("{}:{}", opt.server.address, listen_port);
 
-    let network_config = ParsedNetworkConfig::from_config(opt.network, &environment)
-        .unwrap_or_else(|e| {
-            error!("Configuration error: {}", e);
-            std::process::exit(1);
-        });
+    let network_config = ParsedNetworkConfig::from_config(opt.network).unwrap_or_else(|e| {
+        error!("Configuration error: {}", e);
+        std::process::exit(1);
+    });
     info!("Internet Computer URL set to {}", network_config.ic_url);
 
     if network_config.root_key.is_none() {

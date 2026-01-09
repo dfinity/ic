@@ -40,6 +40,8 @@ impl Drop for KillOnDrop {
 pub struct RosettaOptions {
     pub ledger_id: Option<Principal>,
 
+    pub token_symbol: Option<String>,
+
     pub store_type: String,
 
     pub ic_url: String,
@@ -55,6 +57,7 @@ impl RosettaOptions {
 
 pub struct RosettaOptionsBuilder {
     ledger_id: Option<Principal>,
+    token_symbol: Option<String>,
     persistent_storage: bool,
     ic_url: String,
     offline: bool,
@@ -64,6 +67,7 @@ impl RosettaOptionsBuilder {
     pub fn new(ic_url: String) -> Self {
         RosettaOptionsBuilder {
             ledger_id: None,
+            token_symbol: None,
             persistent_storage: false,
             ic_url,
             offline: false,
@@ -72,6 +76,11 @@ impl RosettaOptionsBuilder {
 
     pub fn with_ledger_id(mut self, ledger_id: Principal) -> Self {
         self.ledger_id = Some(ledger_id);
+        self
+    }
+
+    pub fn with_token_symbol(mut self, token_symbol: String) -> Self {
+        self.token_symbol = Some(token_symbol);
         self
     }
 
@@ -88,6 +97,7 @@ impl RosettaOptionsBuilder {
     pub fn build(self) -> RosettaOptions {
         RosettaOptions {
             ledger_id: self.ledger_id,
+            token_symbol: self.token_symbol,
             store_type: if self.persistent_storage {
                 "sqlite".to_string()
             } else {
@@ -136,6 +146,10 @@ pub async fn start_rosetta(
             .arg(arguments.ledger_id.unwrap().to_string());
     }
 
+    if let Some(token_symbol) = arguments.token_symbol {
+        cmd.arg("--token-symbol").arg(token_symbol);
+    }
+
     if arguments.offline {
         cmd.arg("--offline");
     }
@@ -149,8 +163,14 @@ pub async fn start_rosetta(
         )
     }));
 
+    // Wait for port file to be created (with timeout to avoid infinite loop if Rosetta crashes)
+    let mut port_file_tries = NUM_TRIES;
     while !port_file.exists() {
         sleep(WAIT_BETWEEN_ATTEMPTS).await;
+        port_file_tries -= 1;
+        if port_file_tries == 0 {
+            panic!("Rosetta did not create port file within timeout. Check if Rosetta crashed during startup.");
+        }
     }
 
     let port = std::fs::read_to_string(port_file).expect("Expected port in port file");
