@@ -82,8 +82,7 @@ fn main() -> Result<()> {
         .ok()
         .and_then(|s| s.parse::<u64>().ok());
 
-    let hostuser = std::env::var("HOSTUSER")
-        .expect("HOSTUSER environment variable must be set");
+    let hostuser = std::env::var("HOSTUSER").expect("HOSTUSER environment variable must be set");
 
     let config = Config::new(perf_hosts, num_hosts, hostuser);
 
@@ -205,7 +204,11 @@ pub struct Config {
 
 impl Config {
     pub fn new(hosts: Option<Vec<String>>, num_hosts: Option<u64>, hostuser: String) -> Config {
-        Config { hosts, num_hosts, hostuser}
+        Config {
+            hosts,
+            num_hosts,
+            hostuser,
+        }
     }
 
     /// Builds the IC instance.
@@ -284,7 +287,9 @@ pub fn setup(env: TestEnv, config: Config) {
             );
             let log = logger.clone();
             let hostuser = config.hostuser.clone();
-            switch_to_ssd_handles.push(std::thread::spawn(move || switch_to_ssd(&log, &hostname, &hostuser)));
+            switch_to_ssd_handles.push(std::thread::spawn(move || {
+                switch_to_ssd(&log, &hostname, &hostuser)
+            }));
         }
     }
     for handle in switch_to_ssd_handles {
