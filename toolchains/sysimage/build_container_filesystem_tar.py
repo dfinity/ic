@@ -204,7 +204,7 @@ def main():
 
     # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
     # strips this out - add it back manually.
-    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
+    os.environ["PATH"] = "/usr/bin:" + os.environ.get("PATH", "")
 
     image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files

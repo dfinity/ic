@@ -12,7 +12,7 @@ cleanup() {
 
         # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
         # strips this out - add it back manually.
-        export PATH="$PATH:/usr/bin"
+        export PATH="/usr/bin:$PATH"
         podman container stop "${CONTAINER_ID}"
         podman container cleanup --rm "${CONTAINER_ID}"
     fi

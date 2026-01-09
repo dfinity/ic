@@ -82,7 +82,7 @@ def main():
 
     # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
     # strips this out - add it back manually.
-    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
+    os.environ["PATH"] = "/usr/bin:" + os.environ.get("PATH", "")
 
     build_args = list(build_args or [])
     # tempfile cleanup is handled by proc_wrapper.sh
