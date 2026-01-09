@@ -30,7 +30,7 @@ Canister Backtrace:.*
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-_wasm_backtrace_canister::ic0_trap
+canister_update ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
@@ -101,7 +101,7 @@ fn assert_error(
         .unwrap();
     assert!(
         backtrace_regex.is_match(last_error),
-        "Last log: {last_error} doesn't match backtrace regex: {backtrace}"
+        "Last log:\n----------\n{last_error}\n----------\ndoesn't match backtrace regex: {backtrace}"
     );
 }
 
@@ -287,7 +287,7 @@ mod visibility {
             std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
         assert!(
             backtrace_regex.is_match(last_error),
-            "Last log: {last_error} doesn't contain backtrace: {backtrace}"
+            "Last log:\n----------\n{last_error}\n----------\ndoesn't contain backtrace: {backtrace}"
         );
     }
 

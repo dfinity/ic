@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added `take_canister_snapshot` method. It is only callable by the Governance canister though.
+
 ## Changed
 
 ## Deprecated

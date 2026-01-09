@@ -21,8 +21,8 @@ use crate::driver::{
     test_setup::InfraProvider,
 };
 use anyhow::{Context, Result, bail};
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::setupos::{
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::setupos::{
     config_ini::ConfigIniSettings,
     deployment_json::{self, DeploymentSettings},
 };
