@@ -96,7 +96,7 @@ pub struct InitArgs {
     pub transfer_fee: Nat,
     pub token_name: String,
     pub token_symbol: String,
-    pub metadata: Vec<(MetadataKey, Value)>,
+    pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
     pub index_principal: Option<Principal>,
@@ -110,7 +110,7 @@ pub enum ChangeFeeCollector {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType)]
 pub struct UpgradeArgs {
-    pub metadata: Option<Vec<(MetadataKey, Value)>>,
+    pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<Nat>,
@@ -367,10 +367,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         token_symbol: TOKEN_SYMBOL.to_string(),
         decimals: Some(DECIMAL_PLACES),
         metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            (NAT_META_KEY.to_string(), NAT_META_VALUE.into()),
+            (INT_META_KEY.to_string(), INT_META_VALUE.into()),
+            (TEXT_META_KEY.to_string(), TEXT_META_VALUE.into()),
+            (BLOB_META_KEY.to_string(), BLOB_META_VALUE.into()),
         ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -1862,7 +1862,7 @@ where
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         metadata: Some(vec![(
-            MetadataKey::parse(TEXT_META_KEY).unwrap(),
+            TEXT_META_KEY.into(),
             Value::Text(TEXT_META_VALUE_2.into()),
         )]),
         token_name: Some(OTHER_TOKEN_NAME.into()),
@@ -5230,12 +5230,12 @@ pub mod metadata {
     {
         let env = StateMachine::new();
 
-        let forbidden_metadata = vec![
-            Value::entry(METADATA_DECIMALS, 8u64),
-            Value::entry(METADATA_NAME, "BogusName"),
-            Value::entry(METADATA_SYMBOL, "BN"),
-            Value::entry(METADATA_FEE, Nat::from(10_000u64)),
-            Value::entry(METADATA_MAX_MEMO_LENGTH, 8u64),
+        let forbidden_metadata: Vec<(String, Value)> = vec![
+            (METADATA_DECIMALS.to_string(), 8u64.into()),
+            (METADATA_NAME.to_string(), "BogusName".into()),
+            (METADATA_SYMBOL.to_string(), "BN".into()),
+            (METADATA_FEE.to_string(), Nat::from(10_000u64).into()),
+            (METADATA_MAX_MEMO_LENGTH.to_string(), 8u64.into()),
         ];
 
         let args = encode_init_args(InitArgs {
@@ -5299,7 +5299,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![Value::entry(forbidden_metadata, 8u64)],
+                metadata: vec![(forbidden_metadata.to_string(), 8u64.into())],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -5325,7 +5325,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![Value::entry(forbidden_metadata, 8u64)]),
+                metadata: Some(vec![(forbidden_metadata.to_string(), 8u64.into())]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(
