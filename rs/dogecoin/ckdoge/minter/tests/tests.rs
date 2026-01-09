@@ -8,7 +8,7 @@ use ic_ckdoge_minter::{
 };
 use ic_ckdoge_minter_test_utils::{
     DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
-    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxos_with_value,
+    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
 use ic_management_canister_types::CanisterStatusType;
 
@@ -480,7 +480,7 @@ fn should_estimate_withdrawal_fee() {
         result
     }
 
-    let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+    let setup = Setup::new(Network::Regtest).with_doge_balance();
     let minter = setup.minter();
 
     assert_eq!(
@@ -492,7 +492,8 @@ fn should_estimate_withdrawal_fee() {
     setup
         .deposit_flow()
         .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
-        .dogecoin_simulate_transaction(utxos_with_value(&[RETRIEVE_DOGE_MIN_AMOUNT; 2]))
+        .dogecoin_send_transaction([RETRIEVE_DOGE_MIN_AMOUNT; 2])
+        .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
         .minter_update_balance()
         .expect_mint();
 
@@ -505,7 +506,7 @@ fn should_estimate_withdrawal_fee() {
 
     let expected_fee = WithdrawalFee {
         minter_fee: 180_000_000,
-        dogecoin_fee: 11_350_000,
+        dogecoin_fee: 227_000_000,
     };
     assert_eq!(
         estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
