@@ -143,7 +143,7 @@ fn read_checkpoint(
     metrics: &StateManagerMetrics,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), String> {
     let height = *state_layout
-        .checkpoint_heights()
+        .verified_checkpoint_heights()
         .map_err(|e| e.to_string())?
         .last()
         .ok_or(format!(
