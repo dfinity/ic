@@ -1,19 +1,3 @@
-Dev Container
-=============
-
-Building and testing this repository requires being in the dev container since it provides required dependencies.
-
-Entering the dev container can be done using:
-
-`ci/container/container-run.sh`
-
-Individual commands can also be run in the dev container using:
-
-`ci/container/container-run.sh COMMAND`
-
-Alternatively, in VS Code the Dev Containers extension should be used which automatically loads `.devcontainer/devcontainer.json`.
-
-
 Rust
 ====
 
