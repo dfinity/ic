@@ -24,16 +24,14 @@ use ic_agent::Agent;
 use ic_agent::export::Principal;
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
-use ic_system_test_driver::{
-    driver::{
-        ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer},
-    },
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer},
 };
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 use ic_types::Height;
 use ic_utils::interfaces::ManagementCanister;
 use rand::Rng;

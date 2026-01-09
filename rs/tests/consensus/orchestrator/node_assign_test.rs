@@ -191,7 +191,13 @@ fn test(env: TestEnv) {
 
     // Kill one more node and break consensus.
     info!(logger, "Kill one more node and break consensus");
-    block_on(async { newly_assigned_nodes[kill_nodes_count].vm().await.kill().await });
+    block_on(async {
+        newly_assigned_nodes[kill_nodes_count]
+            .vm()
+            .await
+            .kill()
+            .await
+    });
     info!(logger, "Wait for it to become unavailable");
     newly_assigned_nodes[kill_nodes_count]
         .await_status_is_unavailable()
@@ -211,7 +217,13 @@ fn test(env: TestEnv) {
 
     // Restart node to start consensus.
     info!(logger, "Restart node to start consensus");
-    block_on(async { newly_assigned_nodes[kill_nodes_count].vm().await.start().await });
+    block_on(async {
+        newly_assigned_nodes[kill_nodes_count]
+            .vm()
+            .await
+            .start()
+            .await
+    });
     info!(logger, "Wait for subnet to restart");
     // Wait for 1 DKG interval to ensure that subnet makes progress again.
     let target_height =
