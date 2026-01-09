@@ -5,7 +5,39 @@ use crate::{
     types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
     types::arbitrary,
 };
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, Rng};
+
+fn non_torsion_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Affine {
+    let mut buf = [0u8; G1Affine::BYTES];
+
+    loop {
+        rng.fill_bytes(&mut buf);
+        buf[0] |= 0x80; // set compressed bit
+        buf[0] &= 0xBF; // clear infinity bit
+        if let Ok(pt) = G1Affine::deserialize_unchecked(&buf) {
+            if !pt.is_torsion_free() {
+                return pt;
+            }
+        }
+    }
+}
+
+fn non_torsion_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Affine {
+    let mut buf = [0u8; G2Affine::BYTES];
+
+    loop {
+        rng.fill_bytes(&mut buf);
+        buf[0] |= 0x80; // set compressed bit
+        buf[0] &= 0xBF; // clear infinity bit
+        if let Ok(pt) = G2Affine::deserialize_unchecked(&buf) {
+            if !pt.is_torsion_free() {
+                return pt;
+            }
+        }
+    }
+}
 
 fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8]) {
     let signatures: Vec<IndividualSignature> = keys
@@ -265,5 +297,322 @@ mod advanced_functionality {
         ) {
             check_multi_signature_verifies(&keys, &message);
         }
+    }
+}
+
+mod verification_failures {
+    use super::*;
+    use crate::types::{
+        CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes,
+    };
+
+    #[test]
+    fn individual_signature_fails_with_wrong_message() {
+        let rng = &mut reproducible_rng();
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
+        let message = b"correct message";
+        let wrong_message = b"wrong message";
+
+        let signature = multi_crypto::sign_message(message, &secret_key);
+
+        assert!(
+            !multi_crypto::verify_individual_message_signature(
+                wrong_message,
+                &signature,
+                &public_key
+            ),
+            "Signature should not verify with wrong message"
+        );
+    }
+
+    #[test]
+    fn individual_signature_fails_with_wrong_public_key() {
+        let rng = &mut reproducible_rng();
+        let (secret_key, _public_key) = multi_crypto::keypair_from_rng(rng);
+        let (_other_secret_key, other_public_key) = multi_crypto::keypair_from_rng(rng);
+        let message = b"test message";
+
+        let signature = multi_crypto::sign_message(message, &secret_key);
+
+        assert!(
+            !multi_crypto::verify_individual_message_signature(
+                message,
+                &signature,
+                &other_public_key
+            ),
+            "Signature should not verify with wrong public key"
+        );
+    }
+
+    #[test]
+    fn combined_signature_fails_with_wrong_message() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..3)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let message = b"correct message";
+        let wrong_message = b"wrong message";
+
+        let signatures: Vec<_> = keys
+            .iter()
+            .map(|(sk, _)| multi_crypto::sign_message(message, sk))
+            .collect();
+        let combined_sig = multi_crypto::combine_signatures(&signatures);
+        let public_keys: Vec<_> = keys.iter().map(|(_, pk)| pk.clone()).collect();
+
+        assert!(
+            !multi_crypto::verify_combined_message_signature(
+                wrong_message,
+                &combined_sig,
+                &public_keys
+            ),
+            "Combined signature should not verify with wrong message"
+        );
+    }
+
+    #[test]
+    fn combined_signature_fails_with_missing_public_key() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..3)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let message = b"test message";
+
+        let signatures: Vec<_> = keys
+            .iter()
+            .map(|(sk, _)| multi_crypto::sign_message(message, sk))
+            .collect();
+        let combined_sig = multi_crypto::combine_signatures(&signatures);
+        // Only include first two public keys, missing the third
+        let public_keys: Vec<_> = keys.iter().take(2).map(|(_, pk)| pk.clone()).collect();
+
+        assert!(
+            !multi_crypto::verify_combined_message_signature(message, &combined_sig, &public_keys),
+            "Combined signature should not verify with missing public key"
+        );
+    }
+
+    #[test]
+    fn combined_signature_fails_with_extra_public_key() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..3)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let (_, extra_public_key) = multi_crypto::keypair_from_rng(rng);
+        let message = b"test message";
+
+        let signatures: Vec<_> = keys
+            .iter()
+            .map(|(sk, _)| multi_crypto::sign_message(message, sk))
+            .collect();
+        let combined_sig = multi_crypto::combine_signatures(&signatures);
+        let mut public_keys: Vec<_> = keys.iter().map(|(_, pk)| pk.clone()).collect();
+        public_keys.push(extra_public_key);
+
+        assert!(
+            !multi_crypto::verify_combined_message_signature(message, &combined_sig, &public_keys),
+            "Combined signature should not verify with extra public key"
+        );
+    }
+
+    #[test]
+    fn combined_signature_verifies_with_reordered_public_keys() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..3)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let message = b"test message";
+
+        let signatures: Vec<_> = keys
+            .iter()
+            .map(|(sk, _)| multi_crypto::sign_message(message, sk))
+            .collect();
+        let combined_sig = multi_crypto::combine_signatures(&signatures);
+        // Reverse the order of public keys
+        let public_keys: Vec<_> = keys.iter().rev().map(|(_, pk)| pk.clone()).collect();
+
+        // BLS signature aggregation is just summation so it works even if
+        // the public keys are reordered, as long as they are all included
+
+        assert!(
+            multi_crypto::verify_combined_message_signature(message, &combined_sig, &public_keys),
+            "Combined signature should verify regardless of public key order (commutative aggregation)"
+        );
+    }
+
+    #[test]
+    fn pop_fails_with_wrong_public_key() {
+        let rng = &mut reproducible_rng();
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
+        let (_, other_public_key) = multi_crypto::keypair_from_rng(rng);
+
+        let pop = multi_crypto::create_pop(&public_key, &secret_key);
+
+        assert!(
+            !multi_crypto::verify_pop(&pop, &other_public_key),
+            "PoP should not verify with wrong public key"
+        );
+    }
+
+    #[test]
+    fn verify_individual_fails_with_malformed_signature_bytes() {
+        let rng = &mut reproducible_rng();
+        let (_, public_key) = multi_crypto::keypair_from_rng(rng);
+        let public_key_bytes = PublicKeyBytes::from(&public_key);
+        let message = b"test message";
+
+        // Create malformed signature bytes (point not in subgroup)
+        let malformed_sig = non_torsion_g1(rng);
+        let malformed_sig_bytes = IndividualSignatureBytes(malformed_sig.serialize());
+
+        match api::verify_individual(message, &malformed_sig_bytes, &public_key_bytes) {
+            Ok(_) => panic!("Unexpectedly accepted malformed signature"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn verify_individual_fails_with_malformed_public_key_bytes() {
+        let rng = &mut reproducible_rng();
+        let (secret_key, _public_key) = multi_crypto::keypair_from_rng(rng);
+        let message = b"test message";
+
+        let signature = multi_crypto::sign_message(message, &secret_key);
+        let signature_bytes = IndividualSignatureBytes::from(&signature);
+
+        // Create malformed public key bytes (point not in subgroup)
+        let malformed_pk = non_torsion_g2(rng);
+        let malformed_pk_bytes = PublicKeyBytes(malformed_pk.serialize());
+
+        match api::verify_individual(message, &signature_bytes, &malformed_pk_bytes) {
+            Ok(_) => panic!("Unexpectedly accepted malformed public key"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn verify_combined_fails_with_malformed_signature_bytes() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..2)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let public_key_bytes: Vec<_> = keys
+            .iter()
+            .map(|(_, pk)| PublicKeyBytes::from(pk))
+            .collect();
+        let message = b"test message";
+
+        // Create malformed combined signature bytes (point not in subgroup)
+        let malformed_sig = non_torsion_g1(rng);
+        let malformed_sig_bytes = CombinedSignatureBytes(malformed_sig.serialize());
+
+        match api::verify_combined(message, &malformed_sig_bytes, &public_key_bytes) {
+            Ok(_) => panic!("Unexpectedly accepted malformed combined signature"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn verify_combined_fails_with_malformed_public_key_bytes() {
+        let rng = &mut reproducible_rng();
+        let keys: Vec<_> = (0..2)
+            .map(|_| multi_crypto::keypair_from_rng(rng))
+            .collect();
+        let message = b"test message";
+
+        let signatures: Vec<_> = keys
+            .iter()
+            .map(|(sk, _)| multi_crypto::sign_message(message, sk))
+            .collect();
+        let combined_sig = multi_crypto::combine_signatures(&signatures);
+        let combined_sig_bytes = CombinedSignatureBytes::from(&combined_sig);
+
+        // Create public key list with one malformed key
+        let malformed_pk = non_torsion_g2(rng);
+        let public_key_bytes = vec![
+            PublicKeyBytes::from(&keys[0].1),
+            PublicKeyBytes(malformed_pk.serialize()), // malformed
+        ];
+
+        match api::verify_combined(message, &combined_sig_bytes, &public_key_bytes) {
+            Ok(_) => panic!("Unexpectedly accepted malformed public key"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn combine_fails_with_malformed_individual_signature_bytes() {
+        let rng = &mut reproducible_rng();
+        let (secret_key, _) = multi_crypto::keypair_from_rng(rng);
+        let message = b"test message";
+
+        let valid_sig = multi_crypto::sign_message(message, &secret_key);
+        let valid_sig_bytes = IndividualSignatureBytes::from(&valid_sig);
+
+        // Create malformed signature bytes (point not in subgroup)
+        let malformed_sig = non_torsion_g1(rng);
+        let malformed_sig_bytes = IndividualSignatureBytes(malformed_sig.serialize());
+
+        let signatures = vec![valid_sig_bytes, malformed_sig_bytes];
+
+        match api::combine(&signatures) {
+            Ok(_) => panic!("Unexpectedly accepted malformed signature in combine"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn verify_pop_fails_with_malformed_pop_bytes() {
+        let rng = &mut reproducible_rng();
+        let (_, public_key) = multi_crypto::keypair_from_rng(rng);
+        let public_key_bytes = PublicKeyBytes::from(&public_key);
+
+        // Create malformed PoP bytes (point not in subgroup)
+        let malformed_pop = non_torsion_g1(rng);
+        let malformed_pop_bytes = PopBytes(malformed_pop.serialize());
+
+        match api::verify_pop(&malformed_pop_bytes, &public_key_bytes) {
+            Ok(_) => panic!("Unexpectedly accepted malformed PoP"),
+            Err(e) => assert!(e.to_string().contains("Point decoding failed")),
+        }
+    }
+
+    #[test]
+    fn verify_combined_with_empty_public_keys_verifies_identity() {
+        let message = b"test message";
+
+        // Combined signature with no signers is the identity
+        let combined_sig = multi_crypto::combine_signatures(&[]);
+        let combined_sig_bytes = CombinedSignatureBytes::from(&combined_sig);
+        let empty_public_keys: Vec<PublicKeyBytes> = vec![];
+
+        // Verifying identity signature with empty public keys list
+        // This is a degenerate case - documenting the behavior
+        let result = api::verify_combined(message, &combined_sig_bytes, &empty_public_keys);
+
+        // The identity signature with empty public keys should verify
+        // because: e(identity, g2) = e(H(m), identity) = 1
+        assert!(
+            result.is_ok(),
+            "Empty signature with empty public keys should verify (identity case)"
+        );
+    }
+
+    #[test]
+    fn verify_combined_identity_signature_fails_with_nonempty_public_keys() {
+        let rng = &mut reproducible_rng();
+        let (_, public_key) = multi_crypto::keypair_from_rng(rng);
+        let message = b"test message";
+
+        // Identity signature (no signers)
+        let combined_sig = multi_crypto::combine_signatures(&[]);
+        let combined_sig_bytes = CombinedSignatureBytes::from(&combined_sig);
+        let public_keys = vec![PublicKeyBytes::from(&public_key)];
+
+        let result = api::verify_combined(message, &combined_sig_bytes, &public_keys);
+        assert!(
+            result.is_err(),
+            "Identity signature should not verify with non-empty public keys"
+        );
     }
 }
