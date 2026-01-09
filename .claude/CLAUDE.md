@@ -6,7 +6,7 @@ After changing Rust code (`*.rs`) first format the code using `cargo fmt`.
 Then check the code for linting errors using:
 
 ```
-cargo clippy --locked --all-features --workspace --all-targets --keep-going -- \
+cargo clippy --all-features --workspace --all-targets -- \
     -D warnings \
     -D clippy::all \
     -D clippy::mem_forget \
