@@ -1125,12 +1125,9 @@ pub(crate) fn is_handle_invalid(
     for action in change_set {
         if let IDkgChangeAction::HandleInvalid(id, reason) = action
             && *id == *msg_id
+            && reason.contains(expected_reason)
         {
-            if reason.contains(expected_reason) {
-                return true;
-            } else {
-                println!("Expected reason: {expected_reason}, but got: {reason}");
-            }
+            return true;
         }
     }
     false
