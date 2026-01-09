@@ -179,6 +179,10 @@ impl CatchUpPackageMaker {
             return None;
         }
 
+        if self.state_manager.latest_certified_height() < height {
+            return None;
+        }
+
         match self.state_manager.get_state_hash_at(height) {
             Err(StateHashError::Transient(StateNotCommittedYet(_))) => {
                 // TODO: Setup a delay before retry

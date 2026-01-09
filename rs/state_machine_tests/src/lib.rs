@@ -943,7 +943,7 @@ impl Deref for StateMachineStateManager {
 }
 
 impl StateManager for StateMachineStateManager {
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)> {
         self.deref().list_state_hashes_to_certify()
     }
 
@@ -5054,6 +5054,9 @@ pub fn certify_latest_state_helper(
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
         let (height, hash) = state_hashes.last().unwrap();
+        let hash = hash
+            .as_ref()
+            .expect("State manager should always return a hash in tests");
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }

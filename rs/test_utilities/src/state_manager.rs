@@ -183,13 +183,13 @@ impl StateManager for FakeStateManager {
         });
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)> {
         self.states
             .read()
             .unwrap()
             .iter()
             .filter(|s| s.height > Height::from(0) && s.certification.is_none())
-            .map(|s| (s.height, s.partial_hash.clone()))
+            .map(|s| (s.height, Some(s.partial_hash.clone())))
             .collect()
     }
 
@@ -686,7 +686,7 @@ impl StateManager for RefMockStateManager {
             .fetch_state(height, root_hash, cup_interval_length)
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)> {
         self.mock.read().unwrap().list_state_hashes_to_certify()
     }
 

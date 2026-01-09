@@ -1024,9 +1024,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1, hashes[1].1);
+        assert_ne!(hashes[0].1.as_ref().unwrap(), hashes[1].1.as_ref().unwrap());
         assert_eq!(
-            Some(hashes[0].1.clone()),
+            Some(hashes[0].1.clone().unwrap()),
             state_2.system_metadata().prev_state_hash
         );
     });
@@ -1612,8 +1612,8 @@ fn cannot_remove_latest_height_or_checkpoint() {
         // We need to wait for hashing to complete, otherwise the
         // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
-        state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
+        state_manager.remove_states_below(height(11));
+        state_manager.remove_inmemory_states_below(height(11), &BTreeSet::new());
         state_manager.flush_deallocation_channel();
 
         assert_eq!(

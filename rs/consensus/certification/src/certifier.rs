@@ -140,15 +140,15 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         // First, we iterate over requested heights and deliver certifications to the
         // state manager, if they're available or return those hashes which do not have
         // certifications and for which we did not issue a share yet.
-        let state_hashes_to_certify: Vec<_> = self
+        let state_heights_and_hashes_to_certify: Vec<_> = self
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(
-                |(height, hash)| match certification_pool.certification_at_height(height) {
+            .filter_map(|(height, hash)| {
+                match (certification_pool.certification_at_height(height), hash) {
                     // if we have a valid certification, deliver it to the state manager and skip
                     // the pair
-                    Some(certification) => {
+                    (Some(certification), _) => {
                         // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
                         // change set for the artifact processor to handle.
                         self.state_manager
@@ -167,9 +167,13 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         None
                     }
                     // return this pair to be signed by the current replica
-                    _ => Some((height, hash)),
-                },
-            )
+                    (None, hash) => Some((height, hash)),
+                }
+            })
+            .collect();
+        let state_hashes_to_certify: Vec<_> = state_heights_and_hashes_to_certify
+            .iter()
+            .filter_map(|(height, hash)| hash.as_ref().map(|hash| (*height, hash.clone())))
             .collect();
         trace!(
             &self.log,
@@ -214,7 +218,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
 
         let start = Instant::now();
 
-        let certifications = state_hashes_to_certify
+        let certifications = state_heights_and_hashes_to_certify
             .iter()
             .flat_map(|(height, _)| self.aggregate(certification_pool, *height))
             .collect::<Vec<_>>();
@@ -236,7 +240,7 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         }
 
         let start = Instant::now();
-        let change_set = self.validate(certification_pool, &state_hashes_to_certify);
+        let change_set = self.validate(certification_pool, &state_heights_and_hashes_to_certify);
         if change_set.is_empty() {
             trace!(
                 &self.log,
@@ -414,7 +418,7 @@ impl CertifierImpl {
     fn validate(
         &self,
         certification_pool: &dyn CertificationPool,
-        state_hashes: &[(Height, CryptoHashOfPartialState)],
+        state_hashes: &[(Height, Option<CryptoHashOfPartialState>)],
     ) -> Mutations {
         // Iterate over all state hashes, obtain list of corresponding unvalidated
         // artifacts by the height and try to verify their signatures.
@@ -472,7 +476,7 @@ impl CertifierImpl {
 
     fn validate_certification(
         &self,
-        hash: &CryptoHashOfPartialState,
+        hash: &Option<CryptoHashOfPartialState>,
         certification: &Certification,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::Certification(certification.clone());
@@ -482,7 +486,9 @@ impl CertifierImpl {
 
         // check if the certification contains the same state hash as our local one. If
         // not, we consider the certification invalid.
-        if hash != &certification.signed.content.hash {
+        if let Some(hash) = hash
+            && hash != &certification.signed.content.hash
+        {
             return Some(ChangeAction::HandleInvalid(
                 msg,
                 format!(
@@ -515,14 +521,16 @@ impl CertifierImpl {
     fn validate_share(
         &self,
         certification_pool: &dyn CertificationPool,
-        hash: &CryptoHashOfPartialState,
+        hash: &Option<CryptoHashOfPartialState>,
         share: &CertificationShare,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::CertificationShare(share.clone());
         let content = &share.signed.content;
         // If the share has an invalid content or does not belong to the
         // committee
-        if !hash.eq(&content.hash) {
+        if let Some(hash) = hash
+            && !hash.eq(&content.hash)
+        {
             return Some(ChangeAction::HandleInvalid(
                 msg,
                 format!(
@@ -679,10 +687,10 @@ mod tests {
                     .map(move |h| {
                         (
                             Height::from(h),
-                            CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                            Some(CryptoHashOfPartialState::from(CryptoHash(Vec::new()))),
                         )
                     })
-                    .collect::<Vec<(Height, CryptoHashOfPartialState)>>(),
+                    .collect::<Vec<(Height, Option<CryptoHashOfPartialState>)>>(),
             );
     }
 
@@ -1212,7 +1220,7 @@ mod tests {
                 let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
 
                 assert_eq!(
-                    certifier.validate_certification(&hash, &cert),
+                    certifier.validate_certification(&Some(hash.clone()), &cert),
                     Some(ChangeAction::HandleInvalid(
                         CertificationMessage::Certification(cert.clone()),
                         format!(
@@ -1383,7 +1391,7 @@ mod tests {
                         .map(|h| {
                             (
                                 Height::from(h),
-                                CryptoHashOfPartialState::from(CryptoHash(Vec::new())),
+                                Some(CryptoHashOfPartialState::from(CryptoHash(Vec::new()))),
                             )
                         })
                         .collect::<Vec<_>>()

@@ -587,7 +587,12 @@ impl Player {
             find_malicious_nodes(certification_pool, self.get_latest_cup().height(), &verify);
 
         // Get heights and local state hashes without a full certification
-        let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
+        let mut missing_certifications: Vec<_> = self
+            .state_manager
+            .list_state_hashes_to_certify()
+            .into_iter()
+            .filter_map(|(height, hash)| hash.map(|hash| (height, hash)))
+            .collect();
         missing_certifications.sort_by_key(|(height, _)| height.get());
         missing_certifications
             .into_iter()
@@ -848,6 +853,7 @@ impl Player {
             let (height, hash) = state_hashes
                 .last()
                 .expect("There should be at least one state hash to certify");
+            let hash = hash.as_ref().expect("There should be some hash to certify");
             self.state_manager
                 .deliver_state_certification(Self::certify_hash(self.subnet_id, height, hash));
         }
