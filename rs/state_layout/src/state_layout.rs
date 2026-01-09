@@ -664,7 +664,7 @@ impl StateLayout {
     ) -> Result<(), LayoutError> {
         for height in self.verified_checkpoint_heights()? {
             let cp_layout = self.checkpoint_verified(height)?;
-            let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut())?;
+            let result = cp_layout.mark_files_readonly_and_sync(thread_pool.as_mut(), true)?;
 
             info!(
                 &self.log,
@@ -1901,12 +1901,13 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
-    /// Recursively set permissions to readonly for all files under the checkpoint
-    /// except for the unverified checkpoint marker file.
+    /// Recursively set permissions to readonly for all files under the checkpoint.
+    /// If `perform_sync` is true, also syncs files to disk.
     /// Returns counts of files traversed and files made readonly for monitoring.
     pub fn mark_files_readonly_and_sync(
         &self,
         mut thread_pool: Option<&mut scoped_threadpool::Pool>,
+        perform_sync: bool,
     ) -> Result<ReadonlyMarkingResult, LayoutError> {
         let checkpoint_path = self.raw_path();
         let convert_io_err = |err: std::io::Error| -> LayoutError {
@@ -1929,7 +1930,9 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             match mark_readonly_if_file(p) {
                 Ok(was_made_readonly) => {
                     #[cfg(not(target_os = "linux"))]
-                    sync_path(p)?;
+                    if perform_sync {
+                        sync_path(p)?;
+                    }
                     Ok::<bool, std::io::Error>(was_made_readonly)
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -1950,7 +1953,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
             .count();
 
         #[cfg(target_os = "linux")]
-        {
+        if perform_sync {
             let f = std::fs::File::open(checkpoint_path).map_err(convert_io_err)?;
             use std::os::fd::AsRawFd;
             unsafe {
@@ -2041,7 +2044,7 @@ impl CheckpointLayout<ReadOnly> {
         &self,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        let _result = self.mark_files_readonly_and_sync(thread_pool)?;
+        let _result = self.mark_files_readonly_and_sync(thread_pool, true)?;
         self.remove_unverified_checkpoint_marker()?;
         // Remove the state sync marker last to avoid briefly appearing as UnverifiedRegular
         // if a concurrent thread observes the checkpoint between marker removals.

@@ -167,11 +167,11 @@ impl StateSync {
                 .start_timer();
 
             ro_layout
-                .mark_files_readonly_and_sync(Some(&mut thread_pool))
+                .mark_files_readonly_and_sync(Some(&mut thread_pool), false)
                 .unwrap_or_else(|err| {
                     fatal!(
                         self.log,
-                        "Failed to mark files readonly and sync for checkpoint @height {height}: {err}",
+                        "Failed to mark files readonly for checkpoint @height {height}: {err}",
                     );
                 });
             state
