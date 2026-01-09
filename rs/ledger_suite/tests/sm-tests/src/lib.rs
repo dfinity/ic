@@ -5353,6 +5353,90 @@ pub mod metadata {
         )
         .expect("should successfully upgrade the ledger");
     }
+
+    /// Invalid metadata keys (not following namespace:key format) are rejected during init.
+    pub fn test_init_with_invalid_metadata_keys_fails<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        const INVALID_KEYS: [&str; 3] = [
+            "invalid_no_colon",  // missing colon separator
+            ":key_no_namespace", // empty namespace
+            "namespace:",        // empty key
+        ];
+
+        for invalid_key in INVALID_KEYS.iter() {
+            let args = encode_init_args(InitArgs {
+                metadata: vec![(invalid_key.to_string(), "value".into())],
+                ..init_args(vec![])
+            });
+            let args = Encode!(&args).unwrap();
+            match env.install_canister(ledger_wasm.clone(), args, None) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to install ledger with invalid metadata key '{}'",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
+    }
+
+    /// Invalid metadata keys are rejected during upgrade when existing metadata is all valid.
+    pub fn test_upgrade_with_invalid_metadata_keys_fails_when_existing_valid<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        // Install ledger with valid metadata
+        let args = encode_init_args(InitArgs {
+            metadata: vec![("custom:valid_key".to_string(), "value".into())],
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .expect("should successfully install ledger with valid metadata");
+
+        const INVALID_KEYS: [&str; 3] = [
+            "invalid_no_colon",
+            ":key_no_namespace",
+            "namespace:",
+        ];
+
+        // Upgrading with invalid keys should fail when existing metadata is valid
+        for invalid_key in INVALID_KEYS.iter() {
+            let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                metadata: Some(vec![(invalid_key.to_string(), "new_value".into())]),
+                ..UpgradeArgs::default()
+            }));
+            match env.upgrade_canister(
+                canister_id,
+                ledger_wasm.clone(),
+                Encode!(&ledger_upgrade_arg).unwrap(),
+            ) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to upgrade ledger with invalid metadata key '{}' when existing metadata is valid",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
+    }
 }
 
 pub mod archiving {
