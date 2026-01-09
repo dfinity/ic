@@ -88,7 +88,7 @@ impl Farm {
     ) -> FarmResult<PlaynetCertificate> {
         let path = format!("group/{group_name}/playnet/certificate");
         let rb = self.post(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb).await?;
         let playnet_cert = resp.json::<PlaynetCertificate>().await?;
         Ok(playnet_cert)
@@ -110,7 +110,7 @@ impl Farm {
         let spec = spec.add_meta(group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb).await?;
         Ok(())
     }
@@ -128,7 +128,7 @@ impl Farm {
             .unwrap_or_else(|| vm.required_host_features.clone());
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb).await?;
         let created_vm = resp.json::<VMCreateResponse>().await?;
         // Emit a json log event, to be consumed by log post-processing tools.
@@ -147,7 +147,7 @@ impl Farm {
     pub async fn claim_file(&self, group_name: &str, file_id: &FileId) -> FarmResult<ClaimResult> {
         let path = format!("group/{group_name}/file/{file_id}");
         let rb = self.put(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         match self.retry_until_success(rbb).await {
             Ok(resp) => {
                 let expiration = resp.json::<FileExpiration>().await?;
@@ -170,83 +170,30 @@ impl Farm {
             self.logger,
             "Uploading file: {} of size {} bytes ...", filename, size
         );
-        let path_owned = path.as_ref().to_owned();
-        let filename_owned = filename.to_string();
-
-        // File uploads with multipart forms don't support retries via the regular mechanism
-        // because Form doesn't implement Clone and needs to be created fresh each time.
-        // We implement custom retry logic here, recreating the form for each attempt.
-        let started_at = Instant::now();
-        let mut req_sent_successfully = false;
-        let t_settings = TIMEOUT_SETTINGS_LONG;
-
-        loop {
-            let http_timeout = match t_settings.retry_timeout.checked_sub(started_at.elapsed()) {
-                Some(t) if t > t_settings.min_http_timeout => t.min(t_settings.max_http_timeout),
-                _ => break,
-            };
-
-            // Create a fresh multipart form for this attempt
+        let rb = self
+            .post(&format!("group/{group_name}/file"))
+            .timeout(TIMEOUT_SETTINGS_LONG.max_http_timeout);
+        let path = (&path).to_owned();
+        let rbb = async move || {
             let form = multipart::Form::new()
-                .file(filename_owned.clone(), path_owned.clone())
+                .file(filename.to_string(), path)
                 .await
                 .expect("could not create multipart for image");
+            rb.try_clone()
+                .expect("could not clone a request builder")
+                .multipart(form)
+        };
 
-            let rb = self
-                .post(&format!("group/{group_name}/file"))
-                .timeout(http_timeout)
-                .multipart(form);
-
-            match rb.send().await {
-                Err(e) => {
-                    req_sent_successfully = false;
-                    error!(
-                        self.logger,
-                        "sending file upload request to Farm failed: {:?}", e
-                    );
-                }
-                Ok(r) => {
-                    req_sent_successfully = true;
-                    if r.status().is_success() {
-                        let mut file_ids = r.json::<ImageUploadResponse>().await?.image_ids;
-                        if file_ids.len() != 1 || !file_ids.contains_key(filename) {
-                            return Err(FarmError::InvalidResponse {
-                                message: format!(
-                                    "Response has invalid length or does not contain file id for '{filename}'"
-                                ),
-                            });
-                        }
-                        return Ok(FileId(file_ids.remove(filename).unwrap()));
-                    }
-                    if r.status().as_u16() == 404 {
-                        let body = r.text().await.unwrap_or_default();
-                        return Err(FarmError::NotFound { message: body });
-                    }
-                    if r.status().is_server_error() {
-                        error!(
-                            self.logger,
-                            "unexpected response from Farm during file upload: {:?}",
-                            r.text().await
-                        );
-                    } else {
-                        warn!(
-                            self.logger,
-                            "unexpected response from Farm during file upload: {:?}",
-                            r.text().await
-                        );
-                    }
-                }
-            }
-            tokio::time::sleep(t_settings.linear_backoff).await;
+        let resp = self.retry_until_success_long(rbb).await?;
+        let mut file_ids = resp.json::<ImageUploadResponse>().await?.image_ids;
+        if file_ids.len() != 1 || !file_ids.contains_key(filename) {
+            return Err(FarmError::InvalidResponse {
+                message: format!(
+                    "Response has invalid length or does not contain file id for '{filename}'"
+                ),
+            });
         }
-
-        Err(FarmError::TooManyRetries {
-            message: String::from(if req_sent_successfully {
-                "processing file upload request on Farm"
-            } else {
-                "sending file upload request to Farm"
-            }),
-        })
+        Ok(FileId(file_ids.remove(filename).unwrap()))
     }
 
     pub async fn attach_disk_images(
@@ -262,7 +209,7 @@ impl Farm {
             drives: image_specs,
         };
         let rb = Self::json(req, &attach_drives_req);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success_long(rbb).await?;
         Ok(())
     }
@@ -270,7 +217,7 @@ impl Farm {
     pub async fn start_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{group_name}/vm/{vm_name}/start");
         let rb = self.put(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb).await?;
         let url = self.url_from_path(&format!("group/{group_name}/vm/{vm_name}/console/")[..]);
         emit_vm_console_link_event(&self.logger, url, vm_name);
@@ -280,7 +227,7 @@ impl Farm {
     pub async fn destroy_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{group_name}/vm/{vm_name}/destroy");
         let rb = self.put(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb).await?;
         Ok(())
     }
@@ -288,7 +235,7 @@ impl Farm {
     pub async fn reboot_vm(&self, group_name: &str, vm_name: &str) -> FarmResult<()> {
         let path = format!("group/{group_name}/vm/{vm_name}/reboot");
         let rb = self.put(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb).await?;
         Ok(())
     }
@@ -328,7 +275,7 @@ impl Farm {
     ) -> FarmResult<String> {
         let path = format!("group/{group_name}/dns");
         let rb = Self::json(self.post(&path), &dns_records);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb).await?;
         let create_dns_records_result = resp.json::<CreateDnsRecordsResult>().await?;
         Ok(create_dns_records_result.suffix)
@@ -345,7 +292,7 @@ impl Farm {
     ) -> FarmResult<String> {
         let path = format!("group/{group_name}/playnet/dns");
         let rb = Self::json(self.post(&path), &dns_records);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let resp = self.retry_until_success_long(rbb).await?;
         let create_dns_records_result = resp.json::<CreateDnsRecordsResult>().await?;
         Ok(create_dns_records_result.suffix)
@@ -354,7 +301,7 @@ impl Farm {
     pub async fn set_group_ttl(&self, group_name: &str, duration: Duration) -> FarmResult<()> {
         let path = format!("group/{}/ttl/{}", group_name, duration.as_secs());
         let rb = self.put(&path);
-        let rbb = || rb.try_clone().expect("could not clone a request builder");
+        let rbb = async move || rb.try_clone().expect("could not clone a request builder");
         let _resp = self.retry_until_success(rbb).await?;
         Ok(())
     }
@@ -394,21 +341,21 @@ impl Farm {
         Url::parse(&format!("{}{}", self.base_url, path)).expect("should not fail!")
     }
 
-    async fn retry_until_success_long<F: Fn() -> RequestBuilder>(
+    async fn retry_until_success_long<F: AsyncFn() -> RequestBuilder>(
         &self,
         rbb: F,
     ) -> FarmResult<reqwest::Response> {
         self.retry_until_success_(rbb, TIMEOUT_SETTINGS_LONG).await
     }
 
-    async fn retry_until_success<F: Fn() -> RequestBuilder>(
+    async fn retry_until_success<F: AsyncFn() -> RequestBuilder>(
         &self,
         rbb: F,
     ) -> FarmResult<reqwest::Response> {
         self.retry_until_success_(rbb, TIMEOUT_SETTINGS).await
     }
 
-    async fn retry_until_success_<F: Fn() -> RequestBuilder>(
+    async fn retry_until_success_<F: AsyncFn() -> RequestBuilder>(
         &self,
         rbb: F,
         t_settings: TimeoutSettings,
@@ -416,7 +363,7 @@ impl Farm {
         let started_at = Instant::now();
         let mut req_sent_successfully = false;
         loop {
-            let mut req = rbb();
+            let mut req = rbb().await;
             let http_timeout = match t_settings.retry_timeout.checked_sub(started_at.elapsed()) {
                 Some(t) if t > t_settings.min_http_timeout => t.min(t_settings.max_http_timeout),
                 _ => break,
