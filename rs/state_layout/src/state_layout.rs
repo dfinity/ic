@@ -1866,8 +1866,7 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
     /// Other methods should use this function rather than checking markers directly.
     pub fn checkpoint_status(&self) -> CheckpointStatus {
         if self.state_sync_checkpoint_marker().exists() {
-            // State sync checkpoints are always unverified. We never remove their unverified
-            // markers, so both markers should be present. The debug_assert verifies this invariant.
+            // Checkpoints with state sync marker are always unverified. Therefore both markers should be present.
             // For defensive programming, we treat it as unverified even if the unverified marker
             // is accidentally missing, since the presence of a state sync marker alone indicates
             // the checkpoint should never be considered verified.
@@ -2048,8 +2047,10 @@ impl CheckpointLayout<ReadOnly> {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
         let _result = self.mark_files_readonly_and_sync(thread_pool)?;
-        self.remove_state_sync_checkpoint_marker()?;
-        self.remove_unverified_checkpoint_marker()
+        self.remove_unverified_checkpoint_marker()?;
+        // Remove the state sync marker last to avoid briefly appearing as UnverifiedRegular
+        // if a concurrent thread observes the checkpoint between marker removals.
+        self.remove_state_sync_checkpoint_marker()
     }
 
     fn remove_state_sync_checkpoint_marker(&self) -> Result<(), LayoutError> {
