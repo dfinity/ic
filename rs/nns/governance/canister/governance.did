@@ -22,6 +22,7 @@ type Action = variant {
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot
 };
 
 type AddHotKey = record {
@@ -1099,6 +1100,10 @@ type GuestLaunchMeasurementMetadata = record {
   kernel_cmdline : opt text;
 };
 
+type TakeCanisterSnapshot = record {
+  canister_id : opt principal;
+  replace_snapshot : opt blob;
+};
 
 type ProposalData = record {
   id : opt ProposalId;
