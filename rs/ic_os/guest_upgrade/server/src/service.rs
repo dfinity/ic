@@ -152,7 +152,9 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                 derive_key_from_sev_measurement(
                     sev_firmware.as_mut(),
                     Key::DiskEncryptionKey {
-                        device_path: Path::new("/dev/vda10"),
+                        device_path: Path::new(
+                            "/dev/disk/by-partuuid/231213c6-ec9e-11f0-b45f-b7bbea44aaf0",
+                        ),
                     },
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?
