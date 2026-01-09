@@ -1344,8 +1344,8 @@ pub fn symbol_strategy() -> impl Strategy<Value = String> {
 pub fn metadata_strategy() -> impl Strategy<Value = Vec<(MetadataKey, MetadataValue)>> {
     (symbol_strategy(), decimals_strategy()).prop_map(|(symbol, decimals)| {
         vec![
-            MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, symbol),
-            MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, candid::Nat::from(decimals)),
+            MetadataValue::entry(MetadataKey::ICRC1_SYMBOL, symbol).unwrap(),
+            MetadataValue::entry(MetadataKey::ICRC1_DECIMALS, candid::Nat::from(decimals)).unwrap(),
         ]
     })
 }

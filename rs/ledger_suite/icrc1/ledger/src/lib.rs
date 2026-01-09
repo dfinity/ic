@@ -935,28 +935,27 @@ impl Ledger {
             .into_iter()
             .map(|(k, v)| (k, StoredValue::into(v)))
             .collect();
-        records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64));
-        records.push(Value::entry(METADATA_NAME, self.token_name()));
-        records.push(Value::entry(METADATA_SYMBOL, self.token_symbol()));
-        records.push(Value::entry(METADATA_FEE, Nat::from(self.transfer_fee())));
-        records.push(Value::entry(
-            METADATA_MAX_MEMO_LENGTH,
-            self.max_memo_length() as u64,
-        ));
-        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true"));
-        records.push(Value::entry(
-            METADATA_MAX_TAKE_ALLOWANCES,
-            Nat::from(self.max_take_allowances()),
-        ));
+        records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64).unwrap());
+        records.push(Value::entry(METADATA_NAME, self.token_name()).unwrap());
+        records.push(Value::entry(METADATA_SYMBOL, self.token_symbol()).unwrap());
+        records.push(Value::entry(METADATA_FEE, Nat::from(self.transfer_fee())).unwrap());
+        records.push(
+            Value::entry(METADATA_MAX_MEMO_LENGTH, self.max_memo_length() as u64).unwrap(),
+        );
+        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true").unwrap());
+        records.push(
+            Value::entry(METADATA_MAX_TAKE_ALLOWANCES, Nat::from(self.max_take_allowances()))
+                .unwrap(),
+        );
         // When adding new entries that cannot be set by the user
         // (e.g. because they are fixed or computed dynamically)
         // please also add them to `map_metadata_or_trap` to prevent
         // the entry being set using init or upgrade arguments.
         if let Some(index_principal) = self.index_principal() {
-            records.push(Value::entry(
-                MetadataKey::ICRC106_INDEX_PRINCIPAL,
-                index_principal.to_text(),
-            ));
+            records.push(
+                Value::entry(MetadataKey::ICRC106_INDEX_PRINCIPAL, index_principal.to_text())
+                    .unwrap(),
+            );
         }
         records
     }

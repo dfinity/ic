@@ -224,13 +224,14 @@ pub fn test(env: TestEnv) {
             Value::entry(
                 MetadataKey::ICRC1_DECIMALS,
                 ic_ledger_core::tokens::DECIMAL_PLACES as u64,
-            ),
-            Value::entry(MetadataKey::ICRC1_NAME, init_args.token_name),
-            Value::entry(MetadataKey::ICRC1_SYMBOL, init_args.token_symbol),
-            Value::entry(MetadataKey::ICRC1_FEE, init_args.transfer_fee.clone()),
-            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32u64),
-            Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true"),
-            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500u64),
+            )
+            .unwrap(),
+            Value::entry(MetadataKey::ICRC1_NAME, init_args.token_name).unwrap(),
+            Value::entry(MetadataKey::ICRC1_SYMBOL, init_args.token_symbol).unwrap(),
+            Value::entry(MetadataKey::ICRC1_FEE, init_args.transfer_fee.clone()).unwrap(),
+            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32u64).unwrap(),
+            Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap(),
+            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500u64).unwrap(),
         ];
         assert_eq!(
             expected_metadata,

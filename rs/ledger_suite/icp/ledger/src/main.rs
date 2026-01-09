@@ -489,19 +489,22 @@ fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
 #[query]
 fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     vec![
-        Value::entry(MetadataKey::ICRC1_DECIMALS, DECIMAL_PLACES as u64),
+        Value::entry(MetadataKey::ICRC1_DECIMALS, DECIMAL_PLACES as u64).unwrap(),
         Value::entry(
             MetadataKey::ICRC1_NAME,
             LEDGER.read().unwrap().token_name.to_string(),
-        ),
+        )
+        .unwrap(),
         Value::entry(
             MetadataKey::ICRC1_SYMBOL,
             LEDGER.read().unwrap().token_symbol.to_string(),
-        ),
+        )
+        .unwrap(),
         Value::entry(
             MetadataKey::ICRC1_FEE,
             LEDGER.read().unwrap().transfer_fee.get_e8s(),
-        ),
+        )
+        .unwrap(),
     ]
 }
 

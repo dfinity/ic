@@ -24,13 +24,15 @@ impl MetadataValue {
     /// The key must be a valid metadata key in the format `<namespace>:<key>`.
     /// This is typically used with the predefined constants like `MetadataKey::ICRC1_NAME`.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the key is not a valid metadata key format.
-    pub fn entry(key: &str, val: impl Into<MetadataValue>) -> (MetadataKey, Self) {
-        let metadata_key =
-            MetadataKey::parse(key).unwrap_or_else(|e| panic!("invalid metadata key '{key}': {e}"));
-        (metadata_key, val.into())
+    /// Returns an error if the key is not a valid metadata key format.
+    pub fn entry(
+        key: &str,
+        val: impl Into<MetadataValue>,
+    ) -> Result<(MetadataKey, Self), MetadataKeyError> {
+        let metadata_key = MetadataKey::parse(key)?;
+        Ok((metadata_key, val.into()))
     }
 }
 
@@ -94,8 +96,14 @@ mod tests {
 
     #[test]
     fn test_metadata_value_entry() {
-        let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token");
+        let entry = MetadataValue::entry(MetadataKey::ICRC1_NAME, "My Token").unwrap();
         assert_eq!(entry.0.as_str(), "icrc1:name");
         assert_eq!(entry.1, MetadataValue::Text("My Token".to_string()));
+    }
+
+    #[test]
+    fn test_metadata_value_entry_invalid_key() {
+        let result = MetadataValue::entry("invalid_no_colon", "value");
+        assert!(result.is_err());
     }
 }
