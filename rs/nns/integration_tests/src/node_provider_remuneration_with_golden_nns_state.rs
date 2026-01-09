@@ -284,7 +284,6 @@ mod sanity_check {
                 ("diyay", 7090266),
                 ("7a4u2", 18471950),
                 ("efem5", 5366482),
-                ("acqus", 19520656),
                 ("cgmhq", 7621638),
                 ("mf6om", 1012894),
                 ("4fedi", 5715522),
@@ -483,11 +482,9 @@ mod sanity_check {
                 })
                 .collect();
 
-        assert!(
-            expected_xdr_permyriad_per_provider
-                .iter()
-                .all(|(k, v)| xdr_permyriad_distributed.get(k) == Some(v)),
-            "Distributed rewards do not contain the expected rewards"
+        assert_eq!(
+            xdr_permyriad_distributed, expected_xdr_permyriad_per_provider,
+            "Distributed rewards do not match expected rewards calculated from daily results."
         );
         MetricsBeforeAndAfter {
             before: december_distribution_metrics,
