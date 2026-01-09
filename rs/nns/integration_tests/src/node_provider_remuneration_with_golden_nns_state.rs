@@ -483,7 +483,8 @@ mod sanity_check {
                 })
                 .collect();
 
-        // Remove a node provider that was removed from the network before January 2026 distribution.
+        // Remove a node provider that was removed from the network before January 2026 distribution
+        // and thus not expected to receive any rewards.
         // https://dashboard.internetcomputer.org/proposal/139934
         let removed_node_provider = PrincipalId::from_str(
             "acqus-l4yyc-h44lw-grfxw-h7jqf-mtvt3-huwmj-4s372-sc5db-5nsfr-2ae",
