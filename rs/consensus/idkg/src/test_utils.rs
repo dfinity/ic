@@ -1117,12 +1117,20 @@ pub(crate) fn is_removed_from_unvalidated(
 }
 
 // Checks that artifact is being dropped as invalid
-pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
+pub(crate) fn is_handle_invalid(
+    change_set: &[IDkgChangeAction],
+    msg_id: &IDkgMessageId,
+    expected_reason: &str,
+) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::HandleInvalid(id, _) = action
+        if let IDkgChangeAction::HandleInvalid(id, reason) = action
             && *id == *msg_id
         {
-            return true;
+            if reason.contains(expected_reason) {
+                return true;
+            } else {
+                println!("Expected reason: {expected_reason}, but got: {reason}");
+            }
         }
     }
     false
