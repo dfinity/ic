@@ -108,11 +108,7 @@ impl StateSync {
             .state_layout
             .verified_checkpoint_heights()
             .unwrap_or_else(|err| {
-                fatal!(
-                    self.log,
-                    "Failed to get verified checkpoint heights: {}",
-                    err
-                );
+                fatal!(self.log, "Failed to get verified checkpoint heights: {err}");
             });
 
         // Perform validation if no verified checkpoint exists or the last verified checkpoint is too old
@@ -138,9 +134,7 @@ impl StateSync {
                 Err(err) => {
                     fatal!(
                         self.log,
-                        "Failed to load and finalize checkpoint or remove the unverified marker @height {}: {}",
-                        height,
-                        err
+                        "Failed to load and finalize checkpoint or remove the unverified marker @height {height}: {err}",
                     );
                 }
             }
@@ -161,9 +155,7 @@ impl StateSync {
                 Err(err) => {
                     fatal!(
                         self.log,
-                        "Failed to load checkpoint @height {}: {}",
-                        height,
-                        err
+                        "Failed to load checkpoint @height {height}: {err}",
                     );
                 }
             };
@@ -179,9 +171,7 @@ impl StateSync {
                 .unwrap_or_else(|err| {
                     fatal!(
                         self.log,
-                        "Failed to mark files readonly and sync for checkpoint @height {}: {}",
-                        height,
-                        err
+                        "Failed to mark files readonly and sync for checkpoint @height {height}: {err}",
                     );
                 });
             state

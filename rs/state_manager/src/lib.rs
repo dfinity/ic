@@ -2318,8 +2318,7 @@ impl StateManagerImpl {
                 .unwrap_or_else(|err| {
                     fatal!(
                         &self.log,
-                        "Failed to retrieve unfiltered checkpoint heights: {:?}",
-                        err
+                        "Failed to retrieve unfiltered checkpoint heights: {err}",
                     )
                 });
 
@@ -2348,9 +2347,7 @@ impl StateManagerImpl {
         let result = self
             .state_layout
             .verified_checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
-            });
+            .unwrap_or_else(|err| fatal!(self.log, "Failed to gather checkpoint heights: {err}"));
 
         self.metrics
             .checkpoints_on_disk_count
@@ -3034,8 +3031,7 @@ impl StateManager for StateManagerImpl {
             .unwrap_or_else(|err| {
                 fatal!(
                     &self.log,
-                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
-                    err
+                    "Failed to retrieve unfiltered checkpoint heights: {err}",
                 )
             });
         self.metrics

@@ -976,9 +976,7 @@ impl IncompleteState {
             .unwrap_or_else(|err| {
                 fatal!(
                     log,
-                    "Failed to create state sync checkpoint marker for scratchpad @height {}: {}",
-                    height,
-                    err
+                    "Failed to create state sync checkpoint marker for scratchpad @height {height}: {err}",
                 );
             });
 
