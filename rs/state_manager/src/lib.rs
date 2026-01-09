@@ -2344,16 +2344,28 @@ impl StateManagerImpl {
     }
 
     pub fn checkpoint_heights(&self) -> Vec<Height> {
-        let result = self
+        let unfiltered_checkpoint_heights = self
             .state_layout
-            .verified_checkpoint_heights()
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to gather checkpoint heights: {err}"));
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve unfiltered checkpoint heights: {err}",
+                )
+            });
+        self.metrics
+            .unfiltered_checkpoint_heights_count
+            .set(unfiltered_checkpoint_heights.len() as i64);
+
+        let verified_checkpoint_heights = self
+            .state_layout
+            .filter_verified_checkpoint_heights(unfiltered_checkpoint_heights);
 
         self.metrics
             .checkpoints_on_disk_count
-            .set(result.len() as i64);
+            .set(verified_checkpoint_heights.len() as i64);
 
-        result
+        verified_checkpoint_heights
     }
 
     /// Returns the list of heights corresponding to snapshots matching
@@ -3025,18 +3037,6 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
-        let unfiltered_checkpoint_heights = self
-            .state_layout
-            .unfiltered_checkpoint_heights()
-            .unwrap_or_else(|err| {
-                fatal!(
-                    &self.log,
-                    "Failed to retrieve unfiltered checkpoint heights: {err}",
-                )
-            });
-        self.metrics
-            .unfiltered_checkpoint_heights_count
-            .set(unfiltered_checkpoint_heights.len() as i64);
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();

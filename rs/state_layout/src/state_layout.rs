@@ -963,15 +963,18 @@ impl StateLayout {
         parse_and_sort_checkpoint_heights(&names[..])
     }
 
-    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
-    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
-        let verified_checkpoint_heights = self
-            .unfiltered_checkpoint_heights()?
+    /// Filters the given heights to only include verified checkpoints.
+    pub fn filter_verified_checkpoint_heights(&self, heights: Vec<Height>) -> Vec<Height> {
+        heights
             .into_iter()
             .filter(|h| matches!(self.checkpoint_status(*h), Ok(CheckpointStatus::Verified)))
-            .collect();
+            .collect()
+    }
 
-        Ok(verified_checkpoint_heights)
+    /// Returns a sorted list of `Height`s for which a checkpoint is available and verified.
+    pub fn verified_checkpoint_heights(&self) -> Result<Vec<Height>, LayoutError> {
+        let unfiltered_heights = self.unfiltered_checkpoint_heights()?;
+        Ok(self.filter_verified_checkpoint_heights(unfiltered_heights))
     }
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available and is either verified or a state sync checkpoint.
