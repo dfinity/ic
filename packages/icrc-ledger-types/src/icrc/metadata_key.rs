@@ -11,8 +11,8 @@
 //!
 //! // Parse a key (validates the format)
 //! let key = MetadataKey::parse("icrc1:name").unwrap();
-//! assert_eq!(key.namespace(), "icrc1");
-//! assert_eq!(key.key(), "name");
+//! assert_eq!(key.namespace(), Some("icrc1"));
+//! assert_eq!(key.key(), Some("name"));
 //!
 //! // Create from parts (validates the format)
 //! let key = MetadataKey::new("myapp", "setting").unwrap();
@@ -72,8 +72,8 @@ impl std::error::Error for MetadataKeyError {}
 ///
 /// // Using parse (validates the format)
 /// let key = MetadataKey::parse("icrc1:name").unwrap();
-/// assert_eq!(key.namespace(), "icrc1");
-/// assert_eq!(key.key(), "name");
+/// assert_eq!(key.namespace(), Some("icrc1"));
+/// assert_eq!(key.key(), Some("name"));
 ///
 /// // Using new (validates the format)
 /// let key = MetadataKey::new("icrc1", "symbol").unwrap();
@@ -174,28 +174,20 @@ impl MetadataKey {
         validate_key_format(&self.0).is_ok()
     }
 
-    /// Returns the namespace part of the key.
+    /// Returns the namespace part of the key (before the colon).
     ///
-    /// # Panics
-    ///
-    /// Panics if the key does not contain a colon (i.e., was created with `unchecked_from_string`
-    /// with an invalid format).
-    pub fn namespace(&self) -> &str {
-        self.0.find(':').map(|pos| &self.0[..pos]).expect(
-            "BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?",
-        )
+    /// Returns `None` if the key does not contain a colon (i.e., was created with
+    /// `unchecked_from_string` with an invalid format).
+    pub fn namespace(&self) -> Option<&str> {
+        self.0.find(':').map(|pos| &self.0[..pos])
     }
 
-    /// Returns the key part (after the namespace).
+    /// Returns the key part (after the colon).
     ///
-    /// # Panics
-    ///
-    /// Panics if the key does not contain a colon (i.e., was created with `unchecked_from_string`
-    /// with an invalid format).
-    pub fn key(&self) -> &str {
-        self.0.find(':').map(|pos| &self.0[pos + 1..]).expect(
-            "BUG: MetadataKey should contain a colon; was this created with unchecked_from_string?",
-        )
+    /// Returns `None` if the key does not contain a colon (i.e., was created with
+    /// `unchecked_from_string` with an invalid format).
+    pub fn key(&self) -> Option<&str> {
+        self.0.find(':').map(|pos| &self.0[pos + 1..])
     }
 }
 
@@ -242,24 +234,24 @@ mod tests {
     #[test]
     fn test_metadata_key_new() {
         let key = MetadataKey::new("icrc1", "name").unwrap();
-        assert_eq!(key.namespace(), "icrc1");
-        assert_eq!(key.key(), "name");
+        assert_eq!(key.namespace(), Some("icrc1"));
+        assert_eq!(key.key(), Some("name"));
         assert_eq!(key.as_str(), "icrc1:name");
     }
 
     #[test]
     fn test_metadata_key_parse() {
         let key = MetadataKey::parse("myapp:decimals").unwrap();
-        assert_eq!(key.namespace(), "myapp");
-        assert_eq!(key.key(), "decimals");
+        assert_eq!(key.namespace(), Some("myapp"));
+        assert_eq!(key.key(), Some("decimals"));
     }
 
     #[test]
     fn test_metadata_key_with_colons_in_value() {
         // Key part can contain colons
         let key = MetadataKey::parse("myapp:some:complex:key").unwrap();
-        assert_eq!(key.namespace(), "myapp");
-        assert_eq!(key.key(), "some:complex:key");
+        assert_eq!(key.namespace(), Some("myapp"));
+        assert_eq!(key.key(), Some("some:complex:key"));
     }
 
     #[test]
@@ -327,9 +319,16 @@ mod tests {
     #[test]
     fn test_metadata_key_unchecked_from_string() {
         let key = MetadataKey::unchecked_from_string("icrc1:name");
-        assert_eq!(key.namespace(), "icrc1");
-        assert_eq!(key.key(), "name");
+        assert_eq!(key.namespace(), Some("icrc1"));
+        assert_eq!(key.key(), Some("name"));
         assert!(key.is_valid());
+    }
+
+    #[test]
+    fn test_metadata_key_namespace_and_key_return_none_for_invalid() {
+        let invalid = MetadataKey::unchecked_from_string("nocolon");
+        assert_eq!(invalid.namespace(), None);
+        assert_eq!(invalid.key(), None);
     }
 
     #[test]

@@ -747,13 +747,13 @@ mod metadata_validation_tests {
 
         // Verify keys are properly parsed
         let key1 = &ledger.metadata[0].0;
-        assert_eq!(key1.namespace(), "namespace1");
-        assert_eq!(key1.key(), "key1");
+        assert_eq!(key1.namespace(), Some("namespace1"));
+        assert_eq!(key1.key(), Some("key1"));
         assert!(key1.is_valid());
 
         let key2 = &ledger.metadata[1].0;
-        assert_eq!(key2.namespace(), "icrc1");
-        assert_eq!(key2.key(), "logo");
+        assert_eq!(key2.namespace(), Some("icrc1"));
+        assert_eq!(key2.key(), Some("logo"));
         assert!(key2.is_valid());
     }
 
@@ -782,8 +782,8 @@ mod metadata_validation_tests {
         assert_eq!(ledger.metadata.len(), 1);
         let key = &ledger.metadata[0].0;
         let value = &ledger.metadata[0].1;
-        assert_eq!(key.namespace(), "namespace");
-        assert_eq!(key.key(), "key");
+        assert_eq!(key.namespace(), Some("namespace"));
+        assert_eq!(key.key(), Some("key"));
         assert!(key.is_valid());
         match value {
             crate::StoredValue::Text(s) => assert_eq!(s, "upgraded_value"),
