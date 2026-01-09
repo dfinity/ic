@@ -171,7 +171,7 @@ if [ "$(id -u)" = "1000" ]; then
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
         )
     fi
 
@@ -196,8 +196,8 @@ chmod +r ${SUBUID_FILE}
 echo "ubuntu:100000:65536" >$SUBGID_FILE
 chmod +r ${SUBGID_FILE}
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid",idmap="${IDMAP}"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
 )
 
 # make sure we have all bind-mounts
