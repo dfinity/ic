@@ -160,6 +160,7 @@ pub struct StateManagerMetrics {
     last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
     checkpoints_on_disk_count: IntGauge,
+    unfiltered_checkpoint_heights_count: IntGauge,
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     states_metadata_pbuf_size: IntGauge,
@@ -402,6 +403,11 @@ impl StateManagerMetrics {
             "Number of verified checkpoints on disk, independent of if they are loaded or not.",
         );
 
+        let unfiltered_checkpoint_heights_count = metrics_registry.int_gauge(
+            "state_manager_unfiltered_checkpoint_heights_count",
+            "Number of unfiltered checkpoints on disk, independent of if they are verified or not.",
+        );
+
         let last_computed_manifest_height = metrics_registry.int_gauge(
             "state_manager_last_computed_manifest_height",
             "Height of the last checkpoint we computed manifest for.",
@@ -464,6 +470,7 @@ impl StateManagerMetrics {
             last_computed_manifest_height,
             resident_state_count,
             checkpoints_on_disk_count,
+            unfiltered_checkpoint_heights_count,
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
@@ -3016,6 +3023,19 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
+        let unfiltered_checkpoint_heights = self
+            .state_layout
+            .unfiltered_checkpoint_heights()
+            .unwrap_or_else(|err| {
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve unfiltered checkpoint heights: {:?}",
+                    err
+                )
+            });
+        self.metrics
+            .unfiltered_checkpoint_heights_count
+            .set(unfiltered_checkpoint_heights.len() as i64);
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();

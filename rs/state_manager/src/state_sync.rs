@@ -17,6 +17,11 @@ use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_types::{CryptoHashOfState, Height};
 use std::sync::{Arc, Mutex};
 
+/// Maximum height difference from the last verified checkpoint before performing validation
+/// during state sync. If the difference exceeds this threshold, the synced checkpoint will
+/// be validated to prevent losing all state sync progress if it gets archived during restart.
+const MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION: u64 = 10_000;
+
 #[derive(Clone)]
 pub struct StateSync {
     state_manager: Arc<StateManagerImpl>,
@@ -110,7 +115,16 @@ impl StateSync {
                 );
             });
 
-        let state = if verified_checkpoint_heights.is_empty() {
+        // Perform validation if no verified checkpoint exists or the last verified checkpoint is too old
+        let perform_validation = match verified_checkpoint_heights.last() {
+            None => true,
+            Some(last_checkpoint_height) => {
+                last_checkpoint_height.get() < height.get()
+                    && height.get() - last_checkpoint_height.get()
+                        > MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION
+            }
+        };
+        let state = if perform_validation {
             let _timer = state_sync_metrics
                 .step_duration
                 .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])

@@ -3860,7 +3860,7 @@ fn can_state_sync_based_on_unverified_state_sync_checkpoint() {
 
             // Helper to fetch hardlink_files metric
             let get_hardlink_size = || {
-                fetch_int_counter_vec(&dst_metrics, "state_sync_size_bytes_total")
+                fetch_int_counter_vec(dst_metrics, "state_sync_size_bytes_total")
                     .get(&maplit::btreemap! {"op".to_string() => "hardlink_files".to_string()})
                     .cloned()
                     .expect("hardlink_files metric should be present")
@@ -3911,8 +3911,6 @@ fn can_state_sync_based_on_unverified_state_sync_checkpoint() {
 
 #[test]
 fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
-    use ic_state_layout::{CheckpointLayout, RwPolicy};
-
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         // Create state at height 1
         let (_height, mut state) = src_state_manager.take_tip();
@@ -3984,30 +3982,7 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
                     vec![height(1), height(2)]
                 );
 
-                // Corrupt checkpoint 2 to simulate broken state sync
-                // We corrupt the checkpoint files so they'll fail when loaded on restart
-                let state_layout = dst_state_manager.state_layout();
-                let checkpoint_2_path = state_layout
-                    .raw_path()
-                    .join("checkpoints")
-                    .join(StateLayout::checkpoint_name(height(2)));
-                let checkpoint_2_layout =
-                    CheckpointLayout::<RwPolicy<()>>::new_untracked(checkpoint_2_path, height(2))
-                        .unwrap();
-                let canister_200_layout = checkpoint_2_layout
-                    .canister(&canister_test_id(200))
-                    .unwrap();
-                let canister_200_memory = canister_200_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0);
-                make_mutable(&canister_200_memory).unwrap();
-                // Write garbage that will cause deserialization to fail
-                std::fs::write(&canister_200_memory, b"Garbage").unwrap();
-                make_readonly(&canister_200_memory).unwrap();
-
-                // Restart dst state manager to trigger detection of corrupted checkpoint
+                // Restart dst state manager
                 drop(dst_state_sync);
                 let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
                     Ok(sm) => sm,
@@ -4018,7 +3993,7 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
                 let (_metrics, dst_state_manager, dst_state_sync) =
                     restart_fn(dst_state_manager, None);
 
-                // Verify corrupted checkpoint 2 was archived
+                // Verify state sync checkpoint@2 was archived
                 let backup_heights = dst_state_manager
                     .state_layout()
                     .backup_heights()
@@ -4026,7 +4001,10 @@ fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
                 assert_eq!(backup_heights, vec![height(2)]);
 
                 // Verify dst recovered from verified checkpoint 1
-                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Perform state sync at height 3 and verify success
@@ -4943,7 +4921,10 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 assert_eq!(backup_heights, vec![height(2)]);
 
                 // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
-                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Continue execution and create the checkpoint @2.
@@ -5033,7 +5014,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             pipe_state_sync(msg, chunkable);
 
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(2)]
             );
 
@@ -5047,7 +5028,10 @@ fn can_handle_state_sync_and_commit_race_condition() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_error_counters(dst_metrics);
         })
     })
