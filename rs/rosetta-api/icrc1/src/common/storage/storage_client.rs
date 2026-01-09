@@ -294,7 +294,11 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::get_blocks_by_index_range(conn, start_index, end_index)?)
+                Ok(storage_operations::get_blocks_by_index_range(
+                    conn,
+                    start_index,
+                    end_index,
+                )?)
             })
             .await?)
     }
@@ -315,7 +319,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::get_highest_block_idx_in_blocks_table(conn)?)
+                Ok(storage_operations::get_highest_block_idx_in_blocks_table(
+                    conn,
+                )?)
             })
             .await?)
     }
@@ -363,7 +369,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::get_blocks_by_transaction_hash(conn, hash)?)
+                Ok(storage_operations::get_blocks_by_transaction_hash(
+                    conn, hash,
+                )?)
             })
             .await?)
     }
@@ -457,7 +465,9 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::get_account_balance_at_block_idx(conn, &account, block_idx)?)
+                Ok(storage_operations::get_account_balance_at_block_idx(
+                    conn, &account, block_idx,
+                )?)
             })
             .await?)
     }
@@ -484,9 +494,11 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::get_aggregated_balance_for_principal_at_block_idx(
-                    conn, &principal, block_idx,
-                )?)
+                Ok(
+                    storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+                        conn, &principal, block_idx,
+                    )?,
+                )
             })
             .await?)
     }
@@ -512,7 +524,10 @@ impl StorageClient {
         Ok(self
             .storage_connection
             .call::<_, _, StorageError>(move |conn| {
-                Ok(storage_operations::repair_fee_collector_balances(conn, balance_sync_batch_size)?)
+                Ok(storage_operations::repair_fee_collector_balances(
+                    conn,
+                    balance_sync_batch_size,
+                )?)
             })
             .await?)
     }
