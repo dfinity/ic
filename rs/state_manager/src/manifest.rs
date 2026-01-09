@@ -870,7 +870,7 @@ pub fn compute_manifest(
     if !checkpoint.is_checkpoint_verified() {
         markers_to_exclude.insert(checkpoint.unverified_checkpoint_marker());
     }
-    if checkpoint.is_created_via_state_sync() {
+    if checkpoint.is_unverified_state_sync_checkpoint() {
         markers_to_exclude.insert(checkpoint.state_sync_checkpoint_marker());
     }
 

@@ -2181,7 +2181,7 @@ impl StateManagerImpl {
                         // Exclude state sync checkpoints to prevent accumulation during state sync loops.
                         // If a state sync checkpoint is the latest, it is still protected via `latest_manifest_height`.
                         // Regular unverified checkpoints don't need special handling as they block new checkpoint creation and therefore won't accumulate.
-                        if checkpoint_layout.is_created_via_state_sync() {
+                        if checkpoint_layout.is_unverified_state_sync_checkpoint() {
                             return None;
                         }
                         Some(*height)

@@ -142,7 +142,7 @@ pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 pub enum CheckpointStatus {
     /// Locally created checkpoint that has been fully verified.
     Verified,
-    /// Checkpoint created via state sync (never verified).
+    /// Checkpoint created via state sync (conisdered as unverified).
     UnverifiedStateSync,
     /// Locally created checkpoint that has not yet been verified.
     /// May be incomplete due to asynchronous writes of protobuf files.
@@ -1884,15 +1884,13 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         matches!(self.checkpoint_status(), CheckpointStatus::Verified)
     }
 
-    /// Returns `true` if the checkpoint was created via state sync.
-    pub fn is_created_via_state_sync(&self) -> bool {
+    pub fn is_unverified_state_sync_checkpoint(&self) -> bool {
         matches!(
             self.checkpoint_status(),
             CheckpointStatus::UnverifiedStateSync
         )
     }
 
-    /// Returns `true` if the checkpoint was created via state sync.
     pub fn is_verified_or_state_sync_checkpoint(&self) -> bool {
         matches!(
             self.checkpoint_status(),

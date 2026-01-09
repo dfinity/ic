@@ -1445,7 +1445,7 @@ fn handle_compute_manifest_request(
 
     // State sync checkpoints should already have their associated manifests.
     // If this warning is triggered, it indicates an unexpected situation that should be investigated.
-    if checkpoint_layout.is_created_via_state_sync() {
+    if checkpoint_layout.is_unverified_state_sync_checkpoint() {
         warn!(
             log,
             "Trying to compute manifest for state sync checkpoint @{}",
