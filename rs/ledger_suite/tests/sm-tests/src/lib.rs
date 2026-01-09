@@ -5408,11 +5408,7 @@ pub mod metadata {
             .install_canister(ledger_wasm.clone(), args, None)
             .expect("should successfully install ledger with valid metadata");
 
-        const INVALID_KEYS: [&str; 3] = [
-            "invalid_no_colon",
-            ":key_no_namespace",
-            "namespace:",
-        ];
+        const INVALID_KEYS: [&str; 3] = ["invalid_no_colon", ":key_no_namespace", "namespace:"];
 
         // Upgrading with invalid keys should fail when existing metadata is valid
         for invalid_key in INVALID_KEYS.iter() {

@@ -800,16 +800,20 @@ mod metadata_validation_tests {
         let mut ledger = Ledger::from_init_args(DummyLogger, init_args, now);
 
         // Manually inject an invalid key to simulate legacy state
-        ledger.metadata.push(
-            (MetadataKey::unchecked_from_string("invalid_no_colon"), crate::StoredValue::Text("initial_value".to_string()))
-        );
+        ledger.metadata.push((
+            MetadataKey::unchecked_from_string("invalid_no_colon"),
+            crate::StoredValue::Text("initial_value".to_string()),
+        ));
 
         // Verify we have an invalid key
         assert!(!ledger.metadata.iter().all(|(k, _)| k.is_valid()));
 
         // Upgrade the invalid key metadata should succeed (backwards compat)
         let upgrade_args = UpgradeArgs {
-            metadata: Some(vec![("invalid_no_colon".to_string(), "upgraded_value".into())]),
+            metadata: Some(vec![(
+                "invalid_no_colon".to_string(),
+                "upgraded_value".into(),
+            )]),
             ..UpgradeArgs::default()
         };
         ledger.upgrade(DummyLogger, upgrade_args);
