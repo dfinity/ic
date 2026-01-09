@@ -409,8 +409,12 @@ fn encode_dissolve_delay_buckets<W, T>(
     T: Metric + Copy,
 {
     for (k, v) in half_year_buckets.iter() {
-        let lower_bound_months = k * 6;
-        let upper_bound_months = (1 + k) * 6;
+        // In principal, the dissolve delay must never overflow when multiplied by 6.
+        // Otherwise, it is malformed data, and we skip it.
+        let Some(lower_bound_months) = k.checked_mul(6) else {
+            continue;
+        };
+        let upper_bound_months = lower_bound_months.saturating_add(6);
         builder = builder
             .value(
                 &[
@@ -500,7 +504,11 @@ pub fn encode_metrics(
     )?;
     w.encode_gauge(
         "governance_seconds_since_latest_reward_event",
-        (governance.env.now() - governance.latest_reward_event().actual_timestamp_seconds) as f64,
+        (governance
+            .env
+            .now()
+            .saturating_sub(governance.latest_reward_event().actual_timestamp_seconds))
+            as f64,
         "Seconds since the latest reward event",
     )?;
     w.encode_gauge(
