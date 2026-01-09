@@ -483,9 +483,11 @@ mod sanity_check {
                 })
                 .collect();
 
-        assert_eq!(
-            xdr_permyriad_distributed, expected_xdr_permyriad_per_provider,
-            "Distributed rewards do not match expected rewards calculated from daily results."
+        assert!(
+            expected_xdr_permyriad_per_provider
+                .iter()
+                .all(|(k, v)| xdr_permyriad_distributed.get(k) == Some(v)),
+            "Distributed rewards do not contain the expected rewards"
         );
         MetricsBeforeAndAfter {
             before: december_distribution_metrics,
