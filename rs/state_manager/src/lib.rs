@@ -2088,21 +2088,22 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep
-    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
-    /// any checkpoint at height h < last_checkpoint_to_keep
+    /// Remove inmemory states below `last_height_to_keep`, except for heights in
+    /// `extra_inmemory_heights_to_keep`. Also remove checkpoints below `last_checkpoint_to_keep`
+    /// if provided. If `last_checkpoint_to_keep` is None, all checkpoints are kept.
     ///
-    /// Shared inner function of the public functions remove_states_below
-    /// and remove_inmemory_states_below
+    /// Shared inner function of the public functions `remove_states_below`
+    /// and `remove_inmemory_states_below`.
     fn remove_states_below_impl(
         &self,
         last_height_to_keep: Height,
-        last_checkpoint_to_keep: Height,
+        last_checkpoint_to_keep: Option<Height>,
         extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
-            last_height_to_keep >= last_checkpoint_to_keep,
-            "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
+            Some(last_height_to_keep) >= last_checkpoint_to_keep,
+            "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {:?}",
+            last_checkpoint_to_keep
         );
 
         // In debug builds we store the latest_state_height here so
@@ -2134,59 +2135,63 @@ impl StateManagerImpl {
         // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
         let latest_certified_height = self.latest_certified_height();
 
-        // Keep the latest checkpoint with a manifest (verified or state sync) for incremental
-        // manifest computation and state sync. Both types are valid base checkpoints.
-        let latest_manifest_height =
-            states
-                .states_metadata
-                .iter()
-                .rev()
-                .find_map(|(height, state_metadata)| {
-                    state_metadata.bundled_manifest.as_ref()?;
-                    state_metadata
-                        .checkpoint_layout
-                        .as_ref()?
-                        .is_verified_or_state_sync_checkpoint()
-                        .then_some(*height)
-                });
+        let checkpoint_heights_to_keep: BTreeSet<Height> = match last_checkpoint_to_keep {
+            Some(last_checkpoint_to_keep) => {
+                // Keep the latest checkpoint with a manifest (verified or state sync) for incremental
+                // manifest computation and state sync. Both types are valid base checkpoints.
+                let latest_manifest_height =
+                    states
+                        .states_metadata
+                        .iter()
+                        .rev()
+                        .find_map(|(height, state_metadata)| {
+                            state_metadata.bundled_manifest.as_ref()?;
+                            state_metadata
+                                .checkpoint_layout
+                                .as_ref()?
+                                .is_verified_or_state_sync_checkpoint()
+                                .then_some(*height)
+                        });
 
-        // Keep the latest verified checkpoint with a manifest to ensure availability after restart,
-        // since only verified checkpoints survive restarts.
-        // Typically matches `latest_manifest_height` unless state sync checkpoints are present.
-        let latest_verified_checkpoint_with_manifest_height = states
-            .states_metadata
-            .iter()
-            .rev()
-            .find_map(|(height, state_metadata)| {
-                state_metadata.bundled_manifest.as_ref()?;
-                state_metadata
-                    .checkpoint_layout
-                    .as_ref()?
-                    .is_checkpoint_verified()
-                    .then_some(*height)
-            });
-
-        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
-        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
-        let checkpoint_heights_to_keep: BTreeSet<Height> = states
-            .states_metadata
-            .iter()
-            .filter_map(|(height, state_metadata)| {
-                if *height < last_checkpoint_to_keep {
-                    return None;
-                }
-                let checkpoint_layout = state_metadata.checkpoint_layout.as_ref()?;
-                // Exclude state sync checkpoints to prevent accumulation during state sync loops.
-                // If a state sync checkpoint is the latest, it is still protected via `latest_manifest_height`.
-                // Regular unverified checkpoints don't need special handling as they block new checkpoint creation and therefore won't accumulate.
-                if checkpoint_layout.is_created_via_state_sync() {
-                    return None;
-                }
-                Some(*height)
-            })
-            .chain(latest_manifest_height)
-            .chain(latest_verified_checkpoint_with_manifest_height)
-            .collect();
+                // Keep the latest verified checkpoint with a manifest to ensure availability after restart,
+                // since only verified checkpoints survive restarts.
+                // Typically matches `latest_manifest_height` unless state sync checkpoints are present.
+                let latest_verified_checkpoint_with_manifest_height = states
+                    .states_metadata
+                    .iter()
+                    .rev()
+                    .find_map(|(height, state_metadata)| {
+                        state_metadata.bundled_manifest.as_ref()?;
+                        state_metadata
+                            .checkpoint_layout
+                            .as_ref()?
+                            .is_checkpoint_verified()
+                            .then_some(*height)
+                    });
+                // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+                // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
+                states
+                    .states_metadata
+                    .iter()
+                    .filter_map(|(height, state_metadata)| {
+                        if *height < last_checkpoint_to_keep {
+                            return None;
+                        }
+                        let checkpoint_layout = state_metadata.checkpoint_layout.as_ref()?;
+                        // Exclude state sync checkpoints to prevent accumulation during state sync loops.
+                        // If a state sync checkpoint is the latest, it is still protected via `latest_manifest_height`.
+                        // Regular unverified checkpoints don't need special handling as they block new checkpoint creation and therefore won't accumulate.
+                        if checkpoint_layout.is_created_via_state_sync() {
+                            return None;
+                        }
+                        Some(*height)
+                    })
+                    .chain(latest_manifest_height)
+                    .chain(latest_verified_checkpoint_with_manifest_height)
+                    .collect()
+            }
+            None => states.states_metadata.keys().copied().collect(),
+        };
 
         // In addition, we retain the latest certified state and any extra states specified to keep.
         // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
@@ -3070,7 +3075,7 @@ impl StateManager for StateManagerImpl {
         // The public interface does not protect extra states, so we pass an empty set here.
         self.remove_states_below_impl(
             oldest_height_to_keep,
-            oldest_checkpoint_to_keep,
+            Some(oldest_checkpoint_to_keep),
             &BTreeSet::new(),
         );
     }
@@ -3133,11 +3138,7 @@ impl StateManager for StateManagerImpl {
             }
         }
 
-        self.remove_states_below_impl(
-            oldest_height_to_keep,
-            Self::INITIAL_STATE_HEIGHT,
-            extra_heights_to_keep,
-        );
+        self.remove_states_below_impl(oldest_height_to_keep, None, extra_heights_to_keep);
     }
 
     fn commit_and_certify(

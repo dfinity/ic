@@ -119,9 +119,8 @@ impl StateSync {
         let perform_validation = match verified_checkpoint_heights.last() {
             None => true,
             Some(last_checkpoint_height) => {
-                last_checkpoint_height.get() < height.get()
-                    && height.get() - last_checkpoint_height.get()
-                        > MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION
+                last_checkpoint_height.get() + MAX_HEIGHT_DIFFERENCE_WITHOUT_VALIDATION
+                    < height.get()
             }
         };
         let state = if perform_validation {
