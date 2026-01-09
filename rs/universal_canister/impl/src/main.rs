@@ -419,8 +419,8 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::MemorySizeIsAtLeast => {
                 #[cfg(target_arch = "wasm32")]
                 let current_memory_size = || {
-                    let wasm_page_size = wee_alloc::PAGE_SIZE.0;
-                    core::arch::wasm32::memory_size::<0>() * wasm_page_size
+                    const WASM_PAGE_SIZE: usize = 64 * 1024;
+                    core::arch::wasm32::memory_size::<0>() * WASM_PAGE_SIZE
                 };
 
                 #[cfg(not(target_arch = "wasm32"))]

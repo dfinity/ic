@@ -138,7 +138,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
             self.sev_root_certificate_verification,
             &self.blessed_measurements,
             &custom_data,
-            Some(my_attestation_report.chip_id.as_slice()),
+            Some(&[my_attestation_report.chip_id]),
         )
         .map_err(|e| {
             Status::invalid_argument(format!("Attestation report verification failed: {e:?}"))

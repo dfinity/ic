@@ -329,7 +329,7 @@ fn should_correctly_serialize_and_deserialize_nidkg_config() {
 
     // Serialization/deserialization with protobuf
     let config_proto = pb::NiDkgConfig::from(&config);
-    assert_eq!(Ok(config.clone()), NiDkgConfig::try_from(config_proto));
+    assert_eq!(config.clone(), NiDkgConfig::try_from(config_proto).unwrap());
 
     // Serialization/deserialization with serde
     let config_cbor = serde_cbor::to_vec(&config).unwrap();
@@ -342,7 +342,7 @@ fn should_fail_deserializing_invalid_nidkg_config() {
         let invalid_serialization_proto = pb::NiDkgConfig::from(&config);
         assert_matches!(
             NiDkgConfig::try_from(invalid_serialization_proto),
-            Err(e) if e.contains("Invariant check failed while constructing NiDkgConfig")
+            Err(ProxyDecodeError::Other(e)) if e.contains("Invariant check failed while constructing NiDkgConfig")
         );
 
         let invalid_serialization_serde: Vec<u8> = serde_cbor::to_vec(&config).unwrap();

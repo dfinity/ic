@@ -65,7 +65,7 @@ type FeeCollector = record {
   caller : opt principal;
   fee_collector : opt Account;
   ts : opt nat64;
-  op : opt text
+  mthd : opt text
 };
 
 type Approve = record {
