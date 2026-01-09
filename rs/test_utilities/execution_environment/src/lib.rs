@@ -1170,13 +1170,13 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        let mut round_limits = RoundLimits {
-            instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
+        let mut round_limits = RoundLimits::new(
+            RoundInstructions::from(i64::MAX),
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
             compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        };
+            self.subnet_memory_reservation,
+        );
         let instruction_limits = InstructionLimits::new(
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
@@ -1312,13 +1312,13 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
-        let mut round_limits = RoundLimits {
-            instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
+        let mut round_limits = RoundLimits::new(
+            RoundInstructions::from(i64::MAX),
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
             compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        };
+            self.subnet_memory_reservation,
+        );
         let result = self.exec_env.execute_canister_response(
             canister,
             Arc::new(response),
@@ -1424,13 +1424,13 @@ impl ExecutionTest {
             }
         };
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
-        let mut round_limits = RoundLimits {
-            instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
+        let mut round_limits = RoundLimits::new(
+            RoundInstructions::from(i64::MAX),
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
             compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        };
+            self.subnet_memory_reservation,
+        );
 
         let (new_state, instructions_used) = self.exec_env.execute_subnet_message(
             message,
@@ -1452,7 +1452,7 @@ impl ExecutionTest {
             self.update_execution_stats(
                 canister_id,
                 self.install_code_instruction_limits.message(),
-                instructions_used,
+                instructions_used.get(),
             );
         }
         true
@@ -1480,13 +1480,13 @@ impl ExecutionTest {
         let compute_allocation_used = state.total_compute_allocation();
         let mut canisters = state.take_canister_states();
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
-        let mut round_limits = RoundLimits {
-            instructions: RoundInstructions::from(i64::MAX),
-            subnet_available_memory: self.subnet_available_memory,
-            subnet_available_callbacks: self.subnet_available_callbacks,
+        let mut round_limits = RoundLimits::new(
+            RoundInstructions::from(i64::MAX),
+            self.subnet_available_memory,
+            self.subnet_available_callbacks,
             compute_allocation_used,
-            subnet_memory_reservation: self.subnet_memory_reservation,
-        };
+            self.subnet_memory_reservation,
+        );
         for canister_id in canister_ids {
             let network_topology = Arc::new(state.metadata.network_topology.clone());
             let mut canister = canisters.remove(&canister_id).unwrap();
@@ -1561,13 +1561,13 @@ impl ExecutionTest {
             NextExecution::ContinueInstallCode => {
                 canisters.insert(canister_id, canister);
                 state.put_canister_states(canisters);
-                let mut round_limits = RoundLimits {
-                    instructions: RoundInstructions::from(i64::MAX),
-                    subnet_available_memory: self.subnet_available_memory,
-                    subnet_available_callbacks: self.subnet_available_callbacks,
+                let mut round_limits = RoundLimits::new(
+                    RoundInstructions::from(i64::MAX),
+                    self.subnet_available_memory,
+                    self.subnet_available_callbacks,
                     compute_allocation_used,
-                    subnet_memory_reservation: self.subnet_memory_reservation,
-                };
+                    self.subnet_memory_reservation,
+                );
                 let (new_state, instructions_used) = self.exec_env.resume_install_code(
                     state,
                     &canister_id,
@@ -1582,18 +1582,18 @@ impl ExecutionTest {
                     self.update_execution_stats(
                         canister_id,
                         self.install_code_instruction_limits.message(),
-                        instructions_used,
+                        instructions_used.get(),
                     );
                 }
             }
             NextExecution::StartNew | NextExecution::ContinueLong => {
-                let mut round_limits = RoundLimits {
-                    instructions: RoundInstructions::from(i64::MAX),
-                    subnet_available_memory: self.subnet_available_memory,
-                    subnet_available_callbacks: self.subnet_available_callbacks,
+                let mut round_limits = RoundLimits::new(
+                    RoundInstructions::from(i64::MAX),
+                    self.subnet_available_memory,
+                    self.subnet_available_callbacks,
                     compute_allocation_used,
-                    subnet_memory_reservation: self.subnet_memory_reservation,
-                };
+                    self.subnet_memory_reservation,
+                );
                 let result = execute_canister(
                     &self.exec_env,
                     canister,

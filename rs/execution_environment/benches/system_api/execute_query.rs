@@ -105,16 +105,14 @@ pub fn execute_query_bench(c: &mut Criterion) {
              ..
          }| {
             execution_parameters.execution_mode = ExecutionMode::NonReplicated;
-            let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(
-                    execution_parameters.instruction_limits.message(),
-                ),
+            let mut round_limits = RoundLimits::new(
+                as_round_instructions(execution_parameters.instruction_limits.message()),
                 subnet_available_memory,
                 subnet_available_callbacks,
-                compute_allocation_used: 0,
+                0,
                 subnet_memory_reservation,
-            };
-            let instructions_before = round_limits.instructions;
+            );
+            let instructions_before = round_limits.instructions();
             let result = execute_non_replicated_query(
                 NonReplicatedQueryKind::Pure { caller: sender },
                 WasmMethod::Query("test".to_string()),
@@ -131,7 +129,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
             )
             .2;
             let executed_instructions =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before - round_limits.instructions());
             assert_eq!(result, Ok(None), "Error executing a query method");
             assert_eq!(
                 expected_instructions,

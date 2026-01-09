@@ -55,16 +55,14 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
              subnet_available_callbacks,
              ..
          }| {
-            let mut round_limits = RoundLimits {
-                instructions: as_round_instructions(
-                    execution_parameters.instruction_limits.message(),
-                ),
+            let mut round_limits = RoundLimits::new(
+                as_round_instructions(execution_parameters.instruction_limits.message()),
                 subnet_available_memory,
                 subnet_available_callbacks,
-                compute_allocation_used: 0,
+                0,
                 subnet_memory_reservation,
-            };
-            let instructions_before = round_limits.instructions;
+            );
+            let instructions_before = round_limits.instructions();
             let res = exec_env.execute_canister_input(
                 canister_state,
                 execution_parameters.instruction_limits.clone(),
@@ -79,7 +77,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
             );
             // We do not validate the number of executed instructions.
             let _executed_instructions =
-                as_num_instructions(instructions_before - round_limits.instructions);
+                as_num_instructions(instructions_before - round_limits.instructions());
             let response = match res {
                 ExecuteMessageResult::Finished { response, .. } => response,
                 ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),

@@ -65,15 +65,15 @@ pub fn execute_inspect_message(
         ingress.arg().to_vec(),
         time,
     );
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(message_instruction_limit),
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(message_instruction_limit),
         subnet_available_memory,
         // No need for downstream calls.
-        subnet_available_callbacks: 0,
+        0,
         // Ignore compute allocation
-        compute_allocation_used: 0,
-        subnet_memory_reservation: NumBytes::from(0),
-    };
+        0,
+        NumBytes::from(0),
+    );
     let inspect_message_timer = ingress_filter_metrics
         .inspect_message_duration_seconds
         .start_timer();

@@ -370,7 +370,7 @@ fn install_code(
     Result<InstallCodeResult, CanisterManagerError>,
     Option<CanisterState>,
 ) {
-    let instruction_limit = NumInstructions::new(round_limits.instructions.get() as u64);
+    let instruction_limit = NumInstructions::new(round_limits.instructions().get() as u64);
     let mut execution_parameters = ExecutionParameters {
         instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
         ..EXECUTION_PARAMETERS.clone()
@@ -2370,13 +2370,13 @@ fn failed_upgrade_hooks_consume_instructions() {
             .build();
 
         let mut state = initial_state(subnet_id, false);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-        };
+        let mut round_limits = RoundLimits::new(
+            as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+            *MAX_SUBNET_AVAILABLE_MEMORY,
+            SUBNET_CALLBACK_SOFT_LIMIT as i64,
+            state.total_compute_allocation(),
+            SUBNET_MEMORY_RESERVATION,
+        );
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
             .create_canister(
@@ -2410,13 +2410,13 @@ fn failed_upgrade_hooks_consume_instructions() {
         state.put_canister_state(res.2.unwrap());
 
         // reset instruction limit to investigate costs of just the following install
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-        };
+        let mut round_limits = RoundLimits::new(
+            as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+            *MAX_SUBNET_AVAILABLE_MEMORY,
+            SUBNET_CALLBACK_SOFT_LIMIT as i64,
+            state.total_compute_allocation(),
+            SUBNET_MEMORY_RESERVATION,
+        );
         let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
         let (instructions_left, result, _) = install_code(
             &canister_manager,
@@ -2513,13 +2513,13 @@ fn failed_install_hooks_consume_instructions() {
             .build();
 
         let mut state = initial_state(subnet_id, false);
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-            subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-            subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-            compute_allocation_used: state.total_compute_allocation(),
-            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-        };
+        let mut round_limits = RoundLimits::new(
+            as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+            *MAX_SUBNET_AVAILABLE_MEMORY,
+            SUBNET_CALLBACK_SOFT_LIMIT as i64,
+            state.total_compute_allocation(),
+            SUBNET_MEMORY_RESERVATION,
+        );
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
             .create_canister(
@@ -2599,13 +2599,13 @@ fn install_code_respects_instruction_limit() {
         .build();
 
     let mut state = initial_state(subnet_id, false);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let sender = canister_test_id(100).get();
     let canister_id = canister_manager
         .create_canister(
@@ -2653,13 +2653,13 @@ fn install_code_respects_instruction_limit() {
     let instructions_limit = NumInstructions::from(3) + compilation_cost;
 
     // Too few instructions result in failed installation.
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(instructions_limit),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(instructions_limit),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
@@ -2684,14 +2684,14 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful installation.
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(6) + compilation_cost),
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(NumInstructions::from(6) + compilation_cost),
         // Function is 1 instruction.
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
@@ -2711,13 +2711,13 @@ fn install_code_respects_instruction_limit() {
     let instructions_limit = NumInstructions::from(5);
 
     // Too few instructions result in failed upgrade.
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(instructions_limit),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(instructions_limit),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
         InstallCodeContext {
@@ -2742,13 +2742,13 @@ fn install_code_respects_instruction_limit() {
     assert_eq!(instructions_left, NumInstructions::from(0));
 
     // Enough instructions result in successful upgrade.
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(NumInstructions::from(10) + compilation_cost),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(NumInstructions::from(10) + compilation_cost),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let (instructions_left, result, _) = install_code(
         &canister_manager,
         InstallCodeContext {
@@ -2801,13 +2801,13 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let mut state = ReplicatedStateBuilder::new()
         .with_canister(original_canister.clone())
         .build();
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
 
     // 1. INSTALL
     let install_code_context = InstallCodeContextBuilder::default()
@@ -2862,7 +2862,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
 
     // 2. REINSTALL
 
-    let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
+    let instructions_before_reinstall = as_num_instructions(round_limits.instructions());
     let ctxt = InstallCodeContextBuilder::default()
         .mode(CanisterInstallModeV2::Reinstall)
         .sender(controller.into())
@@ -2916,7 +2916,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .unwrap()
         .system_state
         .certified_data = certified_data;
-    let instructions_before_upgrade = as_num_instructions(round_limits.instructions);
+    let instructions_before_upgrade = as_num_instructions(round_limits.instructions());
     let ctxt = InstallCodeContextBuilder::default()
         .mode(CanisterInstallModeV2::Upgrade(None))
         .sender(controller.into())
@@ -3009,13 +3009,13 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
     );
 
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     canister_manager
         .uninstall_code(
             canister_change_origin_from_canister(&GOVERNANCE_CANISTER_ID),
@@ -7061,13 +7061,13 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         .build();
 
     let mut state = initial_state(subnet_id, false);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
     let sender = canister_test_id(1).get();
     let canister_id = canister_manager
         .create_canister_with_cycles(
@@ -7100,13 +7100,13 @@ fn create_canister_with_specified_id(
         .build();
 
     let mut state = initial_state(subnet_id, true);
-    let mut round_limits = RoundLimits {
-        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
-        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
-        subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
-        compute_allocation_used: state.total_compute_allocation(),
-        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-    };
+    let mut round_limits = RoundLimits::new(
+        as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        *MAX_SUBNET_AVAILABLE_MEMORY,
+        SUBNET_CALLBACK_SOFT_LIMIT as i64,
+        state.total_compute_allocation(),
+        SUBNET_MEMORY_RESERVATION,
+    );
 
     let creator = canister_test_id(1).get();
 
