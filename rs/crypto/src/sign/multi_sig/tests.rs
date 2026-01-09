@@ -65,8 +65,8 @@ mod test_multi_sig_verification {
         TempCryptoComponent::builder()
             .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
             .with_registry_client_and_data(
-                Arc::clone(&registry_client) as Arc<_>,
-                Arc::clone(&registry_data) as Arc<_>,
+                Arc::clone(registry_client) as Arc<_>,
+                Arc::clone(registry_data) as Arc<_>,
             )
             .with_node_id(node_id)
             .with_rng(rng.fork())
