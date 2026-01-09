@@ -26,6 +26,7 @@ use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
 use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
@@ -179,7 +180,7 @@ pub fn test(env: TestEnv) {
     });
 
     info!(&logger, "Killing one of the node now.");
-    killed_app_endpoint.vm().kill();
+    block_on(async { killed_app_endpoint.vm().await.kill().await });
 
     // Wait the node is actually killed
     let http_client = reqwest::blocking::ClientBuilder::new()
@@ -205,7 +206,7 @@ pub fn test(env: TestEnv) {
 
     // Recover the killed node and observe it caught up on state
     info!(&logger, "Restarting the killed node now.");
-    killed_app_endpoint.vm().start();
+    block_on(async { killed_app_endpoint.vm().await.start().await });
     let healthy_runtime = &util::runtime_from_url(
         healthy_app_endpoint.get_public_url(),
         healthy_app_endpoint.effective_canister_id(),

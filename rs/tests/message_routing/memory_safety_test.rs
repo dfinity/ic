@@ -24,6 +24,7 @@ use ic_agent::Agent;
 use ic_agent::export::Principal;
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::{
@@ -32,7 +33,6 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer},
     },
-    util::*,
 };
 use ic_types::Height;
 use ic_utils::interfaces::ManagementCanister;
@@ -90,7 +90,7 @@ pub fn test(env: TestEnv) {
             modify_mem_and_verify(&mut rng, &canister_id, &agent, i as u8).await
         });
         info!(log, "restarting the node with id={}", node.node_id);
-        node.vm().reboot();
+        block_on(async { node.vm().await.reboot().await });
         // Wait until the re-started node becomes ready.
         info!(log, "waiting for the node to be become ready...");
         node.await_status_is_healthy().unwrap();

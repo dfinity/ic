@@ -20,6 +20,7 @@ use std::collections::BTreeMap;
 
 use anyhow::Result;
 
+use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
 
@@ -125,7 +126,7 @@ fn test(env: TestEnv) {
         EndpointsStatus::AllUnhealthy,
     );
     info!(log, "Kill nodes after removal (last shot to the victims)");
-    nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
+    nns_nodes_to_remove.iter().for_each(|node| block_on(async { node.vm().await.kill().await }));
     info!(log, "Verify signature");
     block_on(async {
         let msg_can = MessageCanister::from_canister_id(&nns_agent, canister_id);
