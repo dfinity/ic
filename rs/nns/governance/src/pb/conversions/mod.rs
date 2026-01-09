@@ -463,6 +463,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
             }
+            pb_api::proposal::Action::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
         }
     }
 }
@@ -514,6 +517,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
+            pb_api::ProposalActionRequest::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
             }
         }
     }
@@ -4246,6 +4252,24 @@ impl From<pb::SelfDescribingProposalAction> for pb_api::SelfDescribingProposalAc
             type_name: Some(item.type_name),
             type_description: Some(item.type_description),
             value: item.value.map(pb_api::SelfDescribingValue::from),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshot> for pb_api::TakeCanisterSnapshot {
+    fn from(item: pb::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<pb_api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
+    fn from(item: pb_api::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
         }
     }
 }

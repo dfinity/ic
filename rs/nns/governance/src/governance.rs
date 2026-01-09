@@ -42,8 +42,8 @@ use crate::{
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
-            SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
-            UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
+            SettleNeuronsFundParticipationResponse, StopOrStartCanister, TakeCanisterSnapshot,
+            Tally, Topic, UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
@@ -512,6 +512,7 @@ impl Action {
             Action::BlessAlternativeGuestOsVersion(_) => {
                 "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
             }
+            Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
         }
     }
 }
@@ -4174,6 +4175,10 @@ impl Governance {
                 pid,
                 bless_alternative_guest_os_version,
             ),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                self.perform_take_canister_snapshot(pid, take_canister_snapshot)
+                    .await;
+            }
         }
     }
 
@@ -4251,6 +4256,17 @@ impl Governance {
         bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
     ) {
         let result = bless_alternative_guest_os_version.execute();
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_take_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        take_canister_snapshot: TakeCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, take_canister_snapshot)
+            .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4771,6 +4787,9 @@ impl Governance {
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
             ) => bless_alternative_guest_os_version.validate(),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                take_canister_snapshot.validate()
+            }
         }
     }
 
