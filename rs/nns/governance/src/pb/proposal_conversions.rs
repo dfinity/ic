@@ -1,7 +1,8 @@
 use crate::{governance::EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, pb::v1 as pb};
 
+use candid::{Int, Nat};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::{self as pb_api, SelfDescribingProposalAction};
+use ic_nns_governance_api as pb_api;
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -262,6 +263,179 @@ fn convert_action(
     }
 }
 
+fn convert_self_describing_action(
+    item: &pb::SelfDescribingProposalAction,
+    omit_create_service_nervous_system_logos: bool,
+) -> pb_api::SelfDescribingProposalAction {
+    let pb::SelfDescribingProposalAction {
+        type_name,
+        type_description,
+        value,
+    } = item;
+
+    let type_name = Some(type_name.clone());
+    let type_description = Some(type_description.clone());
+
+    let paths_to_omit = if omit_create_service_nervous_system_logos {
+        vec![
+            RecordPath {
+                fields_names: vec!["logo"],
+            },
+            RecordPath {
+                fields_names: vec!["ledger_parameters", "token_logo"],
+            },
+        ]
+    } else {
+        vec![]
+    };
+    let value = value
+        .as_ref()
+        .map(|value| convert_self_describing_value(value, paths_to_omit));
+
+    pb_api::SelfDescribingProposalAction {
+        type_name,
+        type_description,
+        value,
+    }
+}
+
+/// For example, suppose we have
+///
+/// ```
+/// struct Plane {
+///     wing: Wing,
+///     landing_gear: LandingGear,
+/// }
+///
+/// struct LandingGear {
+///    wheel: Wheel,
+/// }
+///
+/// struct Wheel {
+///     tire: Tire,
+/// }
+///
+/// let plane: Plane = ...;
+/// ```
+///
+/// To reach the `Tire` from `plane`, we can use the path
+/// `vec!["landing_gear", "wheel", "tire"]`, because `plane.landing_gear.wheel.tire`
+/// evaluates to the `Tire`.
+#[derive(Clone)]
+struct RecordPath {
+    // Must have at least one element.
+    fields_names: Vec<&'static str>,
+}
+
+enum OmitAction {
+    DoNothing,
+    OmitCurrent,
+    OmitDescendant(RecordPath),
+}
+
+impl RecordPath {
+    fn matches(&self, field_name: &str) -> OmitAction {
+        let Some((&first, rest)) = self.fields_names.split_first() else {
+            // This should never happen, but we handle it anyway.
+            return OmitAction::DoNothing;
+        };
+        if first != field_name {
+            return OmitAction::DoNothing;
+        }
+        if rest.is_empty() {
+            return OmitAction::OmitCurrent;
+        }
+        OmitAction::OmitDescendant(RecordPath {
+            fields_names: rest.to_vec(),
+        })
+    }
+}
+
+fn convert_self_describing_field(
+    field_name: &str,
+    paths_to_omit: Vec<RecordPath>,
+    original_value: &pb::SelfDescribingValue,
+) -> pb_api::SelfDescribingValue {
+    let match_results = paths_to_omit
+        .iter()
+        .map(|path| path.matches(field_name))
+        .collect::<Vec<_>>();
+    if match_results
+        .iter()
+        .any(|result| matches!(result, OmitAction::OmitCurrent))
+    {
+        return pb_api::SelfDescribingValue::Null;
+    }
+    let descendant_paths_to_omit = match_results
+        .into_iter()
+        .filter_map(|result| match result {
+            OmitAction::OmitDescendant(path) => Some(path),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    convert_self_describing_value(original_value, descendant_paths_to_omit)
+}
+
+fn convert_self_describing_value(
+    item: &pb::SelfDescribingValue,
+    paths_to_omit: Vec<RecordPath>,
+) -> pb_api::SelfDescribingValue {
+    let pb::SelfDescribingValue { value } = item;
+
+    let Some(value) = value else {
+        // This should be unreacheable, because we always construct a SelfDescribingValue with a value.
+        // Ideally the type should be non-optional, but prost always generates an optional field for
+        // messages.
+        return pb_api::SelfDescribingValue::Map(HashMap::new());
+    };
+
+    match value {
+        pb::self_describing_value::Value::Blob(v) => pb_api::SelfDescribingValue::Blob(v.clone()),
+        pb::self_describing_value::Value::Text(v) => pb_api::SelfDescribingValue::Text(v.clone()),
+        pb::self_describing_value::Value::Nat(v) => {
+            let nat = Nat::decode(&mut v.as_slice()).unwrap();
+            pb_api::SelfDescribingValue::Nat(nat)
+        }
+        pb::self_describing_value::Value::Int(v) => {
+            let int = Int::decode(&mut v.as_slice()).unwrap();
+            pb_api::SelfDescribingValue::Int(int)
+        }
+        pb::self_describing_value::Value::Null(_) => pb_api::SelfDescribingValue::Null,
+        pb::self_describing_value::Value::Array(v) => pb_api::SelfDescribingValue::Array(
+            v.values
+                .iter()
+                .map(|value| convert_self_describing_value(value, vec![]))
+                .collect(),
+        ),
+
+        // This is where `paths_to_omit` takes effect - the resursion (calling
+        // `convert_self_describing_value` happens indirectly through
+        // `convert_self_describing_field`, which calls `convert_self_describing_value` if the field
+        // should not be omitted.
+        pb::self_describing_value::Value::Map(v) => pb_api::SelfDescribingValue::Map(
+            v.values
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        k.clone(),
+                        convert_self_describing_field(k, paths_to_omit.clone(), v),
+                    )
+                })
+                .collect(),
+        ),
+    }
+}
+
+// To avoid cloning large values in production, this is only available in tests. Since multiple
+// tests need to convert SelfDescribingValue to `api::SelfDescribingValue`, we define it here rather
+// than in each test.
+#[cfg(test)]
+impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
+    fn from(value: pb::SelfDescribingValue) -> Self {
+        convert_self_describing_value(&value, vec![])
+    }
+}
+
 pub(crate) fn convert_proposal(
     item: &pb::Proposal,
     display_options: ProposalDisplayOptions,
@@ -284,10 +458,22 @@ pub(crate) fn convert_proposal(
     } else {
         None
     };
+    let is_create_service_nervous_system_proposal = action.as_ref().is_some_and(|action| {
+        matches!(
+            action,
+            pb_api::proposal::Action::CreateServiceNervousSystem(_)
+        )
+    });
     let self_describing_action = if display_options.show_self_describing_action() {
         self_describing_action
-            .clone()
-            .map(SelfDescribingProposalAction::from)
+            .as_ref()
+            .map(|self_describing_action| {
+                convert_self_describing_action(
+                    self_describing_action,
+                    is_create_service_nervous_system_proposal
+                        && display_options.omit_create_service_nervous_system_large_fields(),
+                )
+            })
     } else {
         None
     };
@@ -376,8 +562,226 @@ pub(crate) fn proposal_data_to_info(
 mod tests {
     use super::*;
 
+    use crate::{
+        pb::v1::{CreateServiceNervousSystem, create_service_nervous_system::LedgerParameters},
+        proposals::self_describing::LocallyDescribableProposalAction,
+    };
+
     use ic_base_types::PrincipalId;
     use ic_crypto_sha2::Sha256;
+    use ic_nervous_system_proto::pb::v1::Image;
+    use maplit::hashmap;
+
+    #[test]
+    fn test_self_describing_value_conversions() {
+        let nat_value = Nat::from(12345_u64);
+        let int_value = Int::from(-9876_i64);
+
+        let mut nat_bytes = Vec::new();
+        nat_value.encode(&mut nat_bytes).unwrap();
+
+        let mut int_bytes = Vec::new();
+        int_value.encode(&mut int_bytes).unwrap();
+
+        let value_pb = pb::SelfDescribingValue {
+            value: Some(pb::self_describing_value::Value::Map(
+                pb::SelfDescribingValueMap {
+                    values: hashmap! {
+                        "text_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Text("some text".to_string())),
+                        },
+                        "blob_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Blob(vec![1, 2, 3, 4, 5])),
+                        },
+                        "nat_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Nat(nat_bytes.clone())),
+                        },
+                        "int_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Int(int_bytes.clone())),
+                        },
+                        "array_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                                values: vec![
+                                    pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Text("first".to_string())),
+                                    },
+                                    pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Text("second".to_string())),
+                                    },
+                                    pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Blob(vec![10, 20, 30])),
+                                    },
+                                ],
+                            })),
+                        },
+                        "nested_map_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                values: hashmap! {
+                                    "nested_text".to_string() => pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Text("nested value".to_string())),
+                                    },
+                                    "nested_blob".to_string() => pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Blob(vec![255, 254, 253])),
+                                    },
+                                    "nested_nat".to_string() => pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Nat(nat_bytes.clone())),
+                                    },
+                                },
+                            })),
+                        },
+                        "empty_array_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                                values: vec![],
+                            })),
+                        },
+                        "empty_map_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                values: hashmap! {},
+                            })),
+                        },
+                        "array_of_maps_field".to_string() => pb::SelfDescribingValue {
+                            value: Some(pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
+                                values: vec![
+                                    pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                            values: hashmap! {
+                                                "key1".to_string() => pb::SelfDescribingValue {
+                                                    value: Some(pb::self_describing_value::Value::Text("value1".to_string())),
+                                                },
+                                            },
+                                        })),
+                                    },
+                                    pb::SelfDescribingValue {
+                                        value: Some(pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
+                                            values: hashmap! {
+                                                "key2".to_string() => pb::SelfDescribingValue {
+                                                    value: Some(pb::self_describing_value::Value::Text("value2".to_string())),
+                                                },
+                                            },
+                                        })),
+                                    },
+                                ],
+                            })),
+                        },
+                    },
+                },
+            )),
+        };
+
+        let value_pb_api = pb_api::SelfDescribingValue::from(value_pb);
+
+        assert_eq!(
+            value_pb_api,
+            pb_api::SelfDescribingValue::Map(hashmap! {
+                "text_field".to_string() => pb_api::SelfDescribingValue::Text("some text".to_string()),
+                "blob_field".to_string() => pb_api::SelfDescribingValue::Blob(vec![1, 2, 3, 4, 5]),
+                "nat_field".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
+                "int_field".to_string() => pb_api::SelfDescribingValue::Int(int_value.clone()),
+                "array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
+                    pb_api::SelfDescribingValue::Text("first".to_string()),
+                    pb_api::SelfDescribingValue::Text("second".to_string()),
+                    pb_api::SelfDescribingValue::Blob(vec![10, 20, 30]),
+                ]),
+                "nested_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {
+                    "nested_text".to_string() => pb_api::SelfDescribingValue::Text("nested value".to_string()),
+                    "nested_blob".to_string() => pb_api::SelfDescribingValue::Blob(vec![255, 254, 253]),
+                    "nested_nat".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
+                }),
+                "empty_array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![]),
+                "empty_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {}),
+                "array_of_maps_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
+                    pb_api::SelfDescribingValue::Map(hashmap! {
+                        "key1".to_string() => pb_api::SelfDescribingValue::Text("value1".to_string()),
+                    }),
+                    pb_api::SelfDescribingValue::Map(hashmap! {
+                        "key2".to_string() => pb_api::SelfDescribingValue::Text("value2".to_string()),
+                    }),
+                ]),
+            })
+        );
+    }
+
+    #[test]
+    fn test_self_describing_value_omit_logos() {
+        let create_service_nervous_system = CreateServiceNervousSystem {
+            name: Some("some name".to_string()),
+            logo: Some(Image {
+                base64_encoding: Some("base64 encoding of a logo".to_string()),
+            }),
+            ledger_parameters: Some(LedgerParameters {
+                token_name: Some("some token name".to_string()),
+                token_logo: Some(Image {
+                    base64_encoding: Some("base64 encoding of a token logo".to_string()),
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let self_describing_action = create_service_nervous_system.to_self_describing_action();
+
+        // Sanity check that the self-describing value does have logos when we don't omit them.
+        let self_describing_value_with_logos =
+            convert_self_describing_action(&self_describing_action, false)
+                .value
+                .unwrap();
+        let map = match self_describing_value_with_logos {
+            pb_api::SelfDescribingValue::Map(map) => map,
+            _ => panic!("Expected a map"),
+        };
+        assert_eq!(
+            map.get("name").unwrap(),
+            &pb_api::SelfDescribingValue::Text("some name".to_string())
+        );
+        assert_eq!(
+            map.get("logo").unwrap(),
+            &pb_api::SelfDescribingValue::Map(hashmap! {
+                "base64_encoding".to_string() => pb_api::SelfDescribingValue::Text("base64 encoding of a logo".to_string()),
+            })
+        );
+        let ledger_parameters = map.get("ledger_parameters").unwrap();
+        let ledger_parameters_map = match ledger_parameters {
+            pb_api::SelfDescribingValue::Map(map) => map,
+            _ => panic!("Expected a map"),
+        };
+        assert_eq!(
+            ledger_parameters_map.get("token_name").unwrap(),
+            &pb_api::SelfDescribingValue::Text("some token name".to_string())
+        );
+        assert_eq!(
+            ledger_parameters_map.get("token_logo").unwrap(),
+            &pb_api::SelfDescribingValue::Map(hashmap! {
+                "base64_encoding".to_string() => pb_api::SelfDescribingValue::Text("base64 encoding of a token logo".to_string()),
+            })
+        );
+
+        // Now check that the self-describing value does not have logos when we omit them, while the other fields are still present.
+        let self_describing_value_without_logos =
+            convert_self_describing_action(&self_describing_action, true)
+                .value
+                .unwrap();
+        let map = match self_describing_value_without_logos {
+            pb_api::SelfDescribingValue::Map(map) => map,
+            _ => panic!("Expected a map"),
+        };
+        assert_eq!(
+            map.get("name").unwrap(),
+            &pb_api::SelfDescribingValue::Text("some name".to_string())
+        );
+        assert_eq!(map.get("logo"), Some(&pb_api::SelfDescribingValue::Null));
+        let ledger_parameters = map.get("ledger_parameters").unwrap();
+        let ledger_parameters_map = match ledger_parameters {
+            pb_api::SelfDescribingValue::Map(map) => map,
+            _ => panic!("Expected a map"),
+        };
+        assert_eq!(
+            ledger_parameters_map.get("token_name").unwrap(),
+            &pb_api::SelfDescribingValue::Text("some token name".to_string())
+        );
+        assert_eq!(
+            ledger_parameters_map.get("token_logo"),
+            Some(&pb_api::SelfDescribingValue::Null)
+        );
+    }
 
     #[test]
     fn install_code_request_to_internal() {
