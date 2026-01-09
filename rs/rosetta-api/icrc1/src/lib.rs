@@ -9,10 +9,7 @@ use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use num_traits::ToPrimitive;
 use rosetta_core::objects::Currency;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
 pub mod config;
@@ -26,7 +23,7 @@ pub mod ledger_blocks_synchronization;
 pub struct AppState {
     pub icrc1_agent: Arc<Icrc1Agent>,
     pub ledger_id: CanisterId,
-    pub synched: Arc<Mutex<Option<bool>>>,
+    pub synched: Arc<AsyncMutex<Option<bool>>>,
     pub archive_canister_ids: Arc<AsyncMutex<Vec<ArchiveInfo>>>,
     pub storage: Arc<StorageClient>,
     pub metadata: Metadata,

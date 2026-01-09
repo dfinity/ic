@@ -34,6 +34,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util;
+use ic_system_test_driver::util::block_on;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
@@ -179,7 +180,7 @@ pub fn test(env: TestEnv) {
     });
 
     info!(&logger, "Killing one of the node now.");
-    killed_app_endpoint.vm().kill();
+    block_on(async { killed_app_endpoint.vm().await.kill().await });
 
     // Wait the node is actually killed
     let http_client = reqwest::blocking::ClientBuilder::new()
@@ -205,7 +206,7 @@ pub fn test(env: TestEnv) {
 
     // Recover the killed node and observe it caught up on state
     info!(&logger, "Restarting the killed node now.");
-    killed_app_endpoint.vm().start();
+    block_on(async { killed_app_endpoint.vm().await.start().await });
     let healthy_runtime = &util::runtime_from_url(
         healthy_app_endpoint.get_public_url(),
         healthy_app_endpoint.effective_canister_id(),

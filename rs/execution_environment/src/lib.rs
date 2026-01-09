@@ -391,7 +391,7 @@ fn setup_execution_helper(
         own_subnet_type,
         config.clone(),
         metrics_registry,
-        scheduler_config.max_instructions_per_message_without_dts,
+        scheduler_config.max_instructions_per_query_message,
         Arc::clone(&cycles_account_manager),
         query_stats_collector,
     );

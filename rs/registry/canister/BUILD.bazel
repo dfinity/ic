@@ -189,6 +189,7 @@ rust_canister(
 
 rust_canister(
     name = "registry-canister-test",
+    testonly = True,
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry_test.did"],

@@ -329,9 +329,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
-            canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
-                item.cost_schedule,
-            )),
         }
     }
 }
@@ -409,11 +406,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             );
         }
 
-        let cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
-
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -469,7 +461,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 None => BlockmakerMetricsTimeSeries::default(),
             },
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule,
         })
     }
 }

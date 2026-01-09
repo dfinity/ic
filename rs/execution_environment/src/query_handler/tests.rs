@@ -1224,7 +1224,7 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
 fn query_call_exceeds_instructions_limit() {
     let instructions_limit = 4;
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit_without_dts(instructions_limit)
+        .with_instruction_limit_per_query_message(instructions_limit)
         .build();
 
     let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();

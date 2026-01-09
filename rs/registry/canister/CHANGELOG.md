@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-09: Proposal 139941
+
+http://dashboard.internetcomputer.org/proposal/139941
+
+## Fixed
+
+* Display correct error message for node swaps in case of rate limit errors
+
+
 # 2025-12-05: Proposal 139679
 
 http://dashboard.internetcomputer.org/proposal/139679

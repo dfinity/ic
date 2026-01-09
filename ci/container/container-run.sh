@@ -170,6 +170,8 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
+        # Pre-create target directory to avoid crun 64-bit inode issues
+        mkdir -p "${REPO_ROOT}/target"
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )

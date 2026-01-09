@@ -233,7 +233,7 @@ impl IcGatewayVm {
             })
         }
 
-        let base_domain = env.create_playnet_dns_records(records);
+        let base_domain = env.create_playnet_dns_records(records).await;
 
         // Wait for DNS propagation by checking a random subdomain
         await_dns_propagation(&env.logger(), &base_domain).await?;

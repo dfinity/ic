@@ -1997,7 +1997,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         instruction_limits: InstructionLimits,
-        max_instructions_per_message_without_dts: NumInstructions,
+        max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
         prepaid_execution_cycles: Option<Cycles>,
         time: Time,
@@ -2091,7 +2091,7 @@ impl ExecutionEnvironment {
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
-                    max_instructions_per_message_without_dts,
+                    max_instructions_per_query_message,
                     instruction_limits.slice(),
                 );
                 let execution_parameters = self.execution_parameters(
@@ -4472,7 +4472,7 @@ fn execute_canister_input(
     exec_env: &ExecutionEnvironment,
     canister: CanisterState,
     instruction_limits: InstructionLimits,
-    max_instructions_per_message_without_dts: NumInstructions,
+    max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
@@ -4483,7 +4483,7 @@ fn execute_canister_input(
     let result = exec_env.execute_canister_input(
         canister,
         instruction_limits,
-        max_instructions_per_message_without_dts,
+        max_instructions_per_query_message,
         input,
         prepaid_execution_cycles,
         time,
@@ -4508,7 +4508,7 @@ pub fn execute_canister(
     exec_env: &ExecutionEnvironment,
     mut canister: CanisterState,
     instruction_limits: InstructionLimits,
-    max_instructions_per_message_without_dts: NumInstructions,
+    max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
     time: Time,
     round_limits: &mut RoundLimits,
@@ -4605,7 +4605,7 @@ pub fn execute_canister(
         exec_env,
         canister,
         instruction_limits,
-        max_instructions_per_message_without_dts,
+        max_instructions_per_query_message,
         network_topology,
         time,
         round_limits,
