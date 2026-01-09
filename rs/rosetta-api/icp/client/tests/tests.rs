@@ -53,10 +53,7 @@ fn smoke_test() {
         let context = start_rosetta(
             &rosetta_bin,
             rosetta_state_directory,
-            RosettaOptions::builder(replica_url)
-                .with_ledger_id(ledger_canister_id)
-                .with_token_symbol("ICP".to_string())
-                .build(),
+            RosettaOptions::builder(replica_url).build(),
         )
         .await;
         let client = RosettaClient::from_str_url(&format!("http://localhost:{}", context.port))

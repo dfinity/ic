@@ -75,8 +75,6 @@ pub async fn start_rosetta(
         .arg(ic_url.to_string())
         .arg("--canister-id")
         .arg(ledger_canister_id.to_string())
-        .arg("--token-symbol")
-        .arg("ICP")
         .arg("--port-file")
         .arg(port_file.clone());
 

@@ -78,6 +78,8 @@ struct NetworkConfig {
 struct ParsedNetworkConfig {
     pub ic_url: Url,
     pub root_key: Option<ThresholdSigPublicKey>,
+    /// True if connecting to mainnet (no custom --ic-url provided)
+    pub is_mainnet_url: bool,
 }
 
 impl ParsedNetworkConfig {
@@ -110,7 +112,11 @@ impl ParsedNetworkConfig {
             }
         };
 
-        Ok(Self { ic_url, root_key })
+        Ok(Self {
+            ic_url,
+            root_key,
+            is_mainnet_url,
+        })
     }
 }
 
@@ -135,29 +141,44 @@ struct ParsedCanisterConfig {
 }
 
 impl ParsedCanisterConfig {
-    fn from_config(config: CanisterConfig, environment: &Environment) -> Result<Self, String> {
-        // Apply environment preset defaults when no explicit value provided
+    fn from_config(
+        config: CanisterConfig,
+        environment: &Environment,
+        is_mainnet_url: bool,
+    ) -> Result<Self, String> {
+        // Apply environment preset defaults when no explicit value provided.
+        // The environment only affects defaults when connecting to mainnet (no custom --ic-url).
+        // For custom URLs (local replicas, testnets), we default to production settings
+        // since test replicas typically use LEDGER_CANISTER_ID and "ICP" token.
         let ledger_canister_id = match config.ledger_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
                 PrincipalId::from_str(&explicit_value)
                     .map_err(|e| format!("Invalid ledger canister ID '{explicit_value}': {e}"))?,
             ),
-            None => match environment {
-                Environment::Test => CanisterId::unchecked_from_principal(
-                    PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
-                        format!("Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}")
-                    })?,
-                ),
-                Environment::Production => LEDGER_CANISTER_ID,
-            },
+            None => {
+                if is_mainnet_url && *environment == Environment::Test {
+                    CanisterId::unchecked_from_principal(
+                        PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
+                            format!(
+                                "Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}"
+                            )
+                        })?,
+                    )
+                } else {
+                    LEDGER_CANISTER_ID
+                }
+            }
         };
 
         let token_symbol = match config.token_symbol {
             Some(explicit_value) => explicit_value,
-            None => match environment {
-                Environment::Test => TEST_TOKEN_SYMBOL.to_string(),
-                Environment::Production => DEFAULT_TOKEN_SYMBOL.to_string(),
-            },
+            None => {
+                if is_mainnet_url && *environment == Environment::Test {
+                    TEST_TOKEN_SYMBOL.to_string()
+                } else {
+                    DEFAULT_TOKEN_SYMBOL.to_string()
+                }
+            }
         };
 
         let governance_canister_id = match config.governance_canister_id {
@@ -316,11 +337,12 @@ async fn main() -> std::io::Result<()> {
         warn!("Data certificate will not be verified due to missing root key");
     }
 
-    let canister_config = ParsedCanisterConfig::from_config(opt.canister, &environment)
-        .unwrap_or_else(|e| {
-            error!("Configuration error: {}", e);
-            std::process::exit(1);
-        });
+    let canister_config =
+        ParsedCanisterConfig::from_config(opt.canister, &environment, network_config.is_mainnet_url)
+            .unwrap_or_else(|e| {
+                error!("Configuration error: {}", e);
+                std::process::exit(1);
+            });
 
     info!("Token symbol set to {}", canister_config.token_symbol);
 

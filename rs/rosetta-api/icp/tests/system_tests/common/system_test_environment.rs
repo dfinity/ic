@@ -468,9 +468,7 @@ impl RosettaTestingEnvironmentBuilder {
         let rosetta_state_directory =
             TempDir::new().expect("failed to create a temporary directory");
 
-        let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string())
-            .with_ledger_id(ledger_canister_id)
-            .with_token_symbol("ICP".to_string());
+        let mut rosetta_options_builder = RosettaOptionsBuilder::new(replica_url.to_string());
 
         if self.persistent_storage {
             rosetta_options_builder = rosetta_options_builder.with_persistent_storage();

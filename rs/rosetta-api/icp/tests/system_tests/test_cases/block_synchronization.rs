@@ -149,10 +149,7 @@ fn test_ledger_upgrade_synchronization() {
                     // Let's restart rosetta to make sure it can handle the mainnet ledger version
                     env = env
                         .restart_rosetta_node(
-                            RosettaOptions::builder(pockt_ic_url.to_string())
-                                .with_ledger_id(LEDGER_CANISTER_ID.into())
-                                .with_token_symbol("ICP".to_string())
-                                .build(),
+                            RosettaOptions::builder(pockt_ic_url.to_string()).build(),
                         )
                         .await;
 
@@ -265,8 +262,6 @@ fn test_load_from_storage() {
                     env = env
                         .restart_rosetta_node(
                             RosettaOptions::builder(replica_url.clone().unwrap().to_string())
-                                .with_ledger_id(LEDGER_CANISTER_ID.into())
-                                .with_token_symbol("ICP".to_string())
                                 .with_persistent_storage()
                                 .offline()
                                 .build(),
@@ -294,8 +289,6 @@ fn test_load_from_storage() {
                     env = env
                         .restart_rosetta_node(
                             RosettaOptions::builder(replica_url.clone().unwrap().to_string())
-                                .with_ledger_id(LEDGER_CANISTER_ID.into())
-                                .with_token_symbol("ICP".to_string())
                                 .with_persistent_storage()
                                 .build(),
                         )
