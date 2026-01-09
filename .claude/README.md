@@ -10,6 +10,8 @@ You can you use Claude Code either from the:
 Login
 -----
 
+Ask #help-it to generate an Anthropic API key for you. Then:
+
 * Select `2. Anthropic Console account · API usage billing`.
 
 * Open the OAuth link in your browser.
