@@ -1922,7 +1922,6 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
         let files_traversed = paths.len();
 
-        let unverified_marker = self.unverified_checkpoint_marker();
         let results = maybe_parallel_map(&mut thread_pool, paths.iter(), |p| {
             match mark_readonly_if_file(p) {
                 Ok(was_made_readonly) => {
@@ -1931,13 +1930,8 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
                     Ok::<bool, std::io::Error>(was_made_readonly)
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    // The unverified checkpoint marker may be deleted by another thread during concurrent validation.
-                    // This is the only file that can be safely deleted during this operation.
-                    debug_assert_eq!(
-                        *p, &unverified_marker,
-                        "Only the unverified checkpoint marker should be deleted during marking files readonly, but {:?} was not found",
-                        p
-                    );
+                    // State sync now skips delivering checkpoints that already exist, preventing concurrent marker removal while marking files readonly.
+                    debug_assert!(false, "Unexpected file not found: {:?}", p);
                     Ok(false)
                 }
                 Err(e) => Err(e),
@@ -2067,8 +2061,6 @@ impl CheckpointLayout<ReadOnly> {
             _ => {}
         }
 
-        // Sync the directory to make sure the marker is removed from disk.
-        // This is strict prerequisite for the manifest computation.
         sync_path(&self.0.root).map_err(|err| LayoutError::IoError {
             path: self.0.root.clone(),
             message: "Failed to sync checkpoint directory for the removal of the state sync checkpoint marker".to_string(),
