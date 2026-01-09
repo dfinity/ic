@@ -13,6 +13,7 @@ pub enum CertificationVersion {
     V22 = 22,
     /// In `Request` / `Response`, switch from encoding `payment` / `refund` (type
     /// `Funds`) to encoding `cycles_payment` / `cycles_refund` (type `Cycles`).
+    /// Make `Request::metadata` and the `RequestMetadata` fields non-optional.
     V23 = 23,
 }
 

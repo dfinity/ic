@@ -95,13 +95,8 @@ pub struct StreamMessage {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RequestMetadata {
-    // TODO(MR-642): Remove `Option` from `call_tree_depth` and `call_tree_start_time`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_tree_depth: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_tree_start_time_u64: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub call_subtree_deadline_u64: Option<u64>,
+    pub call_tree_depth: u64,
+    pub call_tree_start_time_u64: u64,
 }
 
 /// Canonical representation of `ic_types::messages::Request`.
@@ -120,9 +115,7 @@ pub struct Request {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
-    // TODO(MR-642): Remove `Option` from `metadata`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: RequestMetadata,
     #[serde(skip_serializing_if = "is_zero", default)]
     pub deadline: u32,
 }
@@ -448,11 +441,8 @@ impl TryFrom<StreamMessage> for ic_types::messages::StreamMessage {
 impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
     fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
         RequestMetadata {
-            call_tree_depth: Some(*metadata.call_tree_depth()),
-            call_tree_start_time_u64: Some(
-                metadata.call_tree_start_time().as_nanos_since_unix_epoch(),
-            ),
-            call_subtree_deadline_u64: None,
+            call_tree_depth: *metadata.call_tree_depth(),
+            call_tree_start_time_u64: metadata.call_tree_start_time().as_nanos_since_unix_epoch(),
         }
     }
 }
@@ -460,8 +450,8 @@ impl From<&ic_types::messages::RequestMetadata> for RequestMetadata {
 impl From<RequestMetadata> for ic_types::messages::RequestMetadata {
     fn from(metadata: RequestMetadata) -> Self {
         ic_types::messages::RequestMetadata::new(
-            metadata.call_tree_depth.unwrap_or(0),
-            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
+            metadata.call_tree_depth,
+            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64),
         )
     }
 }
@@ -491,7 +481,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             } else {
                 None
             },
-            metadata: Some((&request.metadata).into()),
+            metadata: (&request.metadata).into(),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -518,7 +508,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             payment,
             method_name: request.method_name,
             method_payload: request.method_payload,
-            metadata: request.metadata.map_or_else(Default::default, From::from),
+            metadata: request.metadata.into(),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
     }

@@ -14,11 +14,10 @@ use std::{
 use super::types;
 use crate::CertificationVersion;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, Payload, Refund, RejectSignals, RequestMetadata, STREAM_SUPPORTED_FLAGS,
-    StreamFlagBits,
+    Bytes, Cycles, Funds, Payload, Refund, RejectSignals, STREAM_SUPPORTED_FLAGS, StreamFlagBits,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::time::CoarseTime;
+use ic_types::{Time, time::CoarseTime};
 use serde::{Deserialize, Serialize};
 
 /// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
@@ -155,9 +154,8 @@ pub struct RequestV19 {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
-    // TODO(MR-642): Remove `Option` from `metadata`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<types::RequestMetadata>,
+    pub metadata: Option<RequestMetadataV22>,
     #[serde(skip_serializing_if = "types::is_zero", default)]
     pub deadline: u32,
 }
@@ -226,9 +224,8 @@ pub struct RequestV22 {
     pub method_payload: Bytes,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cycles_payment: Option<Cycles>,
-    // TODO(MR-642): Remove `Option` from `metadata`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<RequestMetadata>,
+    pub metadata: Option<RequestMetadataV22>,
     #[serde(skip_serializing_if = "types::is_zero", default)]
     pub deadline: u32,
 }
@@ -279,6 +276,37 @@ impl TryFrom<RequestV22> for ic_types::messages::Request {
             metadata: request.metadata.map_or_else(Default::default, From::from),
             deadline: CoarseTime::from_secs_since_unix_epoch(request.deadline),
         })
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct RequestMetadataV22 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_tree_depth: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_tree_start_time_u64: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_subtree_deadline_u64: Option<u64>,
+}
+
+impl From<&ic_types::messages::RequestMetadata> for RequestMetadataV22 {
+    fn from(metadata: &ic_types::messages::RequestMetadata) -> Self {
+        RequestMetadataV22 {
+            call_tree_depth: Some(*metadata.call_tree_depth()),
+            call_tree_start_time_u64: Some(
+                metadata.call_tree_start_time().as_nanos_since_unix_epoch(),
+            ),
+            call_subtree_deadline_u64: None,
+        }
+    }
+}
+
+impl From<RequestMetadataV22> for ic_types::messages::RequestMetadata {
+    fn from(metadata: RequestMetadataV22) -> Self {
+        ic_types::messages::RequestMetadata::new(
+            metadata.call_tree_depth.unwrap_or(0),
+            Time::from_nanos_since_unix_epoch(metadata.call_tree_start_time_u64.unwrap_or(0)),
+        )
     }
 }
 
