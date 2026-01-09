@@ -7,6 +7,7 @@
 set -euo pipefail
 
 cleanup() {
+    echo "Cleaning up tmpdir from proc_wrapper"
     if [ -f "${tmpdir}/cidfile" ]; then
         CONTAINER_ID=$(cut -d':' -f2 <"${tmpdir}/cidfile")
 
@@ -17,6 +18,7 @@ cleanup() {
         podman container cleanup --rm "${CONTAINER_ID}"
     fi
 
+    ls -lahR "$tmpdir"
     sudo rm -rf "$tmpdir"
 }
 
