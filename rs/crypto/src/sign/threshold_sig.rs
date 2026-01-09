@@ -149,14 +149,12 @@ impl ThresholdSigVerifierInternal {
             signer,
         )?;
 
-        threshold_sig_csp_client
-            .threshold_verify_individual_signature(
-                AlgorithmId::from(public_key),
-                message.as_signed_bytes().as_slice(),
-                csp_signature,
-                public_key,
-            )
-            .map_err(panic_on_illegal_individual_sig_verification_state)
+        threshold_sig_csp_client.threshold_verify_individual_signature(
+            AlgorithmId::from(public_key),
+            message.as_signed_bytes().as_slice(),
+            csp_signature,
+            public_key,
+        )
     }
 }
 
@@ -254,24 +252,6 @@ fn coeffs_and_index(
     Ok((public_coeffs, node_index))
 }
 
-fn panic_on_illegal_individual_sig_verification_state(error: CryptoError) -> CryptoError {
-    match error {
-        CryptoError::InvalidArgument { .. } | CryptoError::MalformedPublicKey { .. } => panic!(
-            "Illegal state: the algorithm of the public key from the threshold signature data \
-            store (which is based on the algorithm of the public coefficients in the store) is \
-            not supported: {error}"
-        ),
-        CryptoError::MalformedSignature { .. } => unreachable!(
-            "This case cannot occur because `CryptoError::MalformedSignature` is returned only \
-            if the given signature was not a \
-            `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual)`, but we know \
-            for sure that it has this type because this is the type returned by \
-            `CspSignature::try_from(ThresholdSigShareOf)`."
-        ),
-        _ => error,
-    }
-}
-
 impl ThresholdSigVerifierInternal {
     pub fn combine_threshold_sig_shares<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
@@ -290,7 +270,7 @@ impl ThresholdSigVerifierInternal {
                 public_coefficients,
             )
             .map_err(map_csp_combine_sigs_error)?;
-        combined_threshold_sig_or_panic(csp_signature)
+        CombinedThresholdSigOf::try_from(csp_signature)
     }
 }
 
@@ -343,15 +323,6 @@ fn index_for_node_id(
         .index(node_id)
         .copied()
         .ok_or_else(|| node_id_missing_error(node_id, dkg_id))
-}
-
-fn combined_threshold_sig_or_panic<H: Signable>(
-    csp_signature: CspSignature,
-) -> CryptoResult<CombinedThresholdSigOf<H>> {
-    Ok(CombinedThresholdSigOf::try_from(csp_signature).expect(
-        "The CSP must return a signature of type \
-        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.",
-    ))
 }
 
 fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
