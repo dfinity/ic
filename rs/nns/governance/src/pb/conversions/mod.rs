@@ -1,7 +1,6 @@
 use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
 use crate::pb::v1 as pb;
 
-use candid::{Int, Nat};
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
 use ic_protobuf::registry::replica_version::v1::{
@@ -9,7 +8,6 @@ use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurementMetadata as PbGuestLaunchMeasurementMetadata,
     GuestLaunchMeasurements as PbGuestLaunchMeasurements,
 };
-use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
@@ -4173,79 +4171,6 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
             ),
-        }
-    }
-}
-
-impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
-    fn from(item: pb::SelfDescribingValue) -> Self {
-        let Some(value) = item.value else {
-            return Self::Map(HashMap::new());
-        };
-        match value {
-            pb::self_describing_value::Value::Blob(v) => Self::Blob(v),
-            pb::self_describing_value::Value::Text(v) => Self::Text(v),
-            pb::self_describing_value::Value::Nat(v) => {
-                let nat = Nat::decode(&mut v.as_slice()).unwrap();
-                Self::Nat(nat)
-            }
-            pb::self_describing_value::Value::Int(v) => {
-                let int = Int::decode(&mut v.as_slice()).unwrap();
-                Self::Int(int)
-            }
-            pb::self_describing_value::Value::Array(v) => {
-                Self::Array(v.values.into_iter().map(Self::from).collect())
-            }
-            pb::self_describing_value::Value::Map(v) => Self::Map(
-                v.values
-                    .into_iter()
-                    .map(|(k, v)| (k, Self::from(v)))
-                    .collect(),
-            ),
-            pb::self_describing_value::Value::Null(_) => Self::Null,
-        }
-    }
-}
-
-impl From<pb_api::SelfDescribingValue> for pb::SelfDescribingValue {
-    fn from(item: pb_api::SelfDescribingValue) -> Self {
-        let value = match item {
-            pb_api::SelfDescribingValue::Blob(v) => pb::self_describing_value::Value::Blob(v),
-            pb_api::SelfDescribingValue::Text(v) => pb::self_describing_value::Value::Text(v),
-            pb_api::SelfDescribingValue::Nat(v) => {
-                let mut bytes = Vec::new();
-                v.encode(&mut bytes).unwrap();
-                pb::self_describing_value::Value::Nat(bytes)
-            }
-            pb_api::SelfDescribingValue::Int(v) => {
-                let mut bytes = Vec::new();
-                v.encode(&mut bytes).unwrap();
-                pb::self_describing_value::Value::Int(bytes)
-            }
-            pb_api::SelfDescribingValue::Array(v) => {
-                pb::self_describing_value::Value::Array(pb::SelfDescribingValueArray {
-                    values: v.into_iter().map(Self::from).collect(),
-                })
-            }
-            pb_api::SelfDescribingValue::Map(v) => {
-                pb::self_describing_value::Value::Map(pb::SelfDescribingValueMap {
-                    values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
-                })
-            }
-            pb_api::SelfDescribingValue::Null => {
-                pb::self_describing_value::Value::Null(pb::Empty {})
-            }
-        };
-        Self { value: Some(value) }
-    }
-}
-
-impl From<pb::SelfDescribingProposalAction> for pb_api::SelfDescribingProposalAction {
-    fn from(item: pb::SelfDescribingProposalAction) -> Self {
-        Self {
-            type_name: Some(item.type_name),
-            type_description: Some(item.type_description),
-            value: item.value.map(pb_api::SelfDescribingValue::from),
         }
     }
 }
