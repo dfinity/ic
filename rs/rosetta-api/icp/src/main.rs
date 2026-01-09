@@ -78,7 +78,7 @@ struct NetworkConfig {
 struct ParsedNetworkConfig {
     pub ic_url: Url,
     pub root_key: Option<ThresholdSigPublicKey>,
-    /// True if connecting to mainnet (no custom --ic-url provided)
+    /// True if connecting to mainnet (no custom --ic-url provided, or URL matches mainnet)
     pub is_mainnet_url: bool,
 }
 
@@ -87,11 +87,11 @@ impl ParsedNetworkConfig {
         const MAINNET_URL: &str = "https://ic0.app";
         const MAINNET_ROOT_KEY: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 
-        let is_mainnet_url = config.ic_url.is_none();
         let url_str = match &config.ic_url {
             Some(url_str) => url_str.as_str(),
             None => MAINNET_URL,
         };
+        let is_mainnet_url = url_str == MAINNET_URL;
         let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {e}"))?;
 
         let root_key = match config.root_key {
