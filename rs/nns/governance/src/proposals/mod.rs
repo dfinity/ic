@@ -256,6 +256,9 @@ impl ValidProposalAction {
             ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => {
                 Ok(create_service_nervous_system.to_self_describing_action())
             }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => Ok(bless_alternative_guest_os_version.to_self_describing_action()),
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",
