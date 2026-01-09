@@ -89,10 +89,6 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
-    /// This flag determines whether cycles are charged. The flag is pulled from
-    /// the registry every round.
-    pub cost_schedule: CanisterCyclesCostSchedule,
-
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 
@@ -389,7 +385,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -674,8 +669,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            cost_schedule: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
@@ -775,7 +768,6 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            cost_schedule,
         } = self;
 
         assert_eq!(None, split_from);
@@ -880,7 +872,6 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            cost_schedule,
         })
     }
 
@@ -1861,7 +1852,6 @@ pub(crate) mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
