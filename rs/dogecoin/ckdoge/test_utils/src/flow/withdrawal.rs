@@ -5,12 +5,11 @@ use crate::{Setup, into_outpoint, parse_dogecoin_address};
 use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
-use ic_bitcoin_canister_mock::Utxo;
 use ic_ckdoge_minter::candid_api::EstimateWithdrawalFeeError;
 use ic_ckdoge_minter::event::RetrieveDogeRequest;
 use ic_ckdoge_minter::fees::DogecoinFeeEstimator;
 use ic_ckdoge_minter::{
-    BurnMemo, MIN_RESUBMISSION_DELAY, Txid, WithdrawalReimbursementReason,
+    BurnMemo, MIN_RESUBMISSION_DELAY, Txid, Utxo, WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,

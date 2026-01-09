@@ -4,7 +4,7 @@ use bitcoin::hashes::Hash;
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    MintMemo, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    MintMemo, Txid, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     event::CkDogeMinterEventType, memo_encode,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -67,26 +67,6 @@ impl<S> DogecoinDepositTransactionFlow<S>
 where
     S: AsRef<Setup>,
 {
-    pub fn dogecoin_simulate_transaction<I: IntoIterator<Item = Utxo>>(
-        self,
-        deposit_utxos: I,
-    ) -> UpdateBalanceFlow<S> {
-        let deposit_utxos: BTreeSet<_> = deposit_utxos.into_iter().collect();
-        self.setup
-            .as_ref()
-            .dogecoin()
-            .push_utxos(deposit_utxos.clone(), self.deposit_address.to_string());
-
-        UpdateBalanceFlow {
-            setup: self.setup,
-            account: self.account,
-            deposit_transactions: deposit_utxos
-                .into_iter()
-                .map(|utxo| utxo.outpoint.txid)
-                .collect(),
-        }
-    }
-
     pub fn dogecoin_send_transaction<I: IntoIterator<Item = u64>>(
         self,
         amounts: I,

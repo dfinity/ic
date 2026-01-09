@@ -7720,7 +7720,6 @@ dependencies = [
  "bitcoin-dogecoin",
  "candid",
  "canlog 0.2.0",
- "ic-bitcoin-canister-mock",
  "ic-btc-adapter-test-utils",
  "ic-ckdoge-minter",
  "ic-http-types",

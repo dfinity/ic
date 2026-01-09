@@ -4,17 +4,16 @@ pub mod flow;
 mod ledger;
 mod minter;
 
-use crate::dogecoin::{DogecoinCanister, DogecoinDaemon};
+use crate::dogecoin::DogecoinDaemon;
 use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::{dogecoin::DogecoinUsers, minter::MinterCanister};
 use bitcoin::TxOut;
 use bitcoin::dogecoin::Network as DogeNetwork;
 use candid::{Encode, Principal};
-use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_btc_adapter_test_utils::bitcoind::Daemon;
 use ic_ckdoge_minter::{
-    Txid, get_dogecoin_canister_id,
+    Txid,
     lifecycle::{
         MinterArg,
         init::{InitArgs, Mode, Network},
@@ -27,7 +26,6 @@ use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
 use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
-use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -53,7 +51,6 @@ pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 pub struct Setup {
     pub env: Arc<PocketIc>,
     doge_network: Network,
-    dogecoin: Option<CanisterId>,
     minter: CanisterId,
     ledger: CanisterId,
     dogecoind: Option<Arc<Daemon<DogeNetwork>>>,
@@ -97,36 +94,6 @@ impl Setup {
                     .with_fiduciary_subnet()
                     .build(),
             ),
-        };
-
-        let mock_dogecoin_canister = match &dogecoind {
-            Some(_) => None,
-            None => {
-                let dogecoin = env
-                    .create_canister_with_id(
-                        None,
-                        Some(CanisterSettings {
-                            controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
-                            ..Default::default()
-                        }),
-                        get_dogecoin_canister_id(&doge_network),
-                    )
-                    .unwrap();
-                env.install_canister(
-                    dogecoin,
-                    bitcoin_canister_mock_wasm(),
-                    Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
-                    Some(NNS_ROOT_PRINCIPAL),
-                );
-                env.update_call(
-                    dogecoin,
-                    NNS_ROOT_PRINCIPAL,
-                    "set_tip_height",
-                    Encode!(&MIN_CONFIRMATIONS).unwrap(),
-                )
-                .unwrap();
-                Some(dogecoin)
-            }
         };
 
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
@@ -213,17 +180,9 @@ impl Setup {
         Self {
             env,
             doge_network,
-            dogecoin: mock_dogecoin_canister,
             minter,
             ledger,
             dogecoind,
-        }
-    }
-
-    pub fn dogecoin(&self) -> DogecoinCanister {
-        DogecoinCanister {
-            env: self.env.clone(),
-            id: self.dogecoin.expect("BUG: mock not available for Regtest"),
         }
     }
 
@@ -233,7 +192,7 @@ impl Setup {
             daemon: self
                 .dogecoind
                 .as_ref()
-                .expect("BUG: mock not available for Mainnet")
+                .expect("BUG: Dogecoind not available for Mainnet")
                 .clone(),
         }
     }
@@ -301,11 +260,6 @@ fn ledger_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-fn bitcoin_canister_mock_wasm() -> Vec<u8> {
-    let wasm_path = std::env::var("IC_BITCOIN_CANISTER_MOCK_WASM_PATH").unwrap();
-    std::fs::read(wasm_path).unwrap()
-}
-
 pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
     assert_matches::assert_matches!(
         result,
@@ -318,43 +272,6 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
 
 pub fn txid(bytes: [u8; 32]) -> Txid {
     Txid::from(bytes)
-}
-
-pub fn utxo_with_value(value: u64) -> Utxo {
-    Utxo {
-        height: 0,
-        outpoint: OutPoint {
-            txid: txid([42u8; 32]),
-            vout: 1,
-        },
-        value,
-    }
-}
-
-pub fn utxos_with_value(values: &[u64]) -> BTreeSet<Utxo> {
-    assert!(
-        values.len() < u16::MAX as usize,
-        "Adapt logic below to create more unique UTXOs!"
-    );
-    let utxos = values
-        .iter()
-        .enumerate()
-        .map(|(i, &value)| {
-            let mut txid = [0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: Txid::from(txid),
-                    vout: 1,
-                },
-                value,
-            }
-        })
-        .collect::<BTreeSet<_>>();
-    assert_eq!(values.len(), utxos.len());
-    utxos
 }
 
 pub fn into_outpoint(
