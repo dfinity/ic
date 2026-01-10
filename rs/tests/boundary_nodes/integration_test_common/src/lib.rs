@@ -115,7 +115,7 @@ Title:: Boundary Nodes API Endpoints Test - Status
 Goal:: api/v2/status - just make a status call against the boundary node
 
 end::catalog[] */
-pub fn api_status_test(env: TestEnv) {
+pub async fn api_status_test(env: TestEnv) {
     let name = "api/v2/status";
     let logger = env.logger();
     info!(&logger, "Starting {name} test");
@@ -123,33 +123,30 @@ pub fn api_status_test(env: TestEnv) {
     let (client, host) = setup_client(env).expect("failed to setup client");
     info!(&logger, "Connecting to the API BN via {host}");
 
-    block_on(async move {
-        let res = client
-            .get(format!("https://{host}/api/v2/status"))
-            .send()
-            .await?;
+    let res = client
+        .get(format!("https://{host}/api/v2/status"))
+        .send()
+        .await
+        .unwrap();
 
-        if res.status() != StatusCode::OK {
-            bail!("{name} failed: {}", res.status())
-        }
+    if res.status() != StatusCode::OK {
+        panic!("{name} failed: {}", res.status())
+    }
 
-        #[derive(Deserialize)]
-        struct Status {
-            replica_health_status: String,
-        }
+    #[derive(Deserialize)]
+    struct Status {
+        replica_health_status: String,
+    }
 
-        let body = res.bytes().await?;
+    let body = res.bytes().await.unwrap();
 
-        let Status {
-            replica_health_status,
-        } = serde_cbor::from_slice::<Status>(&body)?;
+    let Status {
+        replica_health_status,
+    } = serde_cbor::from_slice::<Status>(&body).unwrap();
 
-        if replica_health_status != "healthy" {
-            bail!("{name} failed: status check failed: {replica_health_status}")
-        }
-        Ok(())
-    })
-    .unwrap();
+    if replica_health_status != "healthy" {
+        panic!("{name} failed: status check failed: {replica_health_status}")
+    }
 }
 
 /* tag::catalog[]

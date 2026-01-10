@@ -6,6 +6,7 @@ use ic_boundary_nodes_integration_test_common::{
 };
 use ic_boundary_nodes_system_test_utils::setup::setup_ic;
 use ic_system_test_driver::{
+    async_systest,
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
 };
@@ -16,7 +17,7 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(api_status_test))
+                .add_test(async_systest!(api_status_test))
                 .add_test(systest!(api_query_test))
                 .add_test(systest!(api_call_test))
                 .add_test(systest!(api_sync_call_test))
