@@ -39,7 +39,10 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
-    canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
+    canister_state::{
+        execution_state::{self, WasmExecutionMode, WasmMetadata},
+        system_state::log_memory_store::LogMemoryStore,
+    },
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
@@ -1298,6 +1301,7 @@ impl TestWasmExecutorCore {
             ExportedFunctions::new(exported_functions.into_iter().collect()),
             Memory::new_for_testing(),
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             vec![],
             WasmMetadata::default(),
         );

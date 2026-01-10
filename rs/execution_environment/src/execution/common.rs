@@ -473,6 +473,12 @@ pub fn apply_canister_state_changes(
         system_state_modifications,
     } = canister_state_changes;
 
+    // Preserve delta canister logs.
+    let mut canister_logs = system_state_modifications.canister_log();
+    execution_state
+        .log_memory_store
+        .append_delta_log(&mut canister_logs);
+
     let clean_system_state = system_state.clone();
     let clean_subnet_available_memory = round_limits.subnet_available_memory;
     let callbacks_created = system_state_modifications.callbacks_created();
@@ -500,6 +506,7 @@ pub fn apply_canister_state_changes(
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
             }
+            // TODO: (?) update log memory store in execution state.
             round_limits.subnet_available_callbacks -= callbacks_created as i64;
             deallocate(clean_system_state);
 
