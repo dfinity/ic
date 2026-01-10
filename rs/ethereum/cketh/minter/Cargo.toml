@@ -29,6 +29,7 @@ ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-ethereum-types = { path = "../../../../packages/ic-ethereum-types" }
+ic-icrc1-tokens-u256 = { path = "../../../ledger_suite/icrc1/tokens_u256" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
