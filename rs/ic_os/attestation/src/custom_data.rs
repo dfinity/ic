@@ -8,6 +8,28 @@ use thiserror::Error;
 // depend on the ic_sev crate.
 pub use ic_sev::guest::custom_data::SevCustomDataNamespace;
 
+/// Empty custom data for node registration attestation.
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+pub struct NodeRegistrationAttestationCustomData;
+
+impl Encode for NodeRegistrationAttestationCustomData {
+    fn encoded_len(&self) -> der::Result<der::Length> {
+        // Empty DER SEQUENCE: tag (1 byte) + length (1 byte) = 2 bytes total
+        Ok(der::Length::new(2))
+    }
+
+    fn encode(&self, encoder: &mut impl der::Writer) -> der::Result<()> {
+        // Encode as empty DER SEQUENCE: 0x30 (SEQUENCE tag) + 0x00 (zero length)
+        encoder.write(&[0x30, 0x00])
+    }
+}
+
+impl DerEncodedCustomData for NodeRegistrationAttestationCustomData {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::NodeRegistration
+    }
+}
+
 #[derive(Debug, Error)]
 #[error("EncodingError({0})")]
 pub struct EncodingError(#[from] pub Box<dyn Error + Send + Sync>);
