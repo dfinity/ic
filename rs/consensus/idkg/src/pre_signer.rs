@@ -1736,7 +1736,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock dealing does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &dealing.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &dealing.message_id(),
+                    "Dealing validation(permanent error)"
+                ));
             })
         })
     }
@@ -1847,8 +1851,16 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, msg_id_2));
-                assert!(is_handle_invalid(&change_set, msg_id_3));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_2,
+                    "validate_dealings(): failed to translate transcript_params_ref"
+                ));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_3,
+                    "validate_dealings(): failed to translate transcript_params_ref"
+                ));
                 assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
             })
         });
@@ -1867,8 +1879,16 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, msg_id_2));
-                assert!(is_handle_invalid(&change_set, msg_id_3));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_2,
+                    "Dealing validation(permanent error)"
+                ));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    msg_id_3,
+                    "Dealing validation(permanent error)"
+                ));
                 assert!(is_removed_from_unvalidated(&change_set, msg_id_4));
             })
         });
@@ -1950,7 +1970,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Duplicate dealing:"
+                ));
             })
         })
     }
@@ -2011,9 +2035,17 @@ mod tests {
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
                 if is_moved_to_validated(&change_set, &msg_id_2_a) {
-                    assert!(is_handle_invalid(&change_set, &msg_id_2_b));
+                    assert!(is_handle_invalid(
+                        &change_set,
+                        &msg_id_2_b,
+                        "Duplicate dealing:"
+                    ));
                 } else if is_moved_to_validated(&change_set, &msg_id_2_b) {
-                    assert!(is_handle_invalid(&change_set, &msg_id_2_a));
+                    assert!(is_handle_invalid(
+                        &change_set,
+                        &msg_id_2_a,
+                        "Duplicate dealing in unvalidated batch"
+                    ));
                 } else {
                     panic!("Neither dealing was accepted");
                 }
@@ -2055,7 +2087,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealings(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Dealing from unexpected node"
+                ));
             })
         })
     }
@@ -2213,7 +2249,11 @@ mod tests {
                 // the dealing is considered invalid.
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &dealing.message_id()));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &dealing.message_id(),
+                    "Dealing private verification(permanent error)"
+                ));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
             })
@@ -2312,7 +2352,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock dealing support does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &support.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &support.message_id(),
+                    "Support validation failed"
+                ));
             })
         })
     }
@@ -2412,8 +2456,15 @@ mod tests {
                         || is_moved_to_validated(&change_set, &msg_id_2_dupl)
                 );
                 assert!(
-                    is_handle_invalid(&change_set, &msg_id_2)
-                        || is_handle_invalid(&change_set, &msg_id_2_dupl)
+                    is_handle_invalid(
+                        &change_set,
+                        &msg_id_2,
+                        "Duplicate support in unvalidated batch"
+                    ) || is_handle_invalid(
+                        &change_set,
+                        &msg_id_2_dupl,
+                        "Duplicate support in unvalidated batch"
+                    )
                 );
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
@@ -2445,8 +2496,16 @@ mod tests {
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
                 // Resolving the transcript params for id_2 fails, so both supports are handled invalid
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Failed to translate transcript_params_ref"
+                ));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2_dupl,
+                    "Failed to translate transcript_params_ref"
+                ));
                 // The share for id_3 is deferred since we don't have the dealing yet, meaning
                 // we don't attempt to resolve the references.
                 // The share for id_4 is dropped since the transcript is not requested.
@@ -2475,8 +2534,16 @@ mod tests {
                     .with_target_subnet_xnet_transcripts(vec![t3.transcript_params_ref]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
-                assert!(is_handle_invalid(&change_set, &msg_id_2_dupl));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Support for xnet reshare transcript"
+                ));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2_dupl,
+                    "Support for xnet reshare transcript"
+                ));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
@@ -2641,7 +2708,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate support in unvalidated batch"
+                ));
 
                 // The original validated dealing support should still be there
                 assert_eq!(pre_signer.validated_dealing_supports().len(), 1);
@@ -2662,7 +2733,11 @@ mod tests {
 
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate support:"
+                ));
             })
         })
     }
@@ -2694,7 +2769,11 @@ mod tests {
                     TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Support from unexpected node"
+                ));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
             })
@@ -2735,7 +2814,11 @@ mod tests {
                     TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Support meta data mismatch"
+                ));
 
                 assert!(pre_signer.validated_dealing_supports().is_empty());
             })

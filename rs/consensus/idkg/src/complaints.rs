@@ -1233,7 +1233,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock complaint does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &complaint.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &complaint.message_id(),
+                    "Complaint signature validation(permanent error)"
+                ));
             })
         })
     }
@@ -1402,7 +1406,11 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate complaint:"
+                ));
             })
         })
     }
@@ -1499,7 +1507,11 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(&change_set, &msg_id_1));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_1,
+                    "Duplicate complaint in unvalidated batch"
+                ));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
             })
@@ -1623,7 +1635,11 @@ mod tests {
                     .into_iter()
                     .collect();
                 // assert that the mock opening does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &opening.message_id()));
+                assert!(is_handle_invalid(
+                    &changeset,
+                    &opening.message_id(),
+                    "Opening signature validation(permanent error)"
+                ));
             })
         })
     }
@@ -1809,7 +1825,11 @@ mod tests {
                     &active_transcripts,
                 );
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id,
+                    "Duplicate opening:"
+                ));
             })
         })
     }
@@ -1870,7 +1890,11 @@ mod tests {
                 );
                 assert_eq!(change_set.len(), 2);
                 // One is considered duplicate
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Duplicate opening in unvalidated batch"
+                ));
                 // One is considered valid
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));
             })
