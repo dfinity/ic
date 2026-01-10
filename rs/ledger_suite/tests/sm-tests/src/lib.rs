@@ -99,6 +99,7 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub feature_flags: Option<FeatureFlags>,
     pub index_principal: Option<Principal>,
+    pub fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
@@ -383,6 +384,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         },
         feature_flags: Some(FeatureFlags { icrc2: true }),
         index_principal: None,
+        fee_collector_107: None,
     }
 }
 
@@ -1293,6 +1295,7 @@ pub fn test_archive_controllers(ledger_wasm: Vec<u8>) {
             },
             feature_flags: args.feature_flags,
             index_principal: None,
+            fee_collector_107: None,
         })
     }
 
@@ -1322,6 +1325,7 @@ pub fn test_archive_no_additional_controllers(ledger_wasm: Vec<u8>) {
             },
             feature_flags: args.feature_flags,
             index_principal: None,
+            fee_collector_107: None,
         })
     }
 
@@ -1356,6 +1360,7 @@ pub fn test_archive_duplicate_controllers(ledger_wasm: Vec<u8>) {
             },
             feature_flags: args.feature_flags,
             index_principal: None,
+            fee_collector_107: None,
         })
     }
     let p100 = PrincipalId::new_user_test_id(100);

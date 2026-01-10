@@ -217,6 +217,7 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         max_memo_length: None,
         feature_flags: args.feature_flags,
         index_principal: args.index_principal,
+        fee_collector_107: args.fee_collector_107,
     })
 }
 
@@ -1079,6 +1080,7 @@ fn test_icrc2_feature_flag_doesnt_disable_icrc2_endpoints() {
         max_memo_length: None,
         feature_flags: Some(FeatureFlags { icrc2: false }),
         index_principal: None,
+        fee_collector_107: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -1256,6 +1258,7 @@ fn test_icrc3_get_archives() {
         max_memo_length: None,
         feature_flags: None,
         index_principal: None,
+        fee_collector_107: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1332,6 +1335,7 @@ fn test_icrc3_get_blocks() {
         max_memo_length: None,
         feature_flags: None,
         index_principal: None,
+        fee_collector_107: None,
     });
     let args = Encode!(&args).unwrap();
     let ledger_id = env
@@ -1629,6 +1633,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
         max_memo_length: None,
         feature_flags: None,
         index_principal: None,
+        fee_collector_107: None,
     });
 
     let args = Encode!(&args).unwrap();
@@ -2188,6 +2193,7 @@ mod verify_written_blocks {
                 max_memo_length: None,
                 feature_flags: Some(FeatureFlags { icrc2: true }),
                 index_principal: None,
+                fee_collector_107: None,
             });
 
             let args = Encode!(&ledger_arg_init).unwrap();

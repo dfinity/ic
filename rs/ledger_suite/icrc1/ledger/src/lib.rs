@@ -191,6 +191,7 @@ impl InitArgsBuilder {
             max_memo_length: None,
             feature_flags: None,
             index_principal: None,
+            fee_collector_107: None,
         })
     }
 
@@ -260,6 +261,11 @@ impl InitArgsBuilder {
         self
     }
 
+    pub fn with_fee_collector_107(mut self, fee_collector: Account) -> Self {
+        self.0.fee_collector_107 = Some(fee_collector);
+        self
+    }
+
     pub fn build(self) -> InitArgs {
         self.0
     }
@@ -279,6 +285,7 @@ pub struct InitArgs {
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
     pub index_principal: Option<Principal>,
+    pub fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -611,6 +618,9 @@ pub struct Ledger {
 
     #[serde(default = "wasm_token_type")]
     pub token_type: String,
+
+    #[serde(default)]
+    fee_collector_107: Option<Option<Account>>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -679,6 +689,7 @@ impl Ledger {
             max_memo_length,
             feature_flags,
             index_principal,
+            fee_collector_107,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -712,6 +723,7 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
             index_principal,
             token_type: wasm_token_type(),
+            fee_collector_107: Some(fee_collector_107),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -807,6 +819,10 @@ impl LedgerContext for Ledger {
 
     fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
         self.fee_collector.as_ref()
+    }
+
+    fn fee_collector_107(&self) -> Option<Option<Self::AccountId>> {
+        self.fee_collector_107
     }
 }
 
