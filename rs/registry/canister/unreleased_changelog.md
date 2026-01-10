@@ -20,4 +20,6 @@ on proposals, to an invariant of the registry.
 
 ## Fixed
 
+* When performing `RemoveNodes`, generate 1 update mutation per node operator key. Before this change, a single node operator record would be changed multiple times in a single version if the remove nodes proposal removed multiple nodes from the same node operator, which caused confusion.
+
 ## Security
