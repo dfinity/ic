@@ -3,6 +3,7 @@ use crate::{common::LOG_PREFIX, registry::Registry};
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_sha2::Sha512;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -10,6 +11,9 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_api::SevAttestationPackage;
 use idna::domain_to_ascii_strict;
+use sev::Generation;
+use sev::certs::snp::ca::Chain as SevCaChain;
+use sev::certs::snp::{Certificate, Chain, Verifiable, ca};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 use std::fmt::Display;
@@ -356,11 +360,13 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
 
 /// Verifies the SEV attestation package and extracts the chip_id from the attestation report.
 ///
-/// TODO: This currently performs basic verification. Full verification should include:
+/// Verification includes:
 /// - Verifying the certificate chain (ARK -> ASK -> VCEK)
+/// - Verifying the ARK matches AMD's known root certificate for the CPU generation
 /// - Verifying the attestation report signature with VCEK
-/// - Verifying that the custom data matches NodeRegistrationAttestationCustomData
-/// - Verifying the launch measurement against blessed measurements
+/// - Verifying that the custom data matches NodeRegistrationAttestationCustomData namespace
+///
+/// TODO: Verify the launch measurement against blessed measurements from registry
 fn verify_sev_attestation_and_extract_chip_id(
     attestation: &SevAttestationPackage,
 ) -> Result<Vec<u8>, String> {
@@ -369,34 +375,93 @@ fn verify_sev_attestation_and_extract_chip_id(
         format!("{LOG_PREFIX}do_add_node: Failed to parse SEV attestation report: {e}")
     })?;
 
-    // TODO: Add full verification:
-    // 1. Verify certificate chain (ARK -> ASK -> VCEK)
-    // 2. Verify attestation report signature with VCEK
-    // 3. Verify custom data matches NodeRegistrationAttestationCustomData namespace
-    // 4. Verify launch measurement against blessed measurements from registry
-    //
-    // For now, we just extract the chip_id. The certificate chain validation
-    // ensures the chip_id is authentic when the signature verification is implemented.
+    // Parse certificates from PEM
+    let ark = Certificate::from_pem(attestation.ark_pem.as_bytes())
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to parse ARK certificate: {e}"))?;
+    let ask = Certificate::from_pem(attestation.ask_pem.as_bytes())
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to parse ASK certificate: {e}"))?;
+    let vcek = Certificate::from_pem(attestation.vcek_pem.as_bytes())
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to parse VCEK certificate: {e}"))?;
 
-    // Validate that certificates are present
-    if attestation.vcek_pem.is_empty() {
+    // Verify ARK matches AMD's known root certificate for the CPU generation
+    let expected_root = get_expected_amd_root_certificate(&report)?;
+    if ark.public_key_sec1() != expected_root.public_key_sec1() {
         return Err(format!(
-            "{LOG_PREFIX}do_add_node: SEV attestation missing VCEK certificate"
+            "{LOG_PREFIX}do_add_node: ARK public key does not match expected AMD root certificate"
         ));
     }
-    if attestation.ask_pem.is_empty() {
-        return Err(format!(
-            "{LOG_PREFIX}do_add_node: SEV attestation missing ASK certificate"
-        ));
-    }
-    if attestation.ark_pem.is_empty() {
-        return Err(format!(
-            "{LOG_PREFIX}do_add_node: SEV attestation missing ARK certificate"
-        ));
-    }
+
+    // Verify certificate chain (ARK -> ASK -> VCEK)
+    let chain = Chain {
+        ca: ca::Chain { ark, ask },
+        vek: vcek,
+    };
+    let verified_vcek = chain.verify().map_err(|e| {
+        format!("{LOG_PREFIX}do_add_node: Certificate chain verification failed: {e}")
+    })?;
+
+    // Verify attestation report signature with VCEK
+    (verified_vcek, &report).verify().map_err(|e| {
+        format!("{LOG_PREFIX}do_add_node: Attestation report signature verification failed: {e}")
+    })?;
+
+    // Verify custom data matches NodeRegistrationAttestationCustomData namespace
+    verify_node_registration_custom_data(&report)?;
 
     // Extract chip_id from the attestation report (64 bytes)
     Ok(report.chip_id.to_vec())
+}
+
+/// Gets the expected AMD root certificate for the CPU generation in the attestation report.
+fn get_expected_amd_root_certificate(report: &AttestationReport) -> Result<Certificate, String> {
+    let cpuid_fam_id = report.cpuid_fam_id.ok_or_else(|| {
+        format!("{LOG_PREFIX}do_add_node: Attestation report missing cpuid_fam_id")
+    })?;
+    let cpuid_mod_id = report.cpuid_mod_id.ok_or_else(|| {
+        format!("{LOG_PREFIX}do_add_node: Attestation report missing cpuid_mod_id")
+    })?;
+
+    let generation = Generation::identify_cpu(cpuid_fam_id, cpuid_mod_id)
+        .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to determine CPU generation: {e}"))?;
+
+    Ok(SevCaChain::from(generation).ark)
+}
+
+/// Namespace value for NodeRegistration (must match SevCustomDataNamespace::NodeRegistration)
+const NODE_REGISTRATION_NAMESPACE: u32 = 3;
+
+/// Verifies that the attestation report's custom data matches the expected
+/// NodeRegistrationAttestationCustomData.
+fn verify_node_registration_custom_data(report: &AttestationReport) -> Result<(), String> {
+    let report_data = report.report_data.as_slice();
+    let expected_custom_data = compute_node_registration_custom_data();
+
+    if report_data != expected_custom_data {
+        return Err(format!(
+            "{LOG_PREFIX}do_add_node: Custom data mismatch. \
+            Expected namespace {} with NodeRegistrationAttestationCustomData, \
+            got: {:?}",
+            NODE_REGISTRATION_NAMESPACE, report_data
+        ));
+    }
+
+    Ok(())
+}
+
+/// Computes the expected custom data for NodeRegistrationAttestationCustomData.
+/// Format: namespace (4 bytes LE) + first 60 bytes of SHA-512(empty DER SEQUENCE)
+fn compute_node_registration_custom_data() -> [u8; 64] {
+    // Empty DER SEQUENCE encoding
+    let der_encoded: [u8; 2] = [0x30, 0x00];
+
+    // Compute SHA-512 hash
+    let hash = Sha512::hash(&der_encoded);
+
+    // Build result: namespace + first 60 bytes of hash
+    let mut result = [0u8; 64];
+    result[0..4].copy_from_slice(&NODE_REGISTRATION_NAMESPACE.to_le_bytes());
+    result[4..64].copy_from_slice(&hash[..60]);
+    result
 }
 
 #[cfg(test)]
