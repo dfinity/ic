@@ -251,7 +251,9 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let expected_key = derive_key_from_sev_measurement(
             &mut self.server_sev_firmware.clone(),
             Key::DiskEncryptionKey {
-                device_path: Path::new("/dev/vda10"),
+                device_path: Path::new(
+                    "/dev/disk/by-partuuid/231213c6-ec9e-11f0-b45f-b7bbea44aaf0",
+                ),
             },
         )
         .unwrap();
