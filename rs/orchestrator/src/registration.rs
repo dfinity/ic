@@ -23,7 +23,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
+use ic_registry_canister_api::{
+    AddNodePayload, IPv4Config, SevAttestationPackage, UpdateNodeDirectlyPayload,
+};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
@@ -276,6 +278,7 @@ impl NodeRegistration {
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
             chip_id: None,
+            sev_attestation: generate_sev_attestation_for_registration(&self.log),
             public_ipv4_config: process_ipv4_config(
                 &self.log,
                 &self.node_config.initial_ipv4_config,
@@ -792,6 +795,100 @@ fn encode_as_qrcode(node_id: NodeId) -> String {
     QrCode::new(node_id.to_string())
         .map(|code| code.render::<unicode::Dense1x2>().build())
         .unwrap_or_else(|e| format!("Failed to encode the Node ID as a QR Code: {e}"))
+}
+
+/// Generate SEV attestation package for node registration on Linux.
+/// Returns None if SEV is not active or if attestation generation fails.
+#[cfg(target_os = "linux")]
+fn generate_sev_attestation_for_registration(log: &ReplicaLogger) -> Option<SevAttestationPackage> {
+    use attestation::attestation_package::generate_attestation_package;
+    use attestation::custom_data::NodeRegistrationAttestationCustomData;
+    use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
+    use config_types::GuestOSConfig;
+    use ic_sev::guest::is_sev_active;
+    use sev::firmware::guest::Firmware;
+
+    // Check if SEV is active
+    let is_sev = match is_sev_active() {
+        Ok(active) => active,
+        Err(e) => {
+            info!(log, "Failed to check if SEV is active: {:?}", e);
+            return None;
+        }
+    };
+
+    if !is_sev {
+        info!(log, "SEV is not active, skipping attestation generation");
+        return None;
+    }
+
+    info!(
+        log,
+        "SEV is active, generating attestation for node registration"
+    );
+
+    // Read GuestOS config to get TEE configuration
+    let guestos_config: GuestOSConfig = match deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH)
+    {
+        Ok(config) => config,
+        Err(e) => {
+            warn!(
+                log,
+                "Failed to read GuestOS config for attestation: {:?}", e
+            );
+            return None;
+        }
+    };
+
+    let tee_config = match guestos_config.trusted_execution_environment_config {
+        Some(config) => config,
+        None => {
+            warn!(
+                log,
+                "TrustedExecutionEnvironmentConfig missing in GuestOS config"
+            );
+            return None;
+        }
+    };
+
+    // Open SEV firmware
+    let mut firmware = match Firmware::open() {
+        Ok(fw) => fw,
+        Err(e) => {
+            warn!(log, "Failed to open SEV firmware: {:?}", e);
+            return None;
+        }
+    };
+
+    // Generate attestation with NodeRegistration namespace
+    let custom_data = NodeRegistrationAttestationCustomData;
+    let attestation_package =
+        match generate_attestation_package(&mut firmware, &tee_config, &custom_data) {
+            Ok(pkg) => pkg,
+            Err(e) => {
+                warn!(log, "Failed to generate attestation package: {:?}", e);
+                return None;
+            }
+        };
+
+    // Convert internal attestation package to Candid format
+    let attestation_report = attestation_package.attestation_report?;
+    let cert_chain = attestation_package.certificate_chain?;
+
+    Some(SevAttestationPackage {
+        attestation_report,
+        vcek_pem: cert_chain.vcek_pem?,
+        ask_pem: cert_chain.ask_pem?,
+        ark_pem: cert_chain.ark_pem?,
+    })
+}
+
+/// Non-Linux stub that always returns None.
+#[cfg(not(target_os = "linux"))]
+fn generate_sev_attestation_for_registration(
+    _log: &ReplicaLogger,
+) -> Option<SevAttestationPackage> {
+    None
 }
 
 #[cfg(test)]

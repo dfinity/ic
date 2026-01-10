@@ -1,7 +1,10 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs:ic-os-pkg"])
+package(default_visibility = [
+    "//rs:ic-os-pkg",
+    "//rs/orchestrator:__pkg__",
+])
 
 cargo_build_script(
     name = "build_script",

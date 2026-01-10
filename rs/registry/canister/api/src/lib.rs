@@ -167,6 +167,20 @@ pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
     pub registry_version: Option<u64>,
 }
 
+/// SEV attestation package for node registration.
+/// Used to prove chip_id via hardware attestation rather than direct submission.
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct SevAttestationPackage {
+    /// Raw attestation report bytes (1184 bytes from SEV firmware)
+    pub attestation_report: Vec<u8>,
+    /// VCEK certificate in PEM format
+    pub vcek_pem: String,
+    /// ASK certificate in PEM format
+    pub ask_pem: String,
+    /// ARK certificate in PEM format
+    pub ark_pem: String,
+}
+
 /// The payload of an update request to add a new node.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {
@@ -182,7 +196,15 @@ pub struct AddNodePayload {
     pub xnet_endpoint: String,
     pub http_endpoint: String,
 
+    /// Deprecated: Use `sev_attestation` instead.
+    /// For SEV nodes, chip_id should be extracted from the verified attestation report.
+    /// This field is kept for backward compatibility during the transition period.
     pub chip_id: Option<Vec<u8>>,
+
+    /// SEV attestation package for TEE nodes.
+    /// When provided, chip_id is extracted from the verified attestation report.
+    /// For non-SEV nodes, this should be None.
+    pub sev_attestation: Option<SevAttestationPackage>,
 
     pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,

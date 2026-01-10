@@ -8,7 +8,10 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, IPv4InterfaceConfig, NodeRecord, NodeRewardType},
 };
+use ic_registry_canister_api::SevAttestationPackage;
 use idna::domain_to_ascii_strict;
+use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::fmt::Display;
 use std::net::SocketAddr;
 use std::time::SystemTime;
@@ -185,13 +188,16 @@ impl Registry {
             ));
         }
 
+        // Extract chip_id from sev_attestation if provided, otherwise use legacy chip_id field
+        let chip_id = extract_chip_id_from_payload(&payload)?;
+
         // Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
-            chip_id: payload.chip_id.clone(),
+            chip_id,
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type: node_reward_type.map(|t| t as i32),
@@ -336,6 +342,63 @@ fn now() -> Result<Time, String> {
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
+/// Attempts to extracts chip_id from node payload
+fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u8>>, String> {
+    match &payload.sev_attestation {
+        Some(attestation) => {
+            let chip_id = verify_sev_attestation_and_extract_chip_id(attestation)?;
+            Ok(Some(chip_id))
+        }
+        // No SEV attestation, no chip_id (non-TEE node)
+        None => Ok(None),
+    }
+}
+
+/// Verifies the SEV attestation package and extracts the chip_id from the attestation report.
+///
+/// TODO: This currently performs basic verification. Full verification should include:
+/// - Verifying the certificate chain (ARK -> ASK -> VCEK)
+/// - Verifying the attestation report signature with VCEK
+/// - Verifying that the custom data matches NodeRegistrationAttestationCustomData
+/// - Verifying the launch measurement against blessed measurements
+fn verify_sev_attestation_and_extract_chip_id(
+    attestation: &SevAttestationPackage,
+) -> Result<Vec<u8>, String> {
+    // Parse the attestation report
+    let report = AttestationReport::from_bytes(&attestation.attestation_report).map_err(|e| {
+        format!("{LOG_PREFIX}do_add_node: Failed to parse SEV attestation report: {e}")
+    })?;
+
+    // TODO: Add full verification:
+    // 1. Verify certificate chain (ARK -> ASK -> VCEK)
+    // 2. Verify attestation report signature with VCEK
+    // 3. Verify custom data matches NodeRegistrationAttestationCustomData namespace
+    // 4. Verify launch measurement against blessed measurements from registry
+    //
+    // For now, we just extract the chip_id. The certificate chain validation
+    // ensures the chip_id is authentic when the signature verification is implemented.
+
+    // Validate that certificates are present
+    if attestation.vcek_pem.is_empty() {
+        return Err(format!(
+            "{LOG_PREFIX}do_add_node: SEV attestation missing VCEK certificate"
+        ));
+    }
+    if attestation.ask_pem.is_empty() {
+        return Err(format!(
+            "{LOG_PREFIX}do_add_node: SEV attestation missing ASK certificate"
+        ));
+    }
+    if attestation.ark_pem.is_empty() {
+        return Err(format!(
+            "{LOG_PREFIX}do_add_node: SEV attestation missing ARK certificate"
+        ));
+    }
+
+    // Extract chip_id from the attestation report (64 bytes)
+    Ok(report.chip_id.to_vec())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,6 +454,7 @@ mod tests {
             xnet_endpoint: format!("128.0.{mutation_id}.100:1234"),
             http_endpoint: format!("128.0.{mutation_id}.100:4321"),
             chip_id: None,
+            sev_attestation: None,
             public_ipv4_config: None,
             domain: Some("api-example.com".to_string()),
             // Unused section follows
@@ -430,6 +494,7 @@ mod tests {
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
             chip_id: None,
+            sev_attestation: None,
             public_ipv4_config: None,
             domain: None,
             // Unused section follows

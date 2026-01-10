@@ -1,6 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
-package(default_visibility = ["//rs:ic-os-pkg"])
+package(default_visibility = [
+    "//rs:ic-os-pkg",
+    "//rs/orchestrator:__pkg__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.

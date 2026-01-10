@@ -62,8 +62,7 @@ prost = { workspace = true }
 serde = { workspace = true }
 url = { workspace = true }
 canbench-rs = { workspace = true, optional = true }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
+sev = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }
@@ -108,6 +107,7 @@ pocket-ic = { path = "../../../packages/pocket-ic" }
 pretty_assertions = { workspace = true }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
+rand_chacha = { workspace = true }
 
 [features]
 test = []

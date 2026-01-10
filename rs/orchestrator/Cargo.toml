@@ -12,6 +12,9 @@ async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
 config = { path = "../ic_os/config" }
+attestation = { path = "../ic_os/attestation" }
+config_types = { path = "../ic_os/config_types" }
+ic_sev = { path = "../ic_os/sev" }
 clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
@@ -59,6 +62,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
+sev = { workspace = true }
 slog = { workspace = true }
 slog-async = { workspace = true }
 strum = { workspace = true }
