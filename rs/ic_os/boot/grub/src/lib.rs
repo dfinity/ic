@@ -1,5 +1,5 @@
 use ic_sys::fs::{Clobber, write_atomically};
-use regex::Regex;
+use regex_lite::Regex;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::str::FromStr;

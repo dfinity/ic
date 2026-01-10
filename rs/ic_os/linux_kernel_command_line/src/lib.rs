@@ -1,4 +1,4 @@
-use regex::Regex;
+use regex_lite::Regex;
 /// Utilities to manipulate a kernel command line reliably.
 use std::error::Error as StdError;
 use std::fmt;

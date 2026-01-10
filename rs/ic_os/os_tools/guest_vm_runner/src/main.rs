@@ -14,6 +14,7 @@ use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
 use ic_sev::host::HostSevCertificateProvider;
 use nix::unistd::getuid;
+use regex_lite::Regex;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::Write;
@@ -763,7 +764,7 @@ mod tests {
     use ic_device::mount::testing::ExtractingFilesystemMounter;
     use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
-    use regex::Regex;
+    use regex_lite::Regex;
     use std::fs::File;
     use std::path::PathBuf;
     use std::sync::LazyLock;

@@ -16,7 +16,7 @@ package(default_visibility = ["//visibility:public"])
             # Keep sorted.
             "//packages/ic-http-types",
             "@crate_index//:candid",
-            "@crate_index//:regex",
+            "@crate_index//:regex-lite",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
         ] + extra_deps,

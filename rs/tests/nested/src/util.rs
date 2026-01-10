@@ -36,7 +36,7 @@ use ic_system_test_driver::{
 };
 use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
-use regex::Regex;
+use regex_lite::Regex;
 use reqwest::Client;
 use std::net::Ipv6Addr;
 use std::time::Duration;

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 use linux_kernel_command_line::KernelCommandLine;
-use regex::Regex;
+use regex_lite::Regex;
 use std::fs;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;

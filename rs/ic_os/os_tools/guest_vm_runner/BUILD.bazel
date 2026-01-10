@@ -20,7 +20,7 @@ DEPENDENCIES = [
     "@crate_index//:macaddr",
     "@crate_index//:memchr",
     "@crate_index//:nix",
-    "@crate_index//:regex",
+    "@crate_index//:regex-lite",
     "@crate_index//:strum",
     "@crate_index//:sysinfo",
     "@crate_index//:systemd",

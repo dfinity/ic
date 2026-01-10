@@ -35,7 +35,7 @@ object = { workspace = true, optional = true }
 once_cell = "1.8"
 prometheus = { workspace = true }
 rayon = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }

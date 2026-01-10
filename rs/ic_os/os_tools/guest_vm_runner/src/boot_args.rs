@@ -1,6 +1,6 @@
 use anyhow::Result;
 use anyhow::bail;
-use regex::Regex;
+use regex_lite::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
 

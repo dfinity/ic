@@ -16,7 +16,7 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:pprof",
         "@crate_index//:prost_0_12",
-        "@crate_index//:regex",
+        "@crate_index//:regex-lite",
         "@crate_index//:thiserror",
         "@crate_index//:tokio",
     ],

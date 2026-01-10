@@ -2658,7 +2658,7 @@ dependencies = [
  "macaddr",
  "network",
  "once_cell",
- "regex",
+ "regex-lite",
  "rust-ini",
  "serde",
  "serde_json",
@@ -2800,7 +2800,7 @@ dependencies = [
  "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
- "regex",
+ "regex-lite",
  "slog",
  "tokio",
 ]
@@ -5459,7 +5459,7 @@ name = "grub"
 version = "1.0.0"
 dependencies = [
  "ic-sys",
- "regex",
+ "regex-lite",
  "strum 0.26.3",
  "tempfile",
  "thiserror 2.0.17",
@@ -5594,7 +5594,7 @@ dependencies = [
  "macaddr",
  "memchr",
  "nix 0.24.3",
- "regex",
+ "regex-lite",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "sysinfo",
@@ -5618,7 +5618,7 @@ dependencies = [
  "config_types",
  "indoc 1.0.9",
  "network",
- "regex",
+ "regex-lite",
  "utils",
 ]
 
@@ -6012,7 +6012,7 @@ dependencies = [
  "itertools 0.12.1",
  "manual_guestos_recovery",
  "network",
- "regex",
+ "regex-lite",
  "utils",
 ]
 
@@ -6932,7 +6932,7 @@ dependencies = [
  "rand 0.8.5",
  "rate-limits-api",
  "ratelimit",
- "regex",
+ "regex-lite",
  "reqwest 0.12.24",
  "rustls 0.23.27",
  "salt-sharing-api",
@@ -7343,7 +7343,7 @@ dependencies = [
  "prometheus 0.13.4",
  "rand 0.8.5",
  "rayon",
- "regex",
+ "regex-lite",
  "rstest",
  "serde",
  "serde_bytes",
@@ -9806,7 +9806,7 @@ dependencies = [
  "maplit",
  "predicates",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "tempfile",
 ]
 
@@ -11307,7 +11307,7 @@ dependencies = [
  "ic-http-types",
  "ic-management-canister-types 0.5.0",
  "pocket-ic",
- "regex",
+ "regex-lite",
 ]
 
 [[package]]
@@ -11598,7 +11598,7 @@ dependencies = [
  "humantime",
  "ic-nervous-system-proto",
  "lazy_static",
- "regex",
+ "regex-lite",
  "serde",
  "serde_yaml",
 ]
@@ -12731,7 +12731,7 @@ dependencies = [
  "lazy_static",
  "pprof",
  "prost 0.12.6",
- "regex",
+ "regex-lite",
  "thiserror 2.0.17",
  "tokio",
 ]
@@ -13481,7 +13481,7 @@ dependencies = [
  "predicates",
  "prometheus 0.13.4",
  "rand 0.8.5",
- "regex",
+ "regex-lite",
  "slog",
  "tempfile",
  "tikv-jemalloc-ctl",
@@ -14890,7 +14890,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "regex",
+ "regex-lite",
  "registry-canister",
  "reqwest 0.12.24",
  "ring 0.17.14",
@@ -15902,7 +15902,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rate-limits-api",
- "regex",
+ "regex-lite",
  "registry-canister",
  "salt-sharing-api",
  "slog",
@@ -17605,7 +17605,7 @@ checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 name = "linux_kernel_command_line"
 version = "0.9.0"
 dependencies = [
- "regex",
+ "regex-lite",
 ]
 
 [[package]]
@@ -18337,7 +18337,7 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "prost 0.13.4",
- "regex",
+ "regex-lite",
  "reqwest 0.12.24",
  "slog",
 ]
@@ -18352,7 +18352,7 @@ dependencies = [
  "macaddr",
  "ping",
  "rayon",
- "regex",
+ "regex-lite",
  "serde",
  "serde_json",
  "serde_with 1.14.0",
@@ -21059,7 +21059,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "k256 0.13.4",
  "rate-limits-api",
- "regex",
+ "regex-lite",
  "serde",
  "serde_yaml",
  "tokio",
@@ -22976,7 +22976,7 @@ dependencies = [
  "indoc 1.0.9",
  "linux_kernel_command_line",
  "partition_tools",
- "regex",
+ "regex-lite",
  "tempfile",
  "tokio",
 ]

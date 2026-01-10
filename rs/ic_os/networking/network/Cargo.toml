@@ -10,7 +10,7 @@ deterministic_ips = { path = "../deterministic_ips" }
 macaddr = { workspace = true }
 ping = { version = "^0.5.0" }
 rayon = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { version = "^1.6.2" }

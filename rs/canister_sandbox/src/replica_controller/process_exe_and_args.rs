@@ -304,7 +304,7 @@ fn make_cargo_argv_for_testing(
 fn get_profile_args(current_exe: Option<PathBuf>) -> Vec<String> {
     lazy_static::lazy_static! {
         // Match current_exe directory name after the `/target/`
-        static ref PROFILE_PARSE_RE: regex::Regex = regex::Regex::new(r"/target/(.+/)?(debug|release|release-lto)/").unwrap();
+        static ref PROFILE_PARSE_RE: regex_lite::Regex = regex_lite::Regex::new(r"/target/(.+/)?(debug|release|release-lto)/").unwrap();
     }
     if let Some(current_exe) = current_exe {
         let current_exe = current_exe.to_string_lossy().to_string();

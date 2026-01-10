@@ -55,7 +55,7 @@ num_cpus = { workspace = true }
 pprof = { workspace = true, optional = true }
 prometheus = { workspace = true }
 rand = { workspace = true }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tikv-jemalloc-ctl = { workspace = true }

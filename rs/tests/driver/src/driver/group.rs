@@ -33,7 +33,7 @@ use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
-use regex::Regex;
+use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, trace};
 use std::path::PathBuf;

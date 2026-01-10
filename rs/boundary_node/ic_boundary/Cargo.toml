@@ -63,7 +63,7 @@ rand = { workspace = true }
 ratelimit = "0.9.1"
 rate-limits-api = { path = "../rate_limits/api" }
 salt-sharing-api = { path = "../salt_sharing/api" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde = { workspace = true }

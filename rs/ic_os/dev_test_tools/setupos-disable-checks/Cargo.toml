@@ -9,6 +9,6 @@ clap = { workspace = true }
 indoc = { workspace = true }
 linux_kernel_command_line = { path = "../../linux_kernel_command_line" }
 partition_tools = { path = "../../build_tools/partition_tools" }
-regex = { workspace = true }
+regex-lite = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
