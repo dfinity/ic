@@ -3343,10 +3343,6 @@ impl StateManager for StateManagerImpl {
         if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
             let prev_hash = &prev_metadata.certified_state_hash;
             let hash = &certification_metadata.certified_state_hash;
-            assert_eq!(
-                prev_hash, hash,
-                "Committed state @{height} twice with different hashes: first with {prev_hash:?}, then with {hash:?}",
-            );
             if prev_hash != hash {
                 if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
                     error!(
