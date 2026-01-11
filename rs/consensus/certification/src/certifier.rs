@@ -144,11 +144,11 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(|(height, hash)| {
-                match (certification_pool.certification_at_height(height), hash) {
+            .filter_map(
+                |(height, hash)| match certification_pool.certification_at_height(height) {
                     // if we have a valid certification, deliver it to the state manager and skip
                     // the pair
-                    (Some(certification), _) => {
+                    Some(certification) => {
                         // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
                         // change set for the artifact processor to handle.
                         self.state_manager
@@ -167,9 +167,9 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                         None
                     }
                     // return this pair to be signed by the current replica
-                    (None, hash) => Some((height, hash)),
-                }
-            })
+                    _ => Some((height, hash)),
+                },
+            )
             .collect();
         let state_hashes_to_certify: Vec<_> = state_heights_and_hashes_to_certify
             .iter()

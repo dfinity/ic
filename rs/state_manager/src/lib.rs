@@ -460,12 +460,12 @@ impl StateManagerMetrics {
 
         let no_clone_count = metrics_registry.int_counter(
             "state_manager_no_clone_count",
-            "Number of committed states that were not cloned and stored as snapshots.",
+            "Number of heights whose states were not cloned and not stored by this node.",
         );
 
         let no_hash_count = metrics_registry.int_counter(
             "state_manager_no_hash_count",
-            "Number of committed states that were not hashed as their hash was already available.",
+            "Number of heights whose states were not hashed by this node.",
         );
 
         Self {
@@ -830,8 +830,8 @@ struct CertificationMetadata {
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
-    /// Set to `true` if `StateManagerImpl::commit_and_certify`
-    /// pushes the state snapshot to `StateManagerImpl::states`.
+    /// Set to `true` if the corresponding state snapshot
+    /// is pushed to `StateManagerImpl::states`.
     state_snapshot_available: bool,
 }
 
@@ -1954,7 +1954,7 @@ impl StateManagerImpl {
             assert_eq!(
                 state.metadata.prev_state_hash,
                 Some(CryptoHashOfPartialState::from(
-                    metadata.certified_state_hash.clone()
+                    metadata.certified_state_hash.clone(),
                 ))
             );
         } else {
@@ -2131,12 +2131,6 @@ impl StateManagerImpl {
             "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
         );
 
-        let latest_subnet_certified_height =
-            update_latest_height(&self.latest_subnet_certified_height, last_height_to_keep);
-        self.metrics
-            .latest_subnet_certified_height
-            .set(latest_subnet_certified_height as i64);
-
         // In debug builds we store the latest_state_height here so
         // that we can verify later that this height is retained.
         #[cfg(debug_assertions)]
@@ -2153,6 +2147,12 @@ impl StateManagerImpl {
             .filter(|h| state_heights.contains(h))
             .copied()
             .collect();
+
+        let latest_subnet_certified_height =
+            update_latest_height(&self.latest_subnet_certified_height, last_height_to_keep);
+        self.metrics
+            .latest_subnet_certified_height
+            .set(latest_subnet_certified_height as i64);
 
         let heights_to_remove = std::ops::Range {
             start: Height::new(1),
@@ -2673,7 +2673,7 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let hash_at = |tip_height: Height, certifications_metadata: &mut CertificationsMetadata| {
+        let hash_at = |tip_height: Height, certifications_metadata: &CertificationsMetadata| {
             if tip_height > Self::INITIAL_STATE_HEIGHT {
                 let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
                     fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
@@ -2704,11 +2704,10 @@ impl StateManager for StateManagerImpl {
         let (target_snapshot, target_hash) = match states.snapshots.back() {
             Some(snapshot) if snapshot.height > tip_height => (
                 snapshot.clone(),
-                hash_at(snapshot.height, &mut states.certifications_metadata),
+                hash_at(snapshot.height, &states.certifications_metadata),
             ),
             _ => {
-                tip.metadata.prev_state_hash =
-                    hash_at(tip_height, &mut states.certifications_metadata);
+                tip.metadata.prev_state_hash = hash_at(tip_height, &states.certifications_metadata);
                 return (tip_height, tip);
             }
         };
