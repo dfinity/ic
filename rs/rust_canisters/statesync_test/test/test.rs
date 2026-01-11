@@ -1,7 +1,8 @@
 use candid::{Decode, Encode};
 use canister_test::*;
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{ErrorCode, StateMachine};
+use statesync_test::CanisterCreationStatus;
 
 fn deploy_state_sync_test_canister(env: &StateMachine) -> CanisterId {
     let features = [];
@@ -64,15 +65,54 @@ fn test_create_many_canisters() {
 
     let seed_canister_id = deploy_state_sync_test_canister(&env);
 
+    let canister_creation_status = || {
+        let result = env
+            .query(
+                seed_canister_id,
+                "canister_creation_status",
+                Encode!(&()).unwrap(),
+            )
+            .unwrap();
+        let bytes = assert_reply(result);
+        Decode!(&bytes, CanisterCreationStatus).unwrap()
+    };
+
+    assert!(matches!(
+        canister_creation_status(),
+        CanisterCreationStatus::Idle
+    ));
+
     let num_canisters: u64 = 1000;
-    let result = env
+    let msg_id = env.send_ingress(
+        PrincipalId::new_anonymous(),
+        seed_canister_id,
+        "create_many_canisters",
+        Encode!(&num_canisters).unwrap(),
+    );
+
+    assert!(
+        matches!(canister_creation_status(), CanisterCreationStatus::InProgress(n) if n == num_canisters)
+    );
+
+    let err = env
         .execute_ingress(
             seed_canister_id,
             "create_many_canisters",
-            Encode!(&num_canisters).unwrap(),
+            Encode!(&42_u64).unwrap(),
         )
-        .unwrap();
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().contains(&format!(
+        "Canister creation of {num_canisters} canisters is already in progress!"
+    )));
+
+    let result = env.await_ingress(msg_id, 100).unwrap();
     let _ = assert_reply(result);
+
+    assert!(matches!(
+        canister_creation_status(),
+        CanisterCreationStatus::Done
+    ));
 
     // We created `num_canisters` in addition to the seed canister.
     assert_eq!(env.num_running_canisters(), num_canisters + 1);
