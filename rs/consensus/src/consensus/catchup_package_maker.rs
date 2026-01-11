@@ -175,10 +175,6 @@ impl CatchUpPackageMaker {
         // Skip if the state referenced by finalization tip has not caught up to
         // this height. This is to increase the chance that states are available to
         // validate payloads at the chain tip.
-        if pool.get_finalized_tip().context.certified_height < height {
-            return None;
-        }
-
         if self.state_manager.latest_certified_height() < height {
             return None;
         }
