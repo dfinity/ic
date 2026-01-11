@@ -1025,29 +1025,28 @@ impl IcNodeSnapshot {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
+        let agent = self.build_default_agent_async().await;
 
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(cycles_amount)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait()
+            .await
+            .expect("Couldn't create canister with provisional AP")
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .expect("Couldn't install canister");
+        canister_id
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {

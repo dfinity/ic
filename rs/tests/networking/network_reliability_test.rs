@@ -18,6 +18,7 @@ Runbook::
 end::catalog[] */
 
 use anyhow::Result;
+use futures::future::join_all;
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -166,14 +167,16 @@ pub async fn test(env: TestEnv, config: Config) {
     let agents_app: Vec<_> = subnet_app
         .nodes()
         .take(workload_app_nodes_count)
-        .map(|node| {
+        .map(async |node| {
             debug!(
                 &log,
                 "Node with id={} from APP will be used for the workload.", node.node_id
             );
-            node.with_default_agent(|agent| async move { agent })
+            node.build_default_agent_async().await
         })
         .collect();
+    let agents_app = join_all(agents_app).await;
+
     assert!(
         agents_app.len() == workload_app_nodes_count,
         "Number of nodes and agents do not match."
@@ -263,8 +266,9 @@ pub async fn test(env: TestEnv, config: Config) {
     let agent_app = subnet_app
         .nodes()
         .next()
-        .map(|node| node.with_default_agent(|agent| async move { agent }))
-        .unwrap();
+        .unwrap()
+        .build_default_agent_async()
+        .await;
     info!(
         &log,
         "Step 6: Assert min counter value on both canisters has been reached ... "

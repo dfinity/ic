@@ -65,7 +65,7 @@ pub async fn test(env: TestEnv) {
         "Counter canister with id={counter_canister_id} installed on subnet with id={}",
         app_node.subnet_id().unwrap()
     );
-    let app_agent = app_node.build_default_agent();
+    let app_agent = app_node.build_default_agent_async().await;
     let ucan_id = install_universal_canister(&app_agent, app_node.effective_canister_id()).await;
     // We use universal canister to verify the identity of the caller for query and update calls performed with delegation.
     info!(
@@ -122,7 +122,7 @@ pub async fn test(env: TestEnv) {
         } => panic!("Query call was rejected: code={error_code}, message={reject_message}"),
     }
     info!(log, "Asserting canister counter has value=1");
-    let app_agent = app_node.build_default_agent();
+    let app_agent = app_node.build_default_agent_async().await;
     assert_canister_counter_with_retries(
         &log,
         &app_agent,

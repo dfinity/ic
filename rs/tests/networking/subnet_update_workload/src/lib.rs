@@ -294,13 +294,15 @@ pub async fn test(
     let nns_agent = nns_subnet
         .nodes()
         .next()
-        .map(|node| node.with_default_agent(|agent| async move { agent }))
-        .unwrap();
+        .unwrap()
+        .build_default_agent_async()
+        .await;
     let app_agent = app_subnet
         .nodes()
         .next()
-        .map(|node| node.with_default_agent(|agent| async move { agent }))
-        .unwrap();
+        .unwrap()
+        .build_default_agent_async()
+        .await;
     assert_canister_counter_with_retries(
         &log,
         &nns_agent,

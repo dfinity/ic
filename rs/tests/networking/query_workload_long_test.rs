@@ -108,7 +108,7 @@ pub async fn test(env: TestEnv, rps: usize, runtime: Duration) {
     );
     // Workload sends messages to canister via node agents.
     // As we talk to a single node, we create one agent, accordingly.
-    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let app_agent = app_node.build_default_agent_async().await;
     // Spawn a workload against counter canister.
     let handle_workload = {
         let requests = vec![GenericRequest::new(
