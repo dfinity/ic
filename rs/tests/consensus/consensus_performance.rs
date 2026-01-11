@@ -62,7 +62,6 @@
 use ic_consensus_system_test_utils::performance::{persist_metrics, setup_jaeger_vm};
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::async_systest;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::get_current_branch_version;
 use ic_system_test_driver::driver::{
@@ -73,6 +72,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
+use ic_system_test_driver::systest;
 use ic_system_test_driver::util::get_app_subnet_and_node;
 use ic_types::Height;
 
@@ -149,7 +149,7 @@ fn setup(env: TestEnv) {
     app_subnet.apply_network_settings(NETWORK_SIMULATION);
 }
 
-async fn test(env: TestEnv, message_size: usize, rps: f64) {
+fn test(env: TestEnv, message_size: usize, rps: f64) {
     let logger = env.logger();
 
     // create the runtime that lives until this variable is dropped.
@@ -166,10 +166,14 @@ async fn test(env: TestEnv, message_size: usize, rps: f64) {
         .build()
         .unwrap();
 
-    let test_metrics =
-        ic_consensus_system_test_utils::performance::test(env, message_size, rps, true)
-            .await
-            .unwrap();
+    let test_metrics = rt
+        .block_on(ic_consensus_system_test_utils::performance::test(
+            env,
+            message_size,
+            rps,
+            true,
+        ))
+        .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
         let branch_version = get_current_branch_version();
 
@@ -186,20 +190,20 @@ async fn test(env: TestEnv, message_size: usize, rps: f64) {
     }
 }
 
-async fn test_few_small_messages(env: TestEnv) {
-    test(env, 1, 1.0).await
+fn test_few_small_messages(env: TestEnv) {
+    test(env, 1, 1.0)
 }
 
-async fn test_small_messages(env: TestEnv) {
-    test(env, 4_000, 500.0).await
+fn test_small_messages(env: TestEnv) {
+    test(env, 4_000, 500.0)
 }
 
-async fn test_few_large_messages(env: TestEnv) {
-    test(env, 1_999_000, 1.0).await
+fn test_few_large_messages(env: TestEnv) {
+    test(env, 1_999_000, 1.0)
 }
 
-async fn test_large_messages(env: TestEnv) {
-    test(env, 950_000, 4.0).await
+fn test_large_messages(env: TestEnv) {
+    test(env, 950_000, 4.0)
 }
 
 fn teardown(env: TestEnv) {
@@ -226,10 +230,10 @@ fn main() -> Result<()> {
         // of 10 minutes to setup this large testnet so let's increase the timeout:
         .with_timeout_per_test(Duration::from_secs(60 * 30))
         .with_setup(setup)
-        .add_test(async_systest!(test_few_small_messages))
-        .add_test(async_systest!(test_small_messages))
-        .add_test(async_systest!(test_few_large_messages))
-        .add_test(async_systest!(test_large_messages))
+        .add_test(systest!(test_few_small_messages))
+        .add_test(systest!(test_small_messages))
+        .add_test(systest!(test_few_large_messages))
+        .add_test(systest!(test_large_messages))
         .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
