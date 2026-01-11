@@ -340,7 +340,8 @@ mod tests {
 
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();
-            block.context.certified_height = block.height();
+            let block_height = block.height();
+            block.context.certified_height = block_height;
             proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
             pool.insert_validated(proposal.clone());
             pool.notarize(&proposal);
@@ -350,15 +351,23 @@ mod tests {
             assert!(cup_maker.on_state_change(&PoolReader::new(&pool)).is_none());
 
             // 5. Beacon now exists, we can make a new CUP share
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(block_height);
             pool.insert_validated(pool.make_next_beacon());
             let share = cup_maker
                 .on_state_change(&PoolReader::new(&pool))
                 .expect("Expecting CatchUpPackageShare");
 
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(block_height);
             assert_eq!(&share.content.block, proposal.content.get_hash());
             assert_eq!(
                 share.content.state_hash,
-                state_manager.get_state_hash_at(Height::from(0)).unwrap()
+                state_manager.get_state_hash_at(block_height).unwrap()
             );
             assert_eq!(
                 share
@@ -461,7 +470,8 @@ mod tests {
 
             let mut proposal = pool.make_next_block();
             let block = proposal.content.as_mut();
-            block.context.certified_height = block.height();
+            let block_height = block.height();
+            block.context.certified_height = block_height;
 
             let idkg = empty_idkg_payload(subnet_test_id(0));
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
@@ -476,14 +486,22 @@ mod tests {
 
             pool.advance_round_with_block(&proposal);
 
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(block_height);
             let share = cup_maker
                 .on_state_change(&PoolReader::new(&pool))
                 .expect("Expecting CatchUpPackageShare");
 
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(block_height);
             assert_eq!(&share.content.block, proposal.content.get_hash());
             assert_eq!(
                 share.content.state_hash,
-                state_manager.get_state_hash_at(height).unwrap()
+                state_manager.get_state_hash_at(block_height).unwrap()
             );
             // Since the quadruple using registry version 1 wasn't matched, the oldest one in use
             // by the replicated state should be the registry version of quadruple 3, which is 2.
