@@ -798,16 +798,15 @@ impl TryFrom<pb::StateMetadata> for StateMetadata {
 #[derive(Debug)]
 struct CertificationMetadata {
     /// Fully materialized hash tree built from the part of the state that is
-    /// certified every round.  Dropped as soon as a higher state is certified.
-    hash_tree: Option<Arc<HashTree>>,
+    /// certified every round and wall time when the tree was built.
+    /// Dropped as soon as a higher state is certified.
+    hash_tree: Option<(Arc<HashTree>, Instant)>,
     /// Root hash of the tree above. It's stored even if the hash tree is
     /// dropped.
     certified_state_hash: CryptoHash,
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
-    /// Wall time when certification was requested.
-    certification_requested_at: Instant,
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
@@ -1756,7 +1755,7 @@ impl StateManagerImpl {
             .iter()
             .rev()
             .find_map(|(height, metadata)| {
-                let hash_tree = metadata.hash_tree.as_ref()?;
+                let (hash_tree, _) = metadata.hash_tree.as_ref()?;
                 metadata
                     .certification
                     .clone()
@@ -1816,10 +1815,9 @@ impl StateManagerImpl {
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
         Ok(CertificationMetadata {
-            hash_tree: Some(Arc::new(hash_tree)),
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certified_state_hash,
             certification: None,
-            certification_requested_at: Instant::now(),
         })
     }
 
@@ -1980,9 +1978,8 @@ impl StateManagerImpl {
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
-            hash_tree: Some(Arc::new(hash_tree)),
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certification: None,
-            certification_requested_at: Instant::now(),
         };
 
         let mut states = self.states.write();
@@ -2939,9 +2936,12 @@ impl StateManager for StateManagerImpl {
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
-            self.metrics
-                .certification_duration
-                .observe(metadata.certification_requested_at.elapsed().as_secs_f64());
+
+            if let Some((_, certification_requested_at)) = metadata.hash_tree {
+                self.metrics
+                    .certification_duration
+                    .observe(certification_requested_at.elapsed().as_secs_f64());
+            }
 
             metadata.certification = Some(certification);
 
@@ -2949,7 +2949,7 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
             {
-                if let Some(tree) = certification_metadata.hash_tree.take() {
+                if let Some((tree, _)) = certification_metadata.hash_tree.take() {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
