@@ -82,13 +82,16 @@ fn test_create_many_canisters() {
         CanisterCreationStatus::Idle
     ));
 
+    // Kick off canister creation.
     let num_canisters: u64 = 1000;
-    let msg_id = env.send_ingress(
-        PrincipalId::new_anonymous(),
-        seed_canister_id,
-        "create_many_canisters",
-        Encode!(&num_canisters).unwrap(),
-    );
+    let result = env
+        .execute_ingress(
+            seed_canister_id,
+            "create_many_canisters",
+            Encode!(&num_canisters).unwrap(),
+        )
+        .unwrap();
+    let _ = assert_reply(result);
 
     // Trying to create a different number of canisters
     // while canister creation is in progress
@@ -102,7 +105,7 @@ fn test_create_many_canisters() {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert!(err.description().contains(&format!(
-        "Canister creation of {num_canisters} canisters is already in progress!"
+        "Canister creation of a different number {num_canisters} of canisters is already in progress!"
     )));
 
     // Trying to create the same number of canisters
@@ -120,13 +123,24 @@ fn test_create_many_canisters() {
         matches!(canister_creation_status(), CanisterCreationStatus::InProgress(n) if n == num_canisters)
     );
 
-    let result = env.await_ingress(msg_id, 100).unwrap();
-    let _ = assert_reply(result);
+    while !matches!(canister_creation_status(), CanisterCreationStatus::Done(_)) {
+        env.tick();
+    }
 
-    assert!(matches!(
-        canister_creation_status(),
-        CanisterCreationStatus::Done
-    ));
+    // Trying to create a different number of canisters
+    // while canister creation is in progress
+    // results in a trap.
+    let err = env
+        .execute_ingress(
+            seed_canister_id,
+            "create_many_canisters",
+            Encode!(&42_u64).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().contains(&format!(
+        "Canister creation of a different number {num_canisters} of canisters is already done!"
+    )));
 
     // Trying to create the same number of canisters
     // succeeds immediately since the call is idempotent.
@@ -141,7 +155,7 @@ fn test_create_many_canisters() {
 
     assert!(matches!(
         canister_creation_status(),
-        CanisterCreationStatus::Done
+        CanisterCreationStatus::Done(_)
     ));
 
     // We created `num_canisters` in addition to the seed canister.

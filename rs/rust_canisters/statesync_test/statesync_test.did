@@ -1,7 +1,7 @@
 type canister_creation_status = variant {
   idle;
   in_progress : nat64;
-  done;
+  done : nat64;
 };
 
 service : {

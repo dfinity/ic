@@ -1,4 +1,5 @@
 use futures::{StreamExt, stream};
+use ic_cdk::futures::spawn;
 use ic_cdk::management_canister::{
     ProvisionalCreateCanisterWithCyclesArgs, provisional_create_canister_with_cycles,
 };
@@ -96,10 +97,20 @@ fn set_canister_creation_status(n: u64) -> bool {
             if n == num_canisters {
                 false
             } else {
-                panic!("Canister creation of {num_canisters} canisters is already in progress!");
+                panic!(
+                    "Canister creation of a different number {num_canisters} of canisters is already in progress!"
+                );
             }
         }
-        CanisterCreationStatus::Done => false,
+        CanisterCreationStatus::Done(num_canisters) => {
+            if n == num_canisters {
+                false
+            } else {
+                panic!(
+                    "Canister creation of a different number {num_canisters} of canisters is already done!"
+                );
+            }
+        }
     }
 }
 
@@ -109,29 +120,32 @@ async fn create_many_canisters(n: u64) {
         return;
     }
 
-    let mut futs = vec![];
+    #[allow(clippy::disallowed_methods)]
+    spawn(async move {
+        let mut futs = vec![];
 
-    for _ in 0..n {
-        let fut = async {
-            let create_args = ProvisionalCreateCanisterWithCyclesArgs {
-                amount: None,
-                settings: None,
-                specified_id: None,
+        for _ in 0..n {
+            let fut = async {
+                let create_args = ProvisionalCreateCanisterWithCyclesArgs {
+                    amount: None,
+                    settings: None,
+                    specified_id: None,
+                };
+                provisional_create_canister_with_cycles(&create_args)
+                    .await
+                    .expect("Failed to create canister");
             };
-            provisional_create_canister_with_cycles(&create_args)
-                .await
-                .expect("Failed to create canister");
-        };
-        futs.push(fut);
-    }
+            futs.push(fut);
+        }
 
-    stream::iter(futs)
-        .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
-        .collect::<Vec<_>>()
-        .await;
+        stream::iter(futs)
+            .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
+            .collect::<Vec<_>>()
+            .await;
 
-    let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
-    *canister_creation_status_guard = CanisterCreationStatus::Done;
+        let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
+        *canister_creation_status_guard = CanisterCreationStatus::Done(n);
+    });
 }
 
 #[query]

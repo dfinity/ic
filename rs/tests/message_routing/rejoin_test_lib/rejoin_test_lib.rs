@@ -328,7 +328,7 @@ async fn deploy_canisters_for_long_rounds(
                         .expect("Failed to candid decode canister creation status");
                     match status {
                         CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
-                        CanisterCreationStatus::Done => {
+                        CanisterCreationStatus::Done(_) => {
                             break;
                         }
                     }

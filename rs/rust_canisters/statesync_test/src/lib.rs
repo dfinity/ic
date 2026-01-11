@@ -8,5 +8,5 @@ pub enum CanisterCreationStatus {
     #[serde(rename = "in_progress")]
     InProgress(u64),
     #[serde(rename = "done")]
-    Done,
+    Done(u64),
 }
