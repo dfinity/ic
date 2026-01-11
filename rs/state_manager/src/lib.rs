@@ -3131,6 +3131,22 @@ impl StateManager for StateManagerImpl {
 
         self.populate_extra_metadata(&mut state, height);
 
+        if let CertificationScope::Metadata = scope {
+            // We want to balance writing too many overlay files with having too many unflushed pages at
+            // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+            // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+            // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+            if let Some(batch_summary) = batch_summary
+                && batch_summary
+                    .next_checkpoint_height
+                    .get()
+                    .saturating_sub(height.get())
+                    == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+            {
+                flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
+            }
+        }
+
         let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
             None;
         let mut follow_up_tip_requests = Vec::new();
@@ -3149,23 +3165,7 @@ impl StateManager for StateManagerImpl {
 
                 state
             }
-            CertificationScope::Metadata => {
-                // We want to balance writing too many overlay files with having too many unflushed pages at
-                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                if let Some(batch_summary) = batch_summary
-                    && batch_summary
-                        .next_checkpoint_height
-                        .get()
-                        .saturating_sub(height.get())
-                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                {
-                    flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
-                }
-
-                Arc::new(state)
-            }
+            CertificationScope::Metadata => Arc::new(state),
         };
 
         let certification_metadata =
