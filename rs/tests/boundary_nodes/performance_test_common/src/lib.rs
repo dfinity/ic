@@ -153,7 +153,8 @@ pub async fn query_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None).await;
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
 
     let api_bn_agent = env
         .topology_snapshot()
