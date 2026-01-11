@@ -48,3 +48,7 @@ path = "replicable_mock_test.rs"
 [[bin]]
 name = "remote_replicable_mock_test"
 path = "remote_replicable_mock_test.rs"
+
+[[bin]]
+name = "ii_delegation_test"
+path = "ii_delegation_test.rs"
