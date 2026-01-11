@@ -18,6 +18,7 @@ use anyhow::{Result, bail};
 use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::async_systest;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
@@ -25,7 +26,6 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, secs},
 };
-use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use libflate::gzip::Decoder;
 use nns_dapp::{
@@ -37,7 +37,7 @@ use url::Url;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
     Ok(())
 }
@@ -120,11 +120,11 @@ fn get_html(env: &TestEnv, ic_gateway_url: Url, canister_id: Principal, dapp_anc
     .unwrap_or_else(|_| panic!("{} should deliver a proper HTML page!", dapp_url.as_str()));
 }
 
-pub fn test(env: TestEnv) {
+pub async fn test(env: TestEnv) {
     let ic_gateway = env.get_deployed_ic_gateway(IC_GATEWAY_VM_NAME).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
     let (ii_canister_id, nns_dapp_canister_id) =
-        install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
+        install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None).await;
     let ii_anchor = "<title>Internet Identity</title>";
     let nns_dapp_anchor = "<title>Network Nervous System</title>";
     get_html(&env, ic_gateway_url.clone(), ii_canister_id, ii_anchor);

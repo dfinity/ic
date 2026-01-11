@@ -143,7 +143,11 @@ pub fn setup(env: TestEnv) {
     env.sync_with_prometheus();
 
     // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
+    block_on(install_ii_nns_dapp_and_subnet_rental(
+        &env,
+        &ic_gateway_url,
+        None,
+    ));
 
     // install the Exchange Rate Canister
     let topology = env.topology_snapshot();
@@ -174,9 +178,9 @@ pub fn setup(env: TestEnv) {
     let xrc_node = xrc_subnet.nodes().next().unwrap();
     // we set the exchange rate to 12 XDR per 1 ICP
     let xrc_payload = new_icp_cxdr_mock_exchange_rate_canister_init_payload(12_000_000_000);
-    let xrc_canister_id = xrc_node.create_and_install_canister_with_arg(
+    let xrc_canister_id = block_on(xrc_node.create_and_install_canister_with_arg(
         &env::var("XRC_WASM_PATH").expect("XRC_WASM_PATH not set"),
         Some(Encode!(&xrc_payload).unwrap()),
-    );
+    ));
     assert_eq!(xrc_canister_id, default_xrc_principal_id.into());
 }

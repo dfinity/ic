@@ -27,6 +27,7 @@ use ic_agent::identity::BasicIdentity;
 use ic_agent::{Agent, Identity};
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::async_systest;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
@@ -34,7 +35,6 @@ use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot,
 };
-use ic_system_test_driver::systest;
 use ic_system_test_driver::util::delegations::*;
 use ic_system_test_driver::util::{
     MetricsFetcher, agent_with_identity, block_on, random_ed25519_identity,
@@ -65,7 +65,7 @@ const NUM_CALLS_PER_USER_RANGE: RangeInclusive<usize> = 5..=10;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
 
     Ok(())
@@ -88,12 +88,11 @@ pub fn setup(env: TestEnv) {
     });
 }
 
-pub fn test(env: TestEnv) {
+pub async fn test(env: TestEnv) {
     let ii_node = env.get_first_healthy_system_but_not_nns_node_snapshot();
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let ii_canister_id = install_ii_canister(&env, &ii_node);
-    let ctr_canister_id = install_counter_canister(&env, &app_node);
-
+    let ii_canister_id = install_ii_canister(&env, &ii_node).await;
+    let ctr_canister_id = install_counter_canister(&env, &app_node).await;
     let mut rng = ReproducibleRng::new();
     info!(env.logger(), "Generated a ReproducibleRng\n{rng:?}");
 
@@ -141,11 +140,13 @@ pub fn test(env: TestEnv) {
     });
 }
 
-fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
-    let ii_canister_id = ii_node.create_and_install_canister_with_arg(
-        &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
-        None,
-    );
+async fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
+    let ii_canister_id = ii_node
+        .create_and_install_canister_with_arg(
+            &env::var("II_WASM_PATH").expect("II_WASM_PATH not set"),
+            None,
+        )
+        .await;
     info!(
         env.logger(),
         "II canister with id={ii_canister_id} installed on subnet with id={}",
@@ -154,8 +155,10 @@ fn install_ii_canister(env: &TestEnv, ii_node: &IcNodeSnapshot) -> Principal {
     ii_canister_id
 }
 
-fn install_counter_canister(env: &TestEnv, app_node: &IcNodeSnapshot) -> Principal {
-    let canister_id = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+async fn install_counter_canister(env: &TestEnv, app_node: &IcNodeSnapshot) -> Principal {
+    let canister_id = app_node
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     info!(
         env.logger(),
         "Counter canister with id={canister_id} installed on subnet with id={}",

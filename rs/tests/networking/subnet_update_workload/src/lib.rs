@@ -34,7 +34,7 @@ use ic_system_test_driver::{
         },
     },
     util::{
-        agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+        agent_observes_canister_module, assert_canister_counter_with_retries,
         spawn_round_robin_workload_engine,
     },
 };
@@ -122,7 +122,7 @@ pub fn setup(
 // size of the payload, duration of the test, the requests can be sent
 // to replica or boundary nodes and the required success ratio can be
 // adjusted.
-pub fn test(
+pub async fn test(
     env: TestEnv,
     rps: usize,
     payload_size_bytes: usize,
@@ -148,12 +148,14 @@ pub fn test(
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     let nns_canister = nns_subnet
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     info!(
         &log,
         "Installation of counter canisters on both subnets has succeeded."
@@ -166,40 +168,38 @@ pub fn test(
         &log,
         "Asserting all agents observe the installed canister ..."
     );
-    block_on(async {
-        for agent in nns_agents.iter() {
-            ic_system_test_driver::retry_with_msg_async!(
-                format!("observing NNS canister module {}", nns_canister.to_string()),
-                &log,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
-                || async {
-                    match agent_observes_canister_module(agent, &nns_canister).await {
-                        true => Ok(()),
-                        false => bail!("Canister module not available yet"),
-                    }
+    for agent in nns_agents.iter() {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("observing NNS canister module {}", nns_canister.to_string()),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(agent, &nns_canister).await {
+                    true => Ok(()),
+                    false => bail!("Canister module not available yet"),
                 }
-            )
-            .await
-            .unwrap();
-        }
-        for agent in app_agents.iter() {
-            ic_system_test_driver::retry_with_msg_async!(
-                format!("observing app canister module {}", app_canister.to_string()),
-                &log,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
-                || async {
-                    match agent_observes_canister_module(agent, &app_canister).await {
-                        true => Ok(()),
-                        false => bail!("Canister module not available yet"),
-                    }
+            }
+        )
+        .await
+        .unwrap();
+    }
+    for agent in app_agents.iter() {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("observing app canister module {}", app_canister.to_string()),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(agent, &app_canister).await {
+                    true => Ok(()),
+                    false => bail!("Canister module not available yet"),
                 }
-            )
-            .await
-            .unwrap();
-        }
-    });
+            }
+        )
+        .await
+        .unwrap();
+    }
     info!(&log, "All agents observe the installed canister module.");
     // Spawn one workload per subnet against the counter canister.
     let payload: Vec<u8> = vec![0; payload_size_bytes];
@@ -301,30 +301,26 @@ pub fn test(
         .next()
         .map(|node| node.with_default_agent(|agent| async move { agent }))
         .unwrap();
-    block_on(async {
-        assert_canister_counter_with_retries(
-            &log,
-            &nns_agent,
-            &nns_canister,
-            payload.clone(),
-            min_expected_counter,
-            MAX_CANISTER_READ_RETRIES,
-            CANISTER_READ_RETRY_WAIT,
-        )
-        .await;
-    });
-    block_on(async {
-        assert_canister_counter_with_retries(
-            &log,
-            &app_agent,
-            &app_canister,
-            payload.clone(),
-            min_expected_counter,
-            MAX_CANISTER_READ_RETRIES,
-            CANISTER_READ_RETRY_WAIT,
-        )
-        .await;
-    });
+    assert_canister_counter_with_retries(
+        &log,
+        &nns_agent,
+        &nns_canister,
+        payload.clone(),
+        min_expected_counter,
+        MAX_CANISTER_READ_RETRIES,
+        CANISTER_READ_RETRY_WAIT,
+    )
+    .await;
+    assert_canister_counter_with_retries(
+        &log,
+        &app_agent,
+        &app_canister,
+        payload.clone(),
+        min_expected_counter,
+        MAX_CANISTER_READ_RETRIES,
+        CANISTER_READ_RETRY_WAIT,
+    )
+    .await;
 }
 
 fn create_agents_for_subnet(

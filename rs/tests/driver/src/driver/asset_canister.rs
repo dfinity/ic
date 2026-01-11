@@ -38,19 +38,13 @@ where
         let logger = env.logger();
         let app_node = env.get_first_healthy_application_node_snapshot();
 
-        let canister_id = task::spawn_blocking({
-            let app_node = app_node.clone();
-            let wasm_env_var_name = wasm_env_var_name.to_string();
-            move || {
-                app_node.create_and_install_canister_with_arg(
-                    &env::var(wasm_env_var_name.clone())
-                        .unwrap_or_else(|_| panic!("{wasm_env_var_name} not set")),
-                    None,
-                )
-            }
-        })
-        .await
-        .context("failed to deploy asset canister")?;
+        let canister_id = app_node
+            .create_and_install_canister_with_arg(
+                &env::var(wasm_env_var_name)
+                    .unwrap_or_else(|_| panic!("{wasm_env_var_name} not set")),
+                None,
+            )
+            .await;
 
         let agent = task::spawn_blocking({
             let env = env.clone();

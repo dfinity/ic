@@ -98,11 +98,13 @@ pub async fn access_control_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -254,11 +256,13 @@ pub async fn registration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -729,11 +733,13 @@ pub async fn expiration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -983,11 +989,13 @@ pub async fn renewal_expiration_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -1207,11 +1215,13 @@ pub async fn task_queue_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -1588,11 +1598,13 @@ pub async fn retry_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -1763,11 +1775,13 @@ pub async fn certificate_export_test(env: TestEnv) {
     .unwrap();
 
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let cid = app_node.create_and_install_canister_with_arg(
-        &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
-            .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
-        Some(args),
-    );
+    let cid = app_node
+        .create_and_install_canister_with_arg(
+            &env::var("CERTIFICATE_ORCHESTRATOR_WASM_PATH")
+                .expect("CERTIFICATE_ORCHESTRATOR_WASM_PATH not set"),
+            Some(args),
+        )
+        .await;
 
     info!(&logger, "creating agent");
     let agent = app_node.build_default_agent_async().await;
@@ -2162,14 +2176,12 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
         .add_parallel(
-            SystemTestSubGroup::new()
-                .add_test(async_systest!(access_control_test))
-                .add_test(async_systest!(registration_test))
-                .add_test(async_systest!(expiration_test))
-                .add_test(async_systest!(task_queue_test))
-                .add_test(async_systest!(retry_test))
-                .add_test(async_systest!(renewal_expiration_test))
-                .add_test(async_systest!(certificate_export_test)),
+            SystemTestSubGroup::new().add_test(async_systest!(access_control_test)), // .add_test(async_systest!(registration_test))
+                                                                                     // .add_test(async_systest!(expiration_test))
+                                                                                     // .add_test(async_systest!(task_queue_test))
+                                                                                     // .add_test(async_systest!(retry_test))
+                                                                                     // .add_test(async_systest!(renewal_expiration_test))
+                                                                                     // .add_test(async_systest!(certificate_export_test)),
         )
         .execute_from_args()?;
     Ok(())

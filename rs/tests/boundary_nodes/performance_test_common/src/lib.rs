@@ -73,7 +73,7 @@ pub fn setup(env: TestEnv) {
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
-pub fn update_calls_test(env: TestEnv) {
+pub async fn update_calls_test(env: TestEnv) {
     let rps_min = 50;
     let rps_max = 450;
     let rps_step = 50;
@@ -88,7 +88,8 @@ pub fn update_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
 
     let api_bn_agent = env
         .topology_snapshot()
@@ -137,7 +138,7 @@ pub fn update_calls_test(env: TestEnv) {
 }
 
 // Execute query calls with an increasing req/s rate, against a counter canister via the boundary node agent.
-pub fn query_calls_test(env: TestEnv) {
+pub async fn query_calls_test(env: TestEnv) {
     let rps_min = 500;
     let rps_max = 6500;
     let rps_step = 500;
@@ -152,7 +153,7 @@ pub fn query_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None).await;
 
     let api_bn_agent = env
         .topology_snapshot()

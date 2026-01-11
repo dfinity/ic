@@ -1,5 +1,4 @@
-use std::time::Duration;
-
+use async_trait::async_trait;
 use ic_consensus_system_test_utils::upgrade::bless_replica_version_with_urls;
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_system_test_driver::driver::test_env_api::{
@@ -7,7 +6,7 @@ use ic_system_test_driver::driver::test_env_api::{
 };
 use ic_types::ReplicaVersion;
 use slog::info;
-use tokio::runtime::Handle;
+use std::time::Duration;
 use url::Url;
 
 use super::Step;
@@ -20,11 +19,11 @@ pub struct EnsureElectedVersion {
     pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 }
 
+#[async_trait]
 impl Step for EnsureElectedVersion {
-    fn execute(
+    async fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        rt: Handle,
     ) -> anyhow::Result<()> {
         let elected_versions = env.topology_snapshot().elected_replica_versions()?;
         if elected_versions.iter().any(|v| v == self.version.as_ref()) {
@@ -36,23 +35,24 @@ impl Step for EnsureElectedVersion {
 
         info!(env.logger(), "Upgrade URL: {}", self.url);
 
-        rt.block_on(bless_replica_version_with_urls(
+        bless_replica_version_with_urls(
             &nns_node,
             &self.version,
             vec![self.url.to_string()],
             self.sha256.clone(),
             self.guest_launch_measurements.clone(),
             &env.logger(),
-        ));
+        )
+        .await;
 
         // This call updates the local registry
-        let new_snapshot = rt.block_on(
-            env.topology_snapshot()
-                .block_for_newer_registry_version_within_duration(
-                    Duration::from_secs(10 * 60),
-                    Duration::from_secs(10),
-                ),
-        )?;
+        let new_snapshot = env
+            .topology_snapshot()
+            .block_for_newer_registry_version_within_duration(
+                Duration::from_secs(10 * 60),
+                Duration::from_secs(10),
+            )
+            .await?;
 
         let elected_versions = new_snapshot.elected_replica_versions()?;
 

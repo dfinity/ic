@@ -46,6 +46,7 @@ use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::HasTopologySnapshot,
 };
+use ic_system_test_driver::util::block_on;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, nns_dapp_customizations, set_authorized_subnets,
 };
@@ -80,6 +81,10 @@ pub fn setup(env: TestEnv) {
     let ic_gateway_url = ic_gateway.get_public_url();
     env.sync_with_prometheus();
 
-    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
+    block_on(install_ii_nns_dapp_and_subnet_rental(
+        &env,
+        &ic_gateway_url,
+        None,
+    ));
     set_authorized_subnets(&env);
 }

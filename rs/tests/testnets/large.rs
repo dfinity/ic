@@ -53,6 +53,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::sns_client::add_all_wasms_to_sns_wasm;
+use ic_system_test_driver::util::block_on;
 use nns_dapp::{
     install_ii_nns_dapp_and_subnet_rental, install_sns_aggregator, nns_dapp_customizations,
     set_authorized_subnets, set_sns_subnet,
@@ -130,5 +131,9 @@ pub fn setup(env: TestEnv) {
     add_all_wasms_to_sns_wasm(&env);
 
     // install II, NNS dapp, and Subnet Rental Canister
-    install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, Some(sns_aggregator_canister_id));
+    block_on(install_ii_nns_dapp_and_subnet_rental(
+        &env,
+        &ic_gateway_url,
+        Some(sns_aggregator_canister_id),
+    ));
 }

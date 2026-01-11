@@ -23,6 +23,7 @@ use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_networking_subnet_update_workload::setup;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
@@ -31,7 +32,6 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
-    systest,
     util::spawn_round_robin_workload_engine,
 };
 use slog::{Logger, debug, info};
@@ -69,7 +69,7 @@ pub fn log_max_open_files(log: &Logger) {
 
 // Run a test with configurable number of query requests per second,
 // duration of the test, and the required success ratio.
-pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
+pub async fn test(env: TestEnv, rps: usize, runtime: Duration) {
     let log = env.logger();
     log_max_open_files(&log);
     info!(
@@ -98,7 +98,9 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         "Node with id={} from the Application subnet will be used as a target for the workload.",
         app_node.node_id
     );
-    let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let app_canister = app_node
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     info!(&log, "Installation of counter canister has succeeded.");
     info!(
         &log,
@@ -146,10 +148,13 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
     );
 }
 
+async fn workload_test(env: TestEnv) {
+    test(env, RPS, WORKLOAD_RUNTIME).await;
+}
+
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
         .with_setup(|env| {
             setup(
@@ -161,7 +166,7 @@ fn main() -> Result<()> {
                 vec![HostFeature::Performance],
             )
         })
-        .add_test(systest!(test))
+        .add_test(async_systest!(workload_test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;

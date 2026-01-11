@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-
 use super::Step;
+use async_trait::async_trait;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -22,11 +22,11 @@ pub struct RetireElectedVersions {
 }
 
 // Retire only if the version uses "disk-img"
+#[async_trait]
 impl Step for RetireElectedVersions {
-    fn execute(
+    async fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         let elected_versions = env.topology_snapshot().elected_replica_versions()?;
         let replica_versions = env.topology_snapshot().replica_version_records()?;
@@ -83,7 +83,7 @@ impl Step for RetireElectedVersions {
             return Ok(());
         }
 
-        let proposal_id = rt.block_on(submit_update_elected_replica_versions_proposal(
+        let proposal_id = submit_update_elected_replica_versions_proposal(
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
@@ -92,12 +92,10 @@ impl Step for RetireElectedVersions {
             vec![],
             None,
             versions_to_unelect,
-        ));
+        )
+        .await;
 
-        rt.block_on(vote_execute_proposal_assert_executed(
-            &governance_canister,
-            proposal_id,
-        ));
+        vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
         Ok(())
     }
 }

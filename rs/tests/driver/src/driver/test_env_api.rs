@@ -986,39 +986,37 @@ impl IcNodeSnapshot {
     ///
     /// This function panics if the canister `name` could not be loaded, is not
     /// a wasm module or the installation fails.
-    pub fn create_and_install_canister_with_arg(
+    pub async fn create_and_install_canister_with_arg(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+            .await
     }
 
-    pub fn install_canister_with_arg(
+    pub async fn install_canister_with_arg(
         &self,
         canister_id: Principal,
         name: &str,
         arg: Option<Vec<u8>>,
     ) {
         let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
+        let agent = self.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
 
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub async fn create_and_install_canister_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,

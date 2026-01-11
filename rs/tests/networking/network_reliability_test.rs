@@ -21,6 +21,7 @@ use anyhow::Result;
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     canister_api::{CallMode, GenericRequest},
     driver::{
         constants::DEVICE_NAME,
@@ -32,7 +33,6 @@ use ic_system_test_driver::{
             NnsInstallationBuilder, SshSession,
         },
     },
-    systest,
     util::{
         self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
         spawn_round_robin_workload_engine,
@@ -112,7 +112,7 @@ pub fn setup(env: TestEnv, config: Config) {
         .expect("Failed to setup IC under test.");
 }
 
-pub fn test(env: TestEnv, config: Config) {
+pub async fn test(env: TestEnv, config: Config) {
     let log = env.logger();
     info!(
         &log,
@@ -150,7 +150,8 @@ pub fn test(env: TestEnv, config: Config) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     info!(&log, "Installation of counter canisters has succeeded.");
     info!(
         &log,
@@ -415,12 +416,15 @@ sudo tc qdisc show dev {device}
     )
 }
 
+async fn network_reliability_test(env: TestEnv) {
+    test(env, CONFIG).await;
+}
+
 fn main() -> Result<()> {
     let setup = |env| setup(env, CONFIG);
-    let test = |env| test(env, CONFIG);
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(network_reliability_test))
         .with_timeout_per_test(TASK_TIMEOUT) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(OVERALL_TIMEOUT) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;

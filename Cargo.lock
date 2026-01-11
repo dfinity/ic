@@ -19302,6 +19302,7 @@ name = "os_qualification_utils"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "futures",
  "ic-agent 0.40.1",
  "ic-boundary-nodes-system-test-utils",

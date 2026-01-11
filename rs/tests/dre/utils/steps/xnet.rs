@@ -1,4 +1,5 @@
 use super::Step;
+use async_trait::async_trait;
 use ic_system_test_driver::{
     driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     util::runtime_from_url,
@@ -27,11 +28,11 @@ impl Default for XNet {
     }
 }
 
+#[async_trait]
 impl Step for XNet {
-    fn execute(
+    async fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         // Both guaranteed response and best-effort calls.
         let config = Config::new(
@@ -60,9 +61,7 @@ impl Step for XNet {
         }
         subnets.truncate(self.subnets);
 
-        let threaded = rt.spawn(async move {
-            test_async_impl(env.clone(), subnets.into_iter(), config, &env.logger()).await
-        });
-        rt.block_on(threaded).map_err(anyhow::Error::from)
+        test_async_impl(env.clone(), subnets.into_iter(), config, &env.logger()).await;
+        Ok(())
     }
 }
