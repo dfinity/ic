@@ -3351,7 +3351,7 @@ impl StateManager for StateManagerImpl {
                     );
                 }
                 panic!(
-                    "Committed state @{height} with hash {hash:?} which is different from {prev_hash:?} computed or delivered before"
+                    "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
         }
