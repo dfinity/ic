@@ -90,10 +90,9 @@ fn test_create_many_canisters() {
         Encode!(&num_canisters).unwrap(),
     );
 
-    assert!(
-        matches!(canister_creation_status(), CanisterCreationStatus::InProgress(n) if n == num_canisters)
-    );
-
+    // Trying to create a different number of canisters
+    // while canister creation is in progress
+    // results in a trap.
     let err = env
         .execute_ingress(
             seed_canister_id,
@@ -106,7 +105,38 @@ fn test_create_many_canisters() {
         "Canister creation of {num_canisters} canisters is already in progress!"
     )));
 
+    // Trying to create the same number of canisters
+    // succeeds immediately since the call is idempotent.
+    let result = env
+        .execute_ingress(
+            seed_canister_id,
+            "create_many_canisters",
+            Encode!(&num_canisters).unwrap(),
+        )
+        .unwrap();
+    let _ = assert_reply(result);
+
+    assert!(
+        matches!(canister_creation_status(), CanisterCreationStatus::InProgress(n) if n == num_canisters)
+    );
+
     let result = env.await_ingress(msg_id, 100).unwrap();
+    let _ = assert_reply(result);
+
+    assert!(matches!(
+        canister_creation_status(),
+        CanisterCreationStatus::Done
+    ));
+
+    // Trying to create the same number of canisters
+    // succeeds immediately since the call is idempotent.
+    let result = env
+        .execute_ingress(
+            seed_canister_id,
+            "create_many_canisters",
+            Encode!(&num_canisters).unwrap(),
+        )
+        .unwrap();
     let _ = assert_reply(result);
 
     assert!(matches!(
