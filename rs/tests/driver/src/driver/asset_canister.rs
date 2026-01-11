@@ -12,7 +12,6 @@ use ic_agent::Agent;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::env;
-use tokio::task;
 
 #[async_trait]
 pub trait DeployAssetCanister {
@@ -46,15 +45,10 @@ where
             )
             .await;
 
-        let agent = task::spawn_blocking({
-            let env = env.clone();
-            move || {
-                env.get_first_healthy_application_node_snapshot()
-                    .build_default_agent()
-            }
-        })
-        .await
-        .context("failed to create asset canister agent")?;
+        let agent = env
+            .get_first_healthy_application_node_snapshot()
+            .build_default_agent_async()
+            .await;
 
         retry_with_msg_async!(
             format!(
