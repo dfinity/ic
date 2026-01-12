@@ -8,6 +8,24 @@ use std::time::Duration;
 
 pub(crate) const METRICS_SETUP_TASK_NAME: &str = "metrics_setup";
 
+/// Task that sets up a PrometheusVm.
+///
+/// Note that Prometheus is configured separately by the metrics_sync_task.
+///
+/// The required host features of the VM can be specified via the JSON encoded
+/// PROMETHEUS_VM_REQUIRED_HOST_FEATURES environment variable. For example:
+/// [ "performance", "spm" ]
+///
+/// The VM resources can be specified via the JSON encoded
+/// PROMETHEUS_VM_RESOURCES environment variable. For example:
+/// {
+///     "vcpus": 32,
+///     "memory_kibibytes": 125000000,
+///     "boot_image_minimal_size_gibibytes": 500,
+/// }
+///
+/// The Prometheus scrape interval can be specified via the
+/// PROMETHEUS_SCRAPE_INTERVAL_SECS environment variable and defaults to 10 seconds.
 pub(crate) fn metrics_setup_task(group_ctx: GroupContext) {
     let logger = group_ctx.logger().clone();
     debug!(logger, ">>> metrics_setup_fn");

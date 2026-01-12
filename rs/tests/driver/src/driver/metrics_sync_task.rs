@@ -8,6 +8,7 @@ use std::time::Duration;
 
 pub(crate) const METRICS_SYNC_TASK_NAME: &str = "metrics_sync";
 
+/// Task that periodically (every 10 seconds) synchronizes the Prometheus scraping target configuration with the current IC topology.
 pub(crate) fn metrics_sync_task(group_ctx: GroupContext) {
     let logger = group_ctx.logger().clone();
     debug!(logger, ">>> metrics_sync_fn");
