@@ -8,7 +8,6 @@ use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
@@ -1207,8 +1206,6 @@ pub struct StateMachineBuilder {
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
     is_vetkd_enabled: bool,
-    is_snapshot_download_enabled: bool,
-    is_snapshot_upload_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1249,8 +1246,6 @@ impl StateMachineBuilder {
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
             is_vetkd_enabled: true,
-            is_snapshot_download_enabled: false,
-            is_snapshot_upload_enabled: false,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1464,20 +1459,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_snapshot_download_enabled(self, is_snapshot_download_enabled: bool) -> Self {
-        Self {
-            is_snapshot_download_enabled,
-            ..self
-        }
-    }
-
-    pub fn with_snapshot_upload_enabled(self, is_snapshot_upload_enabled: bool) -> Self {
-        Self {
-            is_snapshot_upload_enabled,
-            ..self
-        }
-    }
-
     pub fn with_execute_round_time_increment(self, execute_round_time_increment: Duration) -> Self {
         Self {
             execute_round_time_increment,
@@ -1542,8 +1523,6 @@ impl StateMachineBuilder {
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
             self.is_vetkd_enabled,
-            self.is_snapshot_download_enabled,
-            self.is_snapshot_upload_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1887,8 +1866,6 @@ impl StateMachine {
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
         is_vetkd_enabled: bool,
-        is_snapshot_download_enabled: bool,
-        is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         execute_round_time_increment: Duration,
@@ -1908,16 +1885,10 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, mut hypervisor_config) = match config {
+        let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        if is_snapshot_download_enabled {
-            hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
-        }
-        if is_snapshot_upload_enabled {
-            hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
-        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -2364,7 +2335,6 @@ impl StateMachine {
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
-            .with_snapshot_download_enabled(true)
             .build()
     }
 
