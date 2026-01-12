@@ -400,7 +400,6 @@ fn lazy_wasms() {
 
     // Enable snapshot downloading.
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
         .build();
     env.set_checkpoints_enabled(true);
 

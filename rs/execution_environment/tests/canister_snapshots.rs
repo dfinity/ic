@@ -159,8 +159,6 @@ fn take_download_upload_load_snapshot_roundtrip(
     download_upload: bool,
 ) {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
 
     let canister_wasm = wat::parse_str(canister_wat).unwrap();
@@ -284,8 +282,6 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
 fn test_env_for_global_timer_on_low_wasm_memory()
 -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
 
     // Set the wasm memory limit explicitly to `4 GiB` (the default is lower)
@@ -459,8 +455,6 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
 #[test]
 fn upload_and_load_snapshot_with_invalid_wasm() {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
 
     let canister_id = env.create_canister(None);
@@ -489,11 +483,9 @@ fn upload_and_load_snapshot_with_invalid_wasm() {
     assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
 }
 
-#[test]
+#[test] 
 fn upload_snapshot_module_with_checkpoint() {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
@@ -542,8 +534,6 @@ fn upload_snapshot_module_with_checkpoint() {
 #[test]
 fn upload_snapshot_with_checkpoint() {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
@@ -667,8 +657,6 @@ fn upload_snapshot_with_checkpoint() {
 #[test]
 fn load_snapshot_inconsistent_metadata_hook_status_fails() {
     let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .with_snapshot_upload_enabled(true)
         .build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
@@ -909,7 +897,6 @@ fn load_canister_snapshot_works_on_another_canister() {
     let config = StateMachineConfig::new(subnet_config, execution_config);
     let env = StateMachineBuilder::new()
         .with_config(Some(config))
-        .with_snapshot_download_enabled(true)
         .with_subnet_type(subnet_type)
         .build();
 
