@@ -10,6 +10,7 @@ rust_library(
     deps = [
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/dfn_candid",
+        "//rs/rust_canisters/statesync_test",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
         "//rs/universal_canister/lib",

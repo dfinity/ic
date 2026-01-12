@@ -21406,6 +21406,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.40.1",
  "slog",
+ "statesync-test",
  "tokio",
 ]
 
@@ -23538,6 +23539,7 @@ name = "statesync-test"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "candid_parser",
  "canister-test",
  "futures",
  "ic-cdk",
