@@ -958,7 +958,7 @@ impl Blocks {
                                 );
                                 last_log = now;
                             }
-                            true // continue
+                            false // continue
                         }),
                     );
 
