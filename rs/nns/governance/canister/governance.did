@@ -22,7 +22,8 @@ type Action = variant {
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
-  TakeCanisterSnapshot : TakeCanisterSnapshot
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 type AddHotKey = record {
@@ -468,6 +469,11 @@ type LedgerParameters = record {
 
 type ListKnownNeuronsResponse = record {
   known_neurons : vec KnownNeuron;
+};
+
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
 };
 
 // Parameters of the list_neurons method.

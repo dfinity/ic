@@ -653,6 +653,8 @@ pub mod proposal {
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
         /// Take a canister snapshot.
         TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1412,6 +1414,7 @@ pub enum ProposalActionRequest {
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
     TakeCanisterSnapshot(TakeCanisterSnapshot),
+    LoadCanisterSnapshot(LoadCanisterSnapshot),
 }
 
 #[derive(
@@ -2721,6 +2724,18 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+}
+
+/// Loads a snapshot of the canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[serde(with = "serde_bytes")]
+    pub snapshot_id: Vec<u8>,
 }
 
 /// This represents the whole NNS governance system. It contains all
