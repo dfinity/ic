@@ -1286,7 +1286,7 @@ mod test {
                                         fee_collector: _,
                                         caller: _,
                                         mthd: _,
-                                    } => false,                                        
+                                    } => false,
                                 })
                                 .count();
 
