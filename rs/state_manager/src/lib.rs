@@ -2094,6 +2094,7 @@ impl StateManagerImpl {
     /// and `remove_inmemory_states_below`.
     fn remove_states_below_impl(
         &self,
+        requested_height: Height,
         last_height_to_keep: Height,
         last_checkpoint_to_keep: Option<Height>,
         extra_inmemory_heights_to_keep: &BTreeSet<Height>,
@@ -2176,10 +2177,16 @@ impl StateManagerImpl {
                             return None;
                         }
                         let checkpoint_layout = state_metadata.checkpoint_layout.as_ref()?;
-                        // Exclude state sync checkpoints to prevent accumulation during state sync loops.
-                        // If a state sync checkpoint is the latest, it is still protected via `latest_manifest_height`.
-                        // Regular unverified checkpoints don't need special handling as they block new checkpoint creation and therefore won't accumulate.
-                        if checkpoint_layout.is_unverified_state_sync_checkpoint() {
+                        // Exclude state sync checkpoints below `requested_height` to prevent accumulation during state sync loops.
+                        // We use `requested_height` instead of `last_checkpoint_to_keep` because the latter may not advance
+                        // during state sync loops when no new verified checkpoints are created.
+                        // If a state sync checkpoint is also the latest checkpoint, it will be protected via `latest_manifest_height` below
+                        // because state sync checkpoints always have manifests.
+                        //
+                        // Note: Regular unverified checkpoints don't need this handling as they block new checkpoint creation.
+                        if checkpoint_layout.is_unverified_state_sync_checkpoint()
+                            && *height < requested_height
+                        {
                             return None;
                         }
                         Some(*height)
@@ -3068,6 +3075,7 @@ impl StateManager for StateManagerImpl {
 
         // The public interface does not protect extra states, so we pass an empty set here.
         self.remove_states_below_impl(
+            requested_height,
             oldest_height_to_keep,
             Some(oldest_checkpoint_to_keep),
             &BTreeSet::new(),
@@ -3132,7 +3140,12 @@ impl StateManager for StateManagerImpl {
             }
         }
 
-        self.remove_states_below_impl(oldest_height_to_keep, None, extra_heights_to_keep);
+        self.remove_states_below_impl(
+            requested_height,
+            oldest_height_to_keep,
+            None,
+            extra_heights_to_keep,
+        );
     }
 
     fn commit_and_certify(
