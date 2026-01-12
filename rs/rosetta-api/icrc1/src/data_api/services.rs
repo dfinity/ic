@@ -1239,6 +1239,11 @@ mod test {
                                     break;
                                 }
                             }
+                            if search_transactions_request.account_identifier.is_none() {
+                                // Only fee collector blocks found, we cannot search for transactions by accounts.
+                                // This situation is similar to blockchain.is_empty() above.
+                                return;
+                            }
 
                             let num_of_transactions_with_account = rosetta_blocks
                                 .iter()
@@ -1286,7 +1291,7 @@ mod test {
                                         fee_collector: _,
                                         caller: _,
                                         mthd: _,
-                                    } => false,                                        
+                                    } => false,
                                 })
                                 .count();
 
