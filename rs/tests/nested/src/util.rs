@@ -32,7 +32,7 @@ use ic_system_test_driver::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     retry_with_msg_async_quiet,
-    util::{block_on, runtime_from_url},
+    util::runtime_from_url,
 };
 use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
@@ -83,9 +83,10 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
 }
 
 /// Use an SSH channel to check the version on the running HostOS.
-pub fn check_hostos_version(node: &NestedVm) -> String {
+pub async fn check_hostos_version(node: &NestedVm) -> String {
     let session = node
-        .block_on_ssh_session()
+        .block_on_ssh_session_async()
+        .await
         .expect("Could not reach HostOS VM.");
     let mut channel = session.channel_session().unwrap();
 
@@ -323,11 +324,6 @@ pub async fn wait_for_expected_guest_version(
     .await
 }
 
-/// Get the current boot ID from a HostOS node.
-pub fn get_host_boot_id(node: &NestedVm) -> String {
-    block_on(get_host_boot_id_async(node))
-}
-
 /// Get the current boot ID from a HostOS node. Asynchronous version
 pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
     node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
@@ -346,14 +342,15 @@ pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: 
 }
 
 /// Logs guestos diagnostics, used in the event of test failure
-pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
+pub async fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     info!(logger, "Logging GuestOS diagnostics...");
 
     /// 10-second timeout prevents excessive logging when SSH is unavailable.
     const SSH_TIMEOUT: Duration = Duration::from_secs(10);
 
-    let execute_and_log = |node: &dyn SshSession, cmd: &str| match node
-        .block_on_ssh_session_with_timeout(SSH_TIMEOUT)
+    let execute_and_log = async |node: &(dyn SshSession + Sync), cmd: &str| match node
+        .block_on_ssh_session_with_timeout_async(SSH_TIMEOUT)
+        .await
         .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
     {
         Ok(out) => info!(logger, "{cmd}:\n{out}"),
@@ -364,7 +361,8 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     execute_and_log(
         host,
         "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
-    );
+    )
+    .await;
 
     match host.get_guest_ssh() {
         Ok(guest) => {
@@ -377,7 +375,7 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
             ];
 
             for cmd in diagnostics {
-                execute_and_log(&guest, cmd);
+                execute_and_log(&guest, cmd).await;
             }
         }
         Err(err) => {

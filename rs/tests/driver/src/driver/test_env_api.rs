@@ -1531,6 +1531,20 @@ pub trait SshSession: HasTestEnv {
         .await
     }
 
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// async version of `block_on_ssh_session_with_timeout`.
+    async fn block_on_ssh_session_with_timeout_async(&self, timeout: Duration) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg_async!(
+            format!("get_ssh_session to {ip}"),
+            &self.test_env().logger(),
+            timeout,
+            RETRY_BACKOFF,
+            async || { self.get_ssh_session() }
+        )
+        .await
+    }
+
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
         self.block_on_bash_script_from_session(&session, script)
@@ -2242,11 +2256,11 @@ pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     log: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
-    f: F,
+    mut f: F,
 ) -> Result<R>
 where
     Fut: Future<Output = Result<R>>,
-    F: Fn() -> Fut,
+    F: FnMut() -> Fut,
 {
     let msg = msg.as_ref();
     let mut attempt = 1;

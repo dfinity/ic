@@ -5,8 +5,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::*,
     },
-    retry_with_msg,
-    util::block_on,
+    retry_with_msg_async,
 };
 use slog::info;
 
@@ -35,14 +34,14 @@ pub fn simple_setup(env: TestEnv) {
 
 /// Allow the nested GuestOS to install and launch, and check that it can
 /// successfully join the testnet.
-pub fn registration(env: TestEnv) {
+pub async fn registration(env: TestEnv) {
     let logger = env.logger();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    let initial_topology = env
+        .topology_snapshot()
+        .block_for_min_registry_version(ic_types::RegistryVersion::from(1))
+        .await
+        .unwrap();
 
     // Check that there are initially no unassigned nodes.
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
@@ -61,7 +60,8 @@ pub fn registration(env: TestEnv) {
             .expect("Unable to find HostOS node.")
             .get_guest_ssh()
             .unwrap()
-            .block_on_bash_script("cat /proc/cmdline")
+            .block_on_bash_script_async("cat /proc/cmdline")
+            .await
             .expect("Could not read /proc/cmdline from GuestOS");
         assert!(
             guest_kernel_cmdline.contains("initrd=initrd"),
@@ -73,19 +73,17 @@ pub fn registration(env: TestEnv) {
 
     // If the nodes are able to join successfully, the registry will be updated,
     // and the new node IDs will enter the unassigned pool.
-    let mut new_topology = initial_topology;
-    retry_with_msg!(
+    retry_with_msg_async!(
         format!("Waiting for all {n} nodes to join ..."),
-        logger.clone(),
+        &logger,
         NODE_REGISTRATION_TIMEOUT,
         NODE_REGISTRATION_BACKOFF,
-        || {
-            new_topology = block_on(
-                new_topology.block_for_newer_registry_version_within_duration(
-                    NODE_REGISTRATION_TIMEOUT,
-                    NODE_REGISTRATION_BACKOFF,
-                ),
+        async || {
+            let new_topology = initial_topology.block_for_newer_registry_version_within_duration(
+                NODE_REGISTRATION_TIMEOUT,
+                NODE_REGISTRATION_BACKOFF,
             )
+            .await
             .unwrap();
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
             if num_unassigned_nodes == n {
@@ -94,6 +92,6 @@ pub fn registration(env: TestEnv) {
                 bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
             }
         }
-    ).unwrap();
+    ).await.unwrap();
     info!(logger, "All {n} nodes successfully came up and registered.");
 }

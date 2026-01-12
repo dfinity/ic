@@ -12,7 +12,7 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version,
-    get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
+    get_host_boot_id_async, try_logging_guestos_diagnostics, update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -28,7 +28,7 @@ fn main() -> Result<()> {
 
 /// Upgrade each HostOS VM to the target version, and verify that each is
 /// healthy before and after the upgrade.
-pub fn upgrade_hostos(env: TestEnv) {
+pub async fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
     // The original HostOS version is the deployed version (i.e., the SetupOS image version).
@@ -43,7 +43,7 @@ pub fn upgrade_hostos(env: TestEnv) {
     info!(logger, "  Update image URL: {update_image_url}");
     info!(logger, "  Update image SHA256: {update_image_sha256}");
 
-    registration(env.clone());
+    registration(env.clone()).await;
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -54,7 +54,10 @@ pub fn upgrade_hostos(env: TestEnv) {
         "Checking version via SSH on HostOS: '{}'",
         host.get_vm().expect("Unable to get HostOS VM.").ipv6
     );
-    assert_eq!(original_version.to_string(), check_hostos_version(&host));
+    assert_eq!(
+        original_version.to_string(),
+        check_hostos_version(&host).await
+    );
 
     info!(logger, "Electing target HostOS version '{target_version}'");
     let nns_node = env
@@ -63,19 +66,20 @@ pub fn upgrade_hostos(env: TestEnv) {
         .nodes()
         .next()
         .unwrap();
-    block_on(elect_hostos_version(
+    elect_hostos_version(
         &nns_node,
         &target_version,
         &update_image_sha256,
         vec![update_image_url.to_string()],
-    ));
+    )
+    .await;
     info!(logger, "Elected target HostOS version");
 
     info!(
         logger,
         "Retrieving the current boot ID from the host before upgrade to detect reboot after upgrade..."
     );
-    let host_boot_id_pre_upgrade = get_host_boot_id(&host);
+    let host_boot_id_pre_upgrade = get_host_boot_id_async(&host).await;
     info!(
         logger,
         "Host boot ID pre upgrade: '{host_boot_id_pre_upgrade}'"
@@ -88,23 +92,18 @@ pub fn upgrade_hostos(env: TestEnv) {
         .unwrap()
         .node_id;
     info!(logger, "Upgrading node '{node_id}' to '{target_version}'");
-    block_on(update_nodes_hostos_version(
-        &nns_node,
-        &target_version,
-        vec![node_id],
-    ));
-
+    update_nodes_hostos_version(&nns_node, &target_version, vec![node_id]).await;
     info!(logger, "Waiting for the HostOS upgrade to apply...");
 
-    if let Err(e) = retry_with_msg!(
+    if let Err(e) = retry_with_msg_async!(
         format!(
             "Waiting until the host's boot ID changes from its pre upgrade value of '{host_boot_id_pre_upgrade}'"
         ),
         logger.clone(),
         NODE_UPGRADE_TIMEOUT,
         NODE_UPGRADE_BACKOFF,
-        || {
-            let host_boot_id = get_host_boot_id(&host);
+        async || {
+            let host_boot_id = get_host_boot_id_async(&host).await;
             if host_boot_id != host_boot_id_pre_upgrade {
                 info!(
                     logger,
@@ -115,19 +114,19 @@ pub fn upgrade_hostos(env: TestEnv) {
                 bail!("Host boot ID is still '{host_boot_id_pre_upgrade}'")
             }
         }
-    ) {
+    ).await {
         try_logging_guestos_diagnostics(&host, &logger);
         panic!("Failed to see the host boot ID change from '{host_boot_id_pre_upgrade}': {e}");
     }
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     if let Err(e) = host.await_orchestrator_dashboard_accessible() {
-        try_logging_guestos_diagnostics(&host, &logger);
+        try_logging_guestos_diagnostics(&host, &logger).await;
         panic!("Orchestrator dashboard is not accessible: {e}");
     }
 
     info!(logger, "Checking HostOS version after reboot");
-    let new_version = check_hostos_version(&host);
+    let new_version = check_hostos_version(&host).await;
     info!(logger, "Version found is: '{new_version}'");
 
     assert_eq!(new_version, target_version.to_string());
