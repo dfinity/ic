@@ -309,7 +309,7 @@ fn test_legacy_custom_data_accepted() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect("Failed to verify attestation package with legacy custom data format");
 }
