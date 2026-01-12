@@ -368,7 +368,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
-/// TODO(urgent): check this function again (aigen).
+/// TODO(urgent): check this function again (ai_gen).
 async fn transform_adapter_response(
     query_handler: TransformExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
@@ -382,12 +382,8 @@ async fn transform_adapter_response(
     
     let instruction_observation = Arc::new(AtomicU64::new(0));
     
-    // 1. Clone the Arc so we can move one copy into the async block
-    // TODO(urgent): check whether we need to clone here.
     let instruction_observation_clone = instruction_observation.clone();
 
-    // 2. Wrap the execution logic in an `async move` block.
-    // This creates a boundary for the `?` operator.
     let execution_result = async move {
         let method_payload = Encode!(&transform_args).map_err(|encode_error| {
             (
@@ -396,7 +392,6 @@ async fn transform_adapter_response(
             )
         })?;
 
-        // Query to execution.
         let query = Query {
             source: QuerySource::System,
             receiver: transform_canister,
@@ -404,7 +399,6 @@ async fn transform_adapter_response(
             method_payload,
         };
         
-        // Use the clone here
         let query_execution_input = TransformExecutionInput { 
             query, 
             instruction_observation: instruction_observation_clone 
@@ -433,9 +427,8 @@ async fn transform_adapter_response(
                 ),
             )),
         }
-    }.await; // 3. Await the block immediately
+    }.await;
 
-    // 4. Read the instructions from the original Arc
     let instructions_used = instruction_observation.load(std::sync::atomic::Ordering::Relaxed);
     
     (execution_result, instructions_used)

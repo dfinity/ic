@@ -215,6 +215,21 @@ fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     transformed
 }
 
+#[query]
+fn long_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    for i in 0..2_000_000_000 {
+        if i % 1_000_000_000 == 0 {
+            ic_cdk::api::print(format!("Loop iteration: {}", i));
+        }
+    }
+    let (response, context) = (raw.response, raw.context);
+    let mut context = context;
+    let mut transformed = response;
+    transformed.body.append(&mut context);
+    transformed.headers = vec![];
+    transformed
+}
+
 fn test_transform_(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, context) = (raw.response, raw.context);
     let mut transformed = response;

@@ -88,7 +88,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
                                     principal: proxy_canister.canister_id().get().0,
-                                    method: "transform_with_context".to_string(),
+                                    method: "long_transform".to_string(),
                                 }),
                                 context: context.as_bytes().to_vec(),
                             }),

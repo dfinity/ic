@@ -118,6 +118,7 @@ pub(super) struct QueryContext<'a> {
     transient_errors: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
     /// An optional atomic to observe the number of instructions used in the query.
+    /// This should only be populated for http outcalls transformations.
     instruction_obvervation: Option<Arc<AtomicU64>>,
 }
 
@@ -143,7 +144,6 @@ impl<'a> QueryContext<'a> {
         query_critical_error: &'a IntCounter,
         local_query_execution_stats: Option<&'a QueryStatsCollector>,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        //TODO(urgent): check if we can have non atomic
         instruction_obvervation: Option<Arc<AtomicU64>>,
     ) -> Self {
         let network_topology = Arc::new(state.get_ref().metadata.network_topology.clone());
@@ -459,9 +459,6 @@ impl<'a> QueryContext<'a> {
         self.instruction_obvervation
             .as_ref()
             .map(|atomic| atomic.fetch_add(instructions_executed.get(), std::sync::atomic::Ordering::Relaxed));
-
-        //TODO(urgent): check we still log when instruction limit is reached
-        //TODO(urgent): check we still log when we run into an error.
 
         // Add query statistics to the query aggregator.
         let stats = QueryStats {
