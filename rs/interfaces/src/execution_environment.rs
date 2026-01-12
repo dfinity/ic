@@ -22,7 +22,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::{atomic::AtomicU64, Arc},
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -590,7 +590,7 @@ pub type QueryExecutionService =
 #[derive(Debug)]
 pub struct TransformExecutionInput {
     pub query: Query,
-    pub instruction_observation: Arc<AtomicU64>
+    pub instruction_observation: Arc<AtomicU64>,
 }
 
 /// Interface for the component to execute canister http transform.
