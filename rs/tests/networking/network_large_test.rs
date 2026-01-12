@@ -128,7 +128,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Step 5: Kill {} nodes", FAULTY);
     let nodes: Vec<_> = subnet.nodes().collect();
     for node in nodes.iter().take(FAULTY) {
-        node.vm().kill();
+        block_on(async { node.vm().await.kill().await });
     }
     for node in nodes.iter().take(FAULTY) {
         node.await_status_is_unavailable()
@@ -150,7 +150,7 @@ pub fn test(env: TestEnv) {
         "Step 7: Kill an additonal node causing consensus to stop due to {} (f+1) faulty nodes",
         FAULTY + 1
     );
-    nodes[FAULTY].vm().kill();
+    block_on(async { nodes[FAULTY].vm().await.kill().await });
     nodes[FAULTY]
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -167,7 +167,7 @@ pub fn test(env: TestEnv) {
     };
 
     info!(log, "Step 8: Restart one node again",);
-    nodes[FAULTY].vm().start();
+    block_on(async { nodes[FAULTY].vm().await.start().await });
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }
