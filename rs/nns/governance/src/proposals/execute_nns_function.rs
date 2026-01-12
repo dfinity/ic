@@ -115,7 +115,7 @@ impl ValidExecuteNnsFunction {
     /// Returns the encoded request to the target canister by transforming the payload submitted by the proposer.
     /// The `proposal_id` argument is used by AddSnsWasm and SubnetRentalRequest proposals.
     /// The `proposal_timestamp_seconds` argument is used by SubnetRentalRequest proposals.
-    pub fn get_encoded_request_to_target_canister(
+    pub fn re_encode_payload_to_target_canister(
         &self,
         proposal_id: u64,
         proposal_timestamp_seconds: u64,

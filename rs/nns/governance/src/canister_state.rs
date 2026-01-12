@@ -220,7 +220,7 @@ impl Environment for CanisterEnv {
             .map(|data| data.proposal_timestamp_seconds)
             .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
         let encoded_request = execute_nns_function
-            .get_encoded_request_to_target_canister(proposal_id, proposal_timestamp_seconds)?;
+            .re_encode_payload_to_target_canister(proposal_id, proposal_timestamp_seconds)?;
 
         ic_cdk::futures::spawn_017_compat(async move {
             match CdkRuntime::call_bytes_with_cleanup(canister_id, method, &encoded_request).await {

@@ -233,7 +233,7 @@ async fn test_to_self_describing_uninstall_code() {
 }
 
 #[test]
-fn test_get_encoded_request_to_target_canister_sets_proposal_id_for_add_wasm() {
+fn test_re_encode_payload_to_target_canister_sets_proposal_id_for_add_wasm() {
     let proposal_id = 42;
     let wasm = vec![1, 2, 3];
     let canister_type = 3;
@@ -255,7 +255,7 @@ fn test_get_encoded_request_to_target_canister_sets_proposal_id_for_add_wasm() {
     };
 
     let effective_payload = execute_nns_function
-        .get_encoded_request_to_target_canister(proposal_id, 0)
+        .re_encode_payload_to_target_canister(proposal_id, 0)
         .unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
@@ -274,7 +274,7 @@ fn test_get_encoded_request_to_target_canister_sets_proposal_id_for_add_wasm() {
 }
 
 #[test]
-fn test_get_encoded_request_to_target_canister_overrides_proposal_id_for_add_wasm() {
+fn test_re_encode_payload_to_target_canister_overrides_proposal_id_for_add_wasm() {
     let proposal_id = 42;
     let payload = Encode!(&AddWasmRequest {
         wasm: Some(SnsWasm {
@@ -291,7 +291,7 @@ fn test_get_encoded_request_to_target_canister_overrides_proposal_id_for_add_was
     };
 
     let effective_payload = execute_nns_function
-        .get_encoded_request_to_target_canister(proposal_id, 0)
+        .re_encode_payload_to_target_canister(proposal_id, 0)
         .unwrap();
 
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
