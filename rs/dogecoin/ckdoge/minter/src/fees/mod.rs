@@ -3,6 +3,7 @@ mod tests;
 
 use crate::candid_api::WithdrawalFee;
 use crate::lifecycle::init::Network;
+use crate::transaction::DogecoinTransactionSigner;
 use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{
     BuildTxError, MillisatoshiPerByte, Satoshi, address::BitcoinAddress, fees::FeeEstimator,
@@ -119,7 +120,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         unsigned_tx: &UnsignedTransaction,
         fee_per_byte: u64,
     ) -> u64 {
-        let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
+        let tx_size = DogecoinTransactionSigner::fake_sign(unsigned_tx).len();
         (tx_size as u64 * fee_per_byte) / 1000
     }
 

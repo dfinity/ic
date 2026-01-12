@@ -152,7 +152,7 @@ def get_replica_version_info(replica_version: str) -> VersionInfo:
 
     version = response["payload"]["replica_version_to_elect"]
     hash = response["payload"]["release_package_sha256_hex"]
-    launch_measurements = response["payload"]["guest_launch_measurements"]
+    launch_measurements = decode_measurements(response["payload"]["guest_launch_measurements"])
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -182,7 +182,7 @@ def get_latest_replica_version_info() -> VersionInfo:
 
     version = latest_elect_proposal["payload"]["replica_version_to_elect"]
     hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
-    launch_measurements = latest_elect_proposal["payload"]["guest_launch_measurements"]
+    launch_measurements = decode_measurements(latest_elect_proposal["payload"]["guest_launch_measurements"])
 
     dev_hash = download_and_hash_file(
         f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
@@ -453,6 +453,14 @@ def collapse_simple_lists(contents):
         lambda m: " ".join([v.strip() for v in m.group(0).splitlines()]),
         contents,
     )
+
+
+# NOTE: We convert the "human" hex format from the dashboard API to the byte
+# format that is actually used in the proposal directly.
+def decode_measurements(launch_measurements):
+    for measurement in launch_measurements["guest_launch_measurements"]:
+        measurement["measurement"] = list(bytes.fromhex(measurement["measurement"]))
+    return launch_measurements
 
 
 if __name__ == "__main__":

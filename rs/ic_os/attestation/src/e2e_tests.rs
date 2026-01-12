@@ -77,7 +77,7 @@ fn test_valid_attestation_package() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect("Failed to verify attestation package");
 
@@ -107,7 +107,7 @@ fn test_invalid_attestation_report() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid attestation report")
     .detail
@@ -138,7 +138,7 @@ fn test_invalid_signature() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid signature")
     .detail
@@ -164,7 +164,7 @@ fn test_invalid_custom_data() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &invalid_custom_data,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid custom data")
     .detail
@@ -185,7 +185,7 @@ fn test_invalid_measurement() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[[0; 48]], // Different from MEASUREMENT
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid measurement")
     .detail
@@ -206,7 +206,7 @@ fn test_invalid_chip_id() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&[0; 64]), // Different from CHIP_ID
+        Some(&[[0; 64]]), // Different from CHIP_ID
     )
     .expect_err("Verification should fail due to invalid chip ID")
     .detail
@@ -235,7 +235,7 @@ fn test_invalid_certificate_chain() {
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid certificate chain")
     .detail
@@ -261,7 +261,7 @@ fn test_invalid_root_certificate() {
         SevRootCertificateVerification::Verify,
         &[MEASUREMENT],
         &CUSTOM_DATA,
-        Some(&CHIP_ID),
+        Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid root certificate")
     .detail

@@ -173,7 +173,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     render_input_screen(f, &state.input_state, size);
 
     // 2. Render the popup overlay
-    let area = centered_rect(Constraint::Percentage(85), 16, size);
+    let area = centered_rect(Constraint::Percentage(85), 20, size);
 
     f.render_widget(Clear, area);
 
@@ -183,7 +183,9 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2), // Header spacing
-            Constraint::Min(1),    // Parameters (Takes remaining space)
+            Constraint::Min(1),    // Parameters
+            Constraint::Length(1), // Spacer
+            Constraint::Length(4), // Security warning
             Constraint::Length(1), // Spacer
             Constraint::Length(1), // Question
             Constraint::Length(1), // Buttons
@@ -197,12 +199,31 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     let params_para = Paragraph::new(params_text).wrap(Wrap { trim: true });
     f.render_widget(params_para, layout[1]);
 
+    let warning_header_style = Style::default().fg(Color::Red).bold();
+    let warning_text_style = Style::default().fg(Color::Yellow);
+    let warning = Paragraph::new(vec![
+        Line::styled("!! SECURITY WARNING !!", warning_header_style),
+        Line::styled(
+            "Only proceed if the calculated hashes exactly match those communicated",
+            warning_text_style,
+        ),
+        Line::styled(
+            "by the recovery coordinator on Matrix and the forum.",
+            warning_text_style,
+        ),
+        Line::styled(
+            "Proceeding with a wrong hash can have critical security implications.",
+            warning_text_style,
+        ),
+    ]);
+    f.render_widget(warning, layout[3]);
+
     let question = Paragraph::new(
         "Please confirm: do these input values match the recovery coordinator's information?",
     )
     .alignment(Alignment::Center)
     .style(Style::default().fg(Color::White).bold());
-    f.render_widget(question, layout[3]);
+    f.render_widget(question, layout[5]);
 
     let yes_selected = state.selected_option == ConfirmationOption::Yes;
     let no_selected = state.selected_option == ConfirmationOption::No;
@@ -225,7 +246,7 @@ fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, si
     ]);
 
     let buttons_para = Paragraph::new(buttons).alignment(Alignment::Center);
-    f.render_widget(buttons_para, layout[4]);
+    f.render_widget(buttons_para, layout[6]);
 }
 
 // ============================================================================

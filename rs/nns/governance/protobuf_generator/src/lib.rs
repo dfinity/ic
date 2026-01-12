@@ -146,6 +146,20 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[compare_default]",
     );
 
+    let self_describing_types = vec![
+        "NetworkEconomics",
+        "NeuronsFundEconomics",
+        "NeuronsFundMatchedFundingCurveCoefficients",
+        "VotingPowerEconomics",
+        "CreateServiceNervousSystem",
+    ];
+    for type_name in self_describing_types {
+        config.type_attribute(
+            format!(".ic_nns_governance.pb.v1.{type_name}"),
+            "#[derive(ic_nns_governance_derive_self_describing::SelfDescribing)]",
+        );
+    }
+
     // Add serde_bytes for efficiently parsing blobs.
     let blob_fields = vec![
         "NeuronStakeTransfer.from_subaccount",
