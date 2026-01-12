@@ -1,10 +1,15 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA", "MAINNET_ENV", "MAINNET_NNS_CANISTER_DATA", "MAINNET_NNS_CANISTER_ENV", "XNET_TEST_CANISTER_DATA")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test(
     name = "guest_os_qualification",
+    data =
+        ["//bazel:version.txt"] +
+        MAINNET_NNS_CANISTER_DATA +
+        COUNTER_CANISTER_DATA +
+        XNET_TEST_CANISTER_DATA,
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
         "ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)",
@@ -13,11 +18,6 @@ system_test(
         "colocate",
         "manual",
     ],
-    runtime_deps =
-        ["//bazel:version.txt"] +
-        MAINNET_NNS_CANISTER_RUNTIME_DEPS +
-        COUNTER_CANISTER_RUNTIME_DEPS +
-        XNET_TEST_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted
         "//rs/protobuf",

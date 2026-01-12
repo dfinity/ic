@@ -1,9 +1,9 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator"]
+CERTIFICATE_ORCHESTRATOR_DATA = ["//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator"]
 
 system_test_nns(
     name = "api_bn_integration_test",
@@ -26,12 +26,12 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     tags = [
         "colocate",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/subnet_update_workload",
@@ -41,10 +41,10 @@ system_test_nns(
 
 system_test_nns(
     name = "certificate_orchestrator_test",
+    data = CERTIFICATE_ORCHESTRATOR_DATA,
     env = {
         "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
     },
-    runtime_deps = CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
@@ -64,13 +64,13 @@ system_test_nns(
 
 system_test_nns(
     name = "salt_sharing_canister_test",
+    data = [
+        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+    ],
     env = {
         "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
     },
     proc_macro_deps = [],
-    runtime_deps = [
-        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
-    ],
     deps = [
         # Keep sorted.
         "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
@@ -93,15 +93,15 @@ system_test_nns(
 
 system_test_nns(
     name = "rate_limit_canister_test",
+    data = [
+        "//rs/boundary_node/rate_limits:rate_limit_canister",
+    ],
     env = {
         "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
     },
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
-    ],
-    runtime_deps = [
-        "//rs/boundary_node/rate_limits:rate_limit_canister",
     ],
     deps = [
         # Keep sorted.
@@ -135,8 +135,8 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    data = COUNTER_CANISTER_DATA,
     tags = ["manual"],
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -154,11 +154,11 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    data = COUNTER_CANISTER_DATA,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
         "manual",
     ],
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -175,11 +175,11 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    data = COUNTER_CANISTER_DATA,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     tags = [
         "manual",
     ],
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
