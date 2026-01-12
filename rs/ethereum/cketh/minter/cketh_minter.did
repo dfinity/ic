@@ -609,6 +609,7 @@ type MintMemo = variant {
         from_address: text;
         // Hash of the transaction.
         tx_hash: text;
+        // Integer of the log index position in the block.
         log_index: nat;
     };
     ReimburseTransaction : record {
