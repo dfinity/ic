@@ -368,7 +368,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
 /// Make upcall to execution to transform the response.
 /// This gives the ability to prune volatile fields before passing the response to consensus.
-/// TODO(urgent): check this function again (ai_gen).
 async fn transform_adapter_response(
     query_handler: TransformExecutionService,
     canister_http_response: CanisterHttpResponsePayload,
