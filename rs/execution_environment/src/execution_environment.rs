@@ -1704,7 +1704,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ReadCanisterSnapshotMetadata) => {
                 match ReadCanisterSnapshotMetadataArgs::decode(payload) {
-                    Ok(args) =>  {
+                    Ok(args) => {
                         let canister_id = args.get_canister_id();
                         let (res, instructions_used) = self.read_canister_snapshot_metadata(
                             *msg.sender(),
@@ -1720,7 +1720,7 @@ impl ExecutionEnvironment {
                         let state =
                             self.finish_subnet_message_execution(state, msg, msg_result, since);
                         return (state, Some(instructions_used));
-                    },
+                    }
                     Err(e) => ExecuteSubnetMessageResult::Finished {
                         response: Err(e),
                         refund: msg.take_cycles(),
@@ -1734,25 +1734,24 @@ impl ExecutionEnvironment {
                         response: Err(e),
                         refund: msg.take_cycles(),
                     },
-                    Ok(args) =>  {
-                            let canister_id = args.get_canister_id();
-                            let (result, instructions_used) = self.read_snapshot_data(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            );
-                            let result = result.map(|res| (res, Some(canister_id)));
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
-                                response: result,
-                                refund: msg.take_cycles(),
-                            };
-                            let state =
-                                self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
-                        }
-                    
+                    Ok(args) => {
+                        let canister_id = args.get_canister_id();
+                        let (result, instructions_used) = self.read_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        let result = result.map(|res| (res, Some(canister_id)));
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result,
+                            refund: msg.take_cycles(),
+                        };
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instructions_used));
+                    }
                 }
             }
 
@@ -1762,24 +1761,23 @@ impl ExecutionEnvironment {
                         response: Err(err),
                         refund: msg.take_cycles(),
                     },
-                    Ok(args) =>  {
-                            let canister_id = args.get_canister_id();
-                            let (result, instructions_used) = self.create_snapshot_from_metadata(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            );
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
-                                response: result.map(|res| (res, Some(canister_id))),
-                                refund: msg.take_cycles(),
-                            };
-                            let state =
-                                self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
-                        }
-                    
+                    Ok(args) => {
+                        let canister_id = args.get_canister_id();
+                        let (result, instructions_used) = self.create_snapshot_from_metadata(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result.map(|res| (res, Some(canister_id))),
+                            refund: msg.take_cycles(),
+                        };
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instructions_used));
+                    }
                 }
             }
 
@@ -1789,24 +1787,23 @@ impl ExecutionEnvironment {
                         response: Err(err),
                         refund: msg.take_cycles(),
                     },
-                    Ok(args) =>  {
-                            let canister_id = args.get_canister_id();
-                            let (result, instructions_used) = self.write_snapshot_data(
-                                *msg.sender(),
-                                &mut state,
-                                args,
-                                registry_settings.subnet_size,
-                                round_limits,
-                            );
-                            let msg_result = ExecuteSubnetMessageResult::Finished {
-                                response: result.map(|res| (res, Some(canister_id))),
-                                refund: msg.take_cycles(),
-                            };
-                            let state =
-                                self.finish_subnet_message_execution(state, msg, msg_result, since);
-                            return (state, Some(instructions_used));
-                        }
-                    
+                    Ok(args) => {
+                        let canister_id = args.get_canister_id();
+                        let (result, instructions_used) = self.write_snapshot_data(
+                            *msg.sender(),
+                            &mut state,
+                            args,
+                            registry_settings.subnet_size,
+                            round_limits,
+                        );
+                        let msg_result = ExecuteSubnetMessageResult::Finished {
+                            response: result.map(|res| (res, Some(canister_id))),
+                            refund: msg.take_cycles(),
+                        };
+                        let state =
+                            self.finish_subnet_message_execution(state, msg, msg_result, since);
+                        return (state, Some(instructions_used));
+                    }
                 }
             }
 

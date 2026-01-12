@@ -158,8 +158,7 @@ fn take_download_upload_load_snapshot_roundtrip(
     expected_globals: Vec<Global>,
     download_upload: bool,
 ) {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     let canister_wasm = wat::parse_str(canister_wat).unwrap();
     let canister_id = env.install_canister(canister_wasm, vec![], None).unwrap();
@@ -281,8 +280,7 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
 
 fn test_env_for_global_timer_on_low_wasm_memory()
 -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     // Set the wasm memory limit explicitly to `4 GiB` (the default is lower)
     // and the wasm memory threshold to `4 GiB - 30 MiB` so that growing the (32-bit) wasm memory by `30 MiB` triggers the on low wasm memory hook.
@@ -454,8 +452,7 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
 
 #[test]
 fn upload_and_load_snapshot_with_invalid_wasm() {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
 
     let canister_id = env.create_canister(None);
 
@@ -483,10 +480,9 @@ fn upload_and_load_snapshot_with_invalid_wasm() {
     assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
 }
 
-#[test] 
+#[test]
 fn upload_snapshot_module_with_checkpoint() {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
@@ -533,8 +529,7 @@ fn upload_snapshot_module_with_checkpoint() {
 
 #[test]
 fn upload_snapshot_with_checkpoint() {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)
@@ -656,8 +651,7 @@ fn upload_snapshot_with_checkpoint() {
 
 #[test]
 fn load_snapshot_inconsistent_metadata_hook_status_fails() {
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
     let counter_canister_wasm = wat::parse_str(COUNTER_GROW_CANISTER_WAT).unwrap();
     let canister_id = env
         .install_canister(counter_canister_wasm.clone(), vec![], None)

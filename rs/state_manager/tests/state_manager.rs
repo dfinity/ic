@@ -399,8 +399,7 @@ fn lazy_wasms() {
     }
 
     // Enable snapshot downloading.
-    let env = StateMachineBuilder::new()
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(true);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
