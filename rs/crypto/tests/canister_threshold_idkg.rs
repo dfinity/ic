@@ -942,9 +942,13 @@ mod verify_complaint {
 
     #[test]
     fn should_return_valid_complaint_on_load_transcript_with_invalid_dealing_for_reshare_of_unmasked()
-     {
+    {
         let rng = &mut reproducible_rng();
-        let subnet_size = rng.gen_range(1..10);
+        // Use at least 4 nodes to ensure reconstruction_threshold > 1.
+        // With smaller subnets (especially 1-2 nodes), the initial and reshared transcripts
+        // may have identical commitments (same KeyId), causing the complainer to skip loading
+        // if they were also a dealer who loaded the initial transcript.
+        let subnet_size = rng.gen_range(4..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
         let (dealers, receivers) =
             env.choose_dealers_and_receivers(&IDkgParticipants::RandomForThresholdSignature, rng);
