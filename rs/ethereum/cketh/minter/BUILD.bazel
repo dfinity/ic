@@ -92,6 +92,7 @@ rust_test(
         # Keep sorted.
         ":minter",
         "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/ethereum/cketh/test_utils",
         "@crate_index//:assert_matches",
         "@crate_index//:candid_parser",
         "@crate_index//:ethers-core",
