@@ -576,9 +576,7 @@ impl From<memo::BurnMemo> for BurnMemo {
                 to_address,
             } => BurnMemo::Erc20GasFee {
                 ckerc20_token_symbol: ckerc20_token_symbol.to_string(),
-                ckerc20_withdrawal_amount: Nat::from(U256::new(
-                    ckerc20_withdrawal_amount.into_inner(),
-                )),
+                ckerc20_withdrawal_amount: Nat::from(ckerc20_withdrawal_amount),
                 to_address: to_address.to_string(),
             },
             memo::BurnMemo::Erc20Convert {
