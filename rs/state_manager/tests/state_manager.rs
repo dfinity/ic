@@ -1051,7 +1051,7 @@ fn returns_state_no_committed_for_future_states() {
 }
 
 #[test]
-#[should_panic(expected = "different hashes")]
+#[should_panic(expected = "which is different from previously computed or delivered hash")]
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
