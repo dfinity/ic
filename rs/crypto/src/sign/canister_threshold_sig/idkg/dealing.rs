@@ -3,9 +3,10 @@
 use crate::sign::basic_sig::{self, BasicSigVerifierInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
     MegaKeyFromRegistryError, fetch_idkg_dealing_encryption_public_key_from_registry,
-    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
+    retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspSigner;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::vault::api::{
     BasicSignatureCspVault, CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
     IDkgTranscriptOperationInternalBytes,
@@ -129,7 +130,7 @@ pub fn verify_dealing_private(
         IDkgDealingInternalBytes::from(signed_dealing.idkg_dealing().dealing_to_bytes()),
         dealer_index,
         self_receiver_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
+        KeyId::from(&self_mega_pubkey),
         params.context_data(),
     )
 }

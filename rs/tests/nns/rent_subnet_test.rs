@@ -635,7 +635,7 @@ fn wait_for_cycles_minting_to_get_price_of_icp(
             .unwrap()
             .as_secs();
 
-        now - timestamp_seconds
+        now.saturating_sub(timestamp_seconds)
     }
 
     let mut err_budget = 30;

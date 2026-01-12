@@ -133,7 +133,7 @@ fn should_deposit_and_withdraw() {
             });
         assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
 
-        cketh.assert_has_unique_events_in_order(&vec![
+        cketh.assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -230,7 +230,7 @@ fn should_block_deposit_from_blocked_address() {
             ..Default::default()
         })
         .expect_no_mint()
-        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+        .assert_has_unique_events_in_order(&[EventPayload::InvalidDeposit {
             event_source: EventSource {
                 transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
@@ -553,7 +553,7 @@ fn should_reimburse() {
             created_at_time: None,
             fee: None,
         })
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -667,7 +667,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
             resubmitted_tx.clone(),
             resubmitted_tx_sig,
         )
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::ReplacedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
                 transaction: UnsignedTransaction {
@@ -747,7 +747,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: second_to_block.into(),
         }]);
 }
@@ -783,7 +783,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -805,7 +805,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: Nat::from(to_block),
         }]);
 }
@@ -973,7 +973,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -999,7 +999,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: last_finalized_block.into(),
         }]);
 }
@@ -1036,7 +1036,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
             ethereum_block_height: Some(CandidBlockTag::Finalized),
             ..Default::default()
         })
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: safe_block_number.into(),
         }]);
     cketh.env.tick();
@@ -1108,7 +1108,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: half_to_block.into(),
         }])
         .assert_has_no_event_satisfying(|event| matches!(event, EventPayload::SkippedBlock { .. }));
@@ -1185,7 +1185,7 @@ fn should_skip_single_block_containing_too_many_events() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::SkippedBlock {
                 contract_address: Some(
                     ETH_HELPER_CONTRACT_ADDRESS

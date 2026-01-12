@@ -1443,7 +1443,7 @@ mod eth_transactions {
                 &mut transactions,
                 sent_tx_0_0.transaction().clone(),
             );
-            let hashes_0: BTreeMap<_, _> = vec![sent_tx_0_0, sent_tx_0_1]
+            let hashes_0: BTreeMap<_, _> = [sent_tx_0_0, sent_tx_0_1]
                 .iter()
                 .map(|tx| (tx.hash(), first_cketh_ledger_burn_index))
                 .collect();
@@ -1458,7 +1458,7 @@ mod eth_transactions {
                 &mut transactions,
                 sent_tx_1_1.transaction().clone(),
             );
-            let hashes_1: BTreeMap<_, _> = vec![sent_tx_1_0, sent_tx_1_1, sent_tx_1_2]
+            let hashes_1: BTreeMap<_, _> = [sent_tx_1_0, sent_tx_1_1, sent_tx_1_2]
                 .iter()
                 .map(|tx| (tx.hash(), second_cketh_ledger_burn_index))
                 .collect();

@@ -3,9 +3,9 @@ use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         CborProxyDecoder, CborProxyEncoder,
-        old_types::{RequestOrResponseV21, StreamHeaderV19},
+        old_types::{RequestOrResponseV21, StreamHeaderV19, StreamMessageV22},
         types::{
-            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV22,
+            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV23,
             SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
     },
@@ -141,7 +141,7 @@ fn stream_header_unique_encoding(
                 results.push((version, encoding.name, bytes));
             }
         }
-        assert!(
+        prop_assert!(
             results.len() > results_before,
             "No supported encodings for certification version {version:?}"
         );
@@ -150,10 +150,17 @@ fn stream_header_unique_encoding(
     if results.len() > 1 {
         let (current_version, current_name, current_bytes) = results.pop().unwrap();
         for (version, name, bytes) in &results {
-            assert_eq!(
-                &current_bytes, bytes,
-                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
-            );
+            if version == &current_version {
+                prop_assert_eq!(
+                    &current_bytes,
+                    bytes,
+                    "Different encodings: {}@{:?} and {}@{:?}",
+                    current_name,
+                    current_version,
+                    name,
+                    version
+                );
+            }
         }
     }
 }
@@ -178,10 +185,12 @@ fn stream_header_roundtrip_encoding(
                 let result = (encoding.decode)(&bytes)
                     .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
 
-                assert_eq!(
-                    header, result,
+                prop_assert_eq!(
+                    &header,
+                    &result,
                     "Roundtrip encoding {}@{:?} failed",
-                    encoding.name, version
+                    encoding.name,
+                    version
                 );
             }
         }
@@ -208,7 +217,7 @@ fn stream_header_encoding_panic_on_invalid(
             if encoding.version_range.contains(&version) {
                 let result = std::panic::catch_unwind(|| (encoding.encode)((&header, version)));
 
-                assert!(
+                prop_assert!(
                     result.is_err(),
                     "Encoding of invalid {}@{:?} succeeded",
                     encoding.name,
@@ -246,18 +255,24 @@ lazy_static! {
             |v| RequestOrResponseV21::proxy_decode(v),
         ),
         VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "StreamMessage",
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V22,
+            "StreamMessageV22",
             |v| StreamMessageV22::proxy_encode(v),
             |v| StreamMessageV22::proxy_decode(v),
+        ),
+        VersionedEncoding::new(
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            "StreamMessage",
+            |v| StreamMessageV23::proxy_encode(v),
+            |v| StreamMessageV23::proxy_decode(v),
         ),
     ];
 }
 
 /// Tests that given a `StreamMessage` that is valid for a given certification
 /// version range (e.g. no `refund` before certification version 22) all
-/// supported canonical type (e.g. `RequestOrResponseV21` or `StreamMessage`)
-/// and certification version combinations produce the exact same encoding.
+/// supported canonical types (e.g. `RequestOrResponseV21` or `StreamMessage`)
+/// the exact same encoding for a given certification version.
 #[test_strategy::proptest]
 fn message_unique_encoding(
     #[strategy(arb_valid_versioned_message())] test_message: (
@@ -277,7 +292,7 @@ fn message_unique_encoding(
                 results.push((version, encoding.name, bytes));
             }
         }
-        assert!(
+        prop_assert!(
             results.len() > results_before,
             "No supported encodings for certification version {version:?}"
         );
@@ -286,10 +301,17 @@ fn message_unique_encoding(
     if results.len() > 1 {
         let (current_version, current_name, current_bytes) = results.pop().unwrap();
         for (version, name, bytes) in &results {
-            assert_eq!(
-                &current_bytes, bytes,
-                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
-            );
+            if version == &current_version {
+                prop_assert_eq!(
+                    &current_bytes,
+                    bytes,
+                    "Different encodings: {}@{:?} and {}@{:?}",
+                    current_name,
+                    current_version,
+                    name,
+                    version
+                );
+            }
         }
     }
 }
@@ -314,10 +336,12 @@ fn message_roundtrip_encoding(
                 let result = (encoding.decode)(&bytes)
                     .unwrap_or_else(|_| panic!("Failed to decode {}@{:?}", encoding.name, version));
 
-                assert_eq!(
-                    message, result,
+                prop_assert_eq!(
+                    &message,
+                    &result,
                     "Roundtrip encoding {}@{:?} failed",
-                    encoding.name, version
+                    encoding.name,
+                    version
                 );
             }
         }
@@ -393,7 +417,7 @@ fn system_metadata_unique_encoding(
                 results.push((version, encoding.name, bytes));
             }
         }
-        assert!(
+        prop_assert!(
             results.len() > results_before,
             "No supported encodings for certification version {version:?}"
         );
@@ -402,10 +426,17 @@ fn system_metadata_unique_encoding(
     if results.len() > 1 {
         let (current_version, current_name, current_bytes) = results.pop().unwrap();
         for (version, name, bytes) in &results {
-            assert_eq!(
-                &current_bytes, bytes,
-                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
-            );
+            if version == &current_version {
+                prop_assert_eq!(
+                    &current_bytes,
+                    bytes,
+                    "Different encodings: {}@{:?} and {}@{:?}",
+                    current_name,
+                    current_version,
+                    name,
+                    version
+                );
+            }
         }
     }
 }
@@ -455,7 +486,7 @@ fn subnet_metrics_unique_encoding(
                 results.push((version, encoding.name, bytes));
             }
         }
-        assert!(
+        prop_assert!(
             results.len() > results_before,
             "No supported encodings for certification version {version:?}"
         );
@@ -464,10 +495,17 @@ fn subnet_metrics_unique_encoding(
     if results.len() > 1 {
         let (current_version, current_name, current_bytes) = results.pop().unwrap();
         for (version, name, bytes) in &results {
-            assert_eq!(
-                &current_bytes, bytes,
-                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
-            );
+            if version == &current_version {
+                prop_assert_eq!(
+                    &current_bytes,
+                    bytes,
+                    "Different encodings: {}@{:?} and {}@{:?}",
+                    current_name,
+                    current_version,
+                    name,
+                    version
+                );
+            }
         }
     }
 }
