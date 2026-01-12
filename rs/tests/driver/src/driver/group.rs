@@ -713,7 +713,6 @@ impl SystemTestGroup {
         // The setup_tasks always includes the setup_task which executes the setup function.
         // In case metrics is enabled it also includes the metrics_setup_task which sets up the PrometheusVm.
         // These tasks are executed in parallel as part of the setup_plan below.
-
         let mut setup_tasks: Vec<Plan<Box<dyn Task>>> = vec![setup_plan];
         if group_ctx.enable_metrics {
             let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
