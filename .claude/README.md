@@ -5,7 +5,7 @@ You can you use Claude Code either from the:
 
 * [Claude Code VS Code Extension](https://code.claude.com/docs/en/vs-code).
 
-* CLI using the [`claude`](https://code.claude.com/docs/en/cli-reference) command which is already installed in the dev container.
+* CLI using the [`claude`](https://code.claude.com/docs/en/cli-reference) command which will be installed in the dev container later.
 
 Login
 -----
