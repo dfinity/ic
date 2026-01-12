@@ -2975,7 +2975,8 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return (Ok(()), NumInstructions::new(0));
+                        round_limits.instructions -= as_round_instructions(instructions);
+                        return (Ok(()), instructions);
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         // In this case, we spent instructions calculating the chunk hash, so we charge them.
