@@ -63,7 +63,7 @@ function make_var_cryptsetup() {
         local ALT_PARTUUID="22d2f5a6-1e39-d247-81cf-90c95c113e21"
     fi
 
-    # Systemd uses a weirdly-escaped unit names
+    # Systemd uses weirdly-escaped unit names
     SYSTEMD_DEVICE=$(systemd-escape dev/disk/by-partuuid/${PARTUUID}.device)
 
     # Generate a unit that will set up the partition as encrypted storage.
