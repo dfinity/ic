@@ -294,8 +294,13 @@ def system_test(
             data.append(dep)
 
     if enable_metrics:
-        env |= {"ENABLE_METRICS": "1"}
         extra_args_simple.append("--enable-metrics")
+
+        # For colocated tests we want to --enable-metrics in the colocated test-driver
+        # but we don't want to --enable-metrics in the wrapper test-driver (otherwise we would get two p8s VMs).
+        # To implement this we set the ENABLE_METRICS environment variable.
+        # The wrapper test-driver will then set --enable-metrics for the colocated test-driver if this variable is set.
+        env |= {"ENABLE_METRICS": "1"}
 
     env |= {
         "PROMETHEUS_VM_REQUIRED_HOST_FEATURES": json.encode(prometheus_vm_required_host_features),
