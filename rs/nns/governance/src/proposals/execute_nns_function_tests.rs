@@ -9,8 +9,11 @@ use crate::{
 use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
-use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
-use ic_nns_governance_api::SelfDescribingValue;
+use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
+use ic_nns_governance_api::{
+    SelfDescribingValue,
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+};
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use maplit::hashmap;
 use std::sync::Arc;
@@ -228,6 +231,42 @@ async fn test_to_self_describing_uninstall_code() {
             "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
                 SelfDescribingValue::Nat(Nat::from(42_u64)),
             ]),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_bitcoin_set_config() {
+    let bitcoin_payload = vec![1, 2, 3, 4, 5];
+    let arg = BitcoinSetConfigProposal {
+        network: BitcoinNetwork::Mainnet,
+        payload: bitcoin_payload.clone(),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::BitcoinSetConfig,
+        payload,
+    };
+
+    // No canister_metadata call expected - BitcoinSetConfig uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Set Bitcoin Config");
+    assert!(
+        result
+            .type_description
+            .contains("set the configuration of the underlying Bitcoin")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "canister_id".to_string() => SelfDescribingValue::Text(BITCOIN_MAINNET_CANISTER_ID.to_string()),
+            "method_name".to_string() => SelfDescribingValue::Text("set_config".to_string()),
+            "payload".to_string() => SelfDescribingValue::Blob(bitcoin_payload),
         })
     );
 }

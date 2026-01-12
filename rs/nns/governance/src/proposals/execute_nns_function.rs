@@ -5,7 +5,10 @@ use crate::{
         ExecuteNnsFunction, GovernanceError, NnsFunction, SelfDescribingProposalAction,
         SelfDescribingValue, Topic, governance_error::ErrorType,
     },
-    proposals::decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
+    proposals::{
+        decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
+        self_describing::ValueBuilder,
+    },
 };
 
 use candid::{Decode, Encode};
@@ -13,13 +16,13 @@ use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
 use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
-use std::str::FromStr;
 use std::sync::Arc;
 
 /// A partial Candid interface for the management canister (ic_00) that contains the necessary
@@ -58,6 +61,17 @@ impl ValidExecuteNnsFunction {
         &self,
         env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingValue, String> {
+        #[allow(clippy::single_match)]
+        match &self.nns_function {
+            ValidNnsFunction::BitcoinSetConfig => {
+                let request = get_request_for_bitcoin_set_config(&self.payload)?;
+                return Ok(SelfDescribingValue::from(request));
+            }
+            _ => {}
+        };
+
+        // For most of the NNS functions, we don't need to know its schema statically, but we fetch
+        // it from the management canister and decode the payload in runtime.
         let candid_source = self.get_candid_source(env).await?;
         let (_, method_name) = self.nns_function.canister_and_function();
         decode_candid_args_to_self_describing_value(&candid_source, method_name, &self.payload)
@@ -120,38 +134,12 @@ impl ValidExecuteNnsFunction {
         proposal_id: u64,
         proposal_timestamp_seconds: u64,
     ) -> Result<Vec<u8>, GovernanceError> {
-        const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
-        const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
-        const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
-
         match &self.nns_function {
             ValidNnsFunction::BitcoinSetConfig => {
-                // Decode the payload to get the network.
-                let decoded_payload =
-                    Decode!([decoder_config()]; &self.payload, BitcoinSetConfigProposal).map_err(
-                        |_| {
-                            GovernanceError::new_with_message(
-                                ErrorType::InvalidProposal,
-                                "Unable to decode BitcoinSetConfigProposal proposal: {e}",
-                            )
-                        },
-                    )?;
-
-                // Convert it to a call canister payload.
-                let canister_id = CanisterId::from_str(match decoded_payload.network {
-                    BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
-                    BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
-                })
-                .expect("bitcoin canister id must be valid.");
-
-                let encoded_payload = Encode!(&CallCanisterRequest {
-                    canister_id,
-                    method_name: BITCOIN_SET_CONFIG_METHOD_NAME.to_string(),
-                    payload: decoded_payload.payload
-                })
-                .unwrap();
-
-                Ok(encoded_payload)
+                let request = get_request_for_bitcoin_set_config(&self.payload)
+                    .map_err(|e| format!("Unable to decode BitcoinSetConfig proposal: {e}"))?;
+                let encoded_request = Encode!(&request).unwrap();
+                Ok(encoded_request)
             }
             ValidNnsFunction::SubnetRentalRequest => {
                 // Decode the payload to `SubnetRentalRequest`.
@@ -194,6 +182,39 @@ impl ValidExecuteNnsFunction {
             // understood by the NNS Governance canister.
             _ => Ok(self.payload.clone()),
         }
+    }
+}
+
+/// Returns a `CallCanisterRequest` for the BitcoinSetConfig proposal.
+fn get_request_for_bitcoin_set_config(payload: &[u8]) -> Result<CallCanisterRequest, String> {
+    let decoded_payload = Decode!([decoder_config()]; payload, BitcoinSetConfigProposal)
+        .map_err(|_| "Unable to decode BitcoinSetConfigProposal proposal: {e}")?;
+
+    let BitcoinSetConfigProposal { network, payload } = decoded_payload;
+    let canister_id = match network {
+        BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+        BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+    };
+    let method_name = "set_config".to_string();
+    Ok(CallCanisterRequest {
+        canister_id,
+        method_name,
+        payload,
+    })
+}
+
+impl From<CallCanisterRequest> for SelfDescribingValue {
+    fn from(request: CallCanisterRequest) -> Self {
+        let CallCanisterRequest {
+            canister_id,
+            method_name,
+            payload,
+        } = request;
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("method_name", method_name)
+            .add_field("payload", payload)
+            .build()
     }
 }
 
