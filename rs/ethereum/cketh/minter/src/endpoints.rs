@@ -532,7 +532,7 @@ impl From<memo::MintMemo> for MintMemo {
             } => MintMemo::Convert {
                 from_address: from_address.to_string(),
                 tx_hash: tx_hash.to_string(),
-                log_index: Nat::from(U256::new(log_index.into_inner())),
+                log_index: Nat::from(log_index),
             },
             memo::MintMemo::ReimburseTransaction {
                 withdrawal_id,
