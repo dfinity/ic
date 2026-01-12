@@ -12,7 +12,7 @@ pub use ic_sev::guest::custom_data::SevCustomDataNamespace;
 #[error("EncodingError({0})")]
 pub struct EncodingError(#[from] pub Box<dyn Error + Send + Sync>);
 
-/// A trait for types that can be encoded into a 64-byte array suitable for use as SEV custom data.
+/// A trait for types that can be encoded into a `SevCustomData` struct for use as SEV custom data.
 /// It's important that the encoding is deterministic and does not change between versions or
 /// environments.
 pub trait EncodeSevCustomData {
@@ -35,12 +35,13 @@ impl<T: DerEncodedCustomData> EncodeSevCustomData for T {
         self.encode(&mut encoded)
             .map_err(|err| EncodingError(Box::new(err)))?;
 
-        // Take first 60 bytes of SHA-512 hash
-        let hash = ring::digest::digest(&ring::digest::SHA512, &encoded);
-        Ok(SevCustomData::new(
-            self.namespace(),
-            hash.as_ref()[..60].try_into().unwrap(),
-        ))
+        let hash = ring::digest::digest(&ring::digest::SHA256, &encoded);
+        let hash_bytes: [u8; 32] = hash
+            .as_ref()
+            .try_into()
+            .expect("SHA-256 hash should be 32 bytes");
+
+        Ok(SevCustomData::new(self.namespace(), hash_bytes))
     }
 
     fn encode_for_sev_legacy(&self) -> Result<[u8; 64], EncodingError> {

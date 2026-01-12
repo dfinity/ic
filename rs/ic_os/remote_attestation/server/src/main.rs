@@ -38,31 +38,18 @@ impl RemoteAttestationServiceImpl {
 
     #[allow(clippy::result_large_err)]
     fn sev_custom_data_from_request(&self, req: &AttestRequest) -> Result<SevCustomData, Status> {
-        let custom_data: [u8; 64] = match &req.custom_data {
+        let custom_data: [u8; 32] = match &req.custom_data {
             Some(bytes) => bytes
                 .as_slice()
                 .try_into()
-                .map_err(|_| Status::invalid_argument("custom_data must be 64 bytes"))?,
-            None => {
-                let mut bytes = [0u8; 64];
-                bytes[0..4]
-                    .copy_from_slice(&SevCustomDataNamespace::RawRemoteAttestation.as_bytes());
-                bytes
-            }
+                .map_err(|_| Status::invalid_argument("custom_data must be 32 bytes"))?,
+            None => [0; 32],
         };
 
-        let custom_data = SevCustomData::from_namespaced_data(
+        Ok(SevCustomData::new(
             SevCustomDataNamespace::RawRemoteAttestation,
             custom_data,
-        )
-        .map_err(|_e| {
-            Status::invalid_argument(format!(
-                "The first 4 bytes of custom data must be {:?}",
-                SevCustomDataNamespace::RawRemoteAttestation.as_bytes()
-            ))
-        })?;
-
-        Ok(custom_data)
+        ))
     }
 }
 
@@ -80,7 +67,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
             trusted_execution_config,
         } = self
         else {
-            return Err(Status::unavailable("SEV is not enabled on this server"));
+            return Err(Status::unavailable("SEV is not enabled on this node"));
         };
 
         let mut guard = firmware.lock().expect("Failed to lock firmware mutex");
@@ -193,7 +180,7 @@ mod tests {
     #[test]
     async fn test_correct_namespace_works() {
         let custom_data =
-            SevCustomData::new(SevCustomDataNamespace::RawRemoteAttestation, [0; 60]).to_bytes();
+            SevCustomData::new(SevCustomDataNamespace::RawRemoteAttestation, [0; 32]).to_bytes();
         let request = AttestRequest {
             custom_data: Some(custom_data.to_vec()),
         };

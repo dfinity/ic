@@ -1,6 +1,4 @@
-use thiserror::Error;
-
-/// Namespaces for SEV custom data. Namespacing ensures that an attestation report for generated
+/// Namespaces for SEV custom data. Namespacing ensures that an attestation report generated
 /// for one purpose won't be accidentally or maliciously used for another purpose.
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -27,35 +25,27 @@ impl SevCustomDataNamespace {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SevCustomData {
     pub namespace: SevCustomDataNamespace,
-    pub data: [u8; 60],
+    pub data: [u8; 32],
 }
 
 impl SevCustomData {
     /// Constructs a `SevCustomData` from the given `namespace` and `data`.
-    pub fn new(namespace: SevCustomDataNamespace, data: [u8; 60]) -> Self {
+    pub fn new(namespace: SevCustomDataNamespace, data: [u8; 32]) -> Self {
         Self { namespace, data }
     }
 
     /// Generates a random `SevCustomData` with the given `namespace`.
     pub fn random(namespace: SevCustomDataNamespace, rng: &mut impl rand::Rng) -> Self {
-        let mut data = [0u8; 60];
+        let mut data = [0u8; 32];
         rng.fill(&mut data[..]);
         Self { namespace, data }
     }
 
-    /// Checks that `data` starts with `namespace.as_bytes()` and if so, constructs a
-    /// `SevCustomData` from it.
-    pub fn from_namespaced_data(
-        namespace: SevCustomDataNamespace,
-        data: [u8; 64],
-    ) -> Result<Self, InvalidNamespace> {
-        let data = data
-            .strip_prefix(&namespace.as_bytes())
-            .ok_or(InvalidNamespace)?;
-        Ok(Self {
-            namespace,
-            data: data.try_into().unwrap(),
-        })
+    /// Verifies that the given custom data (from an attestation report) matches this
+    /// `SevCustomData`.
+    pub fn verify(&self, custom_data_from_attestation_report: &[u8; 64]) -> bool {
+        custom_data_from_attestation_report.starts_with(&self.namespace.as_bytes())
+            && custom_data_from_attestation_report[32..] == self.data
     }
 
     /// Returns the raw bytes of the custom data which can be passed to the SEV firmware for use in
@@ -63,43 +53,67 @@ impl SevCustomData {
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut result = [0u8; 64];
         result[0..4].copy_from_slice(&self.namespace.as_bytes());
-        result[4..].copy_from_slice(&self.data);
+        result[32..].copy_from_slice(&self.data);
         result
     }
 }
 
-#[derive(Error, Debug)]
-#[error("Invalid SEV custom data namespace")]
-pub struct InvalidNamespace;
+/// Alternative syntax for verifying attestation report custom data.
+/// Allows direct comparison with a 64-byte long array using ==.
+impl PartialEq<[u8; 64]> for SevCustomData {
+    fn eq(&self, other: &[u8; 64]) -> bool {
+        self.verify(other)
+    }
+}
 
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_raw_custom_data_is_preserved() {
-        let data = [
-            1, 0, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-            23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
-            45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
-        ];
-        let custom_data =
-            SevCustomData::from_namespaced_data(SevCustomDataNamespace::RawRemoteAttestation, data)
-                .unwrap();
-        assert_eq!(custom_data.to_bytes(), data);
+    fn test_verify() {
+        let custom_data = SevCustomData::new(SevCustomDataNamespace::RawRemoteAttestation, [1; 32]);
+        assert!(!custom_data.verify(&[1; 64]));
+        assert!(custom_data.verify(&[
+            // namespace
+            1, 0, 0, 0, //
+            // ignored
+            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+            // data
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1
+        ]));
+        assert!(custom_data.verify(&[
+            // namespace
+            1, 0, 0, 0, //
+            // ignored
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            // data
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            1, 1, 1
+        ]));
     }
 
     #[test]
-    fn test_error_on_invalid_namespace() {
-        let data = [
-            // Invalid namespace (42)
-            42, 0, 0, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,
-            23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
-            45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
-        ];
-        assert!(
-            SevCustomData::from_namespaced_data(SevCustomDataNamespace::RawRemoteAttestation, data)
-                .is_err()
+    fn test_to_bytes() {
+        let custom_data = SevCustomData::new(SevCustomDataNamespace::RawRemoteAttestation, [1; 32]);
+        assert_eq!(
+            custom_data.to_bytes(),
+            [
+                // namespace
+                1, 0, 0, 0, //
+                // ignored (0s currently)
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                // data
+                1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+                1, 1, 1, 1
+            ]
         );
+    }
+
+    #[test]
+    fn test_equals() {
+        let custom_data = SevCustomData::new(SevCustomDataNamespace::Test, [255; 32]);
+        assert_eq!(custom_data, [255; 64]);
     }
 }
