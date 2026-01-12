@@ -11,7 +11,7 @@ use futures::future::Either;
 use futures::{FutureExt, TryFutureExt};
 use guest_upgrade_client::DiskEncryptionKeyExchangeClientAgent;
 use guest_upgrade_server::DiskEncryptionKeyExchangeServerAgent;
-use guest_upgrade_shared::DEFAULT_SERVER_PORT;
+use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
@@ -251,9 +251,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
         let expected_key = derive_key_from_sev_measurement(
             &mut self.server_sev_firmware.clone(),
             Key::DiskEncryptionKey {
-                device_path: Path::new(
-                    "/dev/disk/by-partuuid/231213c6-ec9e-11f0-b45f-b7bbea44aaf0",
-                ),
+                device_path: Path::new(STORE_DEVICE),
             },
         )
         .unwrap();

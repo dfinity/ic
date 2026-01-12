@@ -6,6 +6,7 @@ use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
+use guest_upgrade_shared::STORE_DEVICE;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
@@ -96,8 +97,6 @@ impl DiskEncryptionKeyExchangeClientAgent {
             .await
             .context(format!("Could not connect to server at {server_uri}"))?;
         println!("Connected successfully to server");
-
-        const STORE_DEVICE: &str = "/dev/disk/by-partuuid/231213c6-ec9e-11f0-b45f-b7bbea44aaf0";
 
         // If we can already open the store, we don't need to run the key exchange.
         // (We still have to call signal_status, since the server is expecting us to signal
