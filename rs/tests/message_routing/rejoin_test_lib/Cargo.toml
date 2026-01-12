@@ -17,6 +17,7 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
 ic-utils = { workspace = true }
+statesync-test = { path = "../../../rust_canisters/statesync_test" }
 slog = { workspace = true }
 tokio = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }

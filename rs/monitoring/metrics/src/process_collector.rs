@@ -53,7 +53,11 @@ impl Collector for ProcessCollector {
             }
         };
 
-        self.threads.set(p.stat.num_threads as f64);
+        self.threads.set(
+            p.stat()
+                .map(|stat| stat.num_threads as f64)
+                .unwrap_or_default(),
+        );
 
         let mut mfs = Vec::with_capacity(METRIC_COUNT);
         mfs.extend(self.threads.collect());

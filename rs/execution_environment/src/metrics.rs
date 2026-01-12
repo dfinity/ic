@@ -306,7 +306,7 @@ impl QueryHandlerMetrics {
         };
 
         self.subnet_query_messages
-            .with_label_values(&[method_name_label, status_label])
+            .with_label_values(&[method_name_label.as_str(), status_label])
             .observe(duration);
     }
 }

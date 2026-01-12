@@ -2,7 +2,7 @@ use crate::{governance::EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, pb::v1 a
 
 use candid::{Int, Nat};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api as pb_api;
+use ic_nns_governance_api as api;
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -64,7 +64,7 @@ impl ProposalDisplayOptions {
 fn convert_execute_nns_function(
     item: &pb::ExecuteNnsFunction,
     omit_large_fields: bool,
-) -> pb_api::ExecuteNnsFunction {
+) -> api::ExecuteNnsFunction {
     let pb::ExecuteNnsFunction {
         nns_function,
         payload,
@@ -78,13 +78,13 @@ fn convert_execute_nns_function(
             payload.clone()
         };
 
-    pb_api::ExecuteNnsFunction {
+    api::ExecuteNnsFunction {
         nns_function,
         payload,
     }
 }
 
-fn convert_install_code(item: &pb::InstallCode) -> pb_api::InstallCode {
+fn convert_install_code(item: &pb::InstallCode) -> api::InstallCode {
     let pb::InstallCode {
         canister_id,
         install_mode,
@@ -101,7 +101,7 @@ fn convert_install_code(item: &pb::InstallCode) -> pb_api::InstallCode {
     let wasm_module_hash = wasm_module_hash.clone();
     let arg_hash = arg_hash.clone();
 
-    pb_api::InstallCode {
+    api::InstallCode {
         canister_id,
         install_mode,
         skip_stopping_before_installing,
@@ -113,7 +113,7 @@ fn convert_install_code(item: &pb::InstallCode) -> pb_api::InstallCode {
 fn convert_ledger_parameters(
     item: &pb::create_service_nervous_system::LedgerParameters,
     omit_large_fields: bool,
-) -> pb_api::create_service_nervous_system::LedgerParameters {
+) -> api::create_service_nervous_system::LedgerParameters {
     let pb::create_service_nervous_system::LedgerParameters {
         transaction_fee,
         token_name,
@@ -131,7 +131,7 @@ fn convert_ledger_parameters(
         token_logo.clone()
     };
 
-    pb_api::create_service_nervous_system::LedgerParameters {
+    api::create_service_nervous_system::LedgerParameters {
         transaction_fee,
         token_name,
         token_symbol,
@@ -142,7 +142,7 @@ fn convert_ledger_parameters(
 fn convert_create_service_nervous_system(
     item: &pb::CreateServiceNervousSystem,
     omit_large_fields: bool,
-) -> pb_api::CreateServiceNervousSystem {
+) -> api::CreateServiceNervousSystem {
     let pb::CreateServiceNervousSystem {
         name,
         description,
@@ -174,7 +174,7 @@ fn convert_create_service_nervous_system(
         .as_ref()
         .map(|ledger_parameters| convert_ledger_parameters(ledger_parameters, omit_large_fields));
 
-    pb_api::CreateServiceNervousSystem {
+    api::CreateServiceNervousSystem {
         name,
         description,
         url,
@@ -191,69 +191,69 @@ fn convert_create_service_nervous_system(
 fn convert_action(
     item: &pb::proposal::Action,
     display_options: ProposalDisplayOptions,
-) -> pb_api::proposal::Action {
+) -> api::proposal::Action {
     match item {
         // Trivial conversions
         pb::proposal::Action::ManageNeuron(v) => {
-            pb_api::proposal::Action::ManageNeuron(Box::new(v.as_ref().clone().into()))
+            api::proposal::Action::ManageNeuron(Box::new(v.as_ref().clone().into()))
         }
         pb::proposal::Action::ManageNetworkEconomics(v) => {
-            pb_api::proposal::Action::ManageNetworkEconomics(v.clone().into())
+            api::proposal::Action::ManageNetworkEconomics(v.clone().into())
         }
-        pb::proposal::Action::Motion(v) => pb_api::proposal::Action::Motion(v.clone().into()),
+        pb::proposal::Action::Motion(v) => api::proposal::Action::Motion(v.clone().into()),
         pb::proposal::Action::ApproveGenesisKyc(v) => {
-            pb_api::proposal::Action::ApproveGenesisKyc(v.clone().into())
+            api::proposal::Action::ApproveGenesisKyc(v.clone().into())
         }
         pb::proposal::Action::AddOrRemoveNodeProvider(v) => {
-            pb_api::proposal::Action::AddOrRemoveNodeProvider(v.clone().into())
+            api::proposal::Action::AddOrRemoveNodeProvider(v.clone().into())
         }
         pb::proposal::Action::RewardNodeProvider(v) => {
-            pb_api::proposal::Action::RewardNodeProvider(v.clone().into())
+            api::proposal::Action::RewardNodeProvider(v.clone().into())
         }
         pb::proposal::Action::SetDefaultFollowees(v) => {
-            pb_api::proposal::Action::SetDefaultFollowees(v.clone().into())
+            api::proposal::Action::SetDefaultFollowees(v.clone().into())
         }
         pb::proposal::Action::RewardNodeProviders(v) => {
-            pb_api::proposal::Action::RewardNodeProviders(v.clone().into())
+            api::proposal::Action::RewardNodeProviders(v.clone().into())
         }
         pb::proposal::Action::RegisterKnownNeuron(v) => {
-            pb_api::proposal::Action::RegisterKnownNeuron(v.clone().into())
+            api::proposal::Action::RegisterKnownNeuron(v.clone().into())
         }
         pb::proposal::Action::DeregisterKnownNeuron(v) => {
-            pb_api::proposal::Action::DeregisterKnownNeuron((*v).into())
+            api::proposal::Action::DeregisterKnownNeuron((*v).into())
         }
         pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
-            pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.clone().into())
+            api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.clone().into())
         }
         pb::proposal::Action::OpenSnsTokenSwap(v) => {
-            pb_api::proposal::Action::OpenSnsTokenSwap(v.clone().into())
+            api::proposal::Action::OpenSnsTokenSwap(v.clone().into())
         }
         pb::proposal::Action::StopOrStartCanister(v) => {
-            pb_api::proposal::Action::StopOrStartCanister(v.clone().into())
+            api::proposal::Action::StopOrStartCanister(v.clone().into())
         }
         pb::proposal::Action::UpdateCanisterSettings(v) => {
-            pb_api::proposal::Action::UpdateCanisterSettings(v.clone().into())
+            api::proposal::Action::UpdateCanisterSettings(v.clone().into())
         }
         pb::proposal::Action::FulfillSubnetRentalRequest(v) => {
-            pb_api::proposal::Action::FulfillSubnetRentalRequest(v.clone().into())
+            api::proposal::Action::FulfillSubnetRentalRequest(v.clone().into())
         }
         pb::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
-            pb_api::proposal::Action::BlessAlternativeGuestOsVersion(v.clone().into())
+            api::proposal::Action::BlessAlternativeGuestOsVersion(v.clone().into())
         }
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.
         pb::proposal::Action::InstallCode(v) => {
-            pb_api::proposal::Action::InstallCode(convert_install_code(v))
+            api::proposal::Action::InstallCode(convert_install_code(v))
         }
         pb::proposal::Action::ExecuteNnsFunction(v) => {
-            pb_api::proposal::Action::ExecuteNnsFunction(convert_execute_nns_function(
+            api::proposal::Action::ExecuteNnsFunction(convert_execute_nns_function(
                 v,
                 display_options.omit_large_execute_nns_function_payload(),
             ))
         }
         pb::proposal::Action::CreateServiceNervousSystem(v) => {
-            pb_api::proposal::Action::CreateServiceNervousSystem(
+            api::proposal::Action::CreateServiceNervousSystem(
                 convert_create_service_nervous_system(
                     v,
                     display_options.omit_create_service_nervous_system_large_fields(),
@@ -266,7 +266,7 @@ fn convert_action(
 fn convert_self_describing_action(
     item: &pb::SelfDescribingProposalAction,
     omit_create_service_nervous_system_logos: bool,
-) -> pb_api::SelfDescribingProposalAction {
+) -> api::SelfDescribingProposalAction {
     let pb::SelfDescribingProposalAction {
         type_name,
         type_description,
@@ -292,7 +292,7 @@ fn convert_self_describing_action(
         .as_ref()
         .map(|value| convert_self_describing_value(value, paths_to_omit));
 
-    pb_api::SelfDescribingProposalAction {
+    api::SelfDescribingProposalAction {
         type_name,
         type_description,
         value,
@@ -355,7 +355,7 @@ fn convert_self_describing_field(
     field_name: &str,
     paths_to_omit: Vec<RecordPath>,
     original_value: &pb::SelfDescribingValue,
-) -> pb_api::SelfDescribingValue {
+) -> api::SelfDescribingValue {
     let match_results = paths_to_omit
         .iter()
         .map(|path| path.matches(field_name))
@@ -364,7 +364,7 @@ fn convert_self_describing_field(
         .iter()
         .any(|result| matches!(result, OmitAction::OmitCurrent))
     {
-        return pb_api::SelfDescribingValue::Null;
+        return api::SelfDescribingValue::Null;
     }
     let descendant_paths_to_omit = match_results
         .into_iter()
@@ -379,29 +379,29 @@ fn convert_self_describing_field(
 fn convert_self_describing_value(
     item: &pb::SelfDescribingValue,
     paths_to_omit: Vec<RecordPath>,
-) -> pb_api::SelfDescribingValue {
+) -> api::SelfDescribingValue {
     let pb::SelfDescribingValue { value } = item;
 
     let Some(value) = value else {
         // This should be unreacheable, because we always construct a SelfDescribingValue with a value.
         // Ideally the type should be non-optional, but prost always generates an optional field for
         // messages.
-        return pb_api::SelfDescribingValue::Map(HashMap::new());
+        return api::SelfDescribingValue::Map(HashMap::new());
     };
 
     match value {
-        pb::self_describing_value::Value::Blob(v) => pb_api::SelfDescribingValue::Blob(v.clone()),
-        pb::self_describing_value::Value::Text(v) => pb_api::SelfDescribingValue::Text(v.clone()),
+        pb::self_describing_value::Value::Blob(v) => api::SelfDescribingValue::Blob(v.clone()),
+        pb::self_describing_value::Value::Text(v) => api::SelfDescribingValue::Text(v.clone()),
         pb::self_describing_value::Value::Nat(v) => {
             let nat = Nat::decode(&mut v.as_slice()).unwrap();
-            pb_api::SelfDescribingValue::Nat(nat)
+            api::SelfDescribingValue::Nat(nat)
         }
         pb::self_describing_value::Value::Int(v) => {
             let int = Int::decode(&mut v.as_slice()).unwrap();
-            pb_api::SelfDescribingValue::Int(int)
+            api::SelfDescribingValue::Int(int)
         }
-        pb::self_describing_value::Value::Null(_) => pb_api::SelfDescribingValue::Null,
-        pb::self_describing_value::Value::Array(v) => pb_api::SelfDescribingValue::Array(
+        pb::self_describing_value::Value::Null(_) => api::SelfDescribingValue::Null,
+        pb::self_describing_value::Value::Array(v) => api::SelfDescribingValue::Array(
             v.values
                 .iter()
                 .map(|value| convert_self_describing_value(value, vec![]))
@@ -412,7 +412,7 @@ fn convert_self_describing_value(
         // `convert_self_describing_value` happens indirectly through
         // `convert_self_describing_field`, which calls `convert_self_describing_value` if the field
         // should not be omitted.
-        pb::self_describing_value::Value::Map(v) => pb_api::SelfDescribingValue::Map(
+        pb::self_describing_value::Value::Map(v) => api::SelfDescribingValue::Map(
             v.values
                 .iter()
                 .map(|(k, v)| {
@@ -430,7 +430,7 @@ fn convert_self_describing_value(
 // tests need to convert SelfDescribingValue to `api::SelfDescribingValue`, we define it here rather
 // than in each test.
 #[cfg(test)]
-impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
+impl From<pb::SelfDescribingValue> for api::SelfDescribingValue {
     fn from(value: pb::SelfDescribingValue) -> Self {
         convert_self_describing_value(&value, vec![])
     }
@@ -439,7 +439,7 @@ impl From<pb::SelfDescribingValue> for pb_api::SelfDescribingValue {
 pub(crate) fn convert_proposal(
     item: &pb::Proposal,
     display_options: ProposalDisplayOptions,
-) -> pb_api::Proposal {
+) -> api::Proposal {
     let pb::Proposal {
         title,
         summary,
@@ -459,10 +459,7 @@ pub(crate) fn convert_proposal(
         None
     };
     let is_create_service_nervous_system_proposal = action.as_ref().is_some_and(|action| {
-        matches!(
-            action,
-            pb_api::proposal::Action::CreateServiceNervousSystem(_)
-        )
+        matches!(action, api::proposal::Action::CreateServiceNervousSystem(_))
     });
     let self_describing_action = if display_options.show_self_describing_action() {
         self_describing_action
@@ -478,7 +475,7 @@ pub(crate) fn convert_proposal(
         None
     };
 
-    pb_api::Proposal {
+    api::Proposal {
         title,
         summary,
         url,
@@ -490,7 +487,7 @@ pub(crate) fn convert_proposal(
 fn convert_ballots(
     all_ballots: &HashMap<u64, pb::Ballot>,
     caller_neurons: &BTreeSet<NeuronId>,
-) -> HashMap<u64, pb_api::Ballot> {
+) -> HashMap<u64, api::Ballot> {
     let mut ballots = HashMap::new();
     for neuron_id in caller_neurons.iter() {
         if let Some(v) = all_ballots.get(&neuron_id.id) {
@@ -506,7 +503,7 @@ pub(crate) fn proposal_data_to_info(
     caller_neurons: &BTreeSet<NeuronId>,
     now_seconds: u64,
     voting_period_seconds: impl Fn(pb::Topic) -> u64,
-) -> pb_api::ProposalInfo {
+) -> api::ProposalInfo {
     // Calculate derived fields
     let status = data.status() as i32;
     let reward_status = data.reward_status(now_seconds, voting_period_seconds(data.topic())) as i32;
@@ -536,7 +533,7 @@ pub(crate) fn proposal_data_to_info(
     // Convert ballots which are potentially large.
     let ballots = convert_ballots(&data.ballots, caller_neurons);
 
-    pb_api::ProposalInfo {
+    api::ProposalInfo {
         id,
         proposer,
         reject_cost_e8s,
@@ -668,33 +665,33 @@ mod tests {
             )),
         };
 
-        let value_pb_api = pb_api::SelfDescribingValue::from(value_pb);
+        let value_api = api::SelfDescribingValue::from(value_pb);
 
         assert_eq!(
-            value_pb_api,
-            pb_api::SelfDescribingValue::Map(hashmap! {
-                "text_field".to_string() => pb_api::SelfDescribingValue::Text("some text".to_string()),
-                "blob_field".to_string() => pb_api::SelfDescribingValue::Blob(vec![1, 2, 3, 4, 5]),
-                "nat_field".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
-                "int_field".to_string() => pb_api::SelfDescribingValue::Int(int_value.clone()),
-                "array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
-                    pb_api::SelfDescribingValue::Text("first".to_string()),
-                    pb_api::SelfDescribingValue::Text("second".to_string()),
-                    pb_api::SelfDescribingValue::Blob(vec![10, 20, 30]),
+            value_api,
+            api::SelfDescribingValue::Map(hashmap! {
+                "text_field".to_string() => api::SelfDescribingValue::Text("some text".to_string()),
+                "blob_field".to_string() => api::SelfDescribingValue::Blob(vec![1, 2, 3, 4, 5]),
+                "nat_field".to_string() => api::SelfDescribingValue::Nat(nat_value.clone()),
+                "int_field".to_string() => api::SelfDescribingValue::Int(int_value.clone()),
+                "array_field".to_string() => api::SelfDescribingValue::Array(vec![
+                    api::SelfDescribingValue::Text("first".to_string()),
+                    api::SelfDescribingValue::Text("second".to_string()),
+                    api::SelfDescribingValue::Blob(vec![10, 20, 30]),
                 ]),
-                "nested_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {
-                    "nested_text".to_string() => pb_api::SelfDescribingValue::Text("nested value".to_string()),
-                    "nested_blob".to_string() => pb_api::SelfDescribingValue::Blob(vec![255, 254, 253]),
-                    "nested_nat".to_string() => pb_api::SelfDescribingValue::Nat(nat_value.clone()),
+                "nested_map_field".to_string() => api::SelfDescribingValue::Map(hashmap! {
+                    "nested_text".to_string() => api::SelfDescribingValue::Text("nested value".to_string()),
+                    "nested_blob".to_string() => api::SelfDescribingValue::Blob(vec![255, 254, 253]),
+                    "nested_nat".to_string() => api::SelfDescribingValue::Nat(nat_value.clone()),
                 }),
-                "empty_array_field".to_string() => pb_api::SelfDescribingValue::Array(vec![]),
-                "empty_map_field".to_string() => pb_api::SelfDescribingValue::Map(hashmap! {}),
-                "array_of_maps_field".to_string() => pb_api::SelfDescribingValue::Array(vec![
-                    pb_api::SelfDescribingValue::Map(hashmap! {
-                        "key1".to_string() => pb_api::SelfDescribingValue::Text("value1".to_string()),
+                "empty_array_field".to_string() => api::SelfDescribingValue::Array(vec![]),
+                "empty_map_field".to_string() => api::SelfDescribingValue::Map(hashmap! {}),
+                "array_of_maps_field".to_string() => api::SelfDescribingValue::Array(vec![
+                    api::SelfDescribingValue::Map(hashmap! {
+                        "key1".to_string() => api::SelfDescribingValue::Text("value1".to_string()),
                     }),
-                    pb_api::SelfDescribingValue::Map(hashmap! {
-                        "key2".to_string() => pb_api::SelfDescribingValue::Text("value2".to_string()),
+                    api::SelfDescribingValue::Map(hashmap! {
+                        "key2".to_string() => api::SelfDescribingValue::Text("value2".to_string()),
                     }),
                 ]),
             })
@@ -725,32 +722,32 @@ mod tests {
                 .value
                 .unwrap();
         let map = match self_describing_value_with_logos {
-            pb_api::SelfDescribingValue::Map(map) => map,
+            api::SelfDescribingValue::Map(map) => map,
             _ => panic!("Expected a map"),
         };
         assert_eq!(
             map.get("name").unwrap(),
-            &pb_api::SelfDescribingValue::Text("some name".to_string())
+            &api::SelfDescribingValue::Text("some name".to_string())
         );
         assert_eq!(
             map.get("logo").unwrap(),
-            &pb_api::SelfDescribingValue::Map(hashmap! {
-                "base64_encoding".to_string() => pb_api::SelfDescribingValue::Text("base64 encoding of a logo".to_string()),
+            &api::SelfDescribingValue::Map(hashmap! {
+                "base64_encoding".to_string() => api::SelfDescribingValue::Text("base64 encoding of a logo".to_string()),
             })
         );
         let ledger_parameters = map.get("ledger_parameters").unwrap();
         let ledger_parameters_map = match ledger_parameters {
-            pb_api::SelfDescribingValue::Map(map) => map,
+            api::SelfDescribingValue::Map(map) => map,
             _ => panic!("Expected a map"),
         };
         assert_eq!(
             ledger_parameters_map.get("token_name").unwrap(),
-            &pb_api::SelfDescribingValue::Text("some token name".to_string())
+            &api::SelfDescribingValue::Text("some token name".to_string())
         );
         assert_eq!(
             ledger_parameters_map.get("token_logo").unwrap(),
-            &pb_api::SelfDescribingValue::Map(hashmap! {
-                "base64_encoding".to_string() => pb_api::SelfDescribingValue::Text("base64 encoding of a token logo".to_string()),
+            &api::SelfDescribingValue::Map(hashmap! {
+                "base64_encoding".to_string() => api::SelfDescribingValue::Text("base64 encoding of a token logo".to_string()),
             })
         );
 
@@ -760,26 +757,26 @@ mod tests {
                 .value
                 .unwrap();
         let map = match self_describing_value_without_logos {
-            pb_api::SelfDescribingValue::Map(map) => map,
+            api::SelfDescribingValue::Map(map) => map,
             _ => panic!("Expected a map"),
         };
         assert_eq!(
             map.get("name").unwrap(),
-            &pb_api::SelfDescribingValue::Text("some name".to_string())
+            &api::SelfDescribingValue::Text("some name".to_string())
         );
-        assert_eq!(map.get("logo"), Some(&pb_api::SelfDescribingValue::Null));
+        assert_eq!(map.get("logo"), Some(&api::SelfDescribingValue::Null));
         let ledger_parameters = map.get("ledger_parameters").unwrap();
         let ledger_parameters_map = match ledger_parameters {
-            pb_api::SelfDescribingValue::Map(map) => map,
+            api::SelfDescribingValue::Map(map) => map,
             _ => panic!("Expected a map"),
         };
         assert_eq!(
             ledger_parameters_map.get("token_name").unwrap(),
-            &pb_api::SelfDescribingValue::Text("some token name".to_string())
+            &api::SelfDescribingValue::Text("some token name".to_string())
         );
         assert_eq!(
             ledger_parameters_map.get("token_logo"),
-            Some(&pb_api::SelfDescribingValue::Null)
+            Some(&api::SelfDescribingValue::Null)
         );
     }
 
@@ -787,7 +784,7 @@ mod tests {
     fn install_code_request_to_internal() {
         let test_cases = vec![
             (
-                pb_api::InstallCodeRequest {
+                api::InstallCodeRequest {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
                     install_mode: Some(pb::install_code::CanisterInstallMode::Install as i32),
                     skip_stopping_before_installing: None,
@@ -796,7 +793,7 @@ mod tests {
                 },
                 pb::InstallCode {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
-                    install_mode: Some(pb_api::install_code::CanisterInstallMode::Install as i32),
+                    install_mode: Some(api::install_code::CanisterInstallMode::Install as i32),
                     skip_stopping_before_installing: None,
                     wasm_module: Some(vec![1, 2, 3]),
                     arg: Some(vec![]),
@@ -805,7 +802,7 @@ mod tests {
                 },
             ),
             (
-                pb_api::InstallCodeRequest {
+                api::InstallCodeRequest {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
                     install_mode: Some(pb::install_code::CanisterInstallMode::Upgrade as i32),
                     skip_stopping_before_installing: Some(true),
@@ -814,7 +811,7 @@ mod tests {
                 },
                 pb::InstallCode {
                     canister_id: Some(PrincipalId::new_user_test_id(1)),
-                    install_mode: Some(pb_api::install_code::CanisterInstallMode::Upgrade as i32),
+                    install_mode: Some(api::install_code::CanisterInstallMode::Upgrade as i32),
                     skip_stopping_before_installing: Some(true),
                     wasm_module: Some(vec![1, 2, 3]),
                     arg: Some(vec![4, 5, 6]),

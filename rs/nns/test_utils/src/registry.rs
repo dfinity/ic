@@ -621,7 +621,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let release_package_url = "http://release_package.tar.zst".to_string();
     let guest_launch_measurements = Some(GuestLaunchMeasurements {
         guest_launch_measurements: vec![GuestLaunchMeasurement {
-            measurement: vec![1, 2, 3],
+            measurement: vec![0x42; 48],
             metadata: Some(GuestLaunchMeasurementMetadata {
                 kernel_cmdline: Some("foo=bar".to_string()),
             }),

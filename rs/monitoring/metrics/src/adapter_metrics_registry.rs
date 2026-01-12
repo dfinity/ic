@@ -78,7 +78,7 @@ impl AdapterMetricsRegistry {
                         match adapter_metrics {
                             Ok(m) => {
                                 scrape_duration
-                                    .with_label_values(&[&adapter_name, "success"])
+                                    .with_label_values(&[adapter_name.as_str(), "success"])
                                     .observe(now.elapsed().as_secs_f64());
                                 m
                             }
