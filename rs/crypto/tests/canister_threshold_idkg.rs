@@ -942,7 +942,7 @@ mod verify_complaint {
 
     #[test]
     fn should_return_valid_complaint_on_load_transcript_with_invalid_dealing_for_reshare_of_unmasked()
-    {
+     {
         let rng = &mut reproducible_rng();
         // Use at least 4 nodes to ensure reconstruction_threshold > 1.
         // With smaller subnets (especially 1-2 nodes), the initial and reshared transcripts
