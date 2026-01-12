@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "NNS_CANISTER_DATA", "NNS_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -39,12 +39,10 @@ system_test(
 
 system_test(
     name = "cycles_cost_schedule_test",
-    data = NNS_CANISTER_DATA,
-    env = NNS_CANISTER_ENV,
     tags = [
         "long_test",
     ],
-    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/governance/api",

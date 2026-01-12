@@ -101,31 +101,25 @@ def canister_runtime_deps_impl(canister_wasm_providers, qualifying_canisters):
         for cname, providers in canister_wasm_providers.items()
     }
 
-    runtime_deps = targets.keys()
-    env = {
-        "{}_WASM_PATH".format(cname.upper().replace("-", "_")): "$(rootpath {})".format(target)
+    runtime_deps = {
+        "{}_WASM_PATH".format(cname.upper().replace("-", "_")): target
         for target, cname in targets.items()
     }
-    return runtime_deps, env
+    return runtime_deps
 
-NNS_CANISTER_DATA, NNS_CANISTER_ENV = canister_runtime_deps_impl(
+NNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = NNS_CANISTER_WASM_PROVIDERS.keys(),
 )
 
-MAINNET_NNS_CANISTER_DATA, MAINNET_NNS_CANISTER_ENV = canister_runtime_deps_impl(
+MAINNET_NNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = [],
 )
 
-SNS_CANISTER_DATA, SNS_CANISTER_ENV = canister_runtime_deps_impl(
+SNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
-)
-
-MAINNET_SNS_CANISTER_DATA, MAINNET_SNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = [],
 )
 
 IC_GATEWAY_DATA = [

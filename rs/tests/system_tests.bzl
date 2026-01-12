@@ -9,7 +9,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_DATA", "MAINNET_NNS_CANISTER_ENV", "NNS_CANISTER_DATA", "NNS_CANISTER_ENV")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
 
 default_vm_resources = {
     "vcpus": None,
@@ -345,7 +345,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, data = [], **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, data = [], runtime_deps = {}, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -388,8 +388,9 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
 
     mainnet_nns_systest = system_test(
         name,
-        env = env | MAINNET_NNS_CANISTER_ENV,
-        data = data + MAINNET_NNS_CANISTER_DATA,
+        runtime_deps = runtime_deps | MAINNET_NNS_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
+        env = env,
+        data = data,
         tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
         **kwargs
     )
@@ -406,8 +407,9 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
-        env = env | NNS_CANISTER_ENV,
-        data = data + NNS_CANISTER_DATA,
+        runtime_deps = runtime_deps | NNS_CANISTER_RUNTIME_DEPS,
+        env = env,
+        data = data,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
