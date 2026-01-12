@@ -113,6 +113,11 @@ run:afl --run_under="//bin/fuzzing:afl_wrapper"
 build:sandbox_fuzzing --config=fuzzing
 run:sandbox_fuzzing --run_under="ASAN_OPTIONS=detect_leaks=0:allow_user_segv_handler=1:handle_segv=1:handle_sigfpe=1:handle_sigill=0:quarantine_size_mb=16 LSAN_OPTIONS=handle_sigill=0 RUST_MIN_STACK=8192000"
 
+# Fuzzing Wasmtime builds requires a special configuration to
+# avoid stack underflow false positives
+build:wasmfuzz --config=afl
+build:wasmfuzz --@rules_rust//:extra_rustc_flags=-Cllvm-args=-asan-stack=0
+
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
