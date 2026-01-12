@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests;
 
-use crate::endpoints::{self, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult, DecodedMemo, MemoType};
+use crate::endpoints::{
+    self, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult, DecodedMemo,
+    MemoType,
+};
 use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::ReceivedEvent;
 use crate::eth_rpc::Hash;
