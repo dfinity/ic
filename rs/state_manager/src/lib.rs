@@ -1793,9 +1793,9 @@ impl StateManagerImpl {
         Some((state, certification, hash_tree))
     }
 
-    /// Returns the manifest and checkpoint layout of the latest checkpoint that is either verified or from state sync.
+    /// Returns the manifest and checkpoint layout of the latest checkpoint with a manifest.
     ///
-    /// Both verified and state sync checkpoints are valid candidates for use as the base checkpoint for incremental manifest computation and state sync.
+    /// Unverified regular checkpoints are naturally excluded since they don't have manifests.
     fn latest_checkpoint_with_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
         let states = self.states.read();
         states
@@ -1803,11 +1803,9 @@ impl StateManagerImpl {
             .iter()
             .rev()
             .find_map(|(_, state_metadata)| {
-                let base_manifest = state_metadata.manifest()?.clone();
+                let manifest = state_metadata.manifest()?.clone();
                 let checkpoint_layout = state_metadata.checkpoint_layout.clone()?;
-                checkpoint_layout
-                    .is_verified_or_state_sync_checkpoint()
-                    .then_some((base_manifest, checkpoint_layout))
+                Some((manifest, checkpoint_layout))
             })
     }
 
