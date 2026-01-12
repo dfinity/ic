@@ -28,7 +28,7 @@ rust_library(
     crate_name = "attestation",
     deps = [
         ":build_script",
-        "//rs/ic_os/config_types",
+        "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/sev",
         "//rs/interfaces/registry",
         "//rs/protobuf",

@@ -341,7 +341,7 @@ message BlockmakerMetricsTimeSeries {
 }
 
 message SystemMetadata {
-  reserved 1, 4, 12, 14;
+  reserved 1, 4, 12, 14, 22;
   reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos";
 
   google.protobuf.BytesValue prev_state_hash = 2;
@@ -383,9 +383,6 @@ message SystemMetadata {
   BlockmakerMetricsTimeSeries blockmaker_metrics_time_series = 20;
 
   repeated ApiBoundaryNodeEntry api_boundary_nodes = 21;
-
-  // TODO: deprecate in favour of information in NetworkTopology
-  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 22;
 }
 
 message StableMemory {

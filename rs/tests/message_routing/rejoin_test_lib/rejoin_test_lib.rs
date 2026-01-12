@@ -1,4 +1,4 @@
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -13,6 +13,7 @@ use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
 use slog::info;
+use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Debug;
@@ -36,9 +37,11 @@ const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 
-const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_duration_seconds";
+const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
 const GIB: u64 = 1 << 30;
+
+const BACKOFF_TIME_MILLIS: u64 = 1000;
 
 pub async fn rejoin_test(
     env: &TestEnv,
@@ -73,7 +76,7 @@ pub async fn rejoin_test(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -88,14 +91,14 @@ pub async fn rejoin_test(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().kill();
+        node_to_kill.vm().await.kill().await;
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -167,7 +170,7 @@ pub async fn rejoin_test_large_state(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -204,14 +207,14 @@ pub async fn rejoin_test_large_state(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().kill();
+        node_to_kill.vm().await.kill().await;
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -298,18 +301,44 @@ async fn deploy_canisters_for_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
-        let bytes = Encode!(&num_canisters_per_seed_canister)
-            .expect("Failed to candid encode argument for a seed canister");
-        let fut = agent
-            .update(&seed_canister_id, "create_many_canisters")
-            .with_arg(bytes)
-            .call_and_wait();
+        let agent = agent.clone();
+        let fut = async move {
+            loop {
+                let bytes = Encode!(&num_canisters_per_seed_canister)
+                    .expect("Failed to candid encode argument for a seed canister");
+                let res = agent
+                    .update(&seed_canister_id, "create_many_canisters")
+                    .with_arg(bytes)
+                    .call_and_wait()
+                    .await;
+                if res.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+            loop {
+                let bytes = Encode!(&()).expect("Failed to candid encode unit type");
+                let res = agent
+                    .query(&seed_canister_id, "canister_creation_status")
+                    .with_arg(bytes)
+                    .call()
+                    .await;
+                if let Ok(bytes) = res {
+                    let status = Decode!(&bytes, CanisterCreationStatus)
+                        .expect("Failed to candid decode canister creation status");
+                    match status {
+                        CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
+                        CanisterCreationStatus::Done(_) => {
+                            break;
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+        };
         create_many_canisters_futs.push(fut);
     }
-    let res = join_all(create_many_canisters_futs).await;
-    for r in res {
-        r.expect("Failed to create canisters via a seed canister");
-    }
+    join_all(create_many_canisters_futs).await;
 
     // We deploy 8 "busy" canisters: this way,
     // there are 2 canisters per each of the 4 scheduler threads
@@ -374,7 +403,7 @@ pub async fn rejoin_test_long_rounds(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -394,7 +423,7 @@ pub async fn rejoin_test_long_rounds(
     wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
 
     info!(logger, "Start the killed node again ...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
 
     info!(logger, "Waiting for the next CUP ...");
     let last_cup_height = wait_for_cup(
@@ -430,7 +459,6 @@ pub async fn assert_state_sync_has_happened(
     base_count: u64,
 ) -> f64 {
     const NUM_RETRIES: u32 = 300;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,
@@ -488,34 +516,21 @@ pub async fn assert_state_sync_has_happened(
 }
 
 async fn average_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
-    let label_sum = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_sum");
-    let label_count = format!("{METRIC_PROCESS_BATCH_PHASE_DURATION}_count");
+    let label_sum = format!("{METRIC_PROCESS_BATCH_DURATION}_sum");
+    let label_count = format!("{METRIC_PROCESS_BATCH_DURATION}_count");
     let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;
-    let sums: Vec<_> = metrics
+    assert_eq!(metrics.len(), 2);
+    let sum = metrics
         .iter()
-        .filter_map(|(k, v)| {
-            if k.starts_with(&label_sum) {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
-    let counts: Vec<_> = metrics
+        .find(|(k, _)| **k == label_sum)
+        .expect("Did not find {label_sum}")
+        .1;
+    let count = metrics
         .iter()
-        .filter_map(|(k, v)| {
-            if k.starts_with(&label_count) {
-                Some(v)
-            } else {
-                None
-            }
-        })
-        .collect();
-    assert_eq!(sums.len(), counts.len());
-    sums.iter()
-        .zip(counts.iter())
-        .map(|(x, y)| x[0] / y[0])
-        .sum()
+        .find(|(k, _)| **k == label_count)
+        .expect("Did not find {label_count}")
+        .1;
+    sum[0] / count[0]
 }
 
 pub async fn fetch_metrics<T>(
@@ -527,7 +542,6 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
@@ -537,10 +551,7 @@ where
         let metrics_result = metrics.fetch::<T>().await;
         match metrics_result {
             Ok(result) => {
-                if labels
-                    .iter()
-                    .all(|&label| result.iter().any(|(k, _)| k.starts_with(label)))
-                {
+                if labels.iter().all(|&label| result.contains_key(label)) {
                     info!(log, "Metrics successfully scraped {:?}.", result);
                     return result;
                 } else {
