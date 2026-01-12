@@ -370,6 +370,8 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         name: the name of the system-tests.
         enable_head_nns_variant: whether to run the head_nns variant daily.
         enable_mainnet_nns_variant: whether to run the mainnet variant.
+        data: TODO.
+        runtime_deps: TODO.
         **kwargs: the arguments of the system-tests.
 
     Returns:
