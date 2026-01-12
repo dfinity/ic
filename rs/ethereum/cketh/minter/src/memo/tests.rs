@@ -15,6 +15,7 @@ use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_cketh_test_utils::{
     DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    USDC_ERC20_CONTRACT_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE,
 };
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
@@ -319,6 +320,31 @@ fn should_decode_ledger_burn_erc20_convert_memo() {
         Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
             ckerc20_withdrawal_id: 123u64,
             to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_use_mixed_case_checksum_while_decoding_address() {
+    let memo = BurnMemo::Erc20Convert {
+        ckerc20_withdrawal_id: 123u64,
+        to_address: USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
+            ckerc20_withdrawal_id: 123u64,
+            to_address: USDC_ERC20_CONTRACT_ADDRESS.to_string(),
         }))));
     assert_eq!(
         result, expected,
