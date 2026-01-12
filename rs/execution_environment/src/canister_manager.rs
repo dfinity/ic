@@ -1594,12 +1594,11 @@ impl CanisterManager {
         // Charge for the upload. We charge before checking if the chunk has already been uploaded
         // since that check involves hash computation that we also want to charge for.
         let instructions = self.config.upload_wasm_chunk_instructions;
-        let chunk_bytes = wasm_chunk_store::chunk_size();
         self.cycles_account_manager
             .consume_cycles_for_instructions(
                 &sender,
                 canister,
-                NumInstructions::new(chunk_bytes.get()),
+                instructions,
                 subnet_size,
                 cost_schedule,
                 // For the `upload_chunk` operation, it does not matter if this is a Wasm64 or Wasm32 module
@@ -1632,6 +1631,7 @@ impl CanisterManager {
             }
         };
 
+        let chunk_bytes = wasm_chunk_store::chunk_size();
         let new_memory_usage = canister.memory_usage() + chunk_bytes;
 
         if self.config.rate_limiting_of_heap_delta == FlagStatus::Enabled
