@@ -3,7 +3,8 @@ use crate::{
     governance::Environment,
     pb::v1::{
         ExecuteNnsFunction, GovernanceError, NnsFunction, SelfDescribingProposalAction,
-        SelfDescribingValue, Topic, governance_error::ErrorType,
+        SelfDescribingValue, SelfDescribingValueMap, Topic, governance_error::ErrorType,
+        self_describing_value::Value,
     },
     proposals::{
         decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
@@ -85,7 +86,17 @@ impl ValidExecuteNnsFunction {
         // it from the management canister and decode the payload in runtime.
         let candid_source = self.get_candid_source(env).await?;
         let (_, method_name) = self.nns_function.canister_and_function();
-        decode_candid_args_to_self_describing_value(&candid_source, method_name, &self.payload)
+        let self_describing_value = decode_candid_args_to_self_describing_value(
+            &candid_source,
+            method_name,
+            &self.payload,
+        )?;
+
+        // Certain blobs (e.g. WASM and sometimes args) are hashed to avoid them being too large.
+        let self_describing_value =
+            maybe_hash_large_blobs(self_describing_value, self.nns_function);
+
+        Ok(self_describing_value)
     }
 
     pub async fn to_self_describing_action(
@@ -265,6 +276,62 @@ fn encode_add_wasm_request(
     })
 }
 
+fn maybe_hash_large_blobs(
+    self_describing_value: SelfDescribingValue,
+    nns_function: ValidNnsFunction,
+) -> SelfDescribingValue {
+    let field_names: &[&str] = match nns_function {
+        ValidNnsFunction::NnsCanisterInstall => &["wasm_module", "arg"],
+        ValidNnsFunction::HardResetNnsRootToVersion => &["wasm_module", "init_arg"],
+        _ => {
+            return self_describing_value;
+        }
+    };
+
+    // Use multiple-level match so that the original value can be returned without cloning if it
+    // doesn't match.
+    let SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    } = self_describing_value
+    else {
+        return self_describing_value;
+    };
+
+    let values_map = values_map
+        .into_iter()
+        .map(|(key, value)| maybe_replace_large_blob_entry_with_hash(key, value, field_names))
+        .collect();
+    SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    }
+}
+
+fn maybe_replace_large_blob_entry_with_hash(
+    key: String,
+    value: SelfDescribingValue,
+    field_names: &[&str],
+) -> (String, SelfDescribingValue) {
+    if !field_names.contains(&key.as_str()) {
+        return (key, value);
+    }
+    // Use multiple-level match so that the original value can be returned without cloning if it
+    // doesn't match.
+    let SelfDescribingValue {
+        value: Some(Value::Blob(blob)),
+    } = value
+    else {
+        return (key, value);
+    };
+
+    let key = format!("{key}_hash");
+    let hash = Sha256::hash(&blob).to_vec();
+    let hashed_value = SelfDescribingValue {
+        value: Some(Value::Blob(hash)),
+    };
+
+    (key, hashed_value)
+}
+
 impl From<CallCanisterRequest> for SelfDescribingValue {
     fn from(request: CallCanisterRequest) -> Self {
         let CallCanisterRequest {
@@ -327,7 +394,7 @@ impl From<SnsWasm> for SelfDescribingValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValidNnsFunction {
     CreateSubnet,
     AddNodeToSubnet,

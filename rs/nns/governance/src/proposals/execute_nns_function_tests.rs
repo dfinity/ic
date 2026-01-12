@@ -416,3 +416,155 @@ fn test_re_encode_payload_to_target_canister_overrides_proposal_id_for_add_wasm(
     let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
     assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
 }
+
+#[tokio::test]
+async fn test_to_self_describing_nns_canister_install() {
+    let root_candid = r#"
+type AddCanisterRequest = record {
+  arg : blob;
+  initial_cycles : nat64;
+  wasm_module : blob;
+  name : text;
+  memory_allocation : opt nat;
+  compute_allocation : opt nat;
+};
+
+service : {
+  add_nns_canister : (AddCanisterRequest) -> ();
+}
+"#;
+
+    #[derive(candid::CandidType)]
+    struct AddCanisterRequest {
+        arg: Vec<u8>,
+        initial_cycles: u64,
+        wasm_module: Vec<u8>,
+        name: String,
+        memory_allocation: Option<u64>,
+        compute_allocation: Option<u64>,
+    }
+
+    let wasm_module = vec![0_u8, 0x61, 0x73, 0x6D, 1_u8, 0_u8, 0_u8, 0_u8];
+    let arg = vec![1_u8, 2_u8, 3_u8];
+
+    let request = AddCanisterRequest {
+        arg: arg.clone(),
+        initial_cycles: 1_000_000_000_000_u64,
+        wasm_module: wasm_module.clone(),
+        name: "test-canister".to_string(),
+        memory_allocation: None,
+        compute_allocation: None,
+    };
+    let payload = Encode!(&request).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::NnsCanisterInstall,
+        payload,
+    };
+
+    let metadata_request = CanisterMetadataRequest::new(
+        ic_nns_constants::ROOT_CANISTER_ID,
+        "candid:service".to_string(),
+    );
+    let metadata_response = CanisterMetadataResponse::new(root_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0_u64,
+    ));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    let wasm_hash = Sha256::hash(&wasm_module).to_vec();
+    let arg_hash = Sha256::hash(&arg).to_vec();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+            "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
+            "initial_cycles".to_string() => SelfDescribingValue::Nat(Nat::from(1_000_000_000_000_u64)),
+            "name".to_string() => SelfDescribingValue::from("test-canister"),
+            "memory_allocation".to_string() => SelfDescribingValue::Array(vec![]),
+            "compute_allocation".to_string() => SelfDescribingValue::Array(vec![]),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_hard_reset_nns_root_to_version() {
+    let lifeline_candid = r#"
+type HardResetRootToVersionPayload = record {
+  wasm_module: blob;
+  init_arg: blob;
+};
+
+service : {
+  hard_reset_root_to_version: (HardResetRootToVersionPayload) -> ();
+}
+"#;
+
+    #[derive(candid::CandidType)]
+    struct HardResetRootToVersionPayload {
+        wasm_module: Vec<u8>,
+        init_arg: Vec<u8>,
+    }
+
+    let wasm_module = vec![0_u8, 0x61, 0x73, 0x6D, 1_u8, 0_u8, 0_u8, 0_u8];
+    let init_arg = vec![4_u8, 5_u8, 6_u8];
+
+    let request = HardResetRootToVersionPayload {
+        wasm_module: wasm_module.clone(),
+        init_arg: init_arg.clone(),
+    };
+    let payload = Encode!(&request).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::HardResetNnsRootToVersion,
+        payload,
+    };
+
+    let metadata_request = CanisterMetadataRequest::new(
+        ic_nns_constants::LIFELINE_CANISTER_ID,
+        "candid:service".to_string(),
+    );
+    let metadata_response = CanisterMetadataResponse::new(lifeline_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0_u64,
+    ));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    let wasm_hash = Sha256::hash(&wasm_module).to_vec();
+    let init_arg_hash = Sha256::hash(&init_arg).to_vec();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
+            "init_arg_hash".to_string() => SelfDescribingValue::from(init_arg_hash),
+        })
+    );
+}
