@@ -500,7 +500,13 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, TransformExecutionInput { query, instruction_observation }: TransformExecutionInput) -> Self::Future {
+    fn call(
+        &mut self,
+        TransformExecutionInput {
+            query,
+            instruction_observation,
+        }: TransformExecutionInput,
+    ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
@@ -531,8 +537,13 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, None, enable_query_stats_tracking, Some(instruction_observation));
+                        let response = internal.query(
+                            query,
+                            state,
+                            None,
+                            enable_query_stats_tracking,
+                            Some(instruction_observation),
+                        );
 
                         Ok((response, time))
                     }

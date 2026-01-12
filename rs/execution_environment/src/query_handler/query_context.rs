@@ -456,9 +456,12 @@ impl<'a> QueryContext<'a> {
             Err(_) => 0,
         };
 
-        self.instruction_obvervation
-            .as_ref()
-            .map(|atomic| atomic.fetch_add(instructions_executed.get(), std::sync::atomic::Ordering::Relaxed));
+        self.instruction_obvervation.as_ref().map(|atomic| {
+            atomic.fetch_add(
+                instructions_executed.get(),
+                std::sync::atomic::Ordering::Relaxed,
+            )
+        });
 
         // Add query statistics to the query aggregator.
         let stats = QueryStats {

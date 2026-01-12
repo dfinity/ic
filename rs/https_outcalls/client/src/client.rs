@@ -23,7 +23,7 @@ use ic_types::{
     messages::{Query, QuerySource, Request},
 };
 use std::{
-    sync::{atomic::AtomicU64, Arc},
+    sync::{Arc, atomic::AtomicU64},
     time::Instant,
 };
 use tokio::{
@@ -379,9 +379,9 @@ async fn transform_adapter_response(
         response: canister_http_response,
         context: transform.context.clone(),
     };
-    
+
     let instruction_observation = Arc::new(AtomicU64::new(0));
-    
+
     let instruction_observation_clone = instruction_observation.clone();
 
     let execution_result = async move {
@@ -398,10 +398,10 @@ async fn transform_adapter_response(
             method_name: transform.method_name.to_string(),
             method_payload,
         };
-        
-        let query_execution_input = TransformExecutionInput { 
-            query, 
-            instruction_observation: instruction_observation_clone 
+
+        let query_execution_input = TransformExecutionInput {
+            query,
+            instruction_observation: instruction_observation_clone,
         };
 
         match Oneshot::new(query_handler, query_execution_input).await {
@@ -427,10 +427,11 @@ async fn transform_adapter_response(
                 ),
             )),
         }
-    }.await;
+    }
+    .await;
 
     let instructions_used = instruction_observation.load(std::sync::atomic::Ordering::Relaxed);
-    
+
     (execution_result, instructions_used)
 }
 
