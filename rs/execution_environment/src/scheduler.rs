@@ -1319,7 +1319,7 @@ impl Scheduler for SchedulerImpl {
             // The round will stop as soon as the counter reaches zero.
             // We can compute the initial value `X` of the counter based on:
             // - `R = max_instructions_per_round`,
-            // - `S = max(max_instructions_per_slice, max_instructions_per_message_without_dts)`.
+            // - `S = max(max_instructions_per_slice, max_instructions_per_install_code_slice)`.
             // In the worst case, we start a new Wasm execution when then counter
             // reaches 1 and the execution uses the maximum `S` instructions. After
             // the execution the counter will be set to `1 - S`.
@@ -1328,7 +1328,7 @@ impl Scheduler for SchedulerImpl {
             // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
             let max_instructions_per_slice = std::cmp::max(
                 self.config.max_instructions_per_slice,
-                self.config.max_instructions_per_message_without_dts,
+                self.config.max_instructions_per_install_code_slice,
             );
             let round_instructions = as_round_instructions(self.config.max_instructions_per_round)
                 - as_round_instructions(max_instructions_per_slice)
@@ -1847,7 +1847,7 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister,
                 instruction_limits.clone(),
-                config.max_instructions_per_message_without_dts,
+                config.max_instructions_per_query_message,
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
@@ -2251,10 +2251,9 @@ fn get_instructions_limits_for_subnet_message(
     config: &SchedulerConfig,
     msg: &CanisterMessage,
 ) -> InstructionLimits {
-    let default_limits = InstructionLimits::new(
-        config.max_instructions_per_message_without_dts,
-        config.max_instructions_per_message_without_dts,
-    );
+    // The default limits are unused since instruction limits only matter
+    // for install code in which case the default limits are overriden.
+    let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
         CanisterMessage::Response(_) => {
             return default_limits;
