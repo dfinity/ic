@@ -14,6 +14,7 @@ use crate::driver::test_env_api::{
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
+use crate::util::block_on;
 use anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -283,7 +284,7 @@ pub fn allocate_resources(
                 threads.push(std::thread::spawn(move || {
                     (
                         vm_name,
-                        farm_cloned.create_vm(&group_name, create_vm_request),
+                        block_on(farm_cloned.create_vm(&group_name, create_vm_request)),
                     )
                 }));
             }
