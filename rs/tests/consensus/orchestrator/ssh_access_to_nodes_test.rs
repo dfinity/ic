@@ -471,7 +471,7 @@ fn node_does_not_remove_keys_on_restart(env: TestEnv) {
     }
 }
 
-fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
+async fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let (nns_node, app_node, _, app_subnet) = topology_entities(topology.clone());
@@ -487,8 +487,8 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         Some(vec![readonly_public_key]),
         Some(vec![backup_public_key]),
     );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    let topology = block_on(topology.block_for_newer_registry_version()).unwrap();
+    update_subnet_record(nns_node.get_public_url(), payload).await;
+    let topology = topology.block_for_newer_registry_version().await.unwrap();
 
     let readonly_mean = AuthMean::PrivateKey(readonly_private_key);
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
@@ -527,7 +527,8 @@ fn node_keeps_keys_until_it_completely_leaves_its_subnet(env: TestEnv) {
         // and after waiting 2 check intervals below, then we should not be able to login and we
         // should break out of the loop. And if we don't, then the `expect` afterwards will catch
         // that.
-        let maybe_earliest_registry_version_in_use = get_node_earliest_topology_version(&app_node);
+        let maybe_earliest_registry_version_in_use =
+            get_node_earliest_topology_version(&app_node).await;
 
         info!(
             logger,

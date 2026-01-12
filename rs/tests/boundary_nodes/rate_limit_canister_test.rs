@@ -24,6 +24,14 @@ use anyhow::{Result, bail};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Wasm};
+use ic_agent::{
+    Agent, AgentError, Identity,
+    agent::{
+        HttpService,
+        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
+    },
+    identity::Secp256k1Identity,
+};
 use ic_base_types::PrincipalId;
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT, helpers::install_canisters,
@@ -33,23 +41,9 @@ use ic_nns_test_utils::{
     common::modify_wasm_bytes, governance::upgrade_nns_canister_by_proposal,
     itest_helpers::install_rust_canister_from_path,
 };
-use k256::elliptic_curve::SecretKey;
-use rand::{SeedableRng, rngs::OsRng};
-use rand_chacha::ChaChaRng;
-use slog::info;
-use std::{env, net::SocketAddr, sync::Arc, time::Duration};
-use tokio::runtime::Runtime;
-
-use ic_agent::{
-    Agent, AgentError, Identity,
-    agent::{
-        HttpService,
-        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
-    },
-    identity::Secp256k1Identity,
-};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     driver::test_env_api::NnsInstallationBuilder,
     driver::{
         group::SystemTestGroup,
@@ -60,13 +54,18 @@ use ic_system_test_driver::{
             get_dependency_path,
         },
     },
-    retry_with_msg_async, systest,
+    retry_with_msg_async,
     util::runtime_from_url,
 };
+use k256::elliptic_curve::SecretKey;
+use rand::{SeedableRng, rngs::OsRng};
+use rand_chacha::ChaChaRng;
 use rate_limits_api::{
     AddConfigResponse, InitArg, InputConfig, InputRule,
     v1::{Action, RateLimitRule},
 };
+use slog::info;
+use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 
 const RATE_LIMIT_CANISTER_ID: &str = "u637p-5aaaa-aaaaq-qaaca-cai";
 
@@ -99,7 +98,7 @@ pub fn setup(env: TestEnv) {
     });
 }
 
-async fn test_async(env: TestEnv) {
+async fn test(env: TestEnv) {
     let logger = env.logger();
 
     let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
@@ -414,15 +413,10 @@ async fn set_rate_limit_rules(
         .map_err(|err| format!("{err:?}"))
 }
 
-fn test(env: TestEnv) {
-    let rt = Runtime::new().expect("Could not create tokio runtime");
-    rt.block_on(test_async(env));
-}
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
     Ok(())
 }

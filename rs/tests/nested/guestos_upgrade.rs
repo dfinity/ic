@@ -4,9 +4,8 @@ use slog::info;
 use std::time::Duration;
 
 use ic_system_test_driver::{
+    async_systest,
     driver::{group::SystemTestGroup, nested::HasNestedVms, test_env::TestEnv, test_env_api::*},
-    systest,
-    util::block_on,
 };
 
 use nested::{HOST_VM_NAME, registration};
@@ -20,7 +19,7 @@ use nested::util::{
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(nested::setup)
-        .add_test(systest!(upgrade_guestos))
+        .add_test(async_systest!(upgrade_guestos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
         .execute_from_args()?;
@@ -30,7 +29,7 @@ fn main() -> Result<()> {
 
 /// Upgrade unassigned guestOS VMs to the target version, and verify that each one
 /// is healthy before and after the upgrade.
-pub fn upgrade_guestos(env: TestEnv) {
+pub async fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
     // The original GuestOS version is the deployed version (i.e., the SetupOS image version).
@@ -64,77 +63,75 @@ pub fn upgrade_guestos(env: TestEnv) {
         .nodes()
         .next()
         .unwrap();
-    nns_node.await_status_is_healthy().unwrap();
+    nns_node.await_status_is_healthy_async().await.unwrap();
 
-    block_on(async {
-        info!(
-            logger,
-            "Initial blessed versions: {:?}",
-            get_blessed_guestos_versions(&nns_node).await
-        );
+    info!(
+        logger,
+        "Initial blessed versions: {:?}",
+        get_blessed_guestos_versions(&nns_node).await
+    );
 
-        info!(
-            logger,
-            "Unassigned nodes config: {:?}",
-            get_unassigned_nodes_config(&nns_node).await
-        );
+    info!(
+        logger,
+        "Unassigned nodes config: {:?}",
+        get_unassigned_nodes_config(&nns_node).await
+    );
 
-        // check that GuestOS is on the expected version (initial version)
-        let client = Client::builder()
-            .danger_accept_invalid_certs(true)
-            .build()
-            .expect("Failed to build HTTP client");
+    // check that GuestOS is on the expected version (initial version)
+    let client = Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .expect("Failed to build HTTP client");
 
-        wait_for_expected_guest_version(
-            &client,
-            &guest_ipv6,
-            &original_version,
-            &logger,
-            Duration::from_secs(60),
-            Duration::from_secs(5),
-        )
-        .await
-        .expect("guest didn't come up as expected");
+    wait_for_expected_guest_version(
+        &client,
+        &guest_ipv6,
+        &original_version,
+        &logger,
+        Duration::from_secs(60),
+        Duration::from_secs(5),
+    )
+    .await
+    .expect("guest didn't come up as expected");
 
-        // elect the target GuestOS version
-        elect_guestos_version(
-            &nns_node,
-            &target_version,
-            sha256,
-            vec![upgrade_url],
-            Some(guest_launch_measurements),
-        )
-        .await;
+    // elect the target GuestOS version
+    elect_guestos_version(
+        &nns_node,
+        &target_version,
+        sha256,
+        vec![upgrade_url],
+        Some(guest_launch_measurements),
+    )
+    .await;
 
-        info!(
-            logger,
-            "Updated blessed versions: {:?}",
-            get_blessed_guestos_versions(&nns_node).await
-        );
+    info!(
+        logger,
+        "Updated blessed versions: {:?}",
+        get_blessed_guestos_versions(&nns_node).await
+    );
 
-        update_unassigned_nodes(&nns_node, &target_version).await;
+    update_unassigned_nodes(&nns_node, &target_version).await;
 
-        info!(
-            logger,
-            "Unassigned nodes config: {:?}",
-            get_unassigned_nodes_config(&nns_node).await
-        );
+    info!(
+        logger,
+        "Unassigned nodes config: {:?}",
+        get_unassigned_nodes_config(&nns_node).await
+    );
 
-        wait_for_expected_guest_version(
-            &client,
-            &guest_ipv6,
-            &target_version,
-            &logger,
-            NODE_UPGRADE_TIMEOUT,
-            NODE_UPGRADE_BACKOFF,
-        )
-        .await
-        .expect("guest failed to upgrade");
+    wait_for_expected_guest_version(
+        &client,
+        &guest_ipv6,
+        &target_version,
+        &logger,
+        NODE_UPGRADE_TIMEOUT,
+        NODE_UPGRADE_BACKOFF,
+    )
+    .await
+    .expect("guest failed to upgrade");
 
-        info!(logger, "Waiting for Orchestrator dashboard...");
-        if let Err(e) = host.await_orchestrator_dashboard_accessible() {
-            try_logging_guestos_diagnostics(&host, &logger);
-            panic!("Orchestrator dashboard is not accessible: {e}");
-        }
-    });
+    info!(logger, "Waiting for Orchestrator dashboard...");
+    if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Orchestrator dashboard is not accessible: {e}");
+    }
 }

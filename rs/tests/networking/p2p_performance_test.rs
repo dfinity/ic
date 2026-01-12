@@ -2,6 +2,7 @@ use anyhow::{Result, bail};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     canister_api::{CallMode, GenericRequest},
     driver::{
         farm::HostFeature,
@@ -16,8 +17,7 @@ use ic_system_test_driver::{
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
-    systest,
-    util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
+    util::{agent_observes_canister_module, spawn_round_robin_workload_engine},
 };
 use slog::{Logger, debug, info};
 use std::{
@@ -139,7 +139,7 @@ pub fn setup(
 // Run a test with configurable number of update requests per second,
 // size of the payload, duration of the test. The requests are sent
 // to the replica.
-pub fn test(
+pub async fn test(
     env: TestEnv,
     rps: usize,
     payload_size_bytes: usize,
@@ -170,7 +170,8 @@ pub fn test(
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None)
+        .await;
     info!(
         &log,
         "Installation of counter canisters on both subnets has succeeded."
@@ -183,24 +184,22 @@ pub fn test(
         &log,
         "Asserting all agents observe the installed canister ..."
     );
-    block_on(async {
-        for agent in app_agents.iter() {
-            ic_system_test_driver::retry_with_msg_async!(
-                format!("observing canister module {}", app_canister.to_string()),
-                &log,
-                READY_WAIT_TIMEOUT,
-                RETRY_BACKOFF,
-                || async {
-                    match agent_observes_canister_module(agent, &app_canister).await {
-                        true => Ok(()),
-                        false => bail!("Canister module not available yet"),
-                    }
+    for agent in app_agents.iter() {
+        ic_system_test_driver::retry_with_msg_async!(
+            format!("observing canister module {}", app_canister.to_string()),
+            &log,
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || async {
+                match agent_observes_canister_module(agent, &app_canister).await {
+                    true => Ok(()),
+                    false => bail!("Canister module not available yet"),
                 }
-            )
-            .await
-            .unwrap();
-        }
-    });
+            }
+        )
+        .await
+        .unwrap();
+    }
     info!(&log, "All agents observe the installed canister module.");
     if rps == 0 {
         info!(&log, "Step 4: No workload will be started.");
@@ -273,6 +272,17 @@ fn create_agents_for_subnet(log: &Logger, subnet: &SubnetSnapshot) -> Vec<Agent>
         .collect::<_>()
 }
 
+async fn performance_test(env: TestEnv) {
+    test(
+        env,
+        RPS,
+        PAYLOAD_SIZE_BYTES,
+        WORKLOAD_RUNTIME,
+        DOWNLOAD_PROMETHEUS_DATA,
+    )
+    .await;
+}
+
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA;
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA;
@@ -285,18 +295,9 @@ fn main() -> Result<()> {
             None,
         )
     };
-    let test = |env| {
-        test(
-            env,
-            RPS,
-            PAYLOAD_SIZE_BYTES,
-            WORKLOAD_RUNTIME,
-            DOWNLOAD_PROMETHEUS_DATA,
-        )
-    };
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(performance_test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;

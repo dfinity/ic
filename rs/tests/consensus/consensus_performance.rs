@@ -166,14 +166,14 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .build()
         .unwrap();
 
-    let test_metrics = ic_consensus_system_test_utils::performance::test_with_rt_handle(
-        env,
-        message_size,
-        rps,
-        rt.handle().clone(),
-        true,
-    )
-    .unwrap();
+    let test_metrics = rt
+        .block_on(ic_consensus_system_test_utils::performance::test(
+            env,
+            message_size,
+            rps,
+            true,
+        ))
+        .unwrap();
     if cfg!(feature = "upload_perf_systest_results") {
         let branch_version = get_current_branch_version();
 

@@ -1,21 +1,18 @@
-use ic_system_test_driver::driver::test_env::TestEnv;
-use tokio::runtime::Runtime;
-
 use super::steps::Step;
+use ic_system_test_driver::driver::test_env::TestEnv;
 
 pub struct QualificationExecutor {
-    rt: Runtime,
     steps: Vec<Box<dyn Step>>,
 }
 
 impl QualificationExecutor {
-    pub fn new(rt: Runtime, steps: Vec<Box<dyn Step>>) -> Self {
-        Self { rt, steps }
+    pub fn new(steps: Vec<Box<dyn Step>>) -> Self {
+        Self { steps }
     }
 
-    pub fn qualify(&self, env: TestEnv) -> anyhow::Result<()> {
+    pub async fn qualify(&self, env: TestEnv) -> anyhow::Result<()> {
         for step in &self.steps {
-            step.do_step(env.clone(), self.rt.handle().clone())?
+            step.do_step(env.clone()).await?
         }
         Ok(())
     }

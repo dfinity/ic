@@ -23,7 +23,7 @@ use std::time::Duration;
 
 /// A subnet is considered to be healthy if all given nodes are healthy and running the given
 /// version, the certified time advances, and messages can be written and read.
-pub fn assert_subnet_is_healthy(
+pub async fn assert_subnet_is_healthy(
     subnet: &[IcNodeSnapshot],
     target_version: &ReplicaVersion,
     can_id: Principal,
@@ -44,7 +44,7 @@ pub fn assert_subnet_is_healthy(
     }
 
     let node = &subnet[0];
-    node.await_status_is_healthy().unwrap();
+    node.await_status_is_healthy_async().await.unwrap();
     // make sure that state sync is completed
     cert_state_makes_progress_with_retries(
         &node.get_public_url(),

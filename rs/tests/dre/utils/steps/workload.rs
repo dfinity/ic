@@ -1,6 +1,6 @@
 use super::Step;
-
 use anyhow::bail;
+use async_trait::async_trait;
 use ic_agent::{
     Agent,
     agent::http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
@@ -31,32 +31,27 @@ pub struct Workload {
     pub rps: f64,
 }
 
+#[async_trait]
 impl Step for Workload {
-    fn execute(
+    async fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         // Small messages
-        ic_consensus_system_test_utils::performance::test_with_rt_handle(
-            env,
-            self.message_size,
-            self.rps,
-            rt,
-            false,
-        )
-        .map(|_| ())
+        ic_consensus_system_test_utils::performance::test(env, self.message_size, self.rps, false)
+            .await
+            .map(|_| ())
     }
 }
 
 #[derive(Clone)]
 pub struct ApiBoundaryNodeWorkload {}
 
+#[async_trait]
 impl Step for ApiBoundaryNodeWorkload {
-    fn execute(
+    async fn execute(
         &self,
         env: ic_system_test_driver::driver::test_env::TestEnv,
-        rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
         let logger = env.logger();
 
@@ -86,7 +81,7 @@ impl Step for ApiBoundaryNodeWorkload {
         };
 
         info!(logger, "Install the counter canister");
-        let counter_canister_id: Principal = rt.block_on(install_counter_canister(env.clone()))?;
+        let counter_canister_id: Principal = install_counter_canister(env.clone()).await?;
 
         let domains: Vec<String> = api_boundary_nodes
             .iter()
@@ -95,13 +90,14 @@ impl Step for ApiBoundaryNodeWorkload {
 
         for (index, domain) in domains.into_iter().enumerate() {
             info!(logger, "Test API BN with domain {domain}");
-            rt.block_on(test_api_boundary_node(
+            test_api_boundary_node(
                 index.try_into().unwrap(),
                 domain,
                 counter_canister_id,
                 http_client.clone(),
                 logger.clone(),
-            ))?;
+            )
+            .await?;
         }
 
         Ok(())

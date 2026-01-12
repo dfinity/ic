@@ -112,7 +112,7 @@ pub fn install_sns_aggregator(
 /// The Subnet Rental Canister is installed since otherwise
 /// the canister ID of the ckETH ledger (required by the NNS dapp)
 /// would conflict with the Subnet Rental Canister ID on mainnet.
-pub fn install_ii_nns_dapp_and_subnet_rental(
+pub async fn install_ii_nns_dapp_and_subnet_rental(
     env: &TestEnv,
     ic_gateway_url: &Url,
     sns_aggregator_canister_id: Option<Principal>,
@@ -122,82 +122,76 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
     // deploy the II canister
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    let ii_canister_id =
-        nns_node.create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None);
+    let ii_canister_id = nns_node
+        .create_and_install_canister_with_arg(&env::var("II_WASM_PATH").unwrap(), None)
+        .await;
 
     // create the NNS dapp canister so that its canister ID is allocated
     // and the Subnet Rental Canister gets its mainnet canister ID in the next step
     // it can't be installed yet since we need to get the ckETH ledger canister ID first
-    let nns_agent = nns_node.build_default_agent();
-    let nns_dapp_canister_id =
-        block_on(
-            async move { create_canister(&nns_agent, nns_node.effective_canister_id()).await },
-        );
+    let nns_agent = nns_node.build_default_agent_async().await;
+    let nns_dapp_canister_id = create_canister(&nns_agent, nns_node.effective_canister_id()).await;
 
     // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    block_on(async move {
-        install_nns_canister_by_proposal(
-            &Canister::new(&nns, SUBNET_RENTAL_CANISTER_ID),
-            &Canister::new(&nns, GOVERNANCE_CANISTER_ID),
-            &Canister::new(&nns, ROOT_CANISTER_ID),
-            Wasm::from_bytes(load_wasm(env::var("SUBNET_RENTAL_WASM_PATH").unwrap())),
-            None,
-        )
-        .await;
-    });
+    install_nns_canister_by_proposal(
+        &Canister::new(&nns, SUBNET_RENTAL_CANISTER_ID),
+        &Canister::new(&nns, GOVERNANCE_CANISTER_ID),
+        &Canister::new(&nns, ROOT_CANISTER_ID),
+        Wasm::from_bytes(load_wasm(env::var("SUBNET_RENTAL_WASM_PATH").unwrap())),
+        None,
+    )
+    .await;
 
     // now that we know all required canister IDs, install the NNS dapp
     let nns_agent = nns_node.build_default_agent();
     let nns_dapp_wasm = load_wasm(env::var("NNS_DAPP_WASM_PATH").unwrap());
     let logger = env.logger();
-    block_on(async move {
-        // The configuration values have been adapted from
-        // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
-        let nns_dapp_metadata = vec![
-              ("API_HOST".to_string(), ic_gateway_url.to_string()),
-              ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
-              ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
-              ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
-              ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
-              ("HOST".to_string(), ic_gateway_url.to_string()),
-              /* ICP swap canister is not deployed by the test driver! */
-              ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{ic_gateway_domain}/")),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{ii_canister_id}.{ic_gateway_domain}")),
-              ("INDEX_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
-              ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
-              ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
-              /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("{nns_dapp_canister_id}.{ic_gateway_domain}")),
-              ("ROBOTS".to_string(), "".to_string()),
-              ("SNS_AGGREGATOR_URL".to_string(), format!("https://{}.{}", sns_aggregator_canister_id.unwrap_or(SNS_AGGREGATOR_CANISTER_ID.into()), ic_gateway_domain)),
-              ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
-              ("TVL_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
-              ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
-            ];
-        let nns_dapp_init_args = Some(CanisterArguments {
-            args: nns_dapp_metadata,
-            schema: Some(SchemaLabel::AccountsInStableMemory),
-        });
-        install_canister(
-            &nns_agent,
-            nns_dapp_canister_id,
-            nns_dapp_wasm.as_slice(),
-            Encode!(&nns_dapp_init_args).unwrap(),
-        )
-        .await;
-        info!(
-            logger,
-            "Internet Identity: https://{}.{}", ii_canister_id, ic_gateway_domain
-        );
-        info!(
-            logger,
-            "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, ic_gateway_domain
-        );
-        (ii_canister_id, nns_dapp_canister_id)
-    })
+    // The configuration values have been adapted from
+    // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
+    let nns_dapp_metadata = vec![
+            ("API_HOST".to_string(), ic_gateway_url.to_string()),
+            ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
+            ("DFX_NETWORK".to_string(), "local".to_string()),
+            ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+            ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
+            ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
+            ("HOST".to_string(), ic_gateway_url.to_string()),
+            /* ICP swap canister is not deployed by the test driver! */
+            ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{ic_gateway_domain}/")),
+            ("IDENTITY_SERVICE_URL".to_string(), format!("https://{ii_canister_id}.{ic_gateway_domain}")),
+            ("INDEX_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
+            ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
+            ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
+            /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
+            ("PLAUSIBLE_DOMAIN".to_string(), format!("{nns_dapp_canister_id}.{ic_gateway_domain}")),
+            ("ROBOTS".to_string(), "".to_string()),
+            ("SNS_AGGREGATOR_URL".to_string(), format!("https://{}.{}", sns_aggregator_canister_id.unwrap_or(SNS_AGGREGATOR_CANISTER_ID.into()), ic_gateway_domain)),
+            ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
+            ("TVL_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
+            ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
+        ];
+    let nns_dapp_init_args = Some(CanisterArguments {
+        args: nns_dapp_metadata,
+        schema: Some(SchemaLabel::AccountsInStableMemory),
+    });
+    install_canister(
+        &nns_agent,
+        nns_dapp_canister_id,
+        nns_dapp_wasm.as_slice(),
+        Encode!(&nns_dapp_init_args).unwrap(),
+    )
+    .await;
+    info!(
+        logger,
+        "Internet Identity: https://{}.{}", ii_canister_id, ic_gateway_domain
+    );
+    info!(
+        logger,
+        "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, ic_gateway_domain
+    );
+    (ii_canister_id, nns_dapp_canister_id)
 }
 
 pub fn set_authorized_subnets(env: &TestEnv) {

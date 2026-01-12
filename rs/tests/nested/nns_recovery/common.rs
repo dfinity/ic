@@ -84,7 +84,7 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
-pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
+pub async fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     let logger = env.logger();
 
     info!(logger, "Adding all unassigned nodes to the NNS subnet...");
@@ -93,21 +93,23 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     let original_node = nns_subnet.nodes().next().unwrap();
 
     let new_node_ids: Vec<_> = topology.unassigned_nodes().map(|n| n.node_id).collect();
-    block_on(change_subnet_membership(
+    change_subnet_membership(
         original_node.get_public_url(),
         nns_subnet.subnet_id,
         &new_node_ids,
         &[original_node.node_id],
-    ))
+    )
+    .await
     .expect("Failed to change subnet membership");
 
     info!(
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology =
-        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
-            .unwrap();
+    let new_topology = topology
+        .block_for_newer_registry_version_within_duration(secs(60), secs(2))
+        .await
+        .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -121,7 +123,7 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
 
     // Readiness wait: ensure the NNS subnet is healthy and making progress
     for node in nns_subnet.nodes() {
-        node.await_status_is_healthy().unwrap();
+        node.await_status_is_healthy_async().await.unwrap();
     }
     await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
@@ -129,14 +131,15 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         &logger,
         secs(15 * 60),
         secs(15),
-    );
+    )
+    .await;
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
 
 // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
 // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
 // the latest certified height of the subnet.
-pub fn grant_backup_access_to_all_nns_nodes(
+pub async fn grant_backup_access_to_all_nns_nodes(
     env: &TestEnv,
     backup_auth: &AuthMean,
     ssh_backup_pub_key: &str,
@@ -152,7 +155,7 @@ pub fn grant_backup_access_to_all_nns_nodes(
         None,
         Some(vec![ssh_backup_pub_key.to_string()]),
     );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+    update_subnet_record(nns_node.get_public_url(), payload).await;
 
     for node in nns_subnet.nodes() {
         info!(
@@ -166,7 +169,8 @@ pub fn grant_backup_access_to_all_nns_nodes(
             &node.get_ip_addr(),
             BACKUP_USERNAME,
             backup_auth,
-        );
+        )
+        .await;
     }
 
     info!(logger, "Success: Backup access granted to all NNS nodes");
@@ -185,7 +189,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
         .unwrap();
 }
 
-pub fn test(env: TestEnv, cfg: TestConfig) {
+pub async fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
@@ -199,7 +203,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ..
     } = get_admin_keys_and_generate_backup_keys(&env);
 
-    nested::registration(env.clone());
+    nested::registration(env.clone()).await;
     replace_nns_with_unassigned_nodes(&env);
     grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
@@ -321,7 +325,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &dfinity_owned_node.get_ip_addr(),
         SSH_USERNAME,
         &admin_auth,
-    );
+    )
+    .await;
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,

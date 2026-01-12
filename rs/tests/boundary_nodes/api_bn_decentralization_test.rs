@@ -15,6 +15,7 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::governance::submit_external_update_proposal;
 use ic_system_test_driver::{
+    async_systest,
     driver::{
         group::SystemTestGroup,
         test_env::TestEnv,
@@ -24,8 +25,7 @@ use ic_system_test_driver::{
         },
     },
     nns::{self, vote_execute_proposal_assert_executed},
-    systest,
-    util::{block_on, runtime_from_url},
+    util::runtime_from_url,
 };
 use registry_canister::mutations::{
     do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -70,10 +70,6 @@ Runbook:
 . Assert state tree now has the following two API BNs - api3.com and api4.com
 
 end::catalog[] */
-
-pub fn decentralization_test(env: TestEnv) {
-    block_on(test(env))
-}
 
 async fn test(env: TestEnv) {
     let log = env.logger();
@@ -577,7 +573,7 @@ fn main() -> Result<()> {
     let setup = |env| setup_ic(env, 0);
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(decentralization_test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
     Ok(())
 }

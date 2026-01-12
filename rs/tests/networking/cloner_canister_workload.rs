@@ -22,6 +22,7 @@ use candid::Encode;
 use cloner_canister_types::SpinupCanistersArgs;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
     driver::{
         farm::HostFeature,
@@ -31,7 +32,6 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
-    systest,
 };
 use slog::info;
 use std::time::Duration;
@@ -57,7 +57,7 @@ const AMOUNT_OF_CLONER_CANISTERS: u64 =
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(install_cloner_canisters))
+        .add_test(async_systest!(install_cloner_canisters))
         .with_timeout_per_test(TEST_TIMEOUT)
         .execute_from_args()?;
     Ok(())
@@ -105,7 +105,7 @@ pub fn setup(env: TestEnv) {
     });
 }
 
-pub fn install_cloner_canisters(env: TestEnv) {
+pub async fn install_cloner_canisters(env: TestEnv) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let top_snapshot = env.topology_snapshot();
     let logger = env.logger();
@@ -133,11 +133,14 @@ pub fn install_cloner_canisters(env: TestEnv) {
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Installing cloner canister."
         );
-        let cloner_canister_id = app_node.create_and_install_canister_with_arg_and_cycles(
-            &std::env::var("CLONER_CANISTER_WASM_PATH").expect("CLONER_CANISTER_WASM_PATH not set"),
-            None,
-            Some(1_001_000_000_000_000), // 1001T cycles is enough to spin up 500 canisters
-        );
+        let cloner_canister_id = app_node
+            .create_and_install_canister_with_arg_and_cycles(
+                &std::env::var("CLONER_CANISTER_WASM_PATH")
+                    .expect("CLONER_CANISTER_WASM_PATH not set"),
+                None,
+                Some(1_001_000_000_000_000), // 1001T cycles is enough to spin up 500 canisters
+            )
+            .await;
         info!(
             &logger,
             "{i}/{AMOUNT_OF_CLONER_CANISTERS}: Succeeded installing cloner canister, {}.",

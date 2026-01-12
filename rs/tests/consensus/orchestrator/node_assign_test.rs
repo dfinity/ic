@@ -33,8 +33,8 @@ use ic_consensus_system_test_utils::{
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::async_systest;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::systest;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
@@ -77,7 +77,7 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-fn test(env: TestEnv) {
+async fn test(env: TestEnv) {
     let topo_snapshot = env.topology_snapshot();
     let logger = env.logger();
     let nns_node = get_nns_node(&topo_snapshot);
@@ -113,25 +113,25 @@ fn test(env: TestEnv) {
         logger,
         "Submitting AddNodeToSubnet proposal: {:#?}", proposal_payload
     );
-    let proposal_id = block_on(submit_external_proposal_with_test_id(
+    let proposal_id = submit_external_proposal_with_test_id(
         &governance_canister,
         NnsFunction::AddNodeToSubnet,
         proposal_payload,
-    ));
+    )
+    .await;
 
     // Explicitly vote for the proposal to add nodes to subnet.
     info!(logger, "Voting on proposal");
-    block_on(vote_execute_proposal_assert_executed(
-        &governance_canister,
-        proposal_id,
-    ));
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 
     // Set unassigned nodes to the Application subnet.
     let newly_assigned_nodes: Vec<_> = unassigned_nodes.collect();
 
     // Wait for registry update
     info!(logger, "Waiting for registry update");
-    block_on(topo_snapshot.block_for_newer_registry_version())
+    topo_snapshot
+        .block_for_newer_registry_version()
+        .await
         .expect("Could not block for newer registry version");
 
     // Assert that new nodes are reachable (via http call).
@@ -159,9 +159,12 @@ fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");
-    block_on(message_canister.try_store_msg(UPDATE_MSG_1)).expect("Update canister call failed.");
+    message_canister
+        .try_store_msg(UPDATE_MSG_1)
+        .await
+        .expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg()),
+        message_canister.try_read_msg().await,
         Ok(Some(UPDATE_MSG_1.to_string()))
     );
 
@@ -169,7 +172,7 @@ fn test(env: TestEnv) {
     let kill_nodes_count = UNASSIGNED_NODES_COUNT / 3;
     info!(logger, "Kill {} of the new nodes", kill_nodes_count);
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
-        block_on(async { n.vm().await.kill().await });
+        n.vm().await.kill().await;
     }
 
     // Second loop to paralelize the effects of the previous one
@@ -183,21 +186,22 @@ fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister still succeeds"
     );
-    block_on(message_canister.try_store_msg(UPDATE_MSG_2)).expect("Update canister call failed.");
+    message_canister
+        .try_store_msg(UPDATE_MSG_2)
+        .await
+        .expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg()),
+        message_canister.try_read_msg().await,
         Ok(Some(UPDATE_MSG_2.to_string()))
     );
 
     // Kill one more node and break consensus.
     info!(logger, "Kill one more node and break consensus");
-    block_on(async {
-        newly_assigned_nodes[kill_nodes_count]
-            .vm()
-            .await
-            .kill()
-            .await
-    });
+    newly_assigned_nodes[kill_nodes_count]
+        .vm()
+        .await
+        .kill()
+        .await;
     info!(logger, "Wait for it to become unavailable");
     newly_assigned_nodes[kill_nodes_count]
         .await_status_is_unavailable()
@@ -205,25 +209,22 @@ fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister now fails.
     info!(logger, "Assert that update call to the canister now fails");
-    if let Ok(Ok(result)) = block_on(async {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(30),
-            message_canister.try_store_msg(UPDATE_MSG_3),
-        )
-        .await
-    }) {
+    if let Ok(Ok(result)) = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        message_canister.try_store_msg(UPDATE_MSG_3),
+    )
+    .await
+    {
         panic!("expected the update to fail, got {result:?}");
     };
 
     // Restart node to start consensus.
     info!(logger, "Restart node to start consensus");
-    block_on(async {
-        newly_assigned_nodes[kill_nodes_count]
-            .vm()
-            .await
-            .start()
-            .await
-    });
+    newly_assigned_nodes[kill_nodes_count]
+        .vm()
+        .await
+        .start()
+        .await;
     info!(logger, "Wait for subnet to restart");
     // Wait for 1 DKG interval to ensure that subnet makes progress again.
     let target_height =
@@ -235,9 +236,12 @@ fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister succeeds again"
     );
-    block_on(message_canister.try_store_msg(UPDATE_MSG_4)).expect("Update canister call failed.");
+    message_canister
+        .try_store_msg(UPDATE_MSG_4)
+        .await
+        .expect("Update canister call failed.");
     assert_eq!(
-        block_on(message_canister.try_read_msg()),
+        message_canister.try_read_msg().await,
         Ok(Some(UPDATE_MSG_4.to_string()))
     );
 }
@@ -245,7 +249,7 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
 
     Ok(())

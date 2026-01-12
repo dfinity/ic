@@ -12,16 +12,12 @@ end::catalog[] */
 
 use anyhow::{Result, bail};
 use candid::{Encode, Principal};
+use ic_agent::export::reqwest::Client;
 use ic_base_types::PrincipalId;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
-use salt_sharing_api::InitArg;
-use slog::info;
-use std::{env, net::SocketAddr, str::FromStr, time::Duration};
-use tokio::runtime::Runtime;
-
-use ic_agent::export::reqwest::Client;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
+    async_systest,
     driver::test_env_api::NnsInstallationBuilder,
     driver::{
         group::SystemTestGroup,
@@ -32,9 +28,12 @@ use ic_system_test_driver::{
             get_dependency_path,
         },
     },
-    retry_with_msg_async, systest,
+    retry_with_msg_async,
     util::runtime_from_url,
 };
+use salt_sharing_api::InitArg;
+use slog::info;
+use std::{env, net::SocketAddr, str::FromStr, time::Duration};
 
 const SALT_SHARING_CANISTER_ID: &str = "uz2z3-qyaaa-aaaaq-qaacq-cai";
 const IC_BOUNDARY_SALT_METRIC: &str = "ic_boundary_anonymization_salt_last_salt_id";
@@ -68,7 +67,7 @@ pub fn setup(env: TestEnv) {
     });
 }
 
-async fn test_async(env: TestEnv) {
+async fn test(env: TestEnv) {
     let logger = env.logger();
 
     let nns_node = env.get_first_healthy_system_node_snapshot();
@@ -141,15 +140,10 @@ async fn test_async(env: TestEnv) {
     .expect("shared salt was not received by API boundary node");
 }
 
-fn test(env: TestEnv) {
-    let rt = Runtime::new().expect("Could not create tokio runtime");
-    rt.block_on(test_async(env));
-}
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(async_systest!(test))
         .execute_from_args()?;
     Ok(())
 }

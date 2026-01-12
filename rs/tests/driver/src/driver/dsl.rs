@@ -21,6 +21,15 @@ macro_rules! systest {
     };
 }
 
+#[macro_export]
+macro_rules! async_systest {
+    ($a:path) => {
+        ic_system_test_driver::driver::dsl::TestFunction::new(std::stringify!($a), |env| {
+            ic_system_test_driver::util::block_on($a(env))
+        })
+    };
+}
+
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     tests: BTreeMap<String, Box<dyn SysTestFn>>,

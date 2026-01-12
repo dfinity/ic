@@ -20,7 +20,6 @@ use ic_types::ReplicaVersion;
 use futures::future::join_all;
 use slog::{Logger, error, info};
 use std::time::{Duration, Instant};
-use tokio::runtime::Handle;
 
 const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const MAX_RETRIES: u32 = 10;
@@ -36,11 +35,10 @@ const INGRESS_MESSAGE_E2E_LATENCY_METRICS: &str =
     "replica_http_ingress_watcher_wait_for_certification_duration_seconds";
 const TIME_TO_RECEIVE_BLOCK_METRICS: &str = "consensus_time_to_receive_block";
 
-pub fn test_with_rt_handle(
+pub async fn test(
     env: TestEnv,
     message_size: usize,
     rps: f64,
-    rt: Handle,
     report: bool,
 ) -> anyhow::Result<TestMetrics> {
     let log = env.logger();
@@ -62,27 +60,27 @@ pub fn test_with_rt_handle(
         "Step 1: Install {} canisters on the subnet..", canister_count
     );
     let mut canisters = Vec::new();
-    let agent = rt.block_on(app_node.build_canister_agent());
+    let agent = app_node.build_canister_agent().await;
 
     let nodes = subnet.nodes().collect::<Vec<_>>();
-    let agents = rt.block_on(async {
-        join_all(
-            nodes
-                .iter()
-                .map(|n| async move { n.build_canister_agent().await }),
-        )
-        .await
-    });
+    let agents = join_all(
+        nodes
+            .iter()
+            .map(|n| async move { n.build_canister_agent().await }),
+    )
+    .await;
 
     for _ in 0..canister_count {
         canisters.push(
-            app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, /*arg=*/ None),
+            app_node
+                .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, /*arg=*/ None)
+                .await,
         );
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
 
     info!(log, "Sleeping for 60 seconds");
-    std::thread::sleep(Duration::from_secs(60));
+    tokio::time::sleep(Duration::from_secs(60)).await;
 
     info!(log, "Step 2: Instantiate and start the workload..");
     let payload: Vec<u8> = vec![0; message_size];
@@ -105,17 +103,17 @@ pub fn test_with_rt_handle(
         }
     };
 
-    let consensus_metrics_before = rt.block_on(get_consensus_metrics(&nodes));
+    let consensus_metrics_before = get_consensus_metrics(&nodes).await;
     let now = Instant::now();
 
-    let metrics = rt.block_on(
+    let metrics =
         generic_workload_engine::engine::Engine::new(log.clone(), generator, rps, TEST_DURATION)
             .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-            .execute_simply(log.clone()),
-    );
+            .execute_simply(log.clone())
+            .await;
 
     let duration = now.elapsed();
-    let consensus_metrics_after = rt.block_on(get_consensus_metrics(&nodes));
+    let consensus_metrics_after = get_consensus_metrics(&nodes).await;
 
     let test_metrics = TestMetrics::compute(
         consensus_metrics_before,
@@ -154,7 +152,7 @@ pub fn test_with_rt_handle(
         "Minimal expected counter value on canisters {}", min_expected_canister_counter
     );
     for canister in canisters.iter() {
-        rt.block_on(assert_canister_counter_with_retries(
+        assert_canister_counter_with_retries(
             &log,
             &agent.get(),
             canister,
@@ -162,7 +160,8 @@ pub fn test_with_rt_handle(
             min_expected_canister_counter,
             MAX_RETRIES,
             RETRY_WAIT,
-        ));
+        )
+        .await;
     }
 
     Ok(test_metrics)

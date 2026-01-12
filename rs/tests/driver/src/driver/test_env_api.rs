@@ -986,39 +986,37 @@ impl IcNodeSnapshot {
     ///
     /// This function panics if the canister `name` could not be loaded, is not
     /// a wasm module or the installation fails.
-    pub fn create_and_install_canister_with_arg(
+    pub async fn create_and_install_canister_with_arg(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
     ) -> Principal {
         self.create_and_install_canister_with_arg_and_cycles(name, arg, None)
+            .await
     }
 
-    pub fn install_canister_with_arg(
+    pub async fn install_canister_with_arg(
         &self,
         canister_id: Principal,
         name: &str,
         arg: Option<Vec<u8>>,
     ) {
         let canister_bytes = load_wasm(name);
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
+        let agent = self.build_default_agent_async().await;
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
 
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister");
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .expect("Could not install canister");
     }
 
-    pub fn create_and_install_canister_with_arg_and_cycles(
+    pub async fn create_and_install_canister_with_arg_and_cycles(
         &self,
         name: &str,
         arg: Option<Vec<u8>>,
@@ -1027,29 +1025,28 @@ impl IcNodeSnapshot {
         let canister_bytes = load_wasm(name);
         let effective_canister_id = self.effective_canister_id();
 
-        self.with_default_agent(move |agent| async move {
-            // Create a canister.
-            let mgr = ManagementCanister::create(&agent);
-            let canister_id = mgr
-                .create_canister()
-                .as_provisional_create_with_amount(cycles_amount)
-                .with_effective_canister_id(effective_canister_id)
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
-                .0;
+        let agent = self.build_default_agent_async().await;
 
-            let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
-            if let Some(arg) = arg {
-                install_code = install_code.with_raw_arg(arg)
-            }
-            install_code
-                .call_and_wait()
-                .await
-                .map_err(|err| format!("Couldn't install canister: {err}"))?;
-            Ok::<_, String>(canister_id)
-        })
-        .expect("Could not install canister")
+        // Create a canister.
+        let mgr = ManagementCanister::create(&agent);
+        let canister_id = mgr
+            .create_canister()
+            .as_provisional_create_with_amount(cycles_amount)
+            .with_effective_canister_id(effective_canister_id)
+            .call_and_wait()
+            .await
+            .expect("Couldn't create canister with provisional AP")
+            .0;
+
+        let mut install_code = mgr.install_code(&canister_id, &canister_bytes);
+        if let Some(arg) = arg {
+            install_code = install_code.with_raw_arg(arg)
+        }
+        install_code
+            .call_and_wait()
+            .await
+            .expect("Couldn't install canister");
+        canister_id
     }
 
     pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
@@ -1530,6 +1527,20 @@ pub trait SshSession: HasTestEnv {
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
             || async { self.get_ssh_session() }
+        )
+        .await
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// async version of `block_on_ssh_session_with_timeout`.
+    async fn block_on_ssh_session_with_timeout_async(&self, timeout: Duration) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg_async!(
+            format!("get_ssh_session to {ip}"),
+            &self.test_env().logger(),
+            timeout,
+            RETRY_BACKOFF,
+            async || { self.get_ssh_session() }
         )
         .await
     }
@@ -2245,11 +2256,11 @@ pub async fn retry_async<S: AsRef<str>, F, Fut, R>(
     log: &slog::Logger,
     timeout: Duration,
     backoff: Duration,
-    f: F,
+    mut f: F,
 ) -> Result<R>
 where
     Fut: Future<Output = Result<R>>,
-    F: Fn() -> Fut,
+    F: FnMut() -> Fut,
 {
     let msg = msg.as_ref();
     let mut attempt = 1;

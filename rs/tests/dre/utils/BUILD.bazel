@@ -22,6 +22,7 @@ rust_library(
         "//rs/tests/message_routing/xnet/slo_test_lib:xnet_slo_test_lib",
         "//rs/types/types",
         "@crate_index//:anyhow",
+        "@crate_index//:async-trait",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",

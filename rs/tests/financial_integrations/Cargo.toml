@@ -9,21 +9,39 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 assert_matches = { workspace = true }
+async-recursion = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-types = { path = "../../types/types" }
+ic-utils = { workspace = true }
+icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 leb128 = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
+quickcheck = "1.0.3"
+rand = { workspace = true }
+rand_chacha = { workspace = true }
 serde_cbor = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
 
 [[bin]]
 name = "icrc1-agent-test"
 path = "icrc1_agent_test.rs"
+
+[[bin]]
+name = "transaction_ledger_correctness_test"
+path = "transaction_ledger_correctness_test.rs"

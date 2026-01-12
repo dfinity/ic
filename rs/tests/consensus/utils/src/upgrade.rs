@@ -43,17 +43,17 @@ pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<Replic
     Ok(ReplicaVersion::try_from(version)?)
 }
 
-pub fn assert_assigned_replica_version(
+pub async fn assert_assigned_replica_version(
     node: &IcNodeSnapshot,
     expected_version: &ReplicaVersion,
     logger: Logger,
 ) {
-    assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10)
+    assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10).await
 }
 
 /// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
-pub fn assert_assigned_replica_version_with_time(
+pub async fn assert_assigned_replica_version_with_time(
     node: &IcNodeSnapshot,
     expected_version: &ReplicaVersion,
     logger: Logger,
@@ -76,38 +76,41 @@ pub fn assert_assigned_replica_version_with_time(
         Finished,
     }
     let mut state = State::Uninitialized;
-    let result = ic_system_test_driver::retry_with_msg!(
+    let result = ic_system_test_driver::retry_with_msg_async!(
         format!(
             "Check if node {} is healthy and running replica version {}",
             node.get_ip_addr(),
             expected_version
         ),
-        logger.clone(),
+        &logger,
         secs(total_secs),
         secs(backoff_secs),
-        || match get_assigned_replica_version(node) {
-            Ok(ver) if &ver == expected_version => {
-                state = State::Finished;
-                Ok(())
-            }
-            Ok(ver) => {
-                if state == State::Uninitialized || state == State::OldVersion {
-                    state = State::OldVersion
-                } else {
-                    state = State::OldVersionAgain
+        async || {
+            match get_assigned_replica_version(node).await {
+                Ok(ver) if &ver == expected_version => {
+                    state = State::Finished;
+                    Ok(())
                 }
-                bail!(
-                    "Node is running the old replica version: {}. Expected: {}",
-                    ver,
-                    expected_version
-                )
-            }
-            Err(err) => {
-                state = State::Reboot;
-                bail!("Error reading replica version: {:?}", err)
+                Ok(ver) => {
+                    if state == State::Uninitialized || state == State::OldVersion {
+                        state = State::OldVersion
+                    } else {
+                        state = State::OldVersionAgain
+                    }
+                    bail!(
+                        "Node is running the old replica version: {}. Expected: {}",
+                        ver,
+                        expected_version
+                    )
+                }
+                Err(err) => {
+                    state = State::Reboot;
+                    bail!("Error reading replica version: {:?}", err)
+                }
             }
         }
-    );
+    )
+    .await;
     if let Err(error) = result {
         info!(logger, "Error: {}", error);
         match state {
@@ -123,8 +126,8 @@ pub fn assert_assigned_replica_version_with_time(
 }
 
 /// Gets the replica version from the node if it is healthy.
-pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVersion, String> {
-    let version = match node.status() {
+pub async fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVersion, String> {
+    let version = match node.status_async().await {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {status:?}")),
         Err(err) => return Err(err.to_string()),
