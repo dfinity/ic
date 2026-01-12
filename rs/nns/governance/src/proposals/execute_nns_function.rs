@@ -7,12 +7,13 @@ use crate::{
     },
     proposals::{
         decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
-        self_describing::ValueBuilder,
+        self_describing::{SelfDescribingProstEnum, ValueBuilder},
     },
 };
 
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
+use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_constants::{
@@ -22,7 +23,7 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
 use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use std::sync::Arc;
 
 /// A partial Candid interface for the management canister (ic_00) that contains the necessary
@@ -66,6 +67,16 @@ impl ValidExecuteNnsFunction {
             ValidNnsFunction::BitcoinSetConfig => {
                 let request = get_request_for_bitcoin_set_config(&self.payload)?;
                 return Ok(SelfDescribingValue::from(request));
+            }
+            ValidNnsFunction::SubnetRentalRequest => {
+                let subnet_rental_request =
+                    decode_subnet_rental_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(subnet_rental_request));
+            }
+            ValidNnsFunction::AddSnsWasm => {
+                let add_wasm_request =
+                    decode_add_wasm_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(add_wasm_request));
             }
             _ => {}
         };
@@ -142,39 +153,19 @@ impl ValidExecuteNnsFunction {
                 Ok(encoded_request)
             }
             ValidNnsFunction::SubnetRentalRequest => {
-                // Decode the payload to `SubnetRentalRequest`.
-                let decoded_payload =
-                    Decode!([decoder_config()]; &self.payload, SubnetRentalRequest).map_err(
-                        |_| {
-                            GovernanceError::new_with_message(
-                                ErrorType::InvalidProposal,
-                                "Unable to decode SubnetRentalRequest proposal: {e}",
-                            )
-                        },
-                    )?;
-
-                // Convert the payload to `SubnetRentalProposalPayload`.
-                let SubnetRentalRequest {
-                    user,
-                    rental_condition_id,
-                } = decoded_payload;
-                let proposal_creation_time_seconds = proposal_timestamp_seconds;
-                let encoded_payload = Encode!(&SubnetRentalProposalPayload {
-                    user,
-                    rental_condition_id,
+                let decoded_payload = decode_subnet_rental_request(&self.payload)?;
+                let encoded_payload = encode_subnet_rental_proposal_payload(
+                    decoded_payload,
                     proposal_id,
-                    proposal_creation_time_seconds,
-                })
-                .unwrap();
-
+                    proposal_timestamp_seconds,
+                )?;
                 Ok(encoded_payload)
             }
 
             ValidNnsFunction::AddSnsWasm => {
-                let transformed_payload =
-                    add_proposal_id_to_add_wasm_request(&self.payload, proposal_id)?;
-
-                Ok(transformed_payload)
+                let decoded_payload = decode_add_wasm_request(&self.payload)?;
+                let encoded_payload = encode_add_wasm_request(decoded_payload, proposal_id)?;
+                Ok(encoded_payload)
             }
 
             // Most NNS functions don't require any transformation of the payload, and for new NNS
@@ -203,35 +194,54 @@ fn get_request_for_bitcoin_set_config(payload: &[u8]) -> Result<CallCanisterRequ
     })
 }
 
-impl From<CallCanisterRequest> for SelfDescribingValue {
-    fn from(request: CallCanisterRequest) -> Self {
-        let CallCanisterRequest {
-            canister_id,
-            method_name,
-            payload,
-        } = request;
-        ValueBuilder::new()
-            .add_field("canister_id", canister_id)
-            .add_field("method_name", method_name)
-            .add_field("payload", payload)
-            .build()
-    }
+fn decode_subnet_rental_request(payload: &[u8]) -> Result<SubnetRentalRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, SubnetRentalRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode SubnetRentalRequest proposal: {e}",
+        )
+    })
 }
 
-fn add_proposal_id_to_add_wasm_request(
-    payload: &[u8],
+fn encode_subnet_rental_proposal_payload(
+    subnet_rental_request: SubnetRentalRequest,
+    proposal_id: u64,
+    proposal_creation_time_seconds: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let SubnetRentalRequest {
+        user,
+        rental_condition_id,
+    } = subnet_rental_request;
+
+    let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+        user,
+        rental_condition_id,
+        proposal_id,
+        proposal_creation_time_seconds,
+    })
+    .map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode SubnetRentalProposalPayload proposal: {e}",
+        )
+    })?;
+
+    Ok(encoded_payload)
+}
+
+fn decode_add_wasm_request(payload: &[u8]) -> Result<AddWasmRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, AddWasmRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode AddWasmRequest proposal: {e}",
+        )
+    })
+}
+
+fn encode_add_wasm_request(
+    add_wasm_request: AddWasmRequest,
     proposal_id: u64,
 ) -> Result<Vec<u8>, GovernanceError> {
-    let add_wasm_request = match Decode!([decoder_config()]; payload, AddWasmRequest) {
-        Ok(add_wasm_request) => add_wasm_request,
-        Err(e) => {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Payload must be a valid AddWasmRequest. Error: {e}"),
-            ));
-        }
-    };
-
     let wasm = add_wasm_request
         .wasm
         .ok_or(GovernanceError::new_with_message(
@@ -247,9 +257,113 @@ fn add_proposal_id_to_add_wasm_request(
         ..add_wasm_request
     };
 
-    let payload = Encode!(&add_wasm_request).unwrap();
+    Encode!(&add_wasm_request).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode AddWasmRequest proposal: {e}",
+        )
+    })
+}
 
-    Ok(payload)
+impl From<CallCanisterRequest> for SelfDescribingValue {
+    fn from(request: CallCanisterRequest) -> Self {
+        let CallCanisterRequest {
+            canister_id,
+            method_name,
+            payload,
+        } = request;
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("method_name", method_name)
+            .add_field("payload", payload)
+            .build()
+    }
+}
+
+impl From<SubnetRentalRequest> for SelfDescribingValue {
+    fn from(request: SubnetRentalRequest) -> Self {
+        let SubnetRentalRequest {
+            user,
+            rental_condition_id,
+        } = request;
+        ValueBuilder::new()
+            .add_field("user", user)
+            .add_field("rental_condition_id", format!("{:?}", rental_condition_id))
+            .build()
+    }
+}
+
+impl From<SubnetRentalProposalPayload> for SelfDescribingValue {
+    fn from(payload: SubnetRentalProposalPayload) -> Self {
+        let SubnetRentalProposalPayload {
+            user,
+            rental_condition_id,
+            proposal_id,
+            proposal_creation_time_seconds,
+        } = payload;
+        ValueBuilder::new()
+            .add_field("user", user)
+            .add_field("rental_condition_id", format!("{:?}", rental_condition_id))
+            .add_field("proposal_id", proposal_id)
+            .add_field(
+                "proposal_creation_time_seconds",
+                proposal_creation_time_seconds,
+            )
+            .build()
+    }
+}
+
+impl From<AddWasmRequest> for SelfDescribingValue {
+    fn from(payload: AddWasmRequest) -> Self {
+        let AddWasmRequest {
+            wasm,
+            hash,
+            skip_update_latest_version,
+        } = payload;
+
+        let wasm_with_hash = wasm.map(|w| {
+            let wasm_hash = Sha256::hash(&w.wasm);
+            let wasm_hash_vec = wasm_hash.to_vec();
+
+            let SnsWasm {
+                canister_type,
+                proposal_id: _,
+                wasm: _,
+            } = w;
+
+            let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
+
+            ValueBuilder::new()
+                .add_field("wasm_hash", wasm_hash_vec)
+                .add_field("canister_type", canister_type)
+                .build()
+        });
+
+        ValueBuilder::new()
+            .add_field("wasm", wasm_with_hash)
+            .add_field("hash", hash)
+            .add_field("skip_update_latest_version", skip_update_latest_version)
+            .build()
+    }
+}
+
+impl From<SnsWasm> for SelfDescribingValue {
+    fn from(wasm: SnsWasm) -> Self {
+        let SnsWasm {
+            wasm,
+            canister_type,
+            proposal_id: _,
+        } = wasm;
+
+        let wasm_hash = Sha256::hash(&wasm);
+        let wasm_hash_vec = wasm_hash.to_vec();
+        let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
+
+        ValueBuilder::new()
+            .add_field("wasm_hash", wasm_hash_vec)
+            .add_field("canister_type", canister_type)
+            .build()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

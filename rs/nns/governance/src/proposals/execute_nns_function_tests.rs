@@ -7,14 +7,16 @@ use crate::{
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
 use candid::{Decode, Encode};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
 use ic_nns_governance_api::{
     SelfDescribingValue,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use maplit::hashmap;
 use std::sync::Arc;
 
@@ -267,6 +269,84 @@ async fn test_to_self_describing_bitcoin_set_config() {
             "canister_id".to_string() => SelfDescribingValue::from(BITCOIN_MAINNET_CANISTER_ID.to_string()),
             "method_name".to_string() => SelfDescribingValue::from("set_config"),
             "payload".to_string() => SelfDescribingValue::from(bitcoin_payload),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_subnet_rental_request() {
+    let user = PrincipalId::new_user_test_id(123);
+    let rental_condition_id = RentalConditionId::App13CH;
+
+    let arg = SubnetRentalRequest {
+        user,
+        rental_condition_id,
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::SubnetRentalRequest,
+        payload,
+    };
+
+    // No canister_metadata call expected - SubnetRentalRequest uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Subnet Rental Request");
+    assert!(
+        result
+            .type_description
+            .contains("A proposal to rent a subnet on the Internet Computer")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "user".to_string() => SelfDescribingValue::Text(user.to_string()),
+            "rental_condition_id".to_string() => SelfDescribingValue::Text("App13CH".to_string()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_add_sns_wasm() {
+    let wasm_bytes = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
+    let canister_type = SnsCanisterType::Root as i32;
+    let hash = vec![1, 2, 3, 4];
+
+    let arg = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            wasm: wasm_bytes.clone(),
+            canister_type,
+            proposal_id: None, // Will be set by the NNS function
+        }),
+        hash: hash.clone(),
+        skip_update_latest_version: Some(false),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    // No canister_metadata call expected - AddSnsWasm uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm".to_string() => SelfDescribingValue::Map(hashmap! {
+                "wasm_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&wasm_bytes).to_vec()),
+                "canister_type".to_string() => SelfDescribingValue::from("Root"),
+            }),
+            "hash".to_string() => SelfDescribingValue::from(hash),
+            "skip_update_latest_version".to_string() => SelfDescribingValue::from(false),
         })
     );
 }
