@@ -298,8 +298,8 @@ fn lsmt_merge_overhead() {
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|x| x.get_name() == "canister_memory_usage_bytes")
-            .map(|x| x.get_metric()[0].get_gauge().get_value())
+            .filter(|x| x.name() == "canister_memory_usage_bytes")
+            .map(|x| x.get_metric()[0].get_gauge().get_or_default().value())
             .next()
             .unwrap()
     }
@@ -345,13 +345,13 @@ fn lazy_pagemaps() {
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|x| x.get_name() == "state_manager_num_page_maps_by_load_status")
+            .filter(|x| x.name() == "state_manager_num_page_maps_by_load_status")
             .map(|x| -> f64 {
                 x.get_metric()
                     .iter()
                     .find(|x| {
                         for l in x.get_label() {
-                            if l.get_name() == "status" && l.get_value() == status {
+                            if l.name() == "status" && l.value() == status {
                                 return true;
                             }
                         }
@@ -359,7 +359,8 @@ fn lazy_pagemaps() {
                     })
                     .unwrap()
                     .get_gauge()
-                    .get_value()
+                    .get_or_default()
+                    .value()
             })
             .next()
             .unwrap() as i64
@@ -388,13 +389,13 @@ fn lazy_wasms() {
             .prometheus_registry()
             .gather()
             .into_iter()
-            .filter(|x| x.get_name() == "state_manager_num_loaded_wasm_files_by_source")
+            .filter(|x| x.name() == "state_manager_num_loaded_wasm_files_by_source")
             .map(|x| -> f64 {
                 x.get_metric()
                     .iter()
                     .find(|x| {
                         for l in x.get_label() {
-                            if l.get_name() == "source" && l.get_value() == source {
+                            if l.name() == "source" && l.value() == source {
                                 return true;
                             }
                         }
@@ -402,16 +403,15 @@ fn lazy_wasms() {
                     })
                     .unwrap()
                     .get_gauge()
-                    .get_value()
+                    .get_or_default()
+                    .value()
             })
             .next()
             .unwrap() as i64
     }
 
     // Enable snapshot downloading.
-    let env = StateMachineBuilder::new()
-        .with_snapshot_download_enabled(true)
-        .build();
+    let env = StateMachineBuilder::new().build();
     env.set_checkpoints_enabled(true);
 
     let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
@@ -1062,7 +1062,7 @@ fn returns_state_no_committed_for_future_states() {
 }
 
 #[test]
-#[should_panic(expected = "different hashes")]
+#[should_panic(expected = "which is different from previously computed or delivered hash")]
 fn panics_on_forked_history() {
     state_manager_test(|_metrics, state_manager| {
         let (_height, state) = state_manager.take_tip();
