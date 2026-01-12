@@ -128,7 +128,7 @@ fn test_create_many_canisters() {
     }
 
     // Trying to create a different number of canisters
-    // while canister creation is in progress
+    // while canister creation is done
     // results in a trap.
     let err = env
         .execute_ingress(
