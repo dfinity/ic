@@ -4624,6 +4624,12 @@ impl From<Vec<u8>> for SelfDescribingValue {
     }
 }
 
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue::Nat(Nat::from(if value { 1_u8 } else { 0_u8 }))
+    }
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,
