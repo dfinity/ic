@@ -180,5 +180,5 @@ runs:
       run: |
         rm -rf '${{ steps.metrics-tmpdir.outputs.dir }}'
         if [ -d bazel-out ]; then
-          rsync -a --delete bazel-out/
+          rm -rf bazel-out/
         fi
