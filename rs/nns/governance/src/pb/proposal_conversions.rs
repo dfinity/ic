@@ -244,7 +244,7 @@ fn convert_action(
             api::proposal::Action::TakeCanisterSnapshot(v.clone().into())
         }
         pb::proposal::Action::LoadCanisterSnapshot(v) => {
-            pb_api::proposal::Action::LoadCanisterSnapshot(v.clone().into())
+            api::proposal::Action::LoadCanisterSnapshot(v.clone().into())
         }
 
         // The action types with potentially large fields need to be converted in a way that avoids
