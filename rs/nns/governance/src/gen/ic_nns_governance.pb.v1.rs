@@ -432,7 +432,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -542,7 +542,31 @@ pub mod proposal {
         /// (NNS-approved) new software.
         #[prost(message, tag = "31")]
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
+        /// Take a canister snapshot.
+        #[prost(message, tag = "32")]
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        #[prost(message, tag = "33")]
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
+}
+/// Take a canister snapshot.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TakeCanisterSnapshot {
+    /// The canister being snapshotted.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// If set, the existing snapshot with this content will be replaced.
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub replace_snapshot: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// Empty message to use in oneof fields that represent empty
 /// enums.
@@ -2824,6 +2848,23 @@ pub struct BlessAlternativeGuestOsVersion {
     pub base_guest_launch_measurements: ::core::option::Option<
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[prost(bytes = "vec", tag = "2")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept

@@ -638,6 +638,7 @@ jobs:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
+              - "ci/scripts/rust-lint.sh"
       - name: Run Cargo ${{ matrix.name }} Linux
         if: |
           steps.filter.outputs.cargo == 'true' ||

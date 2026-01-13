@@ -136,6 +136,16 @@ fn wasm_chunk_store_size(canister_layout: &ic_state_layout::CanisterLayout<ReadO
             .map_or(0, |metadata| metadata.len())
 }
 
+/// Returns a list of checkpoint heights that are either verified or created via state sync.
+///
+/// In state sync-related tests, both types of checkpoints are relevant and should be included in the result.
+fn verified_or_state_sync_checkpoint_heights(state_manager: &StateManagerImpl) -> Vec<Height> {
+    state_manager
+        .state_layout()
+        .verified_or_state_sync_checkpoint_heights()
+        .expect("failed to get verified or state sync checkpoint heights")
+}
+
 /// This is a canister that keeps a counter on the heap and allows to increment it.
 /// The counter can also be read and persisted to and loaded from stable memory.
 const TEST_CANISTER: &str = r#"
@@ -267,7 +277,7 @@ fn lsmt_merge_overhead() {
     }
     fn last_checkpoint_size(env: &StateMachine) -> f64 {
         let state_layout = env.state_manager.state_layout();
-        let checkpoint_heights = state_layout.checkpoint_heights().unwrap();
+        let checkpoint_heights = state_layout.verified_checkpoint_heights().unwrap();
         if checkpoint_heights.is_empty() {
             return 0.0;
         }
@@ -456,7 +466,7 @@ fn lazy_wasms() {
 fn rejoining_node_doesnt_accumulate_states() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
-            for i in 1..=3 {
+            for i in 1..=5 {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(
@@ -482,14 +492,17 @@ fn rejoining_node_doesnt_accumulate_states() {
                     dst_state_manager.get_latest_state().take()
                 );
                 assert_eq!(
-                    dst_state_manager.checkpoint_heights(),
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                     (1..=i).map(height).collect::<Vec<_>>()
                 );
             }
 
-            dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.remove_states_below(height(5));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(1), height(5)]
+            );
 
             assert_error_counters(src_metrics);
             assert_error_counters(dst_metrics);
@@ -3772,6 +3785,249 @@ fn can_state_sync_into_existing_checkpoint() {
 }
 
 #[test]
+fn can_state_sync_based_on_unverified_state_sync_checkpoint() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        // Create state at height 1
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+        let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
+
+        // Create state at height 2 with memory data
+        // This creates substantial data that can be hardlinked from checkpoint 2 during state sync to height 3
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+
+        // Add ~20 MiB of memory data to canister 200
+        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        let pages_for_20mb = (20 * 1024 * 1024) / PAGE_SIZE;
+        // Write data to many pages to create a reasonably large state
+        for i in 0..pages_for_20mb {
+            execution_state
+                .wasm_memory
+                .page_map
+                .update(&[(PageIndex::new(i as u64), &[((i % 256) as u8); PAGE_SIZE])]);
+        }
+
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
+        let id_2 = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2.get(),
+        };
+        let msg_2 = src_state_sync
+            .get(&id_2)
+            .expect("failed to get state sync message");
+
+        // Create state at height 3
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+
+        let hash_3 = wait_for_checkpoint(&*src_state_manager, height(3));
+        let id_3 = StateSyncArtifactId {
+            height: height(3),
+            hash: hash_3.get(),
+        };
+        let msg_3 = src_state_sync
+            .get(&id_3)
+            .expect("failed to get state sync message");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // Create state at height 1
+            let (_height, mut state) = dst_state_manager.take_tip();
+            insert_dummy_canister(&mut state, canister_test_id(100));
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+
+            let dst_hash_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
+            assert_eq!(dst_hash_1.get(), hash_1.get());
+
+            // First state sync: create an unverified state sync checkpoint at height 2
+            let chunkable =
+                set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id_2);
+            pipe_state_sync(msg_2, chunkable);
+
+            // Verify the checkpoint at height 2 exists and is an unverified state sync checkpoint
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(1), height(2)]
+            );
+            assert_eq!(dst_state_manager.latest_state_height(), height(2));
+
+            // Helper to fetch hardlink_files metric
+            let get_hardlink_size = || {
+                fetch_int_counter_vec(dst_metrics, "state_sync_size_bytes_total")
+                    .get(&maplit::btreemap! {"op".to_string() => "hardlink_files".to_string()})
+                    .cloned()
+                    .expect("hardlink_files metric should be present")
+            };
+
+            // Verify that the first state sync (height 1 → 2) had minimal hardlinking
+            // since checkpoint 1 only has a small canister and checkpoint 2 has a large new canister
+            let initial_hardlink_size = get_hardlink_size();
+            assert!(
+                initial_hardlink_size < 10 * 1024 * 1024,
+                "Expected minimal hardlinking (<10 MiB) when using checkpoint 1 as base, but hardlinked {} bytes",
+                initial_hardlink_size
+            );
+
+            // Second state sync: use the unverified state sync checkpoint at height 2 as base
+            let chunkable =
+                set_fetch_state_and_start_state_sync(&dst_state_manager, &dst_state_sync, &id_3);
+            pipe_state_sync(msg_3, chunkable);
+
+            // Verify the state sync completed successfully
+            let expected_state = src_state_manager.get_latest_state();
+            assert_eq!(dst_state_manager.get_latest_state(), expected_state);
+            assert_eq!(dst_state_manager.latest_state_height(), height(3));
+
+            // Verify checkpoint 2 was used as base by checking hardlink_files size
+            // The second state sync (height 2 → 3) should hardlink significantly more than the first (height 1 → 2)
+            // because checkpoint 2 has most of the data needed for checkpoint 3
+            let final_hardlink_size = get_hardlink_size();
+            let second_sync_hardlinked_bytes = final_hardlink_size - initial_hardlink_size;
+            assert!(
+                second_sync_hardlinked_bytes > 10 * 1024 * 1024,
+                "Expected to hardlink >10 MiB from base checkpoint 2 during second state sync, but only hardlinked {} bytes. \
+                This suggests checkpoint 2 was not used as the base.",
+                second_sync_hardlinked_bytes
+            );
+
+            // Verify all checkpoints exist
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(1), height(2), height(3)]
+            );
+
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    });
+}
+
+#[test]
+fn can_archive_state_sync_checkpoints_and_recover_from_verified_checkpoints() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        // Create state at height 1
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
+
+        // Create state at height 2 with wasm memory data
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(200));
+        // Add some pages to wasm_memory so overlay files are created
+        let canister_state = state.canister_state_mut(&canister_test_id(200)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state.wasm_memory.page_map.update(&[
+            (PageIndex::new(0), &[42u8; PAGE_SIZE]),
+            (PageIndex::new(1), &[43u8; PAGE_SIZE]),
+        ]);
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full, None);
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
+        let id_2 = StateSyncArtifactId {
+            height: height(2),
+            hash: hash_2.get(),
+        };
+        let msg_2 = src_state_sync
+            .get(&id_2)
+            .expect("failed to get state sync message");
+
+        // Create state at height 3
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(300));
+        src_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+        let hash_3 = wait_for_checkpoint(&*src_state_manager, height(3));
+        let id_3 = StateSyncArtifactId {
+            height: height(3),
+            hash: hash_3.get(),
+        };
+        let msg_3 = src_state_sync
+            .get(&id_3)
+            .expect("failed to get state sync message");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_restart_test_with_state_sync(
+            |dst_metrics, dst_state_manager, dst_state_sync, restart_fn| {
+                // Create state at height 1 (same as source)
+                let (_height, mut state) = dst_state_manager.take_tip();
+                insert_dummy_canister(&mut state, canister_test_id(100));
+                dst_state_manager.commit_and_certify(
+                    state,
+                    height(1),
+                    CertificationScope::Full,
+                    None,
+                );
+                let hash_dst_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
+                assert_eq!(hash_1.get(), hash_dst_1.get());
+
+                // Perform state sync at height 2
+                let chunkable = set_fetch_state_and_start_state_sync(
+                    &dst_state_manager,
+                    &dst_state_sync,
+                    &id_2,
+                );
+                pipe_state_sync(msg_2, chunkable);
+
+                // Verify state sync completed
+                assert_eq!(dst_state_manager.latest_state_height(), height(2));
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1), height(2)]
+                );
+
+                // Restart dst state manager
+                drop(dst_state_sync);
+                let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
+                    Ok(sm) => sm,
+                    Err(_) => panic!(
+                        "Please make sure other strong references of dst_state_manager have been dropped"
+                    ),
+                };
+                let (_metrics, dst_state_manager, dst_state_sync) =
+                    restart_fn(dst_state_manager, None);
+
+                // Verify state sync checkpoint@2 was archived
+                let backup_heights = dst_state_manager
+                    .state_layout()
+                    .backup_heights()
+                    .expect("failed to get backup heights");
+                assert_eq!(backup_heights, vec![height(2)]);
+
+                // Verify dst recovered from verified checkpoint 1
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
+                assert_eq!(dst_state_manager.latest_state_height(), height(1));
+
+                // Perform state sync at height 3 and verify success
+                let chunkable = set_fetch_state_and_start_state_sync(
+                    &dst_state_manager,
+                    &dst_state_sync,
+                    &id_3,
+                );
+                pipe_state_sync(msg_3, chunkable);
+
+                // Verify final state matches source
+                let expected_state = src_state_manager.get_latest_state();
+                assert_eq!(dst_state_manager.get_latest_state(), expected_state);
+                assert_eq!(dst_state_manager.latest_state_height(), height(3));
+
+                assert_no_remaining_chunks(dst_metrics);
+                assert_error_counters(dst_metrics);
+            },
+        )
+    });
+}
+
+#[test]
 fn can_group_small_files_in_state_sync() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
@@ -4416,7 +4672,10 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
                     restart_fn(dst_state_manager, None);
 
                 // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
-                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Main testing scenario:
@@ -4662,7 +4921,10 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 assert_eq!(backup_heights, vec![height(2)]);
 
                 // Only checkpoint @1 remains in the checkpoints folder and the state manager should recover from this checkpoint.
-                assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(1)]);
+                assert_eq!(
+                    verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                    vec![height(1)]
+                );
                 assert_eq!(dst_state_manager.latest_state_height(), height(1));
 
                 // Continue execution and create the checkpoint @2.
@@ -4752,7 +5014,7 @@ fn can_handle_state_sync_and_commit_race_condition() {
             pipe_state_sync(msg, chunkable);
 
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(2)]
             );
 
@@ -4766,7 +5028,10 @@ fn can_handle_state_sync_and_commit_race_condition() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_error_counters(dst_metrics);
         })
     })
@@ -4841,7 +5106,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             // Checkpoint @2 should be removed
             // while checkpoint @1 is still kept because it is referenced by state sync as a base.
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(3)]
             );
 
@@ -4855,7 +5120,7 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
 
             // State sync adds back checkpoint @2 into the state manager.
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(2), height(3)]
             );
 
@@ -4888,7 +5153,10 @@ fn should_not_leak_checkpoint_when_state_sync_into_existing_snapshot_height() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(4));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_eq!(dst_state_manager.latest_certified_height(), height(4));
             // Snapshots below 4 should be removable.
             assert_eq!(
@@ -4933,13 +5201,29 @@ fn can_commit_below_state_sync() {
             dst_state_manager.flush_tip_channel();
 
             // take_tip should update the tip to the synced checkpoint
-            let (tip_height, _state) = dst_state_manager.take_tip();
+            let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(2));
             assert_eq!(dst_state_manager.latest_state_height(), height(2));
-            // state 1 should be removable
+
             dst_state_manager.remove_states_below(height(2));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            assert_eq!(
+                dst_state_manager
+                    .state_layout()
+                    .verified_or_state_sync_checkpoint_heights()
+                    .unwrap(),
+                vec![height(2)]
+            );
+
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
+            dst_state_manager.flush_tip_channel();
+            dst_state_manager.remove_states_below(height(3));
+            dst_state_manager.flush_deallocation_channel();
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
+
             assert_error_counters(dst_metrics);
         })
     })
@@ -4986,12 +5270,15 @@ fn can_state_sync_below_commit() {
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(2)]
+            );
             // Perform the state sync after the state manager reaches height 2.
             pipe_state_sync(msg, chunkable);
 
             assert_eq!(
-                dst_state_manager.checkpoint_heights(),
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
                 vec![height(1), height(2)]
             );
             dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
@@ -5003,7 +5290,10 @@ fn can_state_sync_below_commit() {
             dst_state_manager.flush_tip_channel();
             dst_state_manager.remove_states_below(height(3));
             dst_state_manager.flush_deallocation_channel();
-            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
+            assert_eq!(
+                verified_or_state_sync_checkpoint_heights(&dst_state_manager),
+                vec![height(3)]
+            );
             assert_error_counters(dst_metrics);
         })
     })
@@ -5908,7 +6198,7 @@ fn remove_too_many_diverged_checkpoints() {
     fn diverge_at(state_manager: StateManagerImpl, divergence: u64) {
         let last_correct_checkpoint = state_manager
             .state_layout()
-            .checkpoint_heights()
+            .verified_checkpoint_heights()
             .unwrap()
             .last()
             .unwrap_or(&height(0))
@@ -6701,7 +6991,13 @@ fn can_uninstall_code_state_machine() {
     env.state_manager.flush_tip_channel();
 
     let canister_layout = layout
-        .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .checkpoint_verified(
+            *layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .last()
+                .unwrap(),
+        )
         .unwrap()
         .canister(&canister_id)
         .unwrap();
@@ -6713,7 +7009,13 @@ fn can_uninstall_code_state_machine() {
 
     env.state_manager.flush_tip_channel();
     let canister_layout = layout
-        .checkpoint_verified(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .checkpoint_verified(
+            *layout
+                .verified_checkpoint_heights()
+                .unwrap()
+                .last()
+                .unwrap(),
+        )
         .unwrap()
         .canister(&canister_id)
         .unwrap();

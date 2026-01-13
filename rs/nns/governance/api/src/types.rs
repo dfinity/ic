@@ -405,6 +405,16 @@ pub struct Motion {
     /// The text of the motion. Maximum 100kib.
     pub motion_text: String,
 }
+/// Take a snapshot of the state of a canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct TakeCanisterSnapshot {
+    /// The canister being snapshotted.
+    pub canister_id: Option<PrincipalId>,
+    /// If set, the existing snapshot with this content will be replaced.
+    pub replace_snapshot: Option<Vec<u8>>,
+}
 /// For all Neurons controlled by the given principals, set their
 /// KYC status to `kyc_verified=true`.
 #[derive(
@@ -641,6 +651,10 @@ pub mod proposal {
         /// back to a healthy state, to recover from some kind of disaster, like
         /// a boot loop, or something like that.
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
+        /// Take a canister snapshot.
+        TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1399,6 +1413,8 @@ pub enum ProposalActionRequest {
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
+    TakeCanisterSnapshot(TakeCanisterSnapshot),
+    LoadCanisterSnapshot(LoadCanisterSnapshot),
 }
 
 #[derive(
@@ -2708,6 +2724,18 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+}
+
+/// Loads a snapshot of the canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all
