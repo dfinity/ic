@@ -6906,7 +6906,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
@@ -7261,7 +7261,7 @@ name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "rand 0.8.5",
@@ -8236,7 +8236,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -8395,7 +8395,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.6",
@@ -8543,7 +8543,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -8791,7 +8791,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "rand 0.8.5",
@@ -8980,7 +8980,7 @@ name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp-test-utils",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
@@ -9172,7 +9172,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -9289,7 +9289,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
 ]
 
@@ -9572,7 +9572,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -10318,7 +10318,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-runner",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -10422,7 +10422,7 @@ dependencies = [
  "clap 4.5.27",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
@@ -10608,7 +10608,7 @@ dependencies = [
  "candid",
  "ic-agent 0.40.1",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
@@ -10888,7 +10888,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -11229,7 +11229,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -12816,7 +12816,7 @@ name = "ic-pub-key"
 version = "0.2.0"
 dependencies = [
  "hex",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-management-canister-types 0.5.0",
  "ic-secp256k1",
  "ic-vetkeys",
@@ -13598,7 +13598,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-limits",
@@ -13696,7 +13696,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
  "ic-icrc1",
@@ -14571,7 +14571,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-http-endpoints-public",
@@ -14943,7 +14943,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
@@ -15206,7 +15206,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -16119,7 +16119,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-fstrim-tool",
  "ic-registry-subnet-type",
  "ic-secp256k1",
@@ -19221,7 +19221,7 @@ dependencies = [
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -19966,7 +19966,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
  "ic-doge-interface",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-gateway",
  "ic-http-endpoints-public",
@@ -21773,7 +21773,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "icp-ledger",
