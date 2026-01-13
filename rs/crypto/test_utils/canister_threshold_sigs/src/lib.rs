@@ -2949,7 +2949,8 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
         let complaints = complainer
             .load_transcript(transcript)
             .expect("expected complaints");
-        assert_eq!(complaints.len(), number_of_complaints);
+
+        assert_eq!(complaints.len(), number_of_complaints, "Got an unexpected number of complaints");
         complaints
     };
 
