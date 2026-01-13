@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use crate::icrc::{
     generic_value::Value,
     generic_value_predicate::{
-        ItemRequirement, ValuePredicateFailures, and, element, is, is_array, is_blob, is_equal_to,
-        is_int, is_less_or_equal_to, is_map, is_more_than, is_nat, is_nat64, item, len, or,
+        ItemRequirement, ValuePredicateFailures, and, is, is_account, is_blob, is_equal_to, is_map,
+        is_more_or_equal_to, item, len, or,
     },
 };
 
@@ -13,24 +13,8 @@ use crate::icrc::{
 pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     use ItemRequirement::*;
 
-    let is_zero = or(vec![
-        and(vec![is_int(), is(Value::Int(0.into()))]),
-        and(vec![is_nat(), is(Value::Nat(0_u8.into()))]),
-        and(vec![is_nat64(), is(Value::Nat64(0))]),
-    ]);
-    let is_positive = or(vec![is_zero, is_more_than(0)]);
-    let is_amount = is_positive.clone();
-    let is_timestamp = is_positive;
-    let is_principal = and(vec![is_blob(), len(is_less_or_equal_to(29))]);
-    let is_subaccount = and(vec![is_blob(), len(is_equal_to(32))]);
-    let is_account = and(vec![
-        is_array(),
-        element(0, is_principal.clone()),
-        or(vec![
-            len(is_equal_to(1)),
-            and(vec![len(is_equal_to(2)), element(1, is_subaccount.clone())]),
-        ]),
-    ]);
+    let is_amount = is_more_or_equal_to(0);
+    let is_timestamp = is_more_or_equal_to(0);
     let is_memo = is_blob();
     let icrc1_common = and(vec![
         is_map(),
@@ -42,27 +26,27 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
     let is_icrc1_burn = and(vec![
         icrc1_common.clone(),
         item("op", Required, is(Value::text("burn"))),
-        item("from", Required, is_account.clone()),
+        item("from", Required, is_account()),
     ]);
     let is_icrc1_mint = and(vec![
         icrc1_common.clone(),
         item("op", Required, is(Value::text("mint"))),
-        item("to", Required, is_account.clone()),
+        item("to", Required, is_account()),
     ]);
     let is_icrc2_approve = and(vec![
         icrc1_common.clone(),
         item("op", Required, is(Value::text("approve"))),
-        item("from", Required, is_account.clone()),
-        item("spender", Required, is_account.clone()),
+        item("from", Required, is_account()),
+        item("spender", Required, is_account()),
         item("expected_allowance", Optional, is_amount.clone()),
         item("expires_at", Optional, is_timestamp.clone()),
     ]);
     let is_icrc2_transfer_from = and(vec![
         icrc1_common,
         item("op", Required, is(Value::text("xfer"))),
-        item("from", Required, is_account.clone()),
-        item("to", Required, is_account.clone()),
-        item("spender", Optional, is_account.clone()),
+        item("from", Required, is_account()),
+        item("to", Required, is_account()),
+        item("spender", Optional, is_account()),
     ]);
     let is_icrc1_or_icrc2_transaction = or(vec![
         is_icrc1_burn,

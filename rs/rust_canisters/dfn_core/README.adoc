@@ -1,9 +1,6 @@
 == DFN Core
 +dfn_core+ is a wrapper around the canisters System API. This should have no non optional dependencies.
 
-=== Allocation
-You can optionally build this with +wee_alloc+ enabled, this should shave off about 10kb from your binary size but reduce the performance of the allocator.
-
 === Printing
 The IC platform doesn't have a stdout or stderr, it has a function called debug_trace which will print text when run locally. When run on the network it will do nothing.
 
