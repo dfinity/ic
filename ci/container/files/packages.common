@@ -35,12 +35,8 @@ libusb-1.0-0-dev
 protobuf-compiler
 llvm
 
-# Other code dependencies
-clang
-fish
-node-json5
-
 # IC-OS
+clang
 cryptsetup-bin
 dosfstools # provides mkfs.vfat
 faketime

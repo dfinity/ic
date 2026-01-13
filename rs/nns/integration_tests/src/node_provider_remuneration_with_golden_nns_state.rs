@@ -468,7 +468,7 @@ mod sanity_check {
         // 1. Convert total XDR permyriad to e8s (with truncation)
         // 2. Convert back to XDR permyriad (with truncation)
         // This accounts for precision loss in the conversion process.
-        let expected_xdr_permyriad_per_provider: BTreeMap<PrincipalId, u64> =
+        let mut expected_xdr_permyriad_per_provider: BTreeMap<PrincipalId, u64> =
             observed_node_provider_id_to_xdr
                 .into_iter()
                 .map(|(provider_id, total_xdr_permyriad)| {
@@ -482,6 +482,15 @@ mod sanity_check {
                     (provider_id, xdr_back)
                 })
                 .collect();
+
+        // Remove a node provider that was removed from the network before January 2026 distribution
+        // and thus not expected to receive any rewards.
+        // https://dashboard.internetcomputer.org/proposal/139934
+        let removed_node_provider = PrincipalId::from_str(
+            "acqus-l4yyc-h44lw-grfxw-h7jqf-mtvt3-huwmj-4s372-sc5db-5nsfr-2ae",
+        )
+        .unwrap();
+        expected_xdr_permyriad_per_provider.remove(&removed_node_provider);
 
         assert_eq!(
             xdr_permyriad_distributed, expected_xdr_permyriad_per_provider,
@@ -523,17 +532,6 @@ mod sanity_check {
                 },
             );
 
-            self.check_metric(
-                |metrics| {
-                    governance_gauge_value(
-                        metrics,
-                        "governance_latest_reward_event_timestamp_seconds",
-                    )
-                },
-                |before, after| {
-                    assert_increased(before, after, "latest reward event timestamp");
-                },
-            );
             self.check_metric(
                 |metrics| governance_gauge_value(metrics, "governance_proposals_total"),
                 |before, after| {

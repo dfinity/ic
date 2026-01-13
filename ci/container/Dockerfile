@@ -55,13 +55,6 @@ RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOG
     rm "/usr/local/bin/LICENSE" && \
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
 
-# Add buf
-ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.46.0"
-RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${BUF_BIN}"
-
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
 ARG MOLD_VERSION=2.37.1
