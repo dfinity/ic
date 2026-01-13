@@ -2734,8 +2734,8 @@ pub struct LoadCanisterSnapshot {
     /// The ID of the canister to load the snapshot into.
     pub canister_id: Option<PrincipalId>,
     /// The ID of the snapshot to load.
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all

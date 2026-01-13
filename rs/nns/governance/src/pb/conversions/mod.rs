@@ -2802,7 +2802,7 @@ impl From<pb::LoadCanisterSnapshot> for pb_api::LoadCanisterSnapshot {
     fn from(item: pb::LoadCanisterSnapshot) -> Self {
         Self {
             canister_id: item.canister_id,
-            snapshot_id: item.snapshot_id,
+            snapshot_id: Some(item.snapshot_id),
         }
     }
 }
@@ -2810,7 +2810,7 @@ impl From<pb_api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
     fn from(item: pb_api::LoadCanisterSnapshot) -> Self {
         Self {
             canister_id: item.canister_id,
-            snapshot_id: item.snapshot_id,
+            snapshot_id: item.snapshot_id.unwrap_or_default(),
         }
     }
 }

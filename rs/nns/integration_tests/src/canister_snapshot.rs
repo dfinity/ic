@@ -306,7 +306,7 @@ fn test_canister_snapshot() {
 
     let load_snapshot = LoadCanisterSnapshot {
         canister_id: Some(target_canister_id.get()),
-        snapshot_id: second_snapshot.snapshot_id().to_vec(),
+        snapshot_id: Some(second_snapshot.snapshot_id().to_vec()),
     };
     let action = ProposalActionRequest::LoadCanisterSnapshot(load_snapshot);
     let make_proposal_request = MakeProposalRequest {
