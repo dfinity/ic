@@ -184,7 +184,7 @@ pub struct SubmittedBtcTransaction {
     /// The tx output from the submitted transaction that the minter owns.
     pub change_output: Option<ChangeOutput>,
     /// Fee per vbyte in millisatoshi.
-    pub fee_per_vbyte: Option<u64>,
+    pub estimated_fee_per_vbyte: Option<u64>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
     /// Signed transaction if included.

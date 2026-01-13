@@ -108,10 +108,10 @@ mod event {
             /// The IC time at which the minter submitted the transaction.
             #[serde(rename = "submitted_at")]
             submitted_at: u64,
-            /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+            /// The fee per vbyte (in millisatoshi) that was estimated for the transaction.
             #[serde(rename = "fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
-            fee_per_vbyte: Option<u64>,
+            estimated_fee_per_vbyte: Option<u64>,
             /// The total fee for this transaction
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -140,7 +140,7 @@ mod event {
             submitted_at: u64,
             /// The fee per vbyte (in millisatoshi) that we used for the transaction.
             #[serde(rename = "fee")]
-            fee_per_vbyte: u64,
+            estimated_fee_per_vbyte: u64,
             /// The total fee for this transaction
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -400,7 +400,7 @@ impl EventLogger for CkBtcEventLogger {
                     request_block_indices,
                     txid,
                     utxos,
-                    fee_per_vbyte,
+                    estimated_fee_per_vbyte: fee_per_vbyte,
                     change_output,
                     submitted_at,
                     withdrawal_fee,
@@ -439,7 +439,7 @@ impl EventLogger for CkBtcEventLogger {
                         requests,
                         txid,
                         used_utxos: utxos,
-                        fee_per_vbyte,
+                        estimated_fee_per_vbyte: fee_per_vbyte,
                         change_output,
                         submitted_at,
                         withdrawal_fee,
@@ -451,7 +451,7 @@ impl EventLogger for CkBtcEventLogger {
                     new_txid,
                     change_output,
                     submitted_at,
-                    fee_per_vbyte,
+                    estimated_fee_per_vbyte: fee_per_vbyte,
                     withdrawal_fee,
                     reason,
                     new_utxos,
@@ -505,7 +505,7 @@ impl EventLogger for CkBtcEventLogger {
                             used_utxos: new_utxos.unwrap_or(old_utxos),
                             change_output: Some(change_output),
                             submitted_at,
-                            fee_per_vbyte: Some(fee_per_vbyte),
+                            estimated_fee_per_vbyte: Some(fee_per_vbyte),
                             withdrawal_fee,
                             signed_tx: None,
                         },

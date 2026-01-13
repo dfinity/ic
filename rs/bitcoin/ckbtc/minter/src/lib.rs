@@ -583,7 +583,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 used_utxos,
                 change_output: Some(req.change_output),
                 submitted_at: runtime.time(),
-                fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
+                estimated_fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                 withdrawal_fee: Some(total_fee),
                 signed_tx,
             },
@@ -860,7 +860,7 @@ pub async fn resubmit_transactions<
             }
             continue;
         }
-        let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
+        let tx_fee_per_vbyte = match submitted_tx.estimated_fee_per_vbyte {
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
@@ -1002,7 +1002,7 @@ pub async fn resubmit_transactions<
                     txid: new_txid,
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
-                    fee_per_vbyte: Some(tx_fee_per_vbyte),
+                    estimated_fee_per_vbyte: Some(tx_fee_per_vbyte),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
                     signed_tx: None,

@@ -835,7 +835,7 @@ proptest! {
             used_utxos: used_utxos.clone(),
             submitted_at,
             change_output: Some(change_output),
-            fee_per_vbyte: Some(fee_per_vbyte),
+            estimated_fee_per_vbyte: Some(fee_per_vbyte),
             withdrawal_fee: Some(withdrawal_fee),
             signed_tx: None,
         });
@@ -862,7 +862,7 @@ proptest! {
                 used_utxos: used_utxos.clone(),
                 submitted_at,
                 change_output: Some(change_output),
-                fee_per_vbyte: Some(fee_per_vbyte),
+                estimated_fee_per_vbyte: Some(fee_per_vbyte),
                 withdrawal_fee: Some(withdrawal_fee),
                 signed_tx: None,
             });

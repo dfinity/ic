@@ -94,7 +94,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             utxos: tx.used_utxos.clone(),
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
-            fee_per_vbyte: tx.fee_per_vbyte,
+            estimated_fee_per_vbyte: tx.estimated_fee_per_vbyte,
             withdrawal_fee: tx.withdrawal_fee,
             signed_tx: tx.signed_tx.clone(),
         },
@@ -223,8 +223,8 @@ pub fn replace_transaction<R: CanisterRuntime>(
                 .clone()
                 .expect("bug: all replacement transactions must have the change output"),
             submitted_at: new_tx.submitted_at,
-            fee_per_vbyte: new_tx
-                .fee_per_vbyte
+            estimated_fee_per_vbyte: new_tx
+                .estimated_fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
             withdrawal_fee: new_tx.withdrawal_fee,
             reason: Some(reason),
