@@ -395,7 +395,7 @@ impl CanisterState {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
-            //+ self.log_memory_store_memory_usage()
+            + self.log_memory_store_memory_usage()
             + self.snapshots_memory_usage()
     }
 
