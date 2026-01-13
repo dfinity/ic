@@ -854,6 +854,7 @@ mod tests {
 
     use super::*;
 
+    use ic_types_test_utils::ids::node_test_id;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -962,6 +963,46 @@ mod tests {
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn canister_http_request_context_proto_round_trip() {
+        let initial = CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: vec![CanisterHttpHeader {
+                name: "Content-Type".to_string(),
+                value: "application/json".to_string(),
+            }],
+            body: Some(b"{\"hello\":\"world\"}".to_vec()),
+            max_response_bytes: Some(NumBytes::from(1234)),
+            http_method: CanisterHttpMethod::POST,
+            transform: Some(Transform {
+                method_name: "transform_response".to_string(),
+                context: vec![1, 2, 3],
+            }),
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "transform".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            time: UNIX_EPOCH,
+            replication: Replication::NonReplicated(node_test_id(42)),
+            pricing_version: PricingVersion::PayAsYouGo,
+            payment_info: PaymentInfo {
+                per_replica_allowance: Cycles::new(1_000_000),
+                already_refunded: Cycles::new(123),
+                refunded_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+            },
+        };
+
+        let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+        let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+        assert_eq!(initial, round_trip);
     }
 }
 
