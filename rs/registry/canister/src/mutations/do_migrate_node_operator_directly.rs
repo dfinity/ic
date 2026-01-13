@@ -63,8 +63,6 @@ impl Registry {
 
         self.maybe_apply_mutation_internal(total_mutations);
 
-        // Commit if valid???
-
         Ok(())
     }
 
@@ -376,6 +374,13 @@ mod tests {
     // Since seeding of test data takes place _now_
     // this is a helper to call the migration in the future
     // to avoid rate limits.
+    //
+    // This just masks the error as it calls the inner
+    // function with a different _now_. Proper testing
+    // of this rate limit cannot be done within unit
+    // tests as `maybe_apply_mutation_internal` doesn't
+    // provide an api for "now" and uses system time
+    // which is hard to mock.
     fn now_plus_13_hours() -> SystemTime {
         let now = now_system_time();
 
@@ -1042,5 +1047,124 @@ mod tests {
         let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
 
         assert!(resp.is_ok());
+    }
+
+    #[test]
+    fn migrate_whole_data_center_to_one_node_operator() {
+        let mut setup = TestSetup::new();
+
+        let caller = PrincipalId::new_user_test_id(999);
+        let dc = "dc";
+
+        let old_node_operators: Vec<_> = (1..=3)
+            .map(|no| PrincipalId::new_user_test_id(no))
+            .collect();
+
+        let node_allowance_per_node_operator = 5;
+        let rewardable_nodes_type_1_per_operator = 3;
+        let rewardable_nodes_per_node_operator: Vec<_> = vec![(
+            NodeRewardType::Type1.to_string(),
+            rewardable_nodes_type_1_per_operator,
+        )];
+
+        for node_operator in &old_node_operators {
+            setup.add_node_operator(
+                *node_operator,
+                caller,
+                node_allowance_per_node_operator,
+                dc,
+                rewardable_nodes_per_node_operator.clone(),
+                rewardable_nodes_per_node_operator.clone(),
+            );
+
+            for _ in 0..3 {
+                setup.add_node(*node_operator);
+            }
+        }
+
+        let destination_node_operator = PrincipalId::new_user_test_id(42);
+
+        for old_node_operator in &old_node_operators {
+            let payload = MigrateNodeOperatorPayload {
+                old_node_operator_id: Some(*old_node_operator),
+                new_node_operator_id: Some(destination_node_operator),
+            };
+
+            let resp =
+                setup
+                    .registry
+                    .migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+            assert!(resp.is_ok());
+        }
+
+        // Everything was migrated, now try migrating to a new one from destination_node_operator
+        //
+        // NOTE: this cannot be tested here since the registry doesn't expose an api
+        // for changing the ingestion time of mutations. While it could be added
+        // with small effort, it would be a rare use case of such feature and thus
+        // this will be tested in integration tests with PocketIC where time can be controlled.
+        //
+        // The following logic is here to remind the reader that this shouldn't be possible.
+        // ```
+        // let too_soon_new_node_operator = PrincipalId::new_user_test_id(456);
+        //
+        // let payload = MigrateNodeOperatorPayload {
+        //     old_node_operator_id: Some(destination_node_operator),
+        //     new_node_operator_id: Some(too_soon_new_node_operator),
+        // };
+        // let resp = setup
+        //     .registry
+        //     .migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+        // let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+        //     principal: destination_node_operator,
+        // });
+        // assert_eq!(resp, expected_err);
+        // ```
+
+        // Validate that old node operators have been removed
+        for old_node_operator in &old_node_operators {
+            let maybe_record = setup.registry.get(
+                make_node_operator_record_key(*old_node_operator).as_bytes(),
+                setup.registry.latest_version(),
+            );
+
+            assert!(maybe_record.is_none());
+
+            // Validate that all of the nodes have been moved to the new node operator
+            for node in setup.fetch_nodes_added_for_node_operator(*old_node_operator) {
+                assert_eq!(node.node_operator_id, destination_node_operator.to_vec());
+            }
+        }
+
+        // Validate correct aggregation in the new node operator
+        let record = setup
+            .registry
+            .get_node_operator_or_panic(destination_node_operator);
+
+        assert_eq!(record.node_provider_principal_id, caller.to_vec());
+        assert_eq!(
+            record.node_allowance,
+            node_allowance_per_node_operator * old_node_operators.len() as u64
+        );
+        assert_eq!(record.dc_id, dc.to_string());
+        assert_eq!(record.rewardable_nodes.len(), 1);
+        let type_1_rewardable_nodes = record
+            .rewardable_nodes
+            .get(&NodeRewardType::Type1.to_string())
+            .unwrap();
+        assert_eq!(
+            *type_1_rewardable_nodes,
+            old_node_operators.len() as u32 * rewardable_nodes_type_1_per_operator
+        );
+
+        assert_eq!(record.max_rewardable_nodes.len(), 1);
+        let type_1_max_rewardable_nodes = record
+            .max_rewardable_nodes
+            .get(&NodeRewardType::Type1.to_string())
+            .unwrap();
+        assert_eq!(
+            *type_1_max_rewardable_nodes,
+            old_node_operators.len() as u32 * rewardable_nodes_type_1_per_operator
+        );
     }
 }
