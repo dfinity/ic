@@ -3,7 +3,7 @@ use crate::{
     proposals::{call_canister::CallCanister, invalid_proposal_error, topic_to_manage_canister},
 };
 use candid::Encode;
-use ic_base_types::{PrincipalId, CanisterId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
 
