@@ -390,7 +390,7 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
 
     mainnet_nns_systest = system_test(
         name,
-        runtime_deps = runtime_deps | MAINNET_NNS_CANISTER_RUNTIME_DEPS | NNS_CANISTER_RUNTIME_DEPS,
+        runtime_deps = runtime_deps | MAINNET_NNS_CANISTER_RUNTIME_DEPS,
         env = env,
         data = data,
         tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
