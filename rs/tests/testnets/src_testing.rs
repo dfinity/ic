@@ -6,10 +6,10 @@
 //   one ic-gateway and a p8s (with grafana) VM.
 // All replica nodes use the default resources.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create src_testing --lifetime-mins=180 --output-dir=./src_testing -- --test_tmpdir=./src_testing
+//   $ ict testnet create src_testing --output-dir=./src_testing -- --test_tmpdir=./src_testing
 //
 // The --output-dir=./src_testing will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./src_testing will store the remaining test output in the specified directory.
@@ -140,8 +140,7 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(ic_gatewway_name).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    let ic_gateway_domain = ic_gateway_url.domain().unwrap();
-    env.sync_with_prometheus_by_name("", Some(ic_gateway_domain.to_string()));
+    env.sync_with_prometheus();
 
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);

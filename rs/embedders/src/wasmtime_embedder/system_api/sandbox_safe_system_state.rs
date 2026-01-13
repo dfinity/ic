@@ -98,7 +98,7 @@ impl Default for SystemStateModifications {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
-            canister_log: Default::default(),
+            canister_log: CanisterLog::default_delta(),
             on_low_wasm_memory_hook_condition_check_result: None,
             should_bump_canister_version: false,
         }
@@ -675,6 +675,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        canister_log_memory_limit: usize,
         is_wasm64_execution: bool,
         network_topology: NetworkTopology,
     ) -> Self {
@@ -691,8 +692,11 @@ impl SandboxSafeSystemState {
             wasm_memory_threshold,
             compute_allocation,
             system_state_modifications: SystemStateModifications {
-                // Start indexing new batch of canister log records from the given index.
-                canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
+                canister_log: CanisterLog::new_delta_with_next_index(
+                    // Start indexing new batch of canister log records from the given index.
+                    next_canister_log_record_idx,
+                    canister_log_memory_limit,
+                ),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
                 ..SystemStateModifications::default()
@@ -833,6 +837,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            system_state.canister_log.byte_capacity(),
             is_wasm64_execution,
             network_topology.clone(),
         )
@@ -1383,7 +1388,7 @@ impl SandboxSafeSystemState {
 
     /// Takes collected canister log records.
     pub fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.system_state_modifications.canister_log)
+        self.system_state_modifications.canister_log.take()
     }
 
     /// Returns collected canister log records.
@@ -1467,8 +1472,8 @@ mod tests {
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-        Time,
+        CanisterTimer, ComputeAllocation, Cycles, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation,
+        NumBytes, NumInstructions, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
@@ -1574,6 +1579,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
@@ -1627,6 +1633,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),

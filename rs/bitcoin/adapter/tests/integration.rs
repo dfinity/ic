@@ -876,7 +876,7 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     wait_for_blocks(client2, 26);
 
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
-    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 201);
+    let blocks = sync_blocks::<T>(&adapter_client, &mut vec![], anchor, 29, 400);
     assert_eq!(blocks.len(), 29);
 }
 

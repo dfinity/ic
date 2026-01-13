@@ -54,6 +54,7 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .disable_ipv4()
         .start(&env)
         .expect("failed to setup ic-gateway");
     set_authorized_subnets(&env);

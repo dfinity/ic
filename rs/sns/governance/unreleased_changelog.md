@@ -11,8 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Clean up if RegisterExtension fails.
-
 ## Deprecated
 
 ## Removed

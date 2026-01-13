@@ -376,6 +376,12 @@ fn block_encoding_agrees_with_the_icrc3_schema() {
     ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc3_schema::<Tokens>();
 }
 
+// Generate random blocks and check that their value encoding complies with the ICRC-107 spec.
+#[test]
+fn block_encoding_agrees_with_the_icrc107_schema() {
+    ic_ledger_suite_state_machine_tests::block_encoding_agreed_with_the_icrc107_schema::<Tokens>();
+}
+
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
@@ -1216,6 +1222,7 @@ fn test_icrc3_get_archives() {
         timestamp: 0,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     }
     .encode()
     .size_bytes();

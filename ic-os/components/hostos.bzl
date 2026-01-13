@@ -31,7 +31,7 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/amd64-microcode"): "/etc/default/amd64-microcode",
     Label("early-boot/initramfs-tools/hostos/intel-microcode"): "/etc/default/intel-microcode",
     Label("early-boot/initramfs-tools/hostos/modules"): "/etc/initramfs-tools/modules",
-    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
+    Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id",
 
     # misc
     Label("misc/config/config-hostos.sh"): "/opt/ic/bin/config.sh",
@@ -44,10 +44,11 @@ component_files = {
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("hostos/misc/sudoers"): "/etc/sudoers",
     Label("hostos/misc/limited-console"): "/opt/ic/bin/limited-console",
+    Label("hostos/misc/bash"): "/opt/ic/bin/rbash/bash",
     Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
-    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
+    Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-launcher.sh"): "/opt/ic/bin/guestos-recovery-launcher.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
 
     # monitoring
@@ -77,6 +78,8 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
     Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
+    Label("monitoring/hostos/export-guestos-serial-logs.sh"): "/opt/ic/bin/export-guestos-serial-logs.sh",
+    Label("monitoring/hostos/export-guestos-serial-logs.service"): "/etc/systemd/system/export-guestos-serial-logs.service",
 
     # networking
     Label("networking/generate-network-config/generate-network-config-hostos.service"): "/etc/systemd/system/generate-network-config.service",

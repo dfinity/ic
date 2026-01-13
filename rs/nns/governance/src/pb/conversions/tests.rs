@@ -1,4 +1,5 @@
 use super::*;
+
 use ic_base_types::PrincipalId;
 use icp_ledger::protobuf::AccountIdentifier;
 
@@ -17,7 +18,7 @@ fn test_node_provider_conversions_always_create_32_byte_account_identifier() {
     };
 
     // Act
-    let converted_node_provider = pb_api::NodeProvider::from(node_provider);
+    let converted_node_provider = api::NodeProvider::from(node_provider);
 
     // Assert the length is now 32 bytes
     assert_eq!(
@@ -49,7 +50,7 @@ fn test_if_invalid_account_identifier_just_return_what_is_stored() {
     };
 
     // Act
-    let converted_node_provider = pb_api::NodeProvider::from(node_provider);
+    let converted_node_provider = api::NodeProvider::from(node_provider);
 
     // Assert the length is still 28 bytes
     assert_eq!(
@@ -80,7 +81,7 @@ fn test_reward_to_account_conversions_always_create_32_byte_account_identifier()
 
     // Act
     let converted_reward_to_account =
-        pb_api::reward_node_provider::RewardToAccount::from(reward_to_account);
+        api::reward_node_provider::RewardToAccount::from(reward_to_account);
 
     // Assert the length is now 32 bytes
     assert_eq!(
@@ -111,7 +112,7 @@ fn test_reward_to_account_invalid_account_identifier_just_return_what_is_stored(
 
     // Act
     let converted_reward_to_account =
-        pb_api::reward_node_provider::RewardToAccount::from(reward_to_account);
+        api::reward_node_provider::RewardToAccount::from(reward_to_account);
 
     // Assert the length is still 27 bytes
     assert_eq!(

@@ -8,6 +8,8 @@ use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::{Connection, params};
 use tempfile::tempdir;
 
+const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
+
 // Helper function to create a test block with a specific timestamp and data
 fn create_test_rosetta_block(
     index: u64,
@@ -438,19 +440,19 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     connection.execute("DELETE FROM account_balances", params![])?;
 
     // Correct balances for mint and block 1
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')",
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '999999899')",
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '100')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '100')",
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (1, ?1, ?2, '1')",
         params![fee_collector_account.owner.as_slice(), fee_collector_account.effective_subaccount().as_slice()])?;
 
     // Broken balances for block 2 (fee collector not credited)
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '999999698')",
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (2, ?1, ?2, '300')",
         params![to_account.owner.as_slice(), to_account.effective_subaccount().as_slice()])?;
     // Missing fee collector balance update - this is the bug
 
@@ -460,7 +462,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     assert_eq!(fee_balance_before, Some(Nat::from(1u64))); // Should be 2, but it's 1 (broken)
 
     // Test repair function
-    repair_fee_collector_balances(&mut connection)?;
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
 
     // Verify fixed state
     let fee_balance_after =
@@ -468,7 +470,7 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     assert_eq!(fee_balance_after, Some(Nat::from(2u64))); // Now correctly 2
 
     // Test idempotency - running repair again should not change anything
-    repair_fee_collector_balances(&mut connection)?;
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
     let fee_balance_final =
         get_account_balance_at_block_idx(&connection, &fee_collector_account, 2)?;
     assert_eq!(fee_balance_final, Some(Nat::from(2u64)));
@@ -495,7 +497,7 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
         &RosettaCounter::CollectorBalancesFixed
     )?);
 
-    repair_fee_collector_balances(&mut connection)?;
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?;
 
     assert!(is_counter_flag_set(
         &connection,
@@ -518,12 +520,12 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
     store_blocks(&mut connection, vec![mint_block])?;
 
     // Manually add correct balance
-    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')", 
+    connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')",
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
 
     // Clear balances to test that repair is skipped
     connection.execute("DELETE FROM account_balances", params![])?;
-    repair_fee_collector_balances(&mut connection)?; // Should be skipped due to counter
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?; // Should be skipped due to counter
 
     // Verify balance is still empty (repair was skipped)
     assert_eq!(
@@ -537,16 +539,127 @@ fn test_repair_fee_collector_edge_cases() -> anyhow::Result<()> {
         params![RosettaCounter::CollectorBalancesFixed.name()],
     )?;
 
-    repair_fee_collector_balances(&mut connection)?; // First run - should execute
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?; // First run - should execute
     let balance_after_first = get_account_balance_at_block_idx(&connection, &from_account, 0)?;
     assert_eq!(balance_after_first, Some(Nat::from(1000000000u64)));
 
     connection.execute("DELETE FROM account_balances", params![])?;
-    repair_fee_collector_balances(&mut connection)?; // Second run - should be skipped
+    repair_fee_collector_balances(&mut connection, BALANCE_SYNC_BATCH_SIZE_DEFAULT)?; // Second run - should be skipped
     assert_eq!(
         get_account_balance_at_block_idx(&connection, &from_account, 0)?,
         None
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_none() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+    schema::create_tables(&connection)?;
+
+    let updated_schema_version = match get_rosetta_metadata(&connection, METADATA_SCHEMA_VERSION)? {
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        None => 0,
+    };
+    assert_eq!(updated_schema_version, schema::SCHEMA_VERSION);
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_zero() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![METADATA_SCHEMA_VERSION, 0u64.to_le_bytes()],
+    )?;
+
+    schema::create_tables(&connection)?;
+
+    let updated_schema_version = match get_rosetta_metadata(&connection, METADATA_SCHEMA_VERSION)? {
+        Some(value) => u64::from_le_bytes(value.as_slice().try_into()?),
+        None => 0,
+    };
+    assert_eq!(updated_schema_version, schema::SCHEMA_VERSION);
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_current() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_SCHEMA_VERSION,
+            schema::SCHEMA_VERSION.to_le_bytes()
+        ],
+    )?;
+
+    schema::create_tables(&connection)?;
+
+    Ok(())
+}
+
+#[test]
+fn test_schema_version_next() -> anyhow::Result<()> {
+    let temp_dir = tempdir()?;
+    let db_path = temp_dir.path().join("test_fee_collector_db.sqlite");
+    let connection = Connection::open(&db_path)?;
+
+    connection.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS rosetta_metadata (
+            key TEXT PRIMARY KEY,
+            value BLOB NOT NULL
+        );
+        "#,
+        [],
+    )?;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_SCHEMA_VERSION,
+            (schema::SCHEMA_VERSION + 1).to_le_bytes()
+        ],
+    )?;
+
+    match schema::create_tables(&connection) {
+        Ok(()) => anyhow::bail!("schema version check should fail"),
+        Err(e) => {
+            assert!(
+                e.to_string()
+                    .contains("incompatible with current schema version")
+            );
+        }
+    };
 
     Ok(())
 }

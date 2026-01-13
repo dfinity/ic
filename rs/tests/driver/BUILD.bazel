@@ -15,6 +15,7 @@ rust_library(
     },
     compile_data = [
         ":assets/vector.toml",
+        ":assets/create-universal-vm-config-image.sh",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [
@@ -34,10 +35,10 @@ rust_library(
         "//rs/config",
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
-        "//rs/ic_os/config:config_lib_dev",
-        "//rs/ic_os/config_types",
-        "//rs/ic_os/deterministic_ips",
+        "//rs/ic_os/config/tool:config_lib_dev",
+        "//rs/ic_os/config/types:config_types",
         "//rs/ic_os/dev_test_tools/setupos-image-config",
+        "//rs/ic_os/networking/deterministic_ips",
         "//rs/interfaces",
         "//rs/interfaces/registry",
         "//rs/ledger_suite/common/ledger_core",

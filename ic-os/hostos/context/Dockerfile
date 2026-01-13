@@ -70,7 +70,7 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
 RUN RESUME=none update-initramfs -c -k all
 
 # Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os/nss_icos/README.md for context.
+# See ../../../rs/ic_os/networking/nss_icos/README.md for context.
 RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys
@@ -199,14 +199,9 @@ RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
+    chmod 0755 /opt/ic/bin/rbash/bash && \
     chmod 0644 /opt/ic/share/*
 
-# Create wrapper script to prevent bash escape in restricted shell
-# A symlink won't work because bash checks its invocation name ($0), not the symlink target
-RUN mkdir -p /opt/ic/bin/rbash && \
-    echo '#!/bin/sh' > /opt/ic/bin/rbash/bash && \
-    echo 'exec /bin/rbash "$@"' >> /opt/ic/bin/rbash/bash && \
-    chmod 0755 /opt/ic/bin/rbash/bash
 
 # ------ DEV VARIANT ---------------------------------------------
 

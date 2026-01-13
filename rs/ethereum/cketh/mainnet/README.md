@@ -204,10 +204,10 @@ pub fn setup(env: TestEnv) {
 }
 ```
 
-and then spin up the dynamic testnet with a generous lifetime
+and then spin up the dynamic testnet:
 ```shell
 ./ci/container/container-run.sh
-ict testnet create small --lifetime-mins=880 --output-dir=./small -- --test_tmpdir=./small
+ict testnet create small --output-dir=./small -- --test_tmpdir=./small
 ```
 
 Once the testnet is up and running, extract the external url of the HTTP Gateway (`ic-gateway`) from the logs, which should have the following format `https://ic<x>.farm.dfinity.systems`. In the following we will use `https://ic1.farm.dfinity.systems`.

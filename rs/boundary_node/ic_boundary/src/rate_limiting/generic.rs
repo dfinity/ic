@@ -24,7 +24,7 @@ use ic_bn_lib::prometheus::{
     IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
     register_int_gauge_with_registry,
 };
-use ic_bn_lib::{http::ConnInfo, tasks::Run};
+use ic_bn_lib_common::{traits::Run, types::http::ConnInfo};
 use ic_types::CanisterId;
 use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
@@ -506,7 +506,7 @@ pub async fn middleware(
 mod test {
     use super::*;
     use anyhow::bail;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use indoc::indoc;
     use std::str::FromStr;
 

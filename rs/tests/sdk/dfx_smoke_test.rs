@@ -47,6 +47,7 @@ pub fn setup(env: TestEnv) {
     );
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .disable_ipv4()
         .start(&env)
         .expect("failed to setup ic-gateway");
 }

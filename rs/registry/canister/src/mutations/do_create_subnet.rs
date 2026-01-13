@@ -414,10 +414,12 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
             return Err("KeyConfig.key_id must be specified.".to_string());
         };
 
-        let Some(pre_signatures_to_create_in_advance) = pre_signatures_to_create_in_advance else {
-            return Err(
-                "KeyConfig.pre_signatures_to_create_in_advance must be specified.".to_string(),
-            );
+        // Ensure presence of `pre_signatures_to_create_in_advance` for keys that require pre-signatures.
+        // Note that an invariant ensures that this field is not zero for keys that require pre-signatures.
+        if key_id.requires_pre_signatures() && pre_signatures_to_create_in_advance.is_none() {
+            return Err(format!(
+                "KeyConfig.pre_signatures_to_create_in_advance must be specified for key {key_id}."
+            ));
         };
 
         let Some(max_queue_size) = max_queue_size else {
@@ -426,7 +428,7 @@ impl TryFrom<KeyConfig> for KeyConfigInternal {
 
         Ok(Self {
             key_id,
-            pre_signatures_to_create_in_advance,
+            pre_signatures_to_create_in_advance: pre_signatures_to_create_in_advance.unwrap_or(0),
             max_queue_size,
         })
     }

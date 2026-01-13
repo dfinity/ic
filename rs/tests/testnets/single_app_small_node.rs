@@ -2,10 +2,10 @@
 //   one 1-node Application subnet and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 16 vCPUs, 64GiB of RAM, and 100 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create single_app_small_node --lifetime-mins=180 --output-dir=./single_app_small_node -- --test_tmpdir=./single_app_small_node
+//   $ ict testnet create single_app_small_node --output-dir=./single_app_small_node -- --test_tmpdir=./single_app_small_node
 //
 // The --output-dir=./single_app_small_node will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./single_app_small_node will store the remaining test output in the specified directory.

@@ -49,6 +49,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-rusqlite",
     "@crate_index//:tower-http",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
@@ -84,7 +85,7 @@ MACRO_DEV_DEPENDENCIES = [
 ALIASES = {
 }
 
-ROSETTA_VERSION = "1.2.7"
+ROSETTA_VERSION = "1.2.8"
 
 rust_library(
     name = "ic-icrc-rosetta",
@@ -293,7 +294,6 @@ oci_image(
     name = "ic_icrc_rosetta_image",
     base = ":ic_icrc_rosetta_image_base",
     entrypoint = ["/home/ic_icrc_rosetta/ic-icrc-rosetta-bin"],
-    tags = ["local"],
     target_compatible_with = [
         "@platforms//os:linux",
     ],

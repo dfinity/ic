@@ -1,12 +1,11 @@
 use anyhow::Result;
+use ic_system_test_driver::driver::constants::COLOCATE_CONTAINER_NAME;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::group::{
-    COLOCATE_CONTAINER_NAME, CliArguments, SystemTestGroup,
-};
+use ic_system_test_driver::driver::group::{CliArguments, SystemTestGroup};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -102,6 +101,7 @@ fn setup(env: TestEnv) {
         .arg(runfiles)
         .arg("--dereference")
         .arg("--exclude=rs/tests/colocate_test_bin")
+        .arg("--exclude=rs/tests/run_systest.sh")
         .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
         // Avoid packing in ic-os images. Those are runtime dependencies for the
         // top-level test runner which uploads them to shared storage; after that

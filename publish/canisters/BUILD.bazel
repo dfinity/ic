@@ -86,8 +86,8 @@ CANISTERS_MAX_SIZE_COMPRESSED_E5_BYTES = {
     # -- XC team --
     # Size when constraint addded: 447_593 bytes
     "ic-btc-checker.wasm.gz": 6,
-    # Size when constraint addded: 696_633 bytes
-    "ic-ckbtc-minter.wasm.gz": 8,
+    # Size when constraint addded: 802_894 bytes
+    "ic-ckbtc-minter.wasm.gz": 9,
     # Size when constraint addded: 1_230_630 bytes
     "ic-cketh-minter.wasm.gz": 13,
     # The orchestrator needs to embed 3 wasms at compile time

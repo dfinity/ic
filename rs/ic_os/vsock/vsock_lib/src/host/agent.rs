@@ -50,7 +50,24 @@ fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
+fn is_manual_recovery_running() -> bool {
+    match procfs::process::all_processes() {
+        Ok(processes) => processes.into_iter().any(|process| {
+            process.cmdline().is_ok_and(|args| {
+                let cmd = args.join(" ");
+                cmd.contains("hostos_tool") && cmd.contains("manual-recovery")
+            })
+        }),
+        Err(_) => false,
+    }
+}
+
 fn notify(notify_data: &NotifyData) -> Response {
+    // Skip logging if manual recovery TUI is running to avoid interfering with the display
+    if is_manual_recovery_running() {
+        return Ok(Payload::NoPayload);
+    }
+
     let message_output_count = std::cmp::min(notify_data.count, 10);
     let message = notify_data.message.clone();
 
@@ -89,16 +106,32 @@ async fn create_hostos_upgrade_file(
     file_path: &str,
     target_hash: &str,
 ) -> Result<(), String> {
+    println!("Starting download from: {}", upgrade_url);
     let file_downloader = FileDownloader::new_with_timeout(None, Duration::from_secs(120));
 
-    file_downloader
+    let download_result = file_downloader
         .download_file(
             upgrade_url,
             Path::new(file_path),
             Some(target_hash.to_string()),
         )
-        .await
-        .map_err(|e| e.to_string())
+        .await;
+
+    match download_result {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            if let Ok(metadata) = std::fs::metadata(file_path) {
+                println!(
+                    "Download failed: {}. Partial file size: {} bytes",
+                    e,
+                    metadata.len()
+                );
+            } else {
+                println!("Download failed: {}", e);
+            }
+            Err(e.to_string())
+        }
+    }
 }
 
 fn run_upgrade() -> Response {
@@ -118,6 +151,7 @@ fn run_upgrade() -> Response {
 
 async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
+
     create_hostos_upgrade_file(
         &upgrade_data.url,
         UPGRADE_FILE_PATH,
@@ -125,7 +159,7 @@ async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     )
     .await?;
 
-    println!("Starting upgrade...");
+    println!("Download completed, starting upgrade installation...");
     run_upgrade()
 }
 

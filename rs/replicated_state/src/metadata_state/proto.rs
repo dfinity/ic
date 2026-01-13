@@ -290,6 +290,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .collect(),
             network_topology: Some((&item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
+            subnet_split_from: item.subnet_split_from.map(subnet_id_into_protobuf),
             state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
@@ -328,9 +329,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 )
                 .collect(),
             blockmaker_metrics_time_series: Some((&item.blockmaker_metrics_time_series).into()),
-            canister_cycles_cost_schedule: i32::from(CanisterCyclesCostScheduleProto::from(
-                item.cost_schedule,
-            )),
         }
     }
 }
@@ -408,11 +406,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             );
         }
 
-        let cost_schedule = CanisterCyclesCostSchedule::from(
-            CanisterCyclesCostScheduleProto::try_from(item.canister_cycles_cost_schedule)
-                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
-        );
-
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -428,6 +421,10 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
+            subnet_split_from: item
+                .subnet_split_from
+                .map(subnet_id_try_from_protobuf)
+                .transpose()?,
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
@@ -464,7 +461,6 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                 None => BlockmakerMetricsTimeSeries::default(),
             },
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule,
         })
     }
 }

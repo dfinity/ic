@@ -214,6 +214,7 @@ table ip6 filter {
     ip6 daddr { ::/0 } ct state { new } tcp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 123 } accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 4460 } accept
     ip6 daddr { ::/0 } ct state { new } tcp dport { 80, 8080, 443 } accept
     # We would ordinarily add a host name in the line following this comment,
     # but nftables starts before the network is up, so there is no DNS name

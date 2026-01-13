@@ -284,11 +284,9 @@ pub(crate) async fn query(
 
     // We wrap `sign_basic` into `spawn_blocking`, otherwise calling `sign_basic` will panic
     // if called from the tokio runtime.
-    let signature = tokio::task::spawn_blocking(move || {
-        signer.sign_basic(&response_hash, node_id, registry_version)
-    })
-    .await
-    .expect("Panicked while attempting to sign the query response.");
+    let signature = tokio::task::spawn_blocking(move || signer.sign_basic(&response_hash))
+        .await
+        .expect("Panicked while attempting to sign the query response.");
 
     match signature {
         Ok(signature) => {

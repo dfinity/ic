@@ -1,11 +1,14 @@
 use candid::Principal;
-use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
-use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-    assert_trap, utxo_with_value,
+use ic_ckdoge_minter::candid_api::{
+    EstimateWithdrawalFeeError, MinterInfo, RetrieveDogeWithApprovalArgs,
+    RetrieveDogeWithApprovalError, WithdrawalFee,
 };
-use std::array;
-use std::time::Duration;
+use ic_ckdoge_minter_test_utils::{
+    DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MIN_CONFIRMATIONS,
+    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap, utxo_with_value,
+    utxos_with_value,
+};
+use ic_management_canister_types::CanisterStatusType;
 
 #[test]
 fn should_fail_withdrawal() {
@@ -150,8 +153,9 @@ mod get_doge_address {
 }
 
 mod deposit {
+    use ic_ckdoge_minter::{OutPoint, Utxo};
     use ic_ckdoge_minter_test_utils::{
-        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, utxo_with_value,
+        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, txid, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -172,29 +176,60 @@ mod deposit {
             .minter_update_balance()
             .expect_mint();
     }
+
+    // DOGE total supply will overflow a u64 around 2030.
+    // However, the maximum output value in a single Dogecoin transaction is 10B DOGE,
+    // so that the value of a single UTXO is guaranteed to fit into a u64.
+    #[test]
+    fn should_handle_large_balances() {
+        let large_utxo_1 = utxo_with_value(u64::MAX);
+        let large_utxo_2 = Utxo {
+            outpoint: OutPoint {
+                txid: txid([43; 32]),
+                vout: 1,
+            },
+            ..large_utxo_1.clone()
+        };
+        assert_ne!(large_utxo_1, large_utxo_2);
+
+        let setup = Setup::default();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(vec![large_utxo_1, large_utxo_2])
+            .minter_update_balance()
+            .expect_mint();
+
+        assert_eq!(
+            setup.ledger().icrc1_balance_of(account),
+            (u64::MAX as u128) * 2
+        );
+    }
 }
 
 mod withdrawal {
     use ic_ckdoge_minter::{
-        InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION, UTXOS_COUNT_THRESHOLD,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, InvalidTransactionError, UTXOS_COUNT_THRESHOLD,
         WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
     };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
-        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, RETRIEVE_DOGE_MIN_AMOUNT,
+        Setup, USER_PRINCIPAL, flow::withdrawal::WithdrawalFlowEnd, only_one, txid,
+        utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
 
     #[test]
     fn should_withdraw_doge() {
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
@@ -287,12 +322,7 @@ mod withdrawal {
                 })
         }
 
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
 
         deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
@@ -328,12 +358,7 @@ mod withdrawal {
         // This is to make sure utxo count optimization is triggered.
         const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
 
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
 
         let account = Account {
             owner: USER_PRINCIPAL,
@@ -376,12 +401,7 @@ mod withdrawal {
 
     #[test]
     fn should_cancel_and_reimburse_large_withdrawal() {
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
 
         let account = Account {
             owner: USER_PRINCIPAL,
@@ -410,29 +430,122 @@ mod withdrawal {
             .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
                 InvalidTransactionError::TooManyInputs {
                     num_inputs: too_large_num_inputs as usize,
-                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                    max_num_inputs: DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
                 },
             ));
     }
 }
 
 #[test]
-fn should_refresh_fee_percentiles() {
-    let setup = Setup::default();
-    let dogecoin = setup.dogecoin();
-    let minter = setup.minter();
-    let fee_percentiles = array::from_fn(|i| i as u64);
-    let median_fee = fee_percentiles[50];
-    assert_eq!(median_fee, 50);
-    dogecoin.set_fee_percentiles(fee_percentiles);
-    setup.env.advance_time(Duration::from_secs(60 * 6 + 1));
-    setup.env.tick();
-    setup.env.tick();
-    setup.env.tick();
+fn should_estimate_withdrawal_fee() {
+    fn estimate_withdrawal_fee_and_check(
+        minter: &MinterCanister,
+        withdrawal_amount: u64,
+    ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
+        let utxos_before = minter.get_known_utxos(USER_PRINCIPAL);
+        let result = minter.estimate_withdrawal_fee(withdrawal_amount);
+        let utxos_after = minter.get_known_utxos(USER_PRINCIPAL);
+        assert_eq!(
+            utxos_before, utxos_after,
+            "BUG: a query endpoint should not be able to modify state!"
+        );
+        result
+    }
 
-    minter
-        .assert_that_metrics()
-        .assert_contains_metric_matching(format!("ckbtc_minter_median_fee_per_vbyte {median_fee}"));
+    let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+    let minter = setup.minter();
+
+    assert_eq!(
+        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        Err(EstimateWithdrawalFeeError::AmountTooHigh),
+        "Any amount should be too high since there are no UTXOs"
+    );
+
+    setup
+        .deposit_flow()
+        .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
+        .dogecoin_simulate_transaction(utxos_with_value(&[RETRIEVE_DOGE_MIN_AMOUNT; 2]))
+        .minter_update_balance()
+        .expect_mint();
+
+    assert_eq!(
+        estimate_withdrawal_fee_and_check(&minter, DOGE),
+        Err(EstimateWithdrawalFeeError::AmountTooLow {
+            min_amount: RETRIEVE_DOGE_MIN_AMOUNT
+        })
+    );
+
+    let expected_fee = WithdrawalFee {
+        minter_fee: 180_000_000,
+        dogecoin_fee: 11_350_000,
+    };
+    assert_eq!(
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
+        Ok(expected_fee)
+    );
+    assert_eq!(
+        estimate_withdrawal_fee_and_check(&minter, RETRIEVE_DOGE_MIN_AMOUNT),
+        Ok(expected_fee),
+        "BUG: estimate_withdrawal_fee should be idempotent"
+    );
+}
+
+mod post_upgrade {
+    use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, MEDIAN_TRANSACTION_FEE, MinterCanister,
+        RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, only_one, utxo_with_value,
+    };
+    use icrc_ledger_types::icrc1::account::Account;
+
+    #[test]
+    fn should_deposit_and_withdraw_with_interleaved_upgrades() {
+        fn upgrade_and_check<F: Fn(&MinterCanister)>(minter: &MinterCanister, check: F) {
+            check(minter);
+            minter.upgrade(None);
+            check(minter)
+        }
+
+        let setup = Setup::default().with_median_fee_percentile(MEDIAN_TRANSACTION_FEE);
+
+        let minter = setup.minter();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+
+        minter.upgrade(None);
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(vec![utxo.clone()])
+            .minter_update_balance()
+            .expect_mint();
+
+        upgrade_and_check(&minter, |m| {
+            assert_eq!(m.get_known_utxos(account), vec![utxo.clone()]);
+        });
+
+        setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
+            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .expect_withdrawal_request_accepted()
+            .dogecoin_await_transaction()
+            .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
+            .minter_await_finalized_single_transaction();
+
+        upgrade_and_check(&minter, |m| {
+            assert_eq!(m.get_known_utxos(account), vec![]);
+            assert_eq!(
+                m.get_known_utxos(m.id()).len(),
+                1,
+                "BUG: expected change output"
+            );
+        });
+    }
 }
 
 #[test]
@@ -447,5 +560,43 @@ fn should_get_logs() {
         init_log.message.contains("[init]"),
         "Expected first log message to be for canister initialization but got: {}",
         init_log.message
+    );
+}
+
+#[test]
+fn should_get_canister_status() {
+    let setup = Setup::default();
+    let status = setup.minter().get_canister_status();
+    assert_eq!(status.status, CanisterStatusType::Running);
+}
+
+#[test]
+fn should_get_minter_info() {
+    let setup = Setup::default();
+    let minter = setup.minter();
+
+    let minter_info = minter.get_minter_info();
+
+    assert_eq!(
+        minter_info,
+        MinterInfo {
+            min_confirmations: MIN_CONFIRMATIONS,
+            retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
+        }
+    );
+
+    let mut setup = setup;
+    for i in 0..8 {
+        setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << i);
+        assert_eq!(setup.minter().get_minter_info(), minter_info);
+    }
+
+    setup = setup.with_median_fee_percentile(MEDIAN_TRANSACTION_FEE << 8);
+    assert_eq!(
+        setup.minter().get_minter_info(),
+        MinterInfo {
+            retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT + RETRIEVE_DOGE_MIN_AMOUNT / 2,
+            ..minter_info
+        }
     );
 }

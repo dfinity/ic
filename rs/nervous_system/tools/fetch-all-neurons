@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+
+# Ouputs a file named neurons.json.
+#
+# An example of how the output can then be analyzed using Colab:
+# https://colab.research.google.com/drive/1ThLiZLc315YXDa5r60f2IV9Xo2ZvR2zD
+
+set -euo pipefail
+
+GOVERNANCE_CANISTER_ID=rrkah-fqaaa-aaaaa-aaaaq-cai
+START=0
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Create newline-delimited JSON file. Batches will be appended to this in the
+# main loop.
+echo '' > neurons.ndjson
+
+# Fetch all neurons. This requires many calls to get_neuron_index.
+# We could probably be making multiple requests concurrently to speed this up.
+i=0
+while true; do
+    echo "$i: $START"
+    i=$(($i + 1))
+
+    # Fetch next batch of neurons.
+    fails=0
+    while true; do
+        if NEURON_BATCH=$(\
+            dfx canister \
+                --ic \
+                call \
+                --candid "${REPO_ROOT}/rs/nns/governance/canister/governance.did" \
+                $GOVERNANCE_CANISTER_ID \
+                get_neuron_index \
+                "(record {
+                    exclusive_start_neuron_id = opt record {
+                        id = ${START} : nat64 ;
+                    } ;
+                })" \
+            | idl2json \
+            | jq '.Ok.neurons'
+        ); then
+            break
+        fi
+        fails=$(($fails + 1))
+
+        # Give up after too many failures.
+        if fails >= 5; then
+            echo "get_neuron_index failed $fails times in a row!"
+            exit 1
+        fi
+
+        # Be more patient. Let the Governance canister catch its breath.
+        sleep $((2 ** $fails))
+    done
+
+    # Append NEURON_BATCH to neurons.json.
+    printf '%s' "$NEURON_BATCH" \
+        | jq -c '.[]' \
+        >> neurons.ndjson
+
+    # Break if done.
+    LENGTH=$(printf '%s' "$NEURON_BATCH" | jq -r '. | length')
+    if [[ $LENGTH -eq 0 ]]; then
+       break
+    fi
+    # Get ready for next loop iteration.
+    START=$(printf '%s' "$NEURON_BATCH" | jq -r '.[(. | length) - 1].id[0].id')
+done
+
+# Convert from newline-delimited JSON to one big JSON Array.
+jq -s '.' neurons.ndjson > neurons.json
+rm neurons.ndjson
+
+FINAL_COUNT=$(jq -r '. | length' neurons.json)
+
+echo "Fetched ${FINAL_COUNT} neurons (over the course of $i batches)."

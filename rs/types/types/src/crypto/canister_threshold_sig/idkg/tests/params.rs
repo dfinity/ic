@@ -298,7 +298,7 @@ fn should_not_create_with_empty_dealers() {
         empty_dealers,
         btreeset! {ordered_node_id(1)},
         RegistryVersion::from(0),
-        AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
+        AlgorithmId::Unspecified, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
     );
 
@@ -315,7 +315,7 @@ fn should_not_create_with_empty_receivers() {
         btreeset! {ordered_node_id(1)},
         empty_receivers,
         RegistryVersion::from(0),
-        AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
+        AlgorithmId::Unspecified, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
     );
 
@@ -418,14 +418,14 @@ fn should_not_create_with_placeholder_algid() {
         nodes.clone(),
         nodes,
         RegistryVersion::from(0),
-        AlgorithmId::Placeholder, // should be ThresholdEcdsaSecp256k1 !
+        AlgorithmId::Unspecified, // should be ThresholdEcdsaSecp256k1 !
         IDkgTranscriptOperation::Random,
     );
 
     assert_matches!(
         result,
         Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
-            algorithm_id: AlgorithmId::Placeholder
+            algorithm_id: AlgorithmId::Unspecified
         })
     );
 }

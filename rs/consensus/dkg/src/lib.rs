@@ -404,6 +404,7 @@ mod tests {
     };
     use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::{
         consensus_pool::ConsensusPool,
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
@@ -420,7 +421,7 @@ mod tests {
         RegistryVersion, ReplicaVersion,
         consensus::{Block, BlockPayload},
         crypto::threshold_sig::ni_dkg::{
-            NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
+            NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
         },
         time::UNIX_EPOCH,
     };
@@ -1048,7 +1049,7 @@ mod tests {
 
             // Now we try to add a different dealing but still from replica 1.
             let mut invalid_dealing_message = valid_dealing_message.clone();
-            invalid_dealing_message.content.dealing = NiDkgDealing::dummy_dealing_for_tests(1);
+            invalid_dealing_message.content.dealing = dummy_dealing(1);
             node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: invalid_dealing_message,
                 peer_id: node_id_1,
@@ -1195,7 +1196,7 @@ mod tests {
 
             // Now we try to add a different dealing but still from replica 1.
             let mut dealing_message_2 = valid_dealing_message;
-            dealing_message_2.content.dealing = NiDkgDealing::dummy_dealing_for_tests(1);
+            dealing_message_2.content.dealing = dummy_dealing(1);
             node_2.dkg_pool.insert(UnvalidatedArtifact {
                 message: dealing_message_2,
                 peer_id: node_id_1,

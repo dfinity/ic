@@ -345,6 +345,7 @@ mod withdrawal_reimbursement {
             change_output: None,
             fee_per_vbyte: None,
             withdrawal_fee: None,
+            signed_tx: None,
         };
         state.push_submitted_transaction(dummy_tx.clone());
 
@@ -456,5 +457,136 @@ mod withdrawal_reimbursement {
                 },
             ),
         }
+    }
+}
+
+mod utxo_set {
+    use crate::state::utxos::UtxoSet;
+    use crate::test_fixtures::{arbitrary, utxo};
+    use ic_btc_interface::Utxo;
+    use proptest::{collection::vec as pvec, prop_assert, prop_assert_eq, proptest};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn should_insert_different_utxos_with_same_value() {
+        let first = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 1;
+            utxo
+        };
+        let second = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo
+        };
+        assert_eq!(first.value, second.value);
+        assert_ne!(first, second);
+
+        let mut utxos = UtxoSet::default();
+
+        assert!(utxos.insert(first));
+        assert!(utxos.insert(second));
+        assert_eq!(utxos.len(), 2);
+    }
+
+    #[test]
+    fn should_find_lower_bound() {
+        let mut utxos = UtxoSet::default();
+        let (small_utxo, medium_utxo, large_utxo) = three_utxos();
+        assert!(utxos.insert(medium_utxo.clone()));
+        assert!(utxos.insert(large_utxo.clone()));
+        assert!(utxos.insert(small_utxo.clone()));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+
+        assert_eq!(utxos.find_lower_bound(11), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
+
+        assert_eq!(utxos.find_lower_bound(101), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_000), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_001), None);
+
+        assert_eq!(utxos.remove(&large_utxo), Some(large_utxo));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(11), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(101), None);
+
+        assert_eq!(utxos.remove(&medium_utxo), Some(medium_utxo));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(11), None);
+
+        assert_eq!(utxos.remove(&small_utxo), Some(small_utxo));
+        assert_eq!(utxos.find_lower_bound(0), None);
+    }
+
+    fn three_utxos() -> (Utxo, Utxo, Utxo) {
+        let small_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 42;
+            utxo.value = 10;
+            utxo
+        };
+        let medium_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo.value = 100;
+            utxo
+        };
+        let large_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2_000;
+            utxo.value = 1_000;
+            utxo
+        };
+        (small_utxo, medium_utxo, large_utxo)
+    }
+
+    proptest! {
+        #[test]
+        fn should_behave_like_a_btree_set(utxos in pvec(arbitrary::utxo(0_u64..10_000), 0..1_000) ) {
+            let mut utxo_set = UtxoSet::default();
+            let mut utxo_btree_set = BTreeSet::default();
+
+            for utxo in utxos {
+                prop_assert_eq!(utxo_set.insert(utxo.clone()), utxo_btree_set.insert(utxo.clone()));
+                prop_assert_eq!(utxo_set.contains(&utxo), utxo_btree_set.contains(&utxo));
+                prop_assert_eq!(utxo_set.len(), utxo_btree_set.len());
+                prop_assert_eq!(utxo_set.is_empty(), utxo_btree_set.is_empty());
+
+                let actual = utxo_set.iter().cloned().collect::<BTreeSet<_>>();
+                prop_assert_eq!(&actual, &utxo_btree_set);
+            }
+        }
+
+        #[test]
+        fn should_be_sorted_by_value_desc(mut utxos in arbitrary::utxo_set(0_u64..10_000, 0..1_000)) {
+            let mut last: Option<Utxo> = None;
+            while !utxos.is_empty() {
+                let current_last = utxos.last().cloned().unwrap();
+                if let Some(prev_last) = last {
+                    prop_assert!(current_last.value <= prev_last.value);
+                }
+                last = Some(utxos.remove(&current_last).unwrap());
+            }
+        }
+
+        #[test]
+        fn should_be_sorted_by_value_asc(mut utxos in arbitrary::utxo_set(0_u64..10_000, 0..1_000)) {
+            let mut first: Option<Utxo> = None;
+            while !utxos.is_empty() {
+                let current_first = utxos.pop_first().unwrap();
+                if let Some(prev_first) = first {
+                    prop_assert!(prev_first.value <= current_first.value);
+                }
+                first = Some(current_first);
+            }
+        }
+
     }
 }

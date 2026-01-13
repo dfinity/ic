@@ -367,17 +367,12 @@ impl From<Principal> for RawNodeId {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
-pub struct TickConfigs {
-    pub blockmakers: Option<BlockmakerConfigs>,
+pub struct RawTickConfigs {
+    pub blockmakers: Option<Vec<RawSubnetBlockmakers>>,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct BlockmakerConfigs {
-    pub blockmakers_per_subnet: Vec<RawSubnetBlockmaker>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RawSubnetBlockmaker {
+pub struct RawSubnetBlockmakers {
     pub subnet: RawSubnetId,
     pub blockmaker: RawNodeId,
     pub failed_blockmakers: Vec<RawNodeId>,
@@ -1097,4 +1092,29 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             additional_responses: mock_canister_http_response.additional_responses,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
 }

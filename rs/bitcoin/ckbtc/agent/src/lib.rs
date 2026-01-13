@@ -1,8 +1,8 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
+use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
-use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, GetEventsArg};
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
@@ -114,6 +114,19 @@ impl CkBtcMinterAgent {
         .await
     }
 
+    pub async fn estimate_withdrawal_fee(
+        &self,
+        amount: u64,
+    ) -> Result<WithdrawalFee, CkBtcMinterAgentError> {
+        self.query(
+            "estimate_withdrawal_fee",
+            EstimateFeeArg {
+                amount: Some(amount),
+            },
+        )
+        .await
+    }
+
     pub async fn distribute_kyt_fee(&self) -> Result<(), CkBtcMinterAgentError> {
         self.update("distribute_kyt_fee", ()).await
     }
@@ -122,7 +135,7 @@ impl CkBtcMinterAgent {
         &self,
         start: u64,
         length: u64,
-    ) -> Result<Vec<Event>, CkBtcMinterAgentError> {
+    ) -> Result<Vec<CkBtcMinterEvent>, CkBtcMinterAgentError> {
         self.query("get_events", GetEventsArg { start, length })
             .await
     }

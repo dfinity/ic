@@ -6,5 +6,6 @@ edition.workspace = true
 [dependencies]
 candid = { workspace = true }
 ic-types = { path = "../../../types/types" }
+ic-limits = { path = "../../../limits" }
 messaging-test = { path = ".." }
 proptest = { workspace = true }

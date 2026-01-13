@@ -6,180 +6,10 @@ load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_LATEST", "MAINNET_LATEST_HOSTOS", "MAINNET_NNS")
 load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
-
-def _run_system_test(ctx):
-    run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
-
-    no_logs = True
-    if ctx.executable.colocated_test_bin != None:
-        # The colocated driver has the logic to see if it should spawn vector
-        no_logs = True
-    elif "VECTOR_VM_PATH" in ctx.attr.env:
-        no_logs = False
-
-    ctx.actions.write(
-        output = run_test_script_file,
-        is_executable = True,
-        content = """#!/bin/bash
-            set -eEuo pipefail
-
-            # Resolve any RUN_SCRIPT_ variables
-
-            # RUN_SCRIPT_ICOS_IMAGES:
-            # For every ic-os image specified, first ensure it's in remote
-            # storage, then export its download URL and HASH as environment variables.
-            if [ -n "${{RUN_SCRIPT_ICOS_IMAGES:-}}" ]; then
-              # split the ";"-delimited list of "env_prefix:filepath;env_prefix2:filepath2;..."
-              # into an array
-              IFS=';' read -ra icos_images <<<"$RUN_SCRIPT_ICOS_IMAGES"
-              for image in "${{icos_images[@]}}"; do
-                  # split "envvar:filepath"
-                  image_var_prefix=${{image%:*}}
-                  image_filename=${{image#*:}}
-
-                  # ensure the dep is uploaded
-                  image_download_url=$("$RUN_SCRIPT_UPLOAD_SYSTEST_DEP" "$image_filename")
-                  echo "  -> $image_filename=$image_download_url" >&2
-
-                  # Since this is a CAS url, we assume the last URL path part is the sha256
-                  image_download_hash="${{image_download_url##*/}}"
-                  # set the environment variables for the test
-                  export "${{image_var_prefix}}_URL=$image_download_url"
-                  export "${{image_var_prefix}}_HASH=$image_download_hash"
-              done
-            fi
-
-            # RUN_SCRIPT_INFO_FILE_VARS:
-            # For every var specified, pull the value from info_file, and
-            # expose it to the test plus the given suffix.
-            if [ -n "${{RUN_SCRIPT_INFO_FILE_VARS:-}}" ]; then
-              # split the ";"-delimited list of "env_var:info_var:suffix;env_var2:info_var2:suffix;..."
-              # into an array
-              IFS=';' read -ra vars <<<"$RUN_SCRIPT_INFO_FILE_VARS"
-              for var in "${{vars[@]}}"; do
-                  # split "envvar:infovar:suffix"
-                  IFS=':' read -ra parts <<<"$var"
-                  env_var_name="${{parts[0]}}"
-                  info_var_name="${{parts[1]}}"
-                  suffix="${{parts[2]:-}}"
-
-                  # Expose the variable to the test.
-                  export "${{env_var_name}}"="$(grep <{info_file} -e ${{info_var_name}} | cut -d' ' -f2)${{suffix}}"
-              done
-            fi
-
-            # clean up the env for the test
-            unset RUN_SCRIPT_ICOS_IMAGES RUN_SCRIPT_UPLOAD_SYSTEST_DEP RUN_SCRIPT_INFO_FILE_VARS
-
-            # We export RUNFILES such that the from_location_specified_by_env_var() function in
-            # rs/rust_canisters/canister_test/src/canister.rs can find canisters
-            # relative to the $RUNFILES directory.
-            export RUNFILES="$PWD"
-            mkdir "$TEST_TMPDIR/root_env"
-            "$RUNFILES/{test_executable}" \
-              --working-dir "$TEST_TMPDIR" \
-              --group-base-name {group_base_name} \
-              {logs} \
-              {no_summary_report} \
-              {exclude_logs} \
-              "$@" run
-        """.format(
-            test_executable = ctx.executable.src.short_path,
-            group_base_name = ctx.label.name,
-            no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
-            info_file = ctx.info_file.short_path,
-            logs = "--no-logs" if no_logs else "",
-            exclude_logs = " ".join(["--exclude-logs {pattern}".format(pattern = pattern) for pattern in ctx.attr.exclude_logs]),
-        ),
-    )
-
-    env = dict(ctx.attr.env.items())
-
-    # Expand Make variables in env vars, with runtime_deps as targets
-    for key, value in env.items():
-        # If this looks like a Make variable, try to expand it
-        if value.startswith("$"):
-            env[key] = ctx.expand_location(value, ctx.attr.runtime_deps)
-
-    env |= {
-        "FARM_METADATA_PATH": ctx.info_file.short_path,
-    }
-
-    # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
-    # script, and not passed directly to the test.
-
-    # RUN_SCRIPT_ICOS_IMAGES:
-    # Have the run script resolve repo based ICOS images.
-    # The run script expects a map of enviromment variable prefixes to targets. e.g.
-    # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
-    icos_images = ctx.attr.icos_images
-    env |= {
-        "RUN_SCRIPT_ICOS_IMAGES": ";".join([k + ":" + v.files.to_list()[0].short_path for k, v in icos_images.items()]),
-    }
-
-    env["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = ctx.executable._upload_systest_dep.short_path
-
-    # RUN_SCRIPT_INFO_FILE_VARS:
-    # Have the run script resolve some vars from info_file.
-    # The run script expects a map of enviromment variables to their info_file counterparts plus a suffix. e.g.
-    # RUN_SCRIPT_INFO_FILE_VARS=ENV_DEPS__GUESTOS_DISK_IMG_VERSION:STABLE_VERSION;ENV_DEPS__OTHER:STABLE_OTHER:suffix
-    info_file_vars = ctx.attr.info_file_vars
-    env |= {
-        "RUN_SCRIPT_INFO_FILE_VARS": ";".join([k + ":" + ":".join(v) for k, v in info_file_vars.items()]),
-    }
-
-    if ctx.executable.colocated_test_bin != None:
-        env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
-
-    runtime_deps = []
-
-    for target in ctx.attr.runtime_deps:
-        runtime_deps.append(target.files)
-
-    for e, t in icos_images.items():
-        runtime_deps.append(t.files)
-        env[e] = t.files.to_list()[0].short_path
-
-    return [
-        DefaultInfo(
-            executable = run_test_script_file,
-            runfiles = ctx.runfiles(
-                files = [
-                    run_test_script_file,
-                    ctx.info_file,
-                    ctx.executable.src,
-                    ctx.executable._upload_systest_dep,
-                ],
-                transitive_files = depset(
-                    direct = [],
-                    transitive = runtime_deps,
-                ),
-            ),
-        ),
-        RunEnvironmentInfo(
-            environment = env,
-            inherited_environment = ctx.attr.env_inherit,
-        ),
-    ]
-
-run_system_test = rule(
-    implementation = _run_system_test,
-    test = True,
-    attrs = {
-        "src": attr.label(executable = True, cfg = "exec"),
-        "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
-        "env": attr.string_dict(allow_empty = True),
-        "_upload_systest_dep": attr.label(executable = True, cfg = "exec", default = "//bazel:upload_systest_dep"),
-        "runtime_deps": attr.label_list(allow_files = True),
-        "icos_images": attr.string_keyed_label_dict(doc = "Specifies images to be used by the test. Values will be replaced with actual download URLs and hashes.", allow_files = True),
-        "info_file_vars": attr.string_list_dict(doc = "Specifies variables to be pulled from info_file. Expects a map of varname to [infovar_name, optional_suffix]."),
-        "env_inherit": attr.string_list(doc = "Specifies additional environment variables to inherit from the external environment when the test is executed by bazel test."),
-        "exclude_logs": attr.string_list(doc = "Specifies uvm name patterns to exclude from streaming."),
-    },
-)
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
 
 default_vm_resources = {
     "vcpus": None,
@@ -199,24 +29,13 @@ def system_test(
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
         colocated_test_driver_vm_forward_ssh_agent = False,
-        uses_guestos_img = True,
-        uses_guestos_malicious_img = False,
-        uses_guestos_mainnet_latest_img = False,
-        uses_guestos_mainnet_nns_img = False,
-        uses_guestos_mainnet_app_img = False,
-        uses_guestos_recovery_dev_img = False,
-        uses_guestos_update = False,
-        uses_guestos_test_update = False,
-        uses_guestos_malicious_update = False,
-        uses_guestos_mainnet_latest_update = False,
-        uses_guestos_mainnet_nns_update = False,
-        uses_guestos_mainnet_app_update = False,
+        guestos = True,
+        guestos_update = False,
         uses_setupos_img = False,
         uses_setupos_mainnet_latest_img = False,
         uses_hostos_update = False,
         uses_hostos_test_update = False,
         uses_hostos_mainnet_latest_update = False,
-        uses_dev_mainnet = False,
         env = {},
         env_inherit = [],
         exclude_logs = ["prometheus", "vector"],
@@ -246,24 +65,13 @@ def system_test(
       colocated_test_driver_vm_forward_ssh_agent: forward the SSH agent to the colocated test-driver VM.
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
-      uses_guestos_img: the test uses the branch GuestOS image
-      uses_guestos_malicious_img: the test uses the malicious GuestOS image
-      uses_guestos_mainnet_latest_img: the test uses the latest release mainnet GuestOS image
-      uses_guestos_mainnet_nns_img: the test uses the NNS subnet mainnet GuestOS image
-      uses_guestos_mainnet_app_img: the test uses the app subnet mainnet GuestOS image
-      uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
-      uses_guestos_update: the test uses the branch GuestOS update image
-      uses_guestos_test_update: the test uses the branch GuestOS update-test image
-      uses_guestos_malicious_update: the test uses the malicious GuestOS update image
-      uses_guestos_mainnet_latest_update: the test uses the latest release mainnet GuestOS update image
-      uses_guestos_mainnet_nns_update: the test uses the NNS subnet mainnet GuestOS update image
-      uses_guestos_mainnet_app_update: the test uses the app subnet mainnet GuestOS update image
+      guestos: The guestos version to use. Values: True (HEAD) | False | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app" | "recovery_dev". Default: True
+      guestos_update: The guestos update image to use. Values: False | True (HEAD) | "test" | "malicious" | "mainnet_latest" | "mainnet_latest_dev" | "mainnet_nns" | "mainnet_app". Default: False
       uses_setupos_img: the test uses the branch SetupOS image
       uses_setupos_mainnet_latest_img: the test uses the latest release mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
       uses_hostos_test_update: the test uses the branch HostOS update-test image
       uses_hostos_mainnet_latest_update: the test uses the latest release mainnet HostOS update image
-      uses_dev_mainnet: the test uses dev variants for latest mainnet images,
       env: environment variables to set in the test (subject to Make variable expansion)
       env_inherit: specifies additional environment variables to inherit from
       the external environment when the test is executed by bazel test.
@@ -298,18 +106,13 @@ def system_test(
         )
         test_driver_target = bin_name
 
+    visibility = kwargs.pop("visibility", ["//visibility:public"])
+
     # Environment variable names to targets (targets are resolved)
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _env_deps = {}
+    _runtime_deps = {}
+    env_var_files = {}
     icos_images = dict()
-    info_file_vars = dict()
-
-    # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_malicious_img) + int(uses_guestos_mainnet_latest_img) + int(uses_guestos_mainnet_nns_img) + int(uses_guestos_mainnet_app_img) + int(uses_guestos_recovery_dev_img) >= 2:
-        fail("More than one initial GuestOS (disk) image was specified!")
-
-    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_malicious_update) + int(uses_guestos_mainnet_latest_update) + int(uses_guestos_mainnet_nns_update) + int(uses_guestos_mainnet_app_update) >= 2:
-        fail("More than one target GuestOS (upgrade) image was specified!")
 
     if int(uses_setupos_img) + int(uses_setupos_mainnet_latest_img) >= 2:
         fail("More than one initial SetupOS (disk) image was provided!")
@@ -318,182 +121,224 @@ def system_test(
         fail("More than one target HostOS (upgrade) image was specified!")
 
     # ICOS image handling
-    if uses_guestos_img:
-        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev:disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
+    if guestos:
+        if guestos == True:  # HEAD version
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev:disk-img.tar.zst"
+            icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
-    if uses_guestos_malicious_img:
-        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
+        elif guestos == "malicious":
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst"
+            icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
 
-    if uses_guestos_mainnet_latest_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_LATEST["version"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guestos_images//:guest-img" if not uses_dev_mainnet else "@mainnet_latest_guestos_images_dev//:guest-img"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guestos_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_latest_guestos_images_dev//:launch-measurements-guest.json"
+        elif guestos == "mainnet_latest":
+            env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_LATEST["version"]
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guestos_images//:guest-img"
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guestos_images//:launch-measurements-guest.json"
 
-    if uses_guestos_mainnet_nns_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS["version"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_images//:guest-img" if not uses_dev_mainnet else "@mainnet_nns_images_dev//:guest-img"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_nns_images_dev//:launch-measurements-guest.json"
+        elif guestos == "mainnet_latest_dev":
+            env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_LATEST["version"]
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guestos_images_dev//:guest-img"
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_dev_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST["dev_hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guestos_images_dev//:launch-measurements-guest.json"
 
-    if uses_guestos_mainnet_app_img:
-        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP["version"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_images//:guest-img" if not uses_dev_mainnet else "@mainnet_app_images_dev//:guest-img"
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_app_images_dev//:launch-measurements-guest.json"
+        elif guestos == "mainnet_nns":
+            env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS["version"]
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_images//:guest-img"
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_images//:launch-measurements-guest.json"
 
-    if uses_guestos_recovery_dev_img:
-        info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
-        icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"  # use the branch update image for initial update image
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"  # use the branch update image for initial update image
+        elif guestos == "mainnet_app":
+            env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP["version"]
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_images//:guest-img"
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json"
 
-    if uses_guestos_update:
-        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
+        elif guestos == "recovery_dev":
+            env_var_files["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
+            icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/guestos/envs/recovery-dev:disk-img.tar.zst"
+            icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"  # use the branch update image for initial update image
+            _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"  # use the branch update image for initial update image
 
-    if uses_guestos_test_update:
-        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img-test.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements-test.json"
+        else:
+            fail("unknown guestos version: " + str(guestos))
 
-    if uses_guestos_malicious_update:
-        info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
-        icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
+    if guestos_update:
+        if guestos_update == True:  # HEAD version
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
+            icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img.tar.zst"
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
-    if uses_guestos_mainnet_latest_update:
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST["version"]
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guestos_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_latest_guestos_images_dev//:launch-measurements-guest.json"
+        elif guestos_update == "test":
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test"
+            icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev:update-img-test.tar.zst"
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements-test.json"
 
-    if uses_guestos_mainnet_nns_update:
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS["version"]
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_NNS["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_nns_images_dev//:launch-measurements-guest.json"
+        elif guestos_update == "malicious":
+            env_var_files["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
+            icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements.json"
 
-    if uses_guestos_mainnet_app_update:
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_APP["version"]
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_app_images_dev//:launch-measurements-guest.json"
+        elif guestos_update == "mainnet_latest":
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST["version"]
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_guestos_images//:launch-measurements-guest.json"
+
+        elif guestos_update == "mainnet_nns":
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_NNS["version"]
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_NNS["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_NNS["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_nns_images//:launch-measurements-guest.json"
+
+        elif guestos_update == "mainnet_app":
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_APP["version"]
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True)
+            env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP["hash"]
+            _runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json"
+
+        else:
+            fail("unknown guestos update version: " + str(guestos_update))
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
-        info_file_vars["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
+        env_var_files["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = "//bazel:version.txt"
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
+        _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
-        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _runtime_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
 
+    # note: which image is used here depends on guestos
     if uses_setupos_mainnet_latest_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_hostos_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_latest_hostos_images_dev//:launch-measurements-guest.json"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if guestos != "mainnet_latest_dev" else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
+        _runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_hostos_images//:launch-measurements-guest.json" if guestos != "mainnet_latest_dev" else "@mainnet_latest_hostos_images_dev//:launch-measurements-guest.json"
 
-        _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
+        _runtime_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
 
     if uses_hostos_update:
-        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
+        env_var_files["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = "//bazel:version.txt"
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img.tar.zst"
 
     if uses_hostos_test_update:
-        info_file_vars["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION", "-test"]
+        env_var_files["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test"
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst"
 
+    # note: which image is used here depends on guestos
     if uses_hostos_mainnet_latest_update:
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True)
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["hash" if not uses_dev_mainnet else "dev_hash"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True) if guestos != "mainnet_latest_dev" else icos_dev_image_download_url(MAINNET_LATEST_HOSTOS["version"], "host-os", True)
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["hash" if guestos != "mainnet_latest_dev" else "dev_hash"]
 
-    deps = list(runtime_deps)
+    env_var_files["FARM_METADATA"] = "//rs/tests:farm_metadata.txt"
+
+    extra_args_simple = []
+    extra_args_colocated = []
+
+    data = list(runtime_deps)
+
+    # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
+    # script, and not passed directly to the test.
+
+    # The uploader for dependencies fetched remotely from the runner
+    _runtime_deps["RUN_SCRIPT_UPLOAD_SYSTEST_DEP"] = "//rs/tests:upload_systest_dep.sh"
+
+    # Vector VM dep for logs
     if logs:
-        env["VECTOR_VM_PATH"] = "$(rootpath //rs/tests:vector_with_log_fetcher_image)"
-        deps = ["//rs/tests:vector_with_log_fetcher_image"]
+        _runtime_deps["VECTOR_VM_PATH"] = "//rs/tests:vector_with_log_fetcher_image"
+    else:
+        extra_args_simple.append("--no-logs")
 
-        for dep in runtime_deps:
-            if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
-                deps.append(dep)
+    # colocated tests have their own vector VM logic
+    extra_args_colocated.append("--no-logs")
 
-        deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
+    # no summary for colocated tests
+    extra_args_colocated.append("--no-summary-report")
 
-    # Expand _env_deps
+    for pat in exclude_logs:
+        extra_args_simple.extend(["--exclude-logs", pat])
+        extra_args_colocated.extend(["--exclude-logs", pat])
+
+    extra_args_simple.extend(["--group-base-name", test_name])
+    extra_args_colocated.extend(["--group-base-name", test_name + "_colocate"])
+
+    # Convert _runtime_deps into environment variables + data dependencies
     env |= {
         name: "$(rootpath {})".format(dep)
-        for name, dep in _env_deps.items()
+        for name, dep in _runtime_deps.items()
     }
-    for dep in _env_deps.values():
-        if dep not in deps:
-            deps.append(dep)
+    for dep in _runtime_deps.values():  # Bazel 7.X does not have 'set()', Bazel 8 does
+        if dep not in data:
+            data.append(dep)
 
-    run_system_test(
+    # RUN_SCRIPT_ICOS_IMAGES:
+    # Have the run script resolve repo based ICOS images.
+    # The run script expects a map of enviromment variable prefixes to targets. e.g.
+    # RUN_SCRIPT_ICOS_IMAGES=ENV_DEPS__GUESTOS_DISK_IMG:ic-os/guestos/envs/dev/disk-img.tar.zst;ENV_DEPS__GUESTOS_UPDATE_IMG:ic-os/guestos/envs/dev/update-img.tar.zst
+    env["RUN_SCRIPT_ICOS_IMAGES"] = ";".join(["{image_name}:$(rootpath {image_path})".format(image_name = name, image_path = path) for name, path in icos_images.items()])
+    for dep in icos_images.values():  # Bazel 7.X does not have 'set()', Bazel 8 does
+        if dep not in data:
+            data.append(dep)
+
+    # RUN_SCRIPT_ENV_VAR_FILES:
+    # Used to set environment variable from the content of files.
+    # The run script expects a map of enviromment variable to targets. e.g.
+    # RUN_SCRIPT_ENV_VAR_FILES=MY_VAR://foo/env-var-contents;BAR://other-var-content
+    env["RUN_SCRIPT_ENV_VAR_FILES"] = ";".join(["{varname}:$(rootpath {varfile})".format(varname = k, varfile = v) for k, v in env_var_files.items()])
+    for dep in env_var_files.values():  # Bazel 7.X does not have 'set()', Bazel 8 does
+        if dep not in data:
+            data.append(dep)
+
+    tags = tags + ["requires-network", "system_test"]
+
+    sh_test(
         name = test_name,
-        src = test_driver_target,
-        runtime_deps = deps,
-        env = env,
-        icos_images = icos_images,
-        info_file_vars = info_file_vars,
+        srcs = ["//rs/tests:run_systest.sh"],
+        data = data + [test_driver_target],
+        env = env | {
+            "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
+            "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
+        },
         env_inherit = env_inherit,
-        tags = tags + ["requires-network", "system_test"] +
-               (["manual"] if "colocate" in tags else []),
-        target_compatible_with = ["@platforms//os:linux"],
-        timeout = test_timeout,
-        flaky = flaky,
-        exclude_logs = exclude_logs,
-    )
-
-    env = env | {
-        "COLOCATED_TEST": test_name,
-        "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
-        "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
-    }
-
-    if colocated_test_driver_vm_enable_ipv4:
-        env.update({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"})
-
-    if colocated_test_driver_vm_forward_ssh_agent:
-        env.update({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"})
-
-    visibility = kwargs.get("visibility", ["//visibility:public"])
-
-    # Add missing UVM deps if logs are disabled
-    for dep in UNIVERSAL_VM_RUNTIME_DEPS:
-        if dep not in deps:
-            deps.append(dep)
-
-    run_system_test(
-        name = test_name + "_colocate",
-        src = "//rs/tests/idx:colocate_test_bin",
-        colocated_test_bin = test_driver_target,
-        runtime_deps = deps + [
-            "//rs/tests:colocate_uvm_config_image",
-            test_driver_target,
-        ],
-        env_inherit = env_inherit,
-        env = env,
-        icos_images = icos_images,
-        info_file_vars = info_file_vars,
-        tags = tags + ["requires-network", "system_test"] +
-               (["colocated"] if "colocate" in tags else ["manual"]) +
-               additional_colocate_tags,
+        tags = tags + (["manual"] if "colocate" in tags else []),
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
         visibility = visibility,
-        exclude_logs = exclude_logs,
+    )
+
+    sh_test(
+        srcs = ["//rs/tests:run_systest.sh"],
+        name = test_name + "_colocate",
+        data = data + [
+            "//rs/tests:colocate_uvm_config_image",
+            "//rs/tests/idx:colocate_test_bin",
+            test_driver_target,
+        ],
+        env_inherit = env_inherit,
+        env = env | {
+                  "COLOCATED_TEST_BIN": "$(rootpath {})".format(test_driver_target),
+                  "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
+                  "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
+                  "COLOCATED_TEST": test_name,
+                  "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
+                  "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
+              } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
+              ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
+        tags = tags + (["colocated"] if "colocate" in tags else ["manual"]) + additional_colocate_tags,
+        target_compatible_with = ["@platforms//os:linux"],
+        timeout = test_timeout,
+        flaky = flaky,
+        visibility = visibility,
     )
     return struct(test_driver_target = test_driver_target)
 

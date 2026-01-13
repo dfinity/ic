@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -9,6 +9,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:tokio",
 ]
 
 LIB_SRCS = glob(
@@ -22,12 +23,6 @@ rust_library(
     crate_name = "ic_nervous_system_timers",
     version = "0.0.1",
     deps = DEPENDENCIES,
-)
-
-rust_test_suite(
-    name = "timers_integration_test",
-    srcs = glob(["tests/**/*.rs"]),
-    deps = [":timers"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test(

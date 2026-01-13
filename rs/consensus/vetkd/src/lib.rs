@@ -29,14 +29,16 @@ use ic_replicated_state::{
     ReplicatedState,
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
 };
-use ic_types::crypto::vetkd::{VetKdKeyShareCombinationError, VetKdKeyVerificationError};
+use ic_types::crypto::vetkd::{
+    VetKdDerivationContextRef, VetKdKeyShareCombinationError, VetKdKeyVerificationError,
+};
 use ic_types::{
     CountBytes, Height, NumBytes, SubnetId, Time,
     batch::{
         ConsensusResponse, ValidationContext, VetKdAgreement, VetKdErrorCode, VetKdPayload,
         bytes_to_vetkd_payload, vetkd_payload_to_bytes,
     },
-    crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKey},
+    crypto::vetkd::{VetKdArgs, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
 };
 use num_traits::ops::saturating::SaturatingSub;
@@ -53,6 +55,8 @@ mod metrics;
 #[cfg(test)]
 mod test_utils;
 mod utils;
+
+const EMPTY_VEC_REF: &Vec<u8> = &vec![];
 
 /// In addition to a timeout, we expire request contexts that were created more than one entire
 /// DKG interval ago. VetKD NiDkgTranscripts are reshared during every interval. However, it is
@@ -239,14 +243,15 @@ impl VetKdPayloadBuilderImpl {
                     let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                         return None;
                     };
+                    debug_assert_eq!(context.derivation_path.len(), 1);
                     let args = VetKdArgs {
-                        context: VetKdDerivationContext {
-                            caller: context.request.sender.into(),
-                            context: context.derivation_path.iter().flatten().cloned().collect(),
+                        context: VetKdDerivationContextRef {
+                            caller: context.request.sender.get_ref(),
+                            context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
                         },
-                        ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                        input: ctxt_args.input.to_vec(),
-                        transport_public_key: ctxt_args.transport_public_key.clone(),
+                        ni_dkg_id: &ctxt_args.ni_dkg_id,
+                        input: &ctxt_args.input,
+                        transport_public_key: &ctxt_args.transport_public_key,
                     };
                     let key_id = context.key_id();
                     match self.crypto.combine_encrypted_key_shares(shares, &args) {
@@ -373,14 +378,15 @@ impl VetKdPayloadBuilderImpl {
         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
             return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
         };
+        debug_assert_eq!(context.derivation_path.len(), 1);
         let args = VetKdArgs {
-            context: VetKdDerivationContext {
-                caller: context.request.sender.into(),
-                context: context.derivation_path.iter().flatten().cloned().collect(),
+            context: VetKdDerivationContextRef {
+                caller: context.request.sender.get_ref(),
+                context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
             },
-            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-            input: ctxt_args.input.to_vec(),
-            transport_public_key: ctxt_args.transport_public_key.clone(),
+            ni_dkg_id: &ctxt_args.ni_dkg_id,
+            input: &ctxt_args.input,
+            transport_public_key: &ctxt_args.transport_public_key,
         };
         let reply = match VetKdDeriveKeyResult::decode(&data) {
             Ok(data) => data,
@@ -1048,7 +1054,7 @@ mod tests {
                 validation.unwrap_err(),
                 ValidationError::InvalidArtifact(InvalidPayloadReason::InvalidVetKdPayload(
                     InvalidVetKdPayloadReason::MissingContext(id)
-                )) if id.get() == 3
+                )) if id.get() >= 3 && id.get() <= 5
             );
         })
     }

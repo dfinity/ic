@@ -595,7 +595,7 @@ impl InstallCodeHelper {
 
     /// Takes the canister log.
     pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.canister.system_state.canister_log)
+        self.canister.system_state.canister_log.take()
     }
 
     /// Checks the result of Wasm execution and applies the state changes.

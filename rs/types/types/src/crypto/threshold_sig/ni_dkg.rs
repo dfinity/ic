@@ -10,7 +10,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, Csp
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
@@ -190,10 +190,11 @@ impl fmt::Display for NiDkgDealing {
     }
 }
 
+#[cfg(test)]
 impl NiDkgDealing {
     pub fn dummy_dealing_for_tests(seed: u8) -> NiDkgDealing {
         NiDkgDealing {
-            internal_dealing: CspNiDkgDealing::placeholder_to_delete(seed),
+            internal_dealing: ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(seed),
         }
     }
 }
@@ -255,27 +256,24 @@ impl From<&NiDkgTranscript> for pb::NiDkgTranscript {
 }
 
 impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(summary: &pb::NiDkgTranscript) -> Result<Self, Self::Error> {
         Ok(Self {
-            dkg_id: NiDkgId::from_option_protobuf(summary.dkg_id.clone(), "NiDkgTranscript")?,
+            dkg_id: try_from_option_field(summary.dkg_id.clone(), "NiDkgTranscript::dkg_id")?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(summary.threshold))
-                .map_err(|e| format!("threshold error {e:?}"))?,
+                .map_err(|e| ProxyDecodeError::Other(format!("threshold error {e:?}")))?,
             committee: NiDkgReceivers::new(
                 summary
                     .committee
                     .iter()
                     .cloned()
                     .map(|committee_member| crate::node_id_try_from_option(Some(committee_member)))
-                    .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| {
-                        format!("Problem loading committee in NiDkgTranscript: {err:?}")
-                    })?,
+                    .collect::<Result<BTreeSet<_>, _>>()?,
             )
-            .map_err(|e| format!("{e:?}"))?,
+            .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
             registry_version: RegistryVersion::from(summary.registry_version),
             internal_csp_transcript: bincode::deserialize(&summary.internal_csp_transcript)
-                .map_err(|e| format!("{e:?}"))?,
+                .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
         })
     }
 }
@@ -312,7 +310,7 @@ impl NiDkgTranscript {
             committee: NiDkgReceivers::new(committee.into_iter().collect())
                 .expect("Couldn't create non-interactive DKG committee"),
             registry_version: RegistryVersion::from(registry_version),
-            internal_csp_transcript: dummy_internal_transcript(),
+            internal_csp_transcript: ic_crypto_test_utils_ni_dkg::dummy_csp_transcript(),
         }
     }
     pub fn dummy_transcript_for_tests() -> Self {
@@ -344,16 +342,4 @@ impl From<NiDkgTranscript> for InitialNiDkgTranscriptRecord {
                 .expect("failed to serialize CSP NI-DKG transcript to CBOR"),
         }
     }
-}
-
-#[cfg(test)]
-fn dummy_internal_transcript() -> CspNiDkgTranscript {
-    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
-    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
-    CspNiDkgTranscript::Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Transcript {
-        public_coefficients: ni_dkg_groth20_bls12_381::PublicCoefficientsBytes {
-            coefficients: vec![PublicKeyBytes([0; PublicKeyBytes::SIZE])],
-        },
-        receiver_data: std::collections::BTreeMap::new(),
-    })
 }

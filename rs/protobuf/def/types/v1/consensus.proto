@@ -6,6 +6,7 @@ package types.v1;
 import "bitcoin/v1/bitcoin.proto";
 import "messaging/xnet/v1/certification.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
+import "registry/subnet/v1/subnet.proto";
 import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
@@ -241,10 +242,30 @@ message GetIngressMessageInBlockResponse {
   bytes ingress_message = 1;
 }
 
+message GetIDkgDealingInBlockRequest {
+  uint32 node_index = 1;
+  IDkgArtifactId dealing_id = 2;
+  ConsensusMessageId block_proposal_id = 3;
+}
+
+message GetIDkgDealingInBlockResponse {
+  registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
+}
+
 message StrippedBlockProposal {
-  BlockProposal block_proposal_without_ingress_payload = 1;
+  // The original block proposal proto but all [`Strippable`] data is removed.
+  BlockProposal pruned_block_proposal = 1;
+  // The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
   repeated StrippedIngressMessage ingress_messages = 2;
+  // The consensus message ID of the original (unstripped) block proposal, including the [`Strippable`] data.
   ConsensusMessageId unstripped_consensus_message_id = 3;
+  // The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
+  repeated StrippedIDkgDealing stripped_idkg_dealings = 4;
+}
+
+message StrippedIDkgDealing {
+  uint32 dealer_index = 1;
+  IDkgArtifactId dealing_id = 2;
 }
 
 message StrippedIngressMessage {

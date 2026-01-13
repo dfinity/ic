@@ -1,0 +1,53 @@
+{
+  "config_version": "1.10.0",
+  "network_settings": {
+    "ipv6_config": {
+      "Fixed": {
+        "address": "2a00:fb01:400:200::1/64",
+        "gateway": "2a00:fb01:400:200::1"
+      }
+    },
+    "ipv4_config": {
+      "address": "192.168.1.1",
+      "gateway": "192.168.1.254",
+      "prefix_length": 24
+    },
+    "domain_name": "ic.test"
+  },
+  "icos_settings": {
+    "node_reward_type": "type3.1",
+    "mgmt_mac": "00:00:00:00:00:01",
+    "deployment_environment": "mainnet",
+    "nns_urls": [
+      "https://icp-api.io,https//icp0.io,https://ic0.app"
+    ],
+    "use_node_operator_private_key": true,
+    "enable_trusted_execution_environment": false,
+    "use_ssh_authorized_keys": false,
+    "icos_dev_settings": {}
+  },
+  "guestos_settings": {
+    "inject_ic_crypto": false,
+    "inject_ic_state": false,
+    "inject_ic_registry_local_store": false,
+    "guestos_dev_settings": {
+      "backup_spool": null,
+      "malicious_behavior": null,
+      "query_stats_epoch_length": null,
+      "bitcoind_addr": null,
+      "dogecoind_addr": null,
+      "jaeger_addr": null,
+      "socks_proxy": null,
+      "hostname": null,
+      "generate_ic_boundary_tls_cert": null
+    }
+  },
+  "guest_vm_type": "default",
+  "upgrade_config": {
+    "peer_guest_vm_address": "2a00:fb01:400:200:6801:95ff:fed7:d475"
+  },
+  "trusted_execution_environment_config": {
+    "sev_cert_chain_pem": "-----BEGIN CERTIFICATE----------END CERTIFICATE-----"
+  },
+  "recovery_config": null
+}

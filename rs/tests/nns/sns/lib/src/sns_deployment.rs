@@ -23,7 +23,6 @@ use ic_system_test_driver::{
     },
     canister_requests,
     driver::{
-        farm::HostFeature,
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
@@ -350,13 +349,11 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
                 .add_nodes(SUBNET_SIZE),
         );
     if !fast_test_setup {
-        ic = ic
-            .with_required_host_features(vec![HostFeature::SnsLoadTest])
-            .with_default_vm_resources(VmResources {
-                vcpus: Some(UVM_NUM_CPUS),
-                memory_kibibytes: Some(UVM_MEMORY_SIZE),
-                boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
-            });
+        ic = ic.with_default_vm_resources(VmResources {
+            vcpus: Some(UVM_NUM_CPUS),
+            memory_kibibytes: Some(UVM_MEMORY_SIZE),
+            boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
+        });
     }
     ic.setup_and_start(env)
         .expect("failed to setup IC under test");

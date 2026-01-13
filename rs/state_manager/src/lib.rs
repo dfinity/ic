@@ -194,6 +194,7 @@ pub struct StateSyncMetrics {
     remaining: IntGauge,
     corrupted_chunks_critical: IntCounter,
     corrupted_chunks: IntCounterVec,
+    add_chunk_duration: HistogramVec,
 }
 
 #[derive(Clone)]
@@ -684,6 +685,32 @@ impl StateSyncMetrics {
             corrupted_chunks.with_label_values(&[*source]);
         }
 
+        let add_chunk_duration = metrics_registry.histogram_vec(
+            "state_sync_add_chunk_duration_seconds",
+            "Duration of add_chunk calls indexed by state before, state after, and success status.",
+            // 0.1ms, 0.2ms, 0.5ms, 1ms, 2ms, 5ms, …, 100s, 200s, 500s
+            decimal_buckets(-4, 2),
+            &["state_before", "state_after", "status"],
+        );
+
+        // Preallocate important state transitions
+        let transitions_to_preallocate = &[
+            // Successful transitions
+            ("blank", "prep", "ok"),
+            ("prep", "loading", "ok"),
+            ("loading", "complete", "ok"),
+            ("prep", "complete", "ok"),
+            ("prep", "prep", "ok"),
+            ("loading", "loading", "ok"),
+            ("blank", "blank", "err"),
+            ("prep", "prep", "err"),
+            ("loading", "loading", "err"),
+        ];
+
+        for (state_before, state_after, success) in transitions_to_preallocate {
+            add_chunk_duration.with_label_values(&[state_before, state_after, success]);
+        }
+
         Self {
             size,
             duration,
@@ -691,6 +718,7 @@ impl StateSyncMetrics {
             remaining,
             corrupted_chunks_critical,
             corrupted_chunks,
+            add_chunk_duration,
         }
     }
 }
@@ -770,16 +798,15 @@ impl TryFrom<pb::StateMetadata> for StateMetadata {
 #[derive(Debug)]
 struct CertificationMetadata {
     /// Fully materialized hash tree built from the part of the state that is
-    /// certified every round.  Dropped as soon as a higher state is certified.
-    hash_tree: Option<Arc<HashTree>>,
+    /// certified every round and wall time when the tree was built.
+    /// Dropped as soon as a higher state is certified.
+    hash_tree: Option<(Arc<HashTree>, Instant)>,
     /// Root hash of the tree above. It's stored even if the hash tree is
     /// dropped.
     certified_state_hash: CryptoHash,
     /// Certification of the root hash delivered by consensus via
     /// `deliver_state_certification()`.
     certification: Option<Certification>,
-    /// Wall time when certification was requested.
-    certification_requested_at: Instant,
 }
 
 fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
@@ -885,7 +912,7 @@ impl Drop for StateManagerImpl {
         // Make sure the tip thread didn't panic. Otherwise we may be blind to it in tests.
         // If the tip thread panics after the latest communication with tip_channel the test returns
         // success.
-        self.flush_tip_channel();
+        self.flush_all();
     }
 }
 
@@ -1224,6 +1251,12 @@ impl StateManagerImpl {
         flush_tip_channel(&self.tip_channel)
     }
 
+    /// Finish all asynchronous operations.
+    pub fn flush_all(&self) {
+        self.flush_tip_channel();
+        self.state_layout().flush_checkpoint_removal_channel();
+    }
+
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
@@ -1471,6 +1504,13 @@ impl StateManagerImpl {
 
         metrics.min_resident_height.set(last_snapshot_height);
         metrics.max_resident_height.set(last_snapshot_height);
+        metrics.state_size.set(
+            states_metadata
+                .values()
+                .last()
+                .and_then(|metadata| metadata.manifest())
+                .map_or(0, |manifest| manifest.state_size_bytes() as i64),
+        );
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
@@ -1715,7 +1755,7 @@ impl StateManagerImpl {
             .iter()
             .rev()
             .find_map(|(height, metadata)| {
-                let hash_tree = metadata.hash_tree.as_ref()?;
+                let (hash_tree, _) = metadata.hash_tree.as_ref()?;
                 metadata
                     .certification
                     .clone()
@@ -1775,10 +1815,9 @@ impl StateManagerImpl {
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
         Ok(CertificationMetadata {
-            hash_tree: Some(Arc::new(hash_tree)),
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certified_state_hash,
             certification: None,
-            certification_requested_at: Instant::now(),
         })
     }
 
@@ -1939,9 +1978,8 @@ impl StateManagerImpl {
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
-            hash_tree: Some(Arc::new(hash_tree)),
+            hash_tree: Some((Arc::new(hash_tree), Instant::now())),
             certification: None,
-            certification_requested_at: Instant::now(),
         };
 
         let mut states = self.states.write();
@@ -1992,11 +2030,7 @@ impl StateManagerImpl {
             );
         }
 
-        let state_size_bytes: i64 = manifest
-            .file_table
-            .iter()
-            .map(|f| f.size_bytes as i64)
-            .sum();
+        let state_size_bytes = manifest.state_size_bytes() as i64;
 
         if !is_state_metadata_present {
             // Normal case: we don't have the state metadata yet.
@@ -2902,9 +2936,12 @@ impl StateManager for StateManagerImpl {
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
-            self.metrics
-                .certification_duration
-                .observe(metadata.certification_requested_at.elapsed().as_secs_f64());
+
+            if let Some((_, certification_requested_at)) = metadata.hash_tree {
+                self.metrics
+                    .certification_duration
+                    .observe(certification_requested_at.elapsed().as_secs_f64());
+            }
 
             metadata.certification = Some(certification);
 
@@ -2912,7 +2949,7 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .range_mut(Self::INITIAL_STATE_HEIGHT..certification_height)
             {
-                if let Some(tree) = certification_metadata.hash_tree.take() {
+                if let Some((tree, _)) = certification_metadata.hash_tree.take() {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
@@ -3094,6 +3131,22 @@ impl StateManager for StateManagerImpl {
 
         self.populate_extra_metadata(&mut state, height);
 
+        if let CertificationScope::Metadata = scope {
+            // We want to balance writing too many overlay files with having too many unflushed pages at
+            // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
+            // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
+            // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
+            if let Some(batch_summary) = batch_summary
+                && batch_summary
+                    .next_checkpoint_height
+                    .get()
+                    .saturating_sub(height.get())
+                    == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
+            {
+                flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
+            }
+        }
+
         let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
             None;
         let mut follow_up_tip_requests = Vec::new();
@@ -3112,23 +3165,7 @@ impl StateManager for StateManagerImpl {
 
                 state
             }
-            CertificationScope::Metadata => {
-                // We want to balance writing too many overlay files with having too many unflushed pages at
-                // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
-                // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
-                // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                if let Some(batch_summary) = batch_summary
-                    && batch_summary
-                        .next_checkpoint_height
-                        .get()
-                        .saturating_sub(height.get())
-                        == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                {
-                    flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
-                }
-
-                Arc::new(state)
-            }
+            CertificationScope::Metadata => Arc::new(state),
         };
 
         let certification_metadata =
@@ -3176,10 +3213,17 @@ impl StateManager for StateManagerImpl {
         if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
             let prev_hash = &prev_metadata.certified_state_hash;
             let hash = &certification_metadata.certified_state_hash;
-            assert_eq!(
-                prev_hash, hash,
-                "Committed state @{height} twice with different hashes: first with {prev_hash:?}, then with {hash:?}",
-            );
+            if prev_hash != hash {
+                if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
+                    error!(
+                        self.log,
+                        "Failed to mark state @{} diverged: {}", height, err
+                    );
+                }
+                panic!(
+                    "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
+                );
+            }
         }
 
         if !states

@@ -1,8 +1,9 @@
 #![allow(clippy::all)]
+use candid::{Int, Nat};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -544,6 +545,9 @@ pub struct Proposal {
     /// This section describes the action that the proposal proposes to
     /// take.
     pub action: Option<proposal::Action>,
+    /// A self-describing action that can be understood without the schema of a specific
+    /// proposal type.
+    pub self_describing_action: Option<SelfDescribingProposalAction>,
 }
 /// Nested message and enum types in `Proposal`.
 pub mod proposal {
@@ -627,6 +631,16 @@ pub mod proposal {
         /// charged for the use of computational resources (mainly, executing
         /// instructions, storing data, network, etc.)
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// The main use case for this is when the virtual machine (VM) where
+        /// replica runs is totally hosed such that it cannot be upgraded (and
+        /// therefore fixed) using the usual mechanisms. When the VM is started
+        /// with this alternative software, a signed copy of the ProposalInfo is
+        /// passed to the VM, and read at boot time to prove that NNS has
+        /// approved this alternative set of software. One of the main goals of
+        /// this alternative software would generally be to bring the system
+        /// back to a healthy state, to recover from some kind of disaster, like
+        /// a boot loop, or something like that.
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1384,6 +1398,7 @@ pub enum ProposalActionRequest {
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
 }
 
 #[derive(
@@ -2657,6 +2672,44 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: Option<Vec<PrincipalId>>,
     pub replica_version_id: Option<String>,
 }
+
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    pub chip_ids: Option<Vec<Vec<u8>>>,
+    pub rootfs_hash: Option<String>,
+    pub base_guest_launch_measurements: Option<GuestLaunchMeasurements>,
+}
+
+/// See also the definition of GuestLaunchMeasurements (plural!) in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurements {
+    pub guest_launch_measurements: Option<Vec<GuestLaunchMeasurement>>,
+}
+
+/// See also the definition of GuestLaunchMeasurement in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurement {
+    pub measurement: Option<Vec<u8>>,
+    pub metadata: Option<GuestLaunchMeasurementMetadata>,
+}
+
+/// See also the definition of GuestLaunchMeasurementMetadata in
+/// rs/protobuf/def/registry/replica_version/v1/replica_version.proto
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Eq, Debug, Default,
+)]
+pub struct GuestLaunchMeasurementMetadata {
+    pub kernel_cmdline: Option<String>,
+}
+
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -2958,6 +3011,8 @@ pub struct ListProposalInfoRequest {
     /// is useful to improve download times and to ensure that the response to the
     /// request doesn't exceed the message size limit.
     pub omit_large_fields: Option<bool>,
+    /// Whether to include self-describing proposal actions in the response.
+    pub return_self_describing_action: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
@@ -4504,4 +4559,45 @@ pub struct NeuronVotes {
 pub struct NeuronVote {
     pub proposal_id: Option<ProposalId>,
     pub vote: Option<Vote>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub enum SelfDescribingValue {
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Null,
+    Array(Vec<SelfDescribingValue>),
+    Map(HashMap<String, SelfDescribingValue>),
+}
+
+impl From<&str> for SelfDescribingValue {
+    fn from(value: &str) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<u64> for SelfDescribingValue {
+    fn from(value: u64) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+impl From<u32> for SelfDescribingValue {
+    fn from(value: u32) -> Self {
+        SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct SelfDescribingProposalAction {
+    pub type_name: Option<String>,
+    pub type_description: Option<String>,
+    pub value: Option<SelfDescribingValue>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct GetPendingProposalsRequest {
+    pub return_self_describing_action: Option<bool>,
 }

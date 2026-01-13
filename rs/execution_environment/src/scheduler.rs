@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::{types::AddCanisterChangeToHistory, uninstall_canister},
+    canister_manager::uninstall_canister,
     execution_environment::{
         ExecuteCanisterResult, ExecutionEnvironment, RoundInstructions, RoundLimits,
         as_num_instructions, as_round_instructions, execute_canister,
@@ -934,7 +934,6 @@ impl SchedulerImpl {
                         canister,
                         None, /* we're at the end of a round so no need to update round limits */
                         state_time,
-                        AddCanisterChangeToHistory::No,
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
@@ -956,7 +955,7 @@ impl SchedulerImpl {
         // Delete any snapshots associated with the canister
         // that ran out of cycles.
         for canister_id in uninstalled_canisters {
-            state.delete_snapshots(canister_id);
+            state.canister_snapshots.delete_snapshots(canister_id);
         }
 
         // Send rejects to any requests that were forcibly closed while uninstalling.
@@ -1134,6 +1133,9 @@ impl SchedulerImpl {
     }
 
     /// Code that must be executed unconditionally after each round.
+    ///
+    /// NOTE: This is also called by `checkpoint_round_with_no_execution()`, so it
+    /// must be safe to call even when no execution has taken place.
     fn finish_round(&self, state: &mut ReplicatedState, current_round_type: ExecutionRoundType) {
         match current_round_type {
             ExecutionRoundType::CheckpointRound => {
@@ -1317,7 +1319,7 @@ impl Scheduler for SchedulerImpl {
             // The round will stop as soon as the counter reaches zero.
             // We can compute the initial value `X` of the counter based on:
             // - `R = max_instructions_per_round`,
-            // - `S = max(max_instructions_per_slice, max_instructions_per_message_without_dts)`.
+            // - `S = max(max_instructions_per_slice, max_instructions_per_install_code_slice)`.
             // In the worst case, we start a new Wasm execution when then counter
             // reaches 1 and the execution uses the maximum `S` instructions. After
             // the execution the counter will be set to `1 - S`.
@@ -1326,7 +1328,7 @@ impl Scheduler for SchedulerImpl {
             // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
             let max_instructions_per_slice = std::cmp::max(
                 self.config.max_instructions_per_slice,
-                self.config.max_instructions_per_message_without_dts,
+                self.config.max_instructions_per_install_code_slice,
             );
             let round_instructions = as_round_instructions(self.config.max_instructions_per_round)
                 - as_round_instructions(max_instructions_per_slice)
@@ -1564,10 +1566,10 @@ impl Scheduler for SchedulerImpl {
                         };
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.canister_log.bytes_used() as f64);
                     for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
                         self.metrics
                             .canister_log_delta_memory_usage
@@ -1676,6 +1678,10 @@ impl Scheduler for SchedulerImpl {
                 final_state.canister_states.len() as u64;
             final_state
         }
+    }
+
+    fn checkpoint_round_with_no_execution(&self, state: &mut ReplicatedState) {
+        self.finish_round(state, ExecutionRoundType::CheckpointRound);
     }
 }
 
@@ -1841,7 +1847,7 @@ fn execute_canisters_on_thread(
                 exec_env,
                 canister,
                 instruction_limits.clone(),
-                config.max_instructions_per_message_without_dts,
+                config.max_instructions_per_query_message,
                 Arc::clone(&network_topology),
                 time,
                 &mut round_limits,
@@ -2245,10 +2251,9 @@ fn get_instructions_limits_for_subnet_message(
     config: &SchedulerConfig,
     msg: &CanisterMessage,
 ) -> InstructionLimits {
-    let default_limits = InstructionLimits::new(
-        config.max_instructions_per_message_without_dts,
-        config.max_instructions_per_message_without_dts,
-    );
+    // The default limits are unused since instruction limits only matter
+    // for install code in which case the default limits are overriden.
+    let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
         CanisterMessage::Response(_) => {
             return default_limits;

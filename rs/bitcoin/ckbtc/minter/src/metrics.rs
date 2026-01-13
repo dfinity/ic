@@ -224,7 +224,7 @@ pub fn encode_metrics(
             state::read_state(|s| {
                 s.submitted_transactions
                     .iter()
-                    .map(|tx| tx.requests.len())
+                    .map(|tx| tx.requests.count_retrieve_btc_requests())
                     .sum::<usize>()
             }) as f64,
         )?;

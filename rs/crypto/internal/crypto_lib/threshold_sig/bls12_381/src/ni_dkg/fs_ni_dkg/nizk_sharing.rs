@@ -271,8 +271,8 @@ pub fn verify_sharing(
     {
         // First verification equation
         // R^x' * F == g_1^z_r
-        let lhs = &instance.combined_randomizer * &x_challenge + &first_move.blinder_g1;
-        let rhs = &instance.g1_gen * &nizk.z_r;
+        let lhs = &instance.combined_randomizer.mul_vartime(&x_challenge) + &first_move.blinder_g1;
+        let rhs = instance.g1_gen.mul_vartime(&nizk.z_r);
         if lhs != rhs {
             return Err(ZkProofSharingError::InvalidProof);
         }
@@ -300,7 +300,7 @@ pub fn verify_sharing(
             G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
                 + &nizk.aa;
 
-        let rhs = &instance.g2_gen * &nizk.z_alpha;
+        let rhs = instance.g2_gen.mul_vartime(&nizk.z_alpha);
 
         if lhs != rhs {
             return Err(ZkProofSharingError::InvalidProof);
@@ -340,7 +340,7 @@ pub fn verify_sharing(
         };
 
         let lhs = G1Projective::muln_affine_vartime(&instance_inputs, &challenges);
-        let rhs = &instance.g1_gen * &nizk.z_alpha + &nizk.yy.neg();
+        let rhs = &instance.g1_gen.mul_vartime(&nizk.z_alpha) + &nizk.yy.neg();
 
         if lhs != rhs {
             return Err(ZkProofSharingError::InvalidProof);

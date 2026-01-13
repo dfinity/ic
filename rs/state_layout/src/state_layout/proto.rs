@@ -6,7 +6,6 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_types::default_log_memory_limit;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -193,10 +192,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
-            // read properly from `NumBytes::from(value.log_memory_limit)`.
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: CanisterLog::new(
+            log_memory_limit: NumBytes::from(value.log_memory_limit),
+            canister_log: CanisterLog::new_aggregate(
                 value.next_canister_log_record_idx,
                 value
                     .canister_log_records

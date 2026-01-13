@@ -19,6 +19,7 @@ use crate::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     ic_gateway_vm::HasIcGatewayVm,
+    ic_gateway_vm::Playnet,
     log_events,
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
@@ -351,11 +352,6 @@ pub trait HasPrometheus {
     /// JSON files and scps them to the prometheus VM.
     fn sync_with_prometheus(&self);
 
-    /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `playnet_domain` is specified, add a
-    /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>);
-
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
     ///
@@ -367,18 +363,21 @@ pub trait HasPrometheus {
 
 impl HasPrometheus for TestEnv {
     fn sync_with_prometheus(&self) {
-        self.sync_with_prometheus_by_name("", None)
-    }
-
-    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>) {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
         let group_name = GroupSetup::read_attribute(self).infra_group_name;
+
+        let playnet_domain = if Playnet::attribute_exists(self) {
+            Some(Playnet::read_attribute(self).playnet_cert.playnet)
+        } else {
+            None
+        };
+
         sync_prometheus_config_dir(
             prometheus_config_dir.clone(),
             group_name.clone(),
-            self.topology_snapshot_by_name(name),
+            self.topology_snapshot(),
             &playnet_domain,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");

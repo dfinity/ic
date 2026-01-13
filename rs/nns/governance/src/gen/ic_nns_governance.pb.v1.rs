@@ -423,11 +423,16 @@ pub struct Proposal {
     /// 2000 bytes.
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
+    /// A self-describing action that can be understood without the schema of a specific proposal type.
+    /// This is populated and stored at the time of proposal creation and does not change as the
+    /// proposal type evolves.
+    #[prost(message, optional, tag = "30")]
+    pub self_describing_action: ::core::option::Option<SelfDescribingProposalAction>,
     /// This section describes the action that the proposal proposes to
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -533,6 +538,10 @@ pub mod proposal {
         /// Create a rented subnet.
         #[prost(message, tag = "28")]
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// Allow node operators to manually intervene in case of disaster to run
+        /// (NNS-approved) new software.
+        #[prost(message, tag = "31")]
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1910,7 +1919,9 @@ pub struct WaitForQuietState {
 /// NetworkEconomics to 0.
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    ic_nns_governance_derive_self_describing::SelfDescribing, Clone, PartialEq, ::prost::Message,
+)]
 pub struct NetworkEconomics {
     /// The number of E8s (10E-8 of an ICP token) that a rejected
     /// proposal will cost.
@@ -1970,6 +1981,7 @@ pub struct NetworkEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     Copy,
     PartialEq,
@@ -2015,6 +2027,7 @@ pub struct VotingPowerEconomics {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2052,6 +2065,7 @@ pub struct NeuronsFundMatchedFundingCurveCoefficients {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2224,6 +2238,7 @@ pub struct OpenSnsTokenSwap {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2259,6 +2274,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2280,6 +2296,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             PartialEq,
             ::prost::Message,
@@ -2296,6 +2313,7 @@ pub mod create_service_nervous_system {
                 candid::Deserialize,
                 serde::Serialize,
                 comparable::Comparable,
+                ic_nns_governance_derive_self_describing::SelfDescribing,
                 Clone,
                 PartialEq,
                 ::prost::Message,
@@ -2320,6 +2338,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2334,6 +2353,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2349,6 +2369,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2404,6 +2425,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2422,6 +2444,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         PartialEq,
         ::prost::Message,
@@ -2443,6 +2466,7 @@ pub mod create_service_nervous_system {
         candid::Deserialize,
         serde::Serialize,
         comparable::Comparable,
+        ic_nns_governance_derive_self_describing::SelfDescribing,
         Clone,
         Copy,
         PartialEq,
@@ -2486,6 +2510,7 @@ pub mod create_service_nervous_system {
             candid::Deserialize,
             serde::Serialize,
             comparable::Comparable,
+            ic_nns_governance_derive_self_describing::SelfDescribing,
             Clone,
             Copy,
             PartialEq,
@@ -2780,6 +2805,25 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(string, tag = "2")]
+    pub rootfs_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub base_guest_launch_measurements: ::core::option::Option<
+        ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
+    >,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -4093,6 +4137,94 @@ pub struct FinalizeDisburseMaturity {
     /// The account identifer to which to transfer the ICPs.
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
+}
+/// An ICRC-3-like value.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValue {
+    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    pub value: ::core::option::Option<self_describing_value::Value>,
+}
+/// Nested message and enum types in `SelfDescribingValue`.
+pub mod self_describing_value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Value {
+        #[prost(bytes, tag = "1")]
+        Blob(::prost::alloc::vec::Vec<u8>),
+        #[prost(string, tag = "2")]
+        Text(::prost::alloc::string::String),
+        /// nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+        #[prost(bytes, tag = "3")]
+        Nat(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        Int(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "5")]
+        Array(super::SelfDescribingValueArray),
+        #[prost(message, tag = "6")]
+        Map(super::SelfDescribingValueMap),
+        #[prost(message, tag = "7")]
+        Null(super::Empty),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueArray {
+    #[prost(message, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<SelfDescribingValue>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingValueMap {
+    #[prost(map = "string, message", tag = "1")]
+    pub values: ::std::collections::HashMap<::prost::alloc::string::String, SelfDescribingValue>,
+}
+/// Proposal action that is self-describing. It can be understood without the schema of a specific
+/// proposal type.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingProposalAction {
+    #[prost(string, tag = "1")]
+    pub type_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub type_description: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub value: ::core::option::Option<SelfDescribingValue>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow

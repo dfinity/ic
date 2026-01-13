@@ -3,7 +3,6 @@ Common dependencies for system-tests.
 """
 
 load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
-load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 MAINNET_ENV = {
     "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
@@ -119,11 +118,6 @@ MAINNET_NNS_CANISTER_RUNTIME_DEPS, MAINNET_NNS_CANISTER_ENV = canister_runtime_d
     qualifying_canisters = [],
 )
 
-QUALIFYING_NNS_CANISTER_RUNTIME_DEPS, QUALIFYING_NNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = QUALIFYING_NNS_CANISTERS,
-)
-
 SNS_CANISTER_RUNTIME_DEPS, SNS_CANISTER_ENV = canister_runtime_deps_impl(
     canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
@@ -134,18 +128,7 @@ MAINNET_SNS_CANISTER_RUNTIME_DEPS, MAINNET_SNS_CANISTER_ENV = canister_runtime_d
     qualifying_canisters = [],
 )
 
-QUALIFYING_SNS_CANISTER_RUNTIME_DEPS, QUALIFYING_SNS_CANISTER_ENV = canister_runtime_deps_impl(
-    canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
-    qualifying_canisters = QUALIFYING_SNS_CANISTERS,
-)
-
-UNIVERSAL_VM_RUNTIME_DEPS = [
-    "//rs/tests:create-universal-vm-config-image.sh",
-]
-
-GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
-
-IC_GATEWAY_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+IC_GATEWAY_RUNTIME_DEPS = [
     "//rs/tests:ic_gateway_uvm_config_image",
 ]
 
@@ -183,7 +166,7 @@ SIGNER_CANISTER_ENV = {
     "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
 }
 
-IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = [
     "//rs/tests:impersonate_upstreams_uvm_config_image",
 ]
 

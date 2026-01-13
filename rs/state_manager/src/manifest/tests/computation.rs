@@ -260,6 +260,7 @@ fn simple_manifest_all_supported_versions() -> Vec<([u8; 32], Manifest)> {
         simple_manifest_v1(),
         simple_manifest(StateSyncVersion::V2),
         simple_manifest(StateSyncVersion::V3),
+        simple_manifest(StateSyncVersion::V4),
     ];
     // Sanity check: ensure that we have one manifest for every supported version.
     assert_eq!(

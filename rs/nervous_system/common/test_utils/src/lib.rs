@@ -391,3 +391,15 @@ impl IcpLedger for SpyLedger {
         unimplemented!()
     }
 }
+
+/// Assert that the error message contains all the key words.
+pub fn assert_contains_all_key_words(error_message: &str, key_words: &[&str]) {
+    for key_word in key_words {
+        assert!(
+            error_message.contains(key_word),
+            "Key word '{}' not found in error message: '{}'",
+            key_word,
+            error_message
+        );
+    }
+}

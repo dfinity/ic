@@ -36,7 +36,7 @@ fn should_reject_cose_encoded_rsa256_pk_with_unknown_alg() {
     assert_eq!(
         result,
         Err(CryptoError::AlgorithmNotSupported {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             reason: "Algorithm not supported in COSE parser".to_string()
         })
     );

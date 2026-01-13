@@ -1,4 +1,7 @@
+pub mod deploy;
+
 use anyhow::{Context, Result, bail};
+use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
 use std::net::Ipv6Addr;
 use std::time::Duration;
@@ -6,7 +9,7 @@ use std::time::Duration;
 /// A wrapper around a command line session for managing a baremetal host via IPMI Serial Over LAN
 /// (SOL).
 pub struct BareMetalIpmiSession {
-    session: rexpect::session::PtySession,
+    session: PtySession,
     /// IPv6 address of the HostOS
     host_address: Ipv6Addr,
 }
@@ -23,7 +26,7 @@ impl BareMetalIpmiSession {
         );
 
         // Single expect timeout for all exp_* operations in this session
-        let expect_timeout_ms = 10_000;
+        let expect_timeout_ms = 5_000;
 
         for _ in 0..30 {
             let mut session = spawn(&cmd, Some(expect_timeout_ms))
@@ -36,21 +39,83 @@ impl BareMetalIpmiSession {
                 ])
                 .context("Timed out waiting for SOL session to become operational")?;
 
-            if matched.contains("SOL Session operational") {
-                return Ok(BareMetalIpmiSession {
-                    session,
-                    host_address: login_info.host_ip,
-                });
+            if !matched.contains("SOL Session operational") {
+                eprintln!("SOL payload already active on another session; retrying...");
+                std::thread::sleep(Duration::from_secs(30));
+                continue;
             }
 
-            eprintln!("SOL payload already active on another session; retrying...");
-            std::thread::sleep(Duration::from_secs(30));
+            Self::init_session(&mut session)?;
+            // Wait a moment to get a prompt
+            std::thread::sleep(Duration::from_millis(500));
+
+            // Get the global IPv6 address of the HostOS
+            session.send_line(
+                "ip -6 addr show br6 scope global | awk '/inet6 / {print $2}' | cut -d/ -f1",
+            )?;
+            let (_, host_ip) = session.exp_regex(r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}")?;
+            return Ok(BareMetalIpmiSession {
+                session,
+                host_address: host_ip
+                    .parse()
+                    .with_context(|| format!("Failed to parse Host IPv6 address {host_ip}"))?,
+            });
         }
 
-        bail!("Could not start SOL session after multiple attempts")
+        bail!("Could not start SOL session after multiple attempts");
     }
 
-    pub fn host_address(&self) -> Ipv6Addr {
+    fn init_session(session: &mut PtySession) -> Result<()> {
+        let skip_login = Self::get_to_login_prompt(session)?;
+
+        if skip_login {
+            return Ok(());
+        }
+
+        // Send "root" and wait for password
+        session.send_line("root").context("Failed to send 'root'")?;
+        session
+            .exp_string("Password:")
+            .context("Timed out waiting for 'Password:'")?;
+
+        // Send password (the original code sent 'root' again)
+        session
+            .send_line("root")
+            .context("Failed to send password")?;
+
+        // Wait for a shell prompt indicator
+        session
+            .exp_string("root@host")
+            .context("Timed out waiting for shell prompt 'root@host'")?;
+
+        Ok(())
+    }
+
+    /// Tries to get to the login prompt.
+    /// If the login can be skipped, returns Ok(true).
+    /// If at the login prompt, returns Ok(false).
+    fn get_to_login_prompt(session: &mut PtySession) -> Result<bool> {
+        // Try to get to the login screen by sending Ctrl+D.
+        // Try a small number of times in case we're inside something like a pager or nested shell.
+        for _ in 0..3 {
+            println!("Sending Ctrl+] and Ctrl+D to get to login prompt...");
+            // Ctrl+] to exit virsh console
+            session.send_control(']').context("Failed to send Ctrl+]")?;
+            session.send_line("").context("Failed to send ENTER")?;
+            // Ctrl+D to go to HostOS login prompt
+            session.send_control('D').context("Failed to send Ctrl+D")?;
+            if let Ok((_, matched)) = session.exp_regex("(Press ENTER|root@|login:)") {
+                if matched.contains("Press ENTER") {
+                    session.send_line("").context("Failed to send ENTER")?;
+                }
+                return Ok(!matched.contains("login:"));
+            }
+        }
+
+        bail!("Could not get to login prompt")
+    }
+
+    pub fn hostos_address(&self) -> Ipv6Addr {
         self.host_address
     }
 
@@ -62,26 +127,6 @@ impl BareMetalIpmiSession {
     /// Injects the provided SSH public key into the baremetal host by logging in via IPMI SOL
     /// The key must be provided in OpenSSH format (e.g. "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAr...")
     pub fn inject_ssh_key(&mut self, ssh_public_key: &str) -> Result<()> {
-        self.get_to_login_prompt()?;
-
-        // Send "root" and wait for password
-        self.session
-            .send_line("root")
-            .context("Failed to send 'root'")?;
-        self.session
-            .exp_string("Password:")
-            .context("Timed out waiting for 'Password:'")?;
-
-        // Send password (the original code sent 'root' again)
-        self.session
-            .send_line("root")
-            .context("Failed to send password")?;
-
-        // Wait for a shell prompt indicator
-        self.session
-            .exp_string("root@host")
-            .context("Timed out waiting for shell prompt 'root@host'")?;
-
         println!("Adding SSH key to authorized_keys...");
         self.session.send_line(&format!(
             "mkdir -p /var/lib/admin/.ssh && echo '{ssh_public_key}' > /var/lib/admin/.ssh/authorized_keys
@@ -94,31 +139,6 @@ impl BareMetalIpmiSession {
             .context("Failed to send 'exit'")?;
 
         Ok(())
-    }
-
-    fn get_to_login_prompt(&mut self) -> Result<()> {
-        // If we're already at a login prompt, great; otherwise try to get there by sending Ctrl+D.
-        // Try a small number of times in case we're inside something like a pager or nested shell.
-        if self.session.exp_string("login:").is_ok() {
-            return Ok(());
-        }
-
-        for _ in 0..3 {
-            println!("Sending Ctrl+] and Ctrl+D to get to login prompt...");
-            // Ctrl+] to exit virsh console
-            self.session
-                .send_control(']')
-                .context("Failed to send Ctrl+]")?;
-            // Ctrl+D to go to HostOS login prompt
-            self.session
-                .send_control('D')
-                .context("Failed to send Ctrl+D")?;
-            if self.session.exp_string("login:").is_ok() {
-                return Ok(());
-            }
-        }
-
-        bail!("Could not get to login prompt")
     }
 }
 
@@ -142,7 +162,13 @@ pub struct LoginInfo {
     host: String,
     username: String,
     password: String,
-    host_ip: Ipv6Addr,
+    hostos_address: Ipv6Addr,
+}
+
+impl LoginInfo {
+    pub fn hostos_address(&self) -> Ipv6Addr {
+        self.hostos_address
+    }
 }
 
 pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
@@ -171,7 +197,7 @@ pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
         host,
         username,
         password,
-        host_ip,
+        hostos_address: host_ip,
     })
 }
 

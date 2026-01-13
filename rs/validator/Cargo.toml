@@ -22,9 +22,15 @@ thiserror = { workspace = true }
 assert_matches = { workspace = true }
 base64 = { workspace = true }
 hex = { workspace = true }
+ic-crypto-internal-basic-sig-der-utils = { path = "../crypto/internal/crypto_lib/basic_sig/der_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
+ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+serde_json = { workspace = true }
+simple_asn1 = { workspace = true }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 mockall = { workspace = true }
 rand = { workspace = true }

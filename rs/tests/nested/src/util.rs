@@ -77,6 +77,7 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast
     install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .disable_ipv4()
         .start(env)
         .expect("failed to setup ic-gateway");
 }
