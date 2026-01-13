@@ -1,14 +1,16 @@
 use std::fmt::Display;
 
 use candid::{CandidType, Principal};
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::make_node_operator_record_key;
+use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
+use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::{delete, pb::v1::RegistryMutation, upsert};
 use ic_types::PrincipalId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use crate::registry::Registry;
+use crate::{
+    mutations::node_management::common::get_node_operator_nodes_with_id, registry::Registry,
+};
 
 impl Registry {
     pub fn do_migrate_node_operator_directly(&mut self, payload: MigrateNodeOperatorPayload) {
@@ -28,11 +30,15 @@ impl Registry {
             payload.new_node_operator_id.unwrap(),
         );
 
-        let _node_operator_migrations = self.get_operator_mutations_if_business_rules_are_valid(
+        let mut total_mutations = self.get_operator_mutations_if_business_rules_are_valid(
             old_node_operator_id,
             new_node_operator_id,
             caller,
         )?;
+
+        total_mutations.extend(self.get_node_mutations(old_node_operator_id, new_node_operator_id));
+
+        self.maybe_apply_mutation_internal(total_mutations);
 
         Ok(())
     }
@@ -156,6 +162,26 @@ impl Registry {
                 .entry(node_reward_type.to_string())
                 .or_insert(0) += value;
         }
+    }
+
+    fn get_node_mutations(
+        &self,
+        old_node_operator_id: PrincipalId,
+        new_node_operator_id: PrincipalId,
+    ) -> Vec<RegistryMutation> {
+        get_node_operator_nodes_with_id(&self, old_node_operator_id)
+            .into_iter()
+            .map(|(key, record)| {
+                upsert(
+                    make_node_record_key(key).as_bytes(),
+                    NodeRecord {
+                        node_operator_id: new_node_operator_id.to_vec(),
+                        ..record
+                    }
+                    .encode_to_vec(),
+                )
+            })
+            .collect()
     }
 }
 
