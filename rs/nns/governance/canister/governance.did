@@ -1039,6 +1039,7 @@ type ProposalActionRequest = variant {
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
   BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
   TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
