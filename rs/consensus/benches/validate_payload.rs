@@ -226,10 +226,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
 
     let to_certify = state_manager.list_state_hashes_to_certify();
     assert_eq!(to_certify.len(), 1);
-    let hash = to_certify[0]
-        .1
-        .as_ref()
-        .expect("State manager should return a hash in tests");
+    let hash = &to_certify[0].1;
     state_manager.deliver_state_certification(Certification {
         height: Height::new(CERTIFIED_HEIGHT),
         signed: SignedCertificationContent::fake(CertificationContent::new(hash.clone())),

@@ -144,7 +144,11 @@ pub trait StateManager: StateReader {
     ///   let l_2 = state_manager.list_state_hashes_to_certify()
     ///   ∀ (h_1, H_1) ∈ l_1, (h_2, H_2) ∈ l_2: h_1 = h_2 ⇒ H_1 = H_2
     ///   ```
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)>;
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)>;
+
+    /// Returns a list of heights for which the state manager optimistically requests
+    /// a certification to be delivered via `state_manager.deliver_state_certification`.
+    fn list_state_heights_to_certify(&self) -> Vec<Height>;
 
     /// Delivers a `certification` corresponding to some state hash / height
     /// pair.

@@ -1037,9 +1037,9 @@ fn populates_prev_state_hash() {
         let hashes = state_manager.list_state_hashes_to_certify();
 
         assert_eq!(2, hashes.len());
-        assert_ne!(hashes[0].1.as_ref().unwrap(), hashes[1].1.as_ref().unwrap());
+        assert_ne!(hashes[0].1, hashes[1].1);
         assert_eq!(
-            Some(hashes[0].1.clone().unwrap()),
+            Some(hashes[0].1.clone()),
             state_2.system_metadata().prev_state_hash
         );
     });

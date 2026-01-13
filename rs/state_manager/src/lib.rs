@@ -2972,25 +2972,32 @@ impl StateManager for StateManagerImpl {
         }
     }
 
-    fn list_state_hashes_to_certify(&self) -> Vec<(Height, Option<CryptoHashOfPartialState>)> {
+    fn list_state_hashes_to_certify(&self) -> Vec<(Height, CryptoHashOfPartialState)> {
         let _timer = self
             .metrics
             .api_call_duration
             .with_label_values(&["list_state_hashes_to_certify"])
             .start_timer();
 
-        let mut heights_without_certifications = Vec::new();
+        self.states
+            .read()
+            .certifications_metadata
+            .iter()
+            .filter(|(_, metadata)| metadata.certification.is_none())
+            .map(|(height, metadata)| {
+                (
+                    *height,
+                    CryptoHashOfPartialState::from(metadata.certified_state_hash.clone()),
+                )
+            })
+            .collect()
+    }
+
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
         let mut heights_with_certifications = HashSet::new();
 
         for (height, metadata) in self.states.read().certifications_metadata.iter() {
-            if metadata.certification.is_none() {
-                heights_without_certifications.push((
-                    *height,
-                    Some(CryptoHashOfPartialState::from(
-                        metadata.certified_state_hash.clone(),
-                    )),
-                ));
-            } else {
+            if metadata.certification.is_some() {
                 heights_with_certifications.insert(height.get());
             }
         }
@@ -2999,14 +3006,11 @@ impl StateManager for StateManagerImpl {
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
         let extra_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
-        let mut filtered_extra_heights: Vec<_> = extra_heights
+        extra_heights
             .into_iter()
             .filter(|h| !heights_with_certifications.contains(h))
-            .map(|h| (Height::new(h), None))
-            .collect();
-        let mut res = heights_without_certifications;
-        res.append(&mut filtered_extra_heights);
-        res
+            .map(Height::new)
+            .collect()
     }
 
     fn deliver_state_certification(&self, certification: Certification) {
