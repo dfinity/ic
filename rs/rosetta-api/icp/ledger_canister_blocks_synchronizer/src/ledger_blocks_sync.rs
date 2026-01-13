@@ -374,6 +374,9 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 
             debug!("Asking for blocks [{},{})", i, range.end);
             let mut retry = 0;
+            progress_bar.as_ref().map(|bar| {
+                bar.set_message("query blocks");
+            });
             let batch = loop {
                 let batch = canister
                     .clone()
@@ -383,6 +386,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     })
                     .await
                     .map_err(Error::InternalError);
+                progress_bar.as_ref().map(|bar| bar.tick());
                 if batch.is_ok() || retry == MAX_RETRY {
                     if let Ok(encoded_blocks) = &batch {
                         self.rosetta_metrics
@@ -408,6 +412,9 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     i, range.end
                 )));
             }
+            progress_bar.as_ref().map(|bar| {
+                bar.set_message("decode blocks");
+            });
             for raw_block in batch {
                 let block = Block::decode(raw_block.clone())
                     .map_err(|err| Error::InternalError(format!("Cannot decode block: {err}")))?;
@@ -425,18 +432,21 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 let hb = HashedBlock::hash_block(raw_block, last_block_hash, i, block.timestamp);
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
+                progress_bar.as_ref().map(|bar| bar.inc(1));
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
             if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
+                progress_bar.as_ref().map(|bar| {
+                    bar.set_message("store blocks");
+                    bar.set_position(bar.position() - block_batch.len() as u64)
+                });
                 blockchain.push_batch(block_batch, progress_bar.as_ref())?;
                 block_batch = Vec::new();
             }
         }
         blockchain.push_batch(block_batch, progress_bar.as_ref())?;
-        if let Some(bar) = progress_bar {
-            bar.finish();
-        }
+        progress_bar.map(|bar| bar.finish());
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
         self.rosetta_metrics.set_verified_height(range.end - 1);
