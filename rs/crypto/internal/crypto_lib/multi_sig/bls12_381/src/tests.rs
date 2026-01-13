@@ -68,6 +68,25 @@ mod stability {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
+    /// This test checks that the functionality is consistent; the values are
+    /// not "correct" but they must never change.
+    #[test]
+    fn bls12_key_generation_is_stable() {
+        let mut csprng = ChaCha20Rng::seed_from_u64(42);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
+        let secret_key_bytes = SecretKeyBytes::from(&secret_key);
+        let public_key_bytes = PublicKeyBytes::from(&public_key);
+
+        assert_eq!(
+            hex::encode(secret_key_bytes.0.expose_secret()),
+            "55f292a9a75dc429aa86f5fb84756558c5210a2de4a8d4d3b4207beb0d419072"
+        );
+        assert_eq!(
+            hex::encode(public_key_bytes.0),
+            "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2"
+        );
+    }
+
     #[test]
     fn message_to_g1() {
         assert_eq!(

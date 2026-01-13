@@ -1,29 +1,45 @@
-//! Multisig lib API tests
-use crate as multi_sig;
-use crate::types::{
+//! Integration tests for the multisig lib public API
+
+use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
+use ic_crypto_internal_multi_sig_bls12381::types::{
     CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes, SecretKeyBytes,
-    arbitrary,
 };
 use ic_types::crypto::CryptoResult;
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-/// This test checks that the functionality is consistent; the values are
-/// not "correct" but they must never change.
-#[test]
-fn bls12_key_generation_is_stable() {
-    let mut csprng = ChaCha20Rng::seed_from_u64(42);
-    let (secret_key, public_key) = multi_sig::keypair_from_rng(&mut csprng);
+/// Proptest strategy for generating key pairs using the public API
+fn key_pair_bytes() -> impl Strategy<Value = (SecretKeyBytes, PublicKeyBytes)> {
+    any::<[u8; 32]>().prop_map(|seed| {
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        multi_sig::keypair_from_rng(&mut rng)
+    })
+}
 
-    assert_eq!(
-        hex::encode(secret_key.0.expose_secret()),
-        "55f292a9a75dc429aa86f5fb84756558c5210a2de4a8d4d3b4207beb0d419072"
-    );
-    assert_eq!(
-        hex::encode(public_key.0),
-        "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2"
-    );
+/// Proptest strategy for generating individual signatures using the public API
+fn individual_signature_bytes() -> impl Strategy<Value = IndividualSignatureBytes> {
+    (any::<[u8; 32]>(), any::<[u8; 8]>()).prop_map(|(seed, message)| {
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        let (secret_key, _public_key) = multi_sig::keypair_from_rng(&mut rng);
+        multi_sig::sign(&message, &secret_key)
+    })
+}
+
+/// Proptest strategy for generating PoPs using the public API
+fn pop_bytes() -> impl Strategy<Value = PopBytes> {
+    any::<[u8; 32]>().prop_map(|seed| {
+        let mut rng = ChaCha20Rng::from_seed(seed);
+        let (secret_key, public_key) = multi_sig::keypair_from_rng(&mut rng);
+        multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP")
+    })
+}
+
+/// Proptest strategy for generating combined signatures using the public API
+fn combined_signature_bytes() -> impl Strategy<Value = CombinedSignatureBytes> {
+    individual_signature_bytes().prop_map(|signature| {
+        multi_sig::combine(&[signature]).expect("Failed to combine signatures")
+    })
 }
 
 fn test_happy_path(
@@ -81,7 +97,7 @@ proptest! {
 
     #[test]
     fn multisig_verification_succeeds(
-      keys in proptest::collection::vec(arbitrary::key_pair_bytes(), 1..10),
+      keys in proptest::collection::vec(key_pair_bytes(), 1..10),
       message in proptest::collection::vec(any::<u8>(), 0..100),
     ) {
         test_happy_path(&keys, &message);
@@ -89,9 +105,9 @@ proptest! {
 
     #[test]
     fn incorrect_individual_signature_fails(
-      keys in arbitrary::key_pair_bytes(),
+      keys in key_pair_bytes(),
       message in proptest::collection::vec(any::<u8>(), 0..100),
-      evil_signature in arbitrary::individual_signature_bytes()
+      evil_signature in individual_signature_bytes()
     ) {
         let (secret_key, public_key) = keys;
         let signature = multi_sig::sign(&message, &secret_key);
@@ -101,8 +117,8 @@ proptest! {
 
     #[test]
     fn incorrect_pop_fails(
-      keys in arbitrary::key_pair_bytes(),
-      evil_pop in arbitrary::pop_bytes()
+      keys in key_pair_bytes(),
+      evil_pop in pop_bytes()
     ) {
         let (secret_key, public_key) = keys;
         let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
@@ -112,9 +128,9 @@ proptest! {
 
     #[test]
     fn incorrect_combined_signature_fails(
-      keys in proptest::collection::vec(arbitrary::key_pair_bytes(), 1..10),
+      keys in proptest::collection::vec(key_pair_bytes(), 1..10),
       message in proptest::collection::vec(any::<u8>(), 0..100),
-      evil_signature in arbitrary::combined_signature_bytes()
+      evil_signature in combined_signature_bytes()
     ) {
         let (_signatures, signature, public_keys) = test_happy_path(&keys, &message);
         prop_assume!(evil_signature != signature);
