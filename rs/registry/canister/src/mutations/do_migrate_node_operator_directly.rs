@@ -269,6 +269,8 @@ impl MigrateNodeOperatorPayload {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
@@ -723,5 +725,190 @@ mod tests {
             .filter(|delta| delta.key.starts_with(prefix.as_bytes()))
             .cloned()
             .collect()
+    }
+
+    #[test]
+    fn successful_migration_when_new_operator_exist() {
+        let mut setup = TestSetup::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let caller = PrincipalId::new_user_test_id(999);
+
+        // Old Operator spec variables
+        let rewardable_nodes = vec![
+            (NodeRewardType::Type1.to_string(), 5),
+            (NodeRewardType::Type2.to_string(), 10),
+        ];
+        let allowance = 5;
+        let dc = "dc";
+
+        setup.add_node_operator(
+            old_node_operator_id,
+            caller,
+            allowance,
+            dc,
+            rewardable_nodes.clone(),
+            rewardable_nodes.clone(),
+        );
+        // Add nodes owned by the old node operator under test
+        for _ in 0..3 {
+            setup.add_node(old_node_operator_id);
+        }
+
+        // New operator spec variables
+        let new_rewardable_nodes = vec![(NodeRewardType::Type1.to_string(), 1)];
+        let new_allowance = 5;
+
+        setup.add_node_operator(
+            new_node_operator_id,
+            caller,
+            new_allowance,
+            dc,
+            new_rewardable_nodes.clone(),
+            new_rewardable_nodes.clone(),
+        );
+        // Add nodes owned by the new node operator under test
+        for _ in 0..4 {
+            setup.add_node(new_node_operator_id);
+        }
+
+        // Add 3 nodes owned by a random operator that shouldn't be
+        // changed
+        let extra_node_operator = PrincipalId::new_user_test_id(333);
+        for _ in 0..5 {
+            setup.add_node(extra_node_operator);
+        }
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        setup
+            .registry
+            .migrate_node_operator_inner(payload, caller)
+            .unwrap();
+
+        // Ensure that the new operator is there
+        let new_node_operator_record = setup
+            .registry
+            .get_node_operator_or_panic(new_node_operator_id);
+
+        // Ensure that the values are inherited from the old record
+        assert_eq!(
+            new_node_operator_record.node_provider_principal_id,
+            caller.to_vec()
+        );
+        assert_eq!(
+            new_node_operator_record.node_allowance,
+            allowance + new_allowance
+        );
+        let rewardable_nodes: BTreeMap<_, _> = rewardable_nodes.into_iter().collect();
+        let new_rewardable_nodes: BTreeMap<_, _> = new_rewardable_nodes.into_iter().collect();
+        compare_rewardable_nodes(
+            new_node_operator_record.rewardable_nodes,
+            rewardable_nodes.clone(),
+            new_rewardable_nodes.clone(),
+        );
+        compare_rewardable_nodes(
+            new_node_operator_record.max_rewardable_nodes,
+            rewardable_nodes.clone(),
+            new_rewardable_nodes.clone(),
+        );
+        assert_eq!(new_node_operator_record.dc_id, dc.to_string());
+
+        // Ensure that the old operator isn't there
+        let old_node_operator_record = setup.registry.get(
+            make_node_operator_record_key(old_node_operator_id).as_bytes(),
+            setup.registry.latest_version(),
+        );
+        assert!(old_node_operator_record.is_none());
+
+        // Ensure that the nodes owned by the old operator show the new operator now
+        let nodes = setup.fetch_nodes_added_for_node_operator(old_node_operator_id);
+        for node in nodes {
+            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        }
+        // Ensure that the nodes owned by the new operator still are owned by the
+        // same node operator
+        let nodes = setup.fetch_nodes_added_for_node_operator(new_node_operator_id);
+        for node in nodes {
+            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        }
+
+        // Ensure that the extra nodes weren't touched
+        let nodes = setup.fetch_nodes_added_for_node_operator(extra_node_operator);
+        for node in nodes {
+            assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
+        }
+
+        // Validate number of mutations and their keys, values are checked above
+        let changes = setup
+            .registry
+            .get_changes_since(setup.registry.latest_version() - 1, None);
+
+        assert_eq!(changes.len(), 5);
+
+        // Node changes
+        let node_deltas = filter_changes_for_key_prefix(NODE_RECORD_KEY_PREFIX, &changes);
+        assert_eq!(node_deltas.len(), 3);
+        assert!(
+            node_deltas
+                .iter()
+                .all(|delta| delta.values.len() == 1 && delta.values[0].is_present())
+        );
+
+        // Old node operator should not be pressent
+        let old_node_operator_deltas = filter_changes_for_key_prefix(
+            make_node_operator_record_key(old_node_operator_id).as_str(),
+            &changes,
+        );
+        assert_eq!(old_node_operator_deltas.len(), 1);
+        assert!(
+            old_node_operator_deltas[0].values.len() == 1
+                && !old_node_operator_deltas[0].values[0].is_present()
+        );
+
+        // New node operator should be present
+        let new_node_operator_deltas = filter_changes_for_key_prefix(
+            make_node_operator_record_key(new_node_operator_id).as_str(),
+            &changes,
+        );
+        assert_eq!(new_node_operator_deltas.len(), 1);
+        assert!(
+            new_node_operator_deltas[0].values.len() == 1
+                && new_node_operator_deltas[0].values[0].is_present()
+        );
+    }
+
+    fn compare_rewardable_nodes(
+        expected: BTreeMap<String, u32>,
+        old: BTreeMap<String, u32>,
+        new: BTreeMap<String, u32>,
+    ) {
+        let mut new_mut = new;
+        let mut old_mut = old;
+
+        for (expected_key, expected_value) in expected.iter() {
+            let old_value = old_mut.remove(expected_key).unwrap_or_default();
+            let new_value = new_mut.remove(expected_key).unwrap_or_default();
+
+            assert_eq!(
+                *expected_value,
+                old_value + new_value,
+                "Expected value {expected_value} for key {expected_key} but got something else. Merging of (max_)rewardable_nodes wasn't successful."
+            );
+        }
+
+        assert!(
+            new_mut.is_empty(),
+            "Leftover values in new (max_)rewardable_nodes which weren't carried over properly, {new_mut:?}"
+        );
+        assert!(
+            old_mut.is_empty(),
+            "Leftover values in old (max_)rewardable_nodes which weren't carried over properly, {new_mut:?}"
+        );
     }
 }
