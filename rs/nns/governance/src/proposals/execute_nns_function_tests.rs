@@ -6,11 +6,12 @@ use crate::{
     },
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
-use candid::{Encode, Nat};
+use candid::{Decode, Encode, Nat};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_nns_governance_api::SelfDescribingValue;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
 use maplit::hashmap;
 use std::sync::Arc;
 
@@ -229,4 +230,70 @@ async fn test_to_self_describing_uninstall_code() {
             ]),
         })
     );
+}
+
+#[test]
+fn test_re_encode_payload_to_target_canister_sets_proposal_id_for_add_wasm() {
+    let proposal_id = 42;
+    let wasm = vec![1, 2, 3];
+    let canister_type = 3;
+    let hash = vec![1, 2, 3, 4];
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: None,
+            wasm: wasm.clone(),
+            canister_type,
+        }),
+        hash: hash.clone(),
+        skip_update_latest_version: Some(false),
+    })
+    .unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    let effective_payload = execute_nns_function
+        .re_encode_payload_to_target_canister(proposal_id, 0)
+        .unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(
+        decoded,
+        AddWasmRequest {
+            wasm: Some(SnsWasm {
+                proposal_id: Some(proposal_id), // The proposal_id should be set
+                wasm,
+                canister_type
+            }),
+            hash,
+            skip_update_latest_version: Some(false),
+        }
+    );
+}
+
+#[test]
+fn test_re_encode_payload_to_target_canister_overrides_proposal_id_for_add_wasm() {
+    let proposal_id = 42;
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id - 1),
+            ..SnsWasm::default()
+        }),
+        ..AddWasmRequest::default()
+    })
+    .unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    let effective_payload = execute_nns_function
+        .re_encode_payload_to_target_canister(proposal_id, 0)
+        .unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
 }

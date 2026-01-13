@@ -11,10 +11,15 @@ use crate::{
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
+use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
+use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
+use std::str::FromStr;
 use std::sync::Arc;
 
 /// A partial Candid interface for the management canister (ic_00) that contains the necessary
@@ -106,6 +111,124 @@ impl ValidExecuteNnsFunction {
         String::from_utf8(decoded_response.value().to_vec())
             .map_err(|e| format!("Failed to convert metadata to UTF-8: {}", e))
     }
+
+    /// Returns the encoded request to the target canister by transforming the payload submitted by the proposer.
+    /// The `proposal_id` argument is used by AddSnsWasm and SubnetRentalRequest proposals.
+    /// The `proposal_timestamp_seconds` argument is used by SubnetRentalRequest proposals.
+    pub fn re_encode_payload_to_target_canister(
+        &self,
+        proposal_id: u64,
+        proposal_timestamp_seconds: u64,
+    ) -> Result<Vec<u8>, GovernanceError> {
+        const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
+        const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
+        const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+
+        match &self.nns_function {
+            ValidNnsFunction::BitcoinSetConfig => {
+                // Decode the payload to get the network.
+                let decoded_payload =
+                    Decode!([decoder_config()]; &self.payload, BitcoinSetConfigProposal).map_err(
+                        |_| {
+                            GovernanceError::new_with_message(
+                                ErrorType::InvalidProposal,
+                                "Unable to decode BitcoinSetConfigProposal proposal: {e}",
+                            )
+                        },
+                    )?;
+
+                // Convert it to a call canister payload.
+                let canister_id = CanisterId::from_str(match decoded_payload.network {
+                    BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+                    BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+                })
+                .expect("bitcoin canister id must be valid.");
+
+                let encoded_payload = Encode!(&CallCanisterRequest {
+                    canister_id,
+                    method_name: BITCOIN_SET_CONFIG_METHOD_NAME.to_string(),
+                    payload: decoded_payload.payload
+                })
+                .unwrap();
+
+                Ok(encoded_payload)
+            }
+            ValidNnsFunction::SubnetRentalRequest => {
+                // Decode the payload to `SubnetRentalRequest`.
+                let decoded_payload =
+                    Decode!([decoder_config()]; &self.payload, SubnetRentalRequest).map_err(
+                        |_| {
+                            GovernanceError::new_with_message(
+                                ErrorType::InvalidProposal,
+                                "Unable to decode SubnetRentalRequest proposal: {e}",
+                            )
+                        },
+                    )?;
+
+                // Convert the payload to `SubnetRentalProposalPayload`.
+                let SubnetRentalRequest {
+                    user,
+                    rental_condition_id,
+                } = decoded_payload;
+                let proposal_creation_time_seconds = proposal_timestamp_seconds;
+                let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+                    user,
+                    rental_condition_id,
+                    proposal_id,
+                    proposal_creation_time_seconds,
+                })
+                .unwrap();
+
+                Ok(encoded_payload)
+            }
+
+            ValidNnsFunction::AddSnsWasm => {
+                let transformed_payload =
+                    add_proposal_id_to_add_wasm_request(&self.payload, proposal_id)?;
+
+                Ok(transformed_payload)
+            }
+
+            // Most NNS functions don't require any transformation of the payload, and for new NNS
+            // functions, consider use a proposal action instead, if the payload should be
+            // understood by the NNS Governance canister.
+            _ => Ok(self.payload.clone()),
+        }
+    }
+}
+
+fn add_proposal_id_to_add_wasm_request(
+    payload: &[u8],
+    proposal_id: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let add_wasm_request = match Decode!([decoder_config()]; payload, AddWasmRequest) {
+        Ok(add_wasm_request) => add_wasm_request,
+        Err(e) => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Payload must be a valid AddWasmRequest. Error: {e}"),
+            ));
+        }
+    };
+
+    let wasm = add_wasm_request
+        .wasm
+        .ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Payload must contain a wasm.",
+        ))?;
+
+    let add_wasm_request = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id),
+            ..wasm
+        }),
+        ..add_wasm_request
+    };
+
+    let payload = Encode!(&add_wasm_request).unwrap();
+
+    Ok(payload)
 }
 
 #[derive(Debug, Clone, PartialEq)]
