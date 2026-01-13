@@ -11,9 +11,7 @@ use crate::crypto::canister_threshold_sig::{
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHashOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeIndex, node_id_into_protobuf, node_id_try_from_option};
-use ic_base_types::{
-    NodeId, RegistryVersion, subnet_id_into_protobuf, subnet_id_try_from_protobuf,
-};
+use ic_base_types::{NodeId, RegistryVersion, subnet_id_into_protobuf, subnet_id_try_from_option};
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
@@ -55,13 +53,8 @@ impl TryFrom<&IDkgTranscriptIdProto> for IDkgTranscriptId {
     type Error = ProxyDecodeError;
 
     fn try_from(proto: &IDkgTranscriptIdProto) -> Result<Self, Self::Error> {
-        let Some(subnet_id) = proto.subnet_id.clone() else {
-            return Err(ProxyDecodeError::MissingField(
-                "IDkgTranscriptId::subnet_id",
-            ));
-        };
         Ok(IDkgTranscriptId::new(
-            subnet_id_try_from_protobuf(subnet_id)?,
+            subnet_id_try_from_option(proto.subnet_id.clone(), "IDkgTranscriptId::subnet_id")?,
             proto.id,
             Height::from(proto.source_height),
         ))

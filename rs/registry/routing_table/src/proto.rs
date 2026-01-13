@@ -1,5 +1,7 @@
 use super::{CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable};
-use ic_base_types::{CanisterId, subnet_id_into_protobuf, subnet_id_try_from_protobuf};
+use ic_base_types::{
+    CanisterId, subnet_id_into_protobuf, subnet_id_try_from_option, subnet_id_try_from_protobuf,
+};
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
     registry::routing_table::v1 as pb,
@@ -85,8 +87,7 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
             .map(|entry| {
                 let range = try_from_option_field(entry.range, "RoutingTable::Entry::range")?;
                 let subnet_id =
-                    try_from_option_field(entry.subnet_id, "RoutingTable::Entry::subnet_id")?;
-                let subnet_id = subnet_id_try_from_protobuf(subnet_id)?;
+                    subnet_id_try_from_option(entry.subnet_id, "RoutingTable::Entry::subnet_id")?;
 
                 Ok((range, subnet_id))
             })

@@ -122,9 +122,12 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
+MISC_TMP_DIR="/tmp/misc"
+mkdir -p "${MISC_TMP_DIR}"
+
 trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp --suffix=containerrun)
-SUBGID_FILE=$(mktemp --suffix=containerrun)
+SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
+SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 
 IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
 
