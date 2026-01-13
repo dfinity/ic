@@ -199,26 +199,26 @@ impl LoginInfo {
 
 pub fn parse_login_info_from_ini(data: &str) -> Result<LoginInfo> {
     let ini = ini::Ini::load_from_str(data)?;
-    let general_section = ini
-        .section(None::<String>)
-        .context("No general section in INI")?;
-    let host = general_section
+    let host_section = ini
+        .section(Some("host"))
+        .context("No [host] section in INI")?;
+    let host = host_section
         .get("ipmi_addr")
-        .context("No host in general section")?;
-    let username = general_section
+        .context("No ipmi_addr in [host] section")?;
+    let username = host_section
         .get("username")
-        .context("No username in general section")?;
-    let password = general_section
+        .context("No username in [host] section")?;
+    let password = host_section
         .get("password")
-        .context("No password in general section")?;
-    let mgmt_mac = general_section
+        .context("No password in [host] section")?;
+    let mgmt_mac = host_section
         .get("mgmt_mac")
-        .context("No mgmt_mac in general section")?
+        .context("No mgmt_mac in [host] section")?
         .parse::<MacAddr6>()
         .context("Failed to parse mgmt_mac")?;
-    let addr_prefix = general_section
+    let addr_prefix = host_section
         .get("addr_prefix")
-        .context("No addr_prefix in general section")?;
+        .context("No addr_prefix in [host] section")?;
 
     Ok(LoginInfo {
         host: host.to_string(),
