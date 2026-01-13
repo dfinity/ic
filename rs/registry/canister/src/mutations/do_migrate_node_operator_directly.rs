@@ -28,7 +28,7 @@ impl Registry {
             payload.new_node_operator_id.unwrap(),
         );
 
-        let _node_operator_migrations = self.get_operator_migrations_if_bussiness_rules_are_valid(
+        let _node_operator_migrations = self.get_operator_mutations_if_business_rules_are_valid(
             old_node_operator_id,
             new_node_operator_id,
             caller,
@@ -37,7 +37,7 @@ impl Registry {
         Ok(())
     }
 
-    fn get_operator_migrations_if_bussiness_rules_are_valid(
+    fn get_operator_mutations_if_business_rules_are_valid(
         &self,
         old_node_operator_id: PrincipalId,
         new_node_operator_id: PrincipalId,
@@ -247,7 +247,11 @@ impl MigrateNodeOperatorPayload {
 
 #[cfg(test)]
 mod tests {
+    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+    use ic_registry_keys::make_node_operator_record_key;
+    use ic_registry_transport::upsert;
     use ic_types::PrincipalId;
+    use prost::Message;
 
     use crate::{
         mutations::do_migrate_node_operator_directly::{MigrateError, MigrateNodeOperatorPayload},
@@ -272,5 +276,176 @@ mod tests {
                 "Expected: {expected:?} but found result: {output:?}"
             );
         }
+    }
+
+    #[test]
+    fn missing_old_node_operator() {
+        let mut registry = Registry::new();
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+            new_node_operator_id: Some(PrincipalId::new_user_test_id(2)),
+        };
+
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::MissingNodeOperator {
+            principal: payload.old_node_operator_id.unwrap(),
+        });
+
+        let resp = registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(3));
+
+        assert_eq!(resp, expected_err);
+    }
+
+    #[test]
+    fn node_provider_mismatch() {
+        let mut registry = Registry::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let old_node_provider_id = PrincipalId::new_user_test_id(3);
+        let new_node_provider_id = PrincipalId::new_user_test_id(4);
+
+        let mutations = vec![
+            upsert(
+                make_node_operator_record_key(old_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: old_node_operator_id.to_vec(),
+                    node_provider_principal_id: old_node_provider_id.to_vec(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            upsert(
+                make_node_operator_record_key(new_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: new_node_operator_id.to_vec(),
+                    node_provider_principal_id: new_node_provider_id.to_vec(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ];
+
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::NodeProviderMismatch {
+            old: old_node_provider_id,
+            new: new_node_provider_id,
+        });
+
+        let resp =
+            registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(999));
+
+        assert_eq!(resp, expected_err)
+    }
+
+    #[test]
+    fn data_center_mismatch() {
+        let mut registry = Registry::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let node_provider_id = PrincipalId::new_user_test_id(3);
+
+        let dc1 = "dc1".to_string();
+        let dc2 = "dc2".to_string();
+
+        let mutations = vec![
+            upsert(
+                make_node_operator_record_key(old_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: old_node_operator_id.to_vec(),
+                    node_provider_principal_id: node_provider_id.to_vec(),
+                    dc_id: dc1.clone(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            upsert(
+                make_node_operator_record_key(new_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: new_node_operator_id.to_vec(),
+                    node_provider_principal_id: node_provider_id.to_vec(),
+                    dc_id: dc2.clone(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ];
+
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        let expected_err: Result<(), MigrateError> =
+            Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
+
+        let resp =
+            registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(999));
+
+        assert_eq!(resp, expected_err)
+    }
+
+    #[test]
+    fn caller_not_owning_node_operator_records() {
+        let mut registry = Registry::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let node_provider_id = PrincipalId::new_user_test_id(3);
+
+        let dc = "dc1".to_string();
+
+        let mutations = vec![
+            upsert(
+                make_node_operator_record_key(old_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: old_node_operator_id.to_vec(),
+                    node_provider_principal_id: node_provider_id.to_vec(),
+                    dc_id: dc.clone(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            upsert(
+                make_node_operator_record_key(new_node_operator_id).as_bytes(),
+                NodeOperatorRecord {
+                    node_operator_principal_id: new_node_operator_id.to_vec(),
+                    node_provider_principal_id: node_provider_id.to_vec(),
+                    dc_id: dc.clone(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ];
+
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        let caller = PrincipalId::new_user_test_id(999);
+
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::CallerMismatch {
+            caller,
+            expected: node_provider_id,
+        });
+
+        let resp = registry.migrate_node_operator_inner(payload, caller);
+
+        assert_eq!(resp, expected_err)
     }
 }
