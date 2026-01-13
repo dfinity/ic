@@ -305,7 +305,21 @@ fn maybe_hash_large_blobs(
         value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
     }
 }
-
+/// If the provided `key` is one of the `field_names`, and the associated `SelfDescribingValue` is a
+/// blob, replaces the value with its SHA-256 hash and modifies the key to be `<key>_hash`.
+/// Otherwise, leaves the entry unchanged.
+///
+/// # Example
+/// ```
+/// let field_names = &["wasm_module", "init_arg"];
+/// let (k, v) = maybe_replace_large_blob_entry_with_hash(
+///     "wasm_module".to_string(),
+///     SelfDescribingValue { value: Some(Value::Blob(vec![1,2,3])) },
+///     field_names,
+/// );
+/// assert_eq!(k, "wasm_module_hash");
+/// assert!(matches!(v.value, Some(Value::Blob(_))));
+/// ```
 fn maybe_replace_large_blob_entry_with_hash(
     key: String,
     value: SelfDescribingValue,
@@ -314,17 +328,16 @@ fn maybe_replace_large_blob_entry_with_hash(
     if !field_names.contains(&key.as_str()) {
         return (key, value);
     }
-    // Use multiple-level match so that the original value can be returned without cloning if it
-    // doesn't match.
-    let SelfDescribingValue {
-        value: Some(Value::Blob(blob)),
-    } = value
-    else {
+
+    let Some(inner_value) = &value.value else {
+        return (key, value);
+    };
+    let Value::Blob(blob) = inner_value else {
         return (key, value);
     };
 
     let key = format!("{key}_hash");
-    let hash = Sha256::hash(&blob).to_vec();
+    let hash = Sha256::hash(blob).to_vec();
     let hashed_value = SelfDescribingValue {
         value: Some(Value::Blob(hash)),
     };
