@@ -45,7 +45,7 @@ VERSION_HASH_FULL=""
 RECOVERY_HASH_PREFIX=""
 RECOVERY_HASH_FULL=""
 
-source /opt/ic/bin/grub.sh
+source /opt/ic/bin/boot-state.sh
 
 # Parse command line arguments in the format key=value
 parse_args() {
@@ -267,8 +267,10 @@ install_upgrade() {
     log_message "Boot image: $extract_dir/boot.img"
     log_message "Root image: $extract_dir/root.img"
 
-    log_message "Reading grubenv configuration..."
-    read_grubenv "${grubdir}/grubenv"
+    log_message "Reading current configuration from grubenv and kernel cmdline..."
+    boot_alternative="$(read_boot_alternative_from_kernel_cmdline)"
+    boot_cycle="$(read_boot_cycle_from_grubenv "${grubdir}/grubenv")"
+
     log_message "Current boot alternative: ${boot_alternative}"
     log_message "Current boot cycle: ${boot_cycle}"
 

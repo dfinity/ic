@@ -5,23 +5,42 @@ set -e
 
 source /opt/ic/bin/logging.sh
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
+# Read boot_alternative from kernel command line
+# Echoes the value of dfinity.system parameter (A or B)
+read_boot_alternative_from_kernel_cmdline() {
+    local cmdline
+    if [ -f /proc/cmdline ]; then
+        cmdline=$(cat /proc/cmdline)
+        if [[ "$cmdline" =~ dfinity\.system=['\"]?([AB])['\"]? ]]; then
+            echo "${BASH_REMATCH[1]}"
+            return 0
+        fi
+    fi
+    write_log "ERROR: Could not read dfinity.system from kernel command line"
+    return 1
+}
+
+# Reads "boot_cycle" property from the grubenv file.
+# Echoes the boot_cycle value.
 #
 # Arguments:
 # $1 - name of grubenv file
-read_grubenv() {
+read_boot_cycle_from_grubenv() {
     local GRUBENV_FILE="$1"
 
     while IFS="=" read -r key value; do
         case "$key" in
             '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
+            'boot_cycle')
+                echo "$value"
+                return 0
                 ;;
             *) ;;
         esac
     done <"$GRUBENV_FILE"
+
+    write_log "ERROR: Could not read boot_cycle from grubenv file"
+    return 1
 }
 
 # Writes "boot_alternative" and "boot_cycle" variables to grubenv file
