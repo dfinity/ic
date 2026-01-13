@@ -841,7 +841,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(100_000)
         .with_manual_execution()
         .build();
 
@@ -942,7 +942,7 @@ fn dts_abort_works_in_response_callback() {
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(100_000)
         .with_manual_execution()
         .build();
 
@@ -990,7 +990,7 @@ fn dts_abort_works_in_cleanup_callback() {
     // until there are no more slices.
     let mut i = 0;
     'outer: loop {
-        for _ in 0..i {
+        for _ in 0..=i {
             test.execute_slice(a_id);
             if test.canister_state(a_id).next_execution() == NextExecution::None {
                 break 'outer;
@@ -1017,7 +1017,7 @@ fn dts_abort_works_in_cleanup_callback() {
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        // Callback is gone.
+        // Callback is gone as soon as we've started executing.
         assert!(
             test.canister_state(a_id)
                 .system_state
