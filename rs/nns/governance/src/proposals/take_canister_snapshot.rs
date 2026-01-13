@@ -3,7 +3,7 @@ use crate::{
     proposals::{call_canister::CallCanister, invalid_proposal_error, topic_to_manage_canister},
 };
 use candid::Encode;
-use ic_base_types::CanisterId;
+use ic_base_types::{PrincipalId, CanisterId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_handler_root_interface::TakeCanisterSnapshotRequest;
 
@@ -45,13 +45,11 @@ pub fn convert_take_canister_snapshot_from_proposal_to_root_request(
     original: &TakeCanisterSnapshot,
 ) -> Result<TakeCanisterSnapshotRequest, GovernanceError> {
     let TakeCanisterSnapshot {
-        canister_id,
         replace_snapshot,
+        canister_id: _,
     } = original.clone();
 
-    let canister_id = canister_id.ok_or_else(|| {
-        invalid_proposal_error("canister_id is required for TakeCanisterSnapshot")
-    })?;
+    let canister_id = PrincipalId::from(original.valid_canister_id()?);
 
     Ok(TakeCanisterSnapshotRequest {
         canister_id,
