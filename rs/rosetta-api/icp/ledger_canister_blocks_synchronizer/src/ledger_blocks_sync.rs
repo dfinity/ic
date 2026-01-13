@@ -426,20 +426,17 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 last_block_hash = Some(hb.hash);
                 block_batch.push(hb);
                 i += 1;
-                if let Some(ref bar) = progress_bar {
-                    bar.inc(1);
-                }
             }
             self.rosetta_metrics.set_synced_height(i - 1);
             if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
-                blockchain.push_batch(block_batch)?;
+                blockchain.push_batch(block_batch, progress_bar.as_ref())?;
                 block_batch = Vec::new();
             }
         }
+        blockchain.push_batch(block_batch, progress_bar.as_ref())?;
         if let Some(bar) = progress_bar {
             bar.finish();
         }
-        blockchain.push_batch(block_batch)?;
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
         self.rosetta_metrics.set_verified_height(range.end - 1);
