@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_ENV", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_DATA", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -69,11 +69,11 @@ system_test(
 
 system_test_nns(
     name = "small",
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -85,11 +85,11 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -102,11 +102,11 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -119,7 +119,6 @@ system_test_nns(
 
 system_test(
     name = "from_config",
-    env = NNS_CANISTER_ENV,
     tags = [
         "dynamic_testnet",
         "manual",
@@ -135,22 +134,17 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
-    env = {
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE + [
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "@ii_dev_canister//file",
-        "@nns_dapp_canister//file",
-        "@subnet_rental_canister//file",
-    ],
+    runtime_deps = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -163,22 +157,17 @@ system_test_nns(
 
 system_test_nns(
     name = "small_with_query_stats",
-    env = {
-        "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE + [
-        "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-        "@ii_dev_canister//file",
-        "@nns_dapp_canister//file",
-        "@subnet_rental_canister//file",
-    ],
+    runtime_deps = {
+        "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -190,22 +179,17 @@ system_test_nns(
 
 system_test_nns(
     name = "sns_testing",
-    env = SNS_CANISTER_ENV | {
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "@ii_dev_canister//file",
-        "@nns_dapp_canister//file",
-        "@sns_aggregator//file",
-        "@subnet_rental_canister//file",
-    ],
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
+        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -219,11 +203,11 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -235,22 +219,17 @@ system_test_nns(
 
 system_test_nns(
     name = "large",
-    env = SNS_CANISTER_ENV | {
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "@ii_dev_canister//file",
-        "@nns_dapp_canister//file",
-        "@sns_aggregator//file",
-        "@subnet_rental_canister//file",
-    ],
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
+        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -263,11 +242,11 @@ system_test_nns(
 
 system_test_nns(
     name = "io_perf_benchmark",
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_UVM_IMAGE,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -281,24 +260,18 @@ system_test_nns(
 
 system_test_nns(
     name = "src_testing",
-    env = SNS_CANISTER_ENV | {
-        "XRC_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
-        "II_WASM_PATH": "$(rootpath @ii_dev_canister//file)",
-        "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
-        "SNS_AGGREGATOR_WASM_PATH": "$(rootpath @sns_aggregator//file)",
-        "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
-    },
+    data = IC_GATEWAY_UVM_IMAGE,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS + IC_GATEWAY_UVM_IMAGE + [
-        "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
-        "@ii_dev_canister//file",
-        "@nns_dapp_canister//file",
-        "@sns_aggregator//file",
-        "@subnet_rental_canister//file",
-    ],
+    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+        "XRC_WASM_PATH": "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
+        "II_WASM_PATH": "@ii_dev_canister//file",
+        "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
+        "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
+        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+    },
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -316,13 +289,13 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
+    data = IC_GATEWAY_DATA,
     guestos_update = "test",
     tags = [
         "dynamic_testnet",
         "manual",
     ],
     uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -337,23 +310,19 @@ system_test_nns(
 
 system_test_nns(
     name = "mainnet_nns",
-    env = MAINNET_ENV | {
-        # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
-        "IC_RECOVERY_PATH": "$(rootpath //rs/recovery:ic-recovery)",
-        "IC_REPLAY_PATH": "$(rootpath //rs/replay:ic-replay)",
-    },
+    data = IC_GATEWAY_DATA + ["//rs/tests:recovery/binaries"],
+    env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns",
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
+    runtime_deps = {
         # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
-        "//rs/recovery:ic-recovery",
-        "//rs/replay:ic-replay",
-    ],
+        "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
+        "IC_REPLAY_PATH": "//rs/replay:ic-replay",
+    },
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
