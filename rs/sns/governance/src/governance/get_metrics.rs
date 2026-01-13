@@ -4,7 +4,6 @@ use crate::governance::{Governance, test_helpers::DoNothingLedger};
 use crate::pb::v1::{self as pb, ProposalData};
 use crate::types::test_helpers::NativeEnvironment;
 use ic_nervous_system_canisters::cmc::FakeCmc;
-use maplit::btreemap;
 
 #[test]
 fn test_recently_executed_proposals() {
