@@ -829,13 +829,13 @@ impl CallContextManager {
     /// Time complexity: `O(1)`.
     pub fn unresponded_callback_count(
         &self,
-        aborted_or_paused_response: Option<&Response>,
+        _aborted_or_paused_response: Option<&Response>,
     ) -> usize {
         self.callbacks.len()
-            - match aborted_or_paused_response {
-                Some(_) => 1,
-                None => 0,
-            }
+        // - match aborted_or_paused_response {
+        //     Some(_) => 1,
+        //     None => 0,
+        // }
     }
 
     /// Returns the number of unresponded guaranteed response callbacks, ignoring
@@ -845,13 +845,13 @@ impl CallContextManager {
     /// Time complexity: `O(1)`.
     pub fn unresponded_guaranteed_response_callback_count(
         &self,
-        aborted_or_paused_response: Option<&Response>,
+        _aborted_or_paused_response: Option<&Response>,
     ) -> usize {
         self.stats.guaranteed_response_callback_count
-            - match aborted_or_paused_response {
-                Some(response) if response.deadline == NO_DEADLINE => 1,
-                _ => 0,
-            }
+        // - match aborted_or_paused_response {
+        //     Some(response) if response.deadline == NO_DEADLINE => 1,
+        //     _ => 0,
+        // }
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,

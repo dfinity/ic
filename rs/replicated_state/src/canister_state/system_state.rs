@@ -427,6 +427,7 @@ pub enum ExecutionTask {
     /// there are too many long-running executions.
     AbortedExecution {
         input: CanisterMessageOrTask,
+        callback: Option<Callback>,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,

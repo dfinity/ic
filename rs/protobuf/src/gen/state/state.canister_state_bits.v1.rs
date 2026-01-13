@@ -320,6 +320,8 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        #[prost(message, optional, tag = "6")]
+        pub callback: ::core::option::Option<super::Callback>,
         #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }

@@ -29,7 +29,7 @@ use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
     CanisterTask, RequestMetadata,
 };
-use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::methods::{Callback, FuncRef, SystemMethod, WasmMethod};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_utils_thread::deallocator_thread::DeallocationSender;
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
@@ -808,7 +808,10 @@ impl PausedExecution for PausedCallOrTaskExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterMessageOrTask, Option<Callback>, Cycles) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",
@@ -817,7 +820,11 @@ impl PausedExecution for PausedCallOrTaskExecution {
         );
         self.paused_wasm_execution.abort();
         let message_or_task = into_message_or_task(self.original.call_or_task);
-        (message_or_task, self.original.prepaid_execution_cycles)
+        (
+            message_or_task,
+            None,
+            self.original.prepaid_execution_cycles,
+        )
     }
 
     fn input(&self) -> CanisterMessageOrTask {

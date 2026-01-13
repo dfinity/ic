@@ -341,6 +341,7 @@ pub(crate) fn validate_message(
 pub fn get_call_context_and_callback(
     canister: &CanisterState,
     response: &Response,
+    callback: Option<Callback>,
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
 ) -> Option<(Callback, CallbackId, CallContext, CallContextId)> {
@@ -368,20 +369,25 @@ pub fn get_call_context_and_callback(
 
     let callback_id = response.originator_reply_callback;
 
-    debug_assert!(call_context_manager.callback(callback_id).is_some());
-    let callback = match call_context_manager.callback(callback_id) {
-        Some(callback) => callback.clone(),
+    let callback = match callback {
+        Some(callback) => callback,
         None => {
-            // Received an unknown callback ID. Nothing to do.
-            unexpected_response_error.inc();
-            error!(
-                logger,
-                "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
-                response.originator_reply_callback,
-                response.originator,
-                response.respondent,
-            );
-            return None;
+            debug_assert!(call_context_manager.callback(callback_id).is_some());
+            match call_context_manager.callback(callback_id) {
+                Some(callback) => callback.clone(),
+                None => {
+                    // Received an unknown callback ID. Nothing to do.
+                    unexpected_response_error.inc();
+                    error!(
+                        logger,
+                        "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}.",
+                        response.originator_reply_callback,
+                        response.originator,
+                        response.respondent,
+                    );
+                    return None;
+                }
+            }
         }
     };
 

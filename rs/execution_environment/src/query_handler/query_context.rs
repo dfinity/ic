@@ -567,6 +567,7 @@ impl<'a> QueryContext<'a> {
             match common::get_call_context_and_callback(
                 &canister,
                 &response,
+                None,
                 self.log,
                 self.query_critical_error,
             ) {

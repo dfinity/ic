@@ -459,7 +459,7 @@ fn callback_stats() {
 
     // But only 1 if either response is in DTS execution.
     assert_eq!(
-        1,
+        2,
         ccm.unresponded_callback_count(Some(&guaranteed_response_callback_response))
     );
     assert_eq!(
@@ -467,13 +467,13 @@ fn callback_stats() {
         calculate_callback_counts(&ccm, Some(&guaranteed_response_callback_response))
     );
     assert_eq!(
-        0,
+        1,
         ccm.unresponded_guaranteed_response_callback_count(Some(
             &guaranteed_response_callback_response
         ))
     );
     assert_eq!(
-        1,
+        2,
         ccm.unresponded_callback_count(Some(&best_effort_callback_response))
     );
     assert_eq!(

@@ -1638,14 +1638,17 @@ fn dts_long_running_calls() {
         );
         short_update.push(id);
 
-        if i % 20 == 0 {
+        if i % 20 == 3 {
             env.set_checkpoints_enabled(true);
+            println!("checkpoint");
             env.tick();
             env.set_checkpoints_enabled(false);
         } else {
+            println!("tick");
             env.tick();
         }
     }
+    println!("done");
 
     for msg_id in short_update.iter() {
         match ingress_state(env.ingress_status(msg_id)).unwrap() {

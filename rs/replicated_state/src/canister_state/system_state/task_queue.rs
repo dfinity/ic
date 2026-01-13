@@ -361,6 +361,7 @@ mod tests {
 
         task_queue.replace_paused_with_aborted_task(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            callback: None,
             prepaid_execution_cycles: Cycles::zero(),
         });
     }
@@ -433,6 +434,7 @@ mod tests {
         let mut task_queue = TaskQueue::default();
         task_queue.remove(ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
+            callback: None,
             prepaid_execution_cycles: Cycles::zero(),
         });
     }

@@ -123,6 +123,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             }
             ExecutionTask::AbortedExecution {
                 input,
+                callback,
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
@@ -147,6 +148,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                         pb::execution_task::AbortedExecution {
                             input: Some(input),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
+                            callback: callback.as_ref().map(|cb| cb.into()),
                         },
                     )),
                 }
@@ -215,6 +217,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
+                    callback: aborted.callback.map(|cb| cb.try_into()).transpose()?,
                     prepaid_execution_cycles,
                 }
             }
