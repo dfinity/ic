@@ -1,10 +1,16 @@
-use std::fmt::Display;
+use std::{
+    cell::RefCell,
+    fmt::Display,
+    time::{Duration, SystemTime},
+};
 
 use candid::{CandidType, Principal};
+use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig};
+use ic_nervous_system_time_helpers::now_system_time;
 use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::{delete, pb::v1::RegistryMutation, upsert};
-use ic_types::PrincipalId;
+use ic_types::{NodeId, PrincipalId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +18,24 @@ use crate::{
     mutations::node_management::common::get_node_operator_nodes_with_id, registry::Registry,
 };
 
+const MIGRATION_CAPACITY_INTERVAL_HOURS: u64 = 12;
+const MIGRATION_CAPACITY_INTERVAL: Duration =
+    Duration::from_secs(MIGRATION_CAPACITY_INTERVAL_HOURS * 60 * 60);
+
+thread_local! {
+    static MIGRATION_LIMITER: RefCell<InMemoryRateLimiter<NodeId>> = RefCell::new(InMemoryRateLimiter::new_in_memory(
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: MIGRATION_CAPACITY_INTERVAL,
+                max_capacity: 1,
+                max_reservations: 1
+            })
+        );
+}
+
 impl Registry {
     pub fn do_migrate_node_operator_directly(&mut self, payload: MigrateNodeOperatorPayload) {
-        self.migrate_node_operator_inner(payload, dfn_core::api::caller())
+        self.migrate_node_operator_inner(payload, dfn_core::api::caller(), now_system_time())
             .unwrap_or_else(|e| panic!("{e}"));
     }
 
@@ -22,6 +43,7 @@ impl Registry {
         &mut self,
         payload: MigrateNodeOperatorPayload,
         caller: PrincipalId,
+        now: SystemTime,
     ) -> Result<(), MigrateError> {
         // Check if the payload is valid by itself.
         payload.validate()?;
@@ -34,11 +56,14 @@ impl Registry {
             old_node_operator_id,
             new_node_operator_id,
             caller,
+            now,
         )?;
 
         total_mutations.extend(self.get_node_mutations(old_node_operator_id, new_node_operator_id));
 
         self.maybe_apply_mutation_internal(total_mutations);
+
+        // Commit if valid???
 
         Ok(())
     }
@@ -48,9 +73,10 @@ impl Registry {
         old_node_operator_id: PrincipalId,
         new_node_operator_id: PrincipalId,
         caller: PrincipalId,
+        now: SystemTime,
     ) -> Result<Vec<RegistryMutation>, MigrateError> {
         // Old node operator record must exist
-        let old_node_operator_record = self
+        let (old_node_operator_record, timestamp_created_nanos) = self
             .get(
                 make_node_operator_record_key(old_node_operator_id).as_bytes(),
                 self.latest_version(),
@@ -59,8 +85,24 @@ impl Registry {
                 principal: old_node_operator_id,
             })
             .map(|registry_value| {
-                NodeOperatorRecord::decode(registry_value.value.as_slice()).unwrap()
+                (
+                    NodeOperatorRecord::decode(registry_value.value.as_slice()).unwrap(),
+                    registry_value.timestamp_nanoseconds,
+                )
             })?;
+
+        // Check that the old operator was created at least MIGRATION_CAPACITY_INTERVAL ago
+        // to prevent rapid empty operator migrations (spam prevention).
+        let timestamp_created = Duration::from_nanos(timestamp_created_nanos);
+        let now_duration = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("SystemTime before UNIX EPOCH");
+
+        if now_duration < timestamp_created + MIGRATION_CAPACITY_INTERVAL {
+            return Err(MigrateError::OldOperatorRateLimit {
+                principal: old_node_operator_id,
+            });
+        }
 
         // New node operator record can exist, but doesn't have to.
         //
@@ -221,6 +263,9 @@ enum MigrateError {
         caller: PrincipalId,
         expected: PrincipalId,
     },
+    OldOperatorRateLimit {
+        principal: PrincipalId,
+    },
 }
 
 impl Display for MigrateError {
@@ -243,6 +288,9 @@ impl Display for MigrateError {
                 ),
                 MigrateError::CallerMismatch { caller, expected } => format!(
                     "Caller doesn't seem to be the node provider owning the operator records that are being changed. Expected {expected}, got {caller}"
+                ),
+                MigrateError::OldOperatorRateLimit { principal } => format!(
+                    "Old node operator {principal} was created too recently (within last {MIGRATION_CAPACITY_INTERVAL_HOURS} hours) and thus cannot be removed yet"
                 ),
             }
         )
@@ -269,11 +317,15 @@ impl MigrateNodeOperatorPayload {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{
+        collections::BTreeMap,
+        time::{Duration, SystemTime},
+    };
 
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
+    use ic_nervous_system_time_helpers::now_system_time;
     use ic_protobuf::registry::{
         node::v1::{ConnectionEndpoint, NodeRecord, NodeRewardType},
         node_operator::v1::NodeOperatorRecord,
@@ -321,13 +373,25 @@ mod tests {
         ]
     }
 
+    // Since seeding of test data takes place _now_
+    // this is a helper to call the migration in the future
+    // to avoid rate limits.
+    fn now_plus_13_hours() -> SystemTime {
+        let now = now_system_time();
+
+        now + Duration::from_secs(13 * 60 * 60)
+    }
+
     #[test]
     fn invalid_payloads() {
         let mut registry = Registry::new();
 
         for (payload, expected_err) in invalid_payloads_with_expected_errors() {
-            let output =
-                registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(1));
+            let output = registry.migrate_node_operator_inner(
+                payload,
+                PrincipalId::new_user_test_id(1),
+                now_plus_13_hours(),
+            );
 
             let expected: Result<(), MigrateError> = Err(expected_err);
             assert_eq!(
@@ -350,7 +414,11 @@ mod tests {
             principal: payload.old_node_operator_id.unwrap(),
         });
 
-        let resp = registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(3));
+        let resp = registry.migrate_node_operator_inner(
+            payload,
+            PrincipalId::new_user_test_id(3),
+            now_plus_13_hours(),
+        );
 
         assert_eq!(resp, expected_err);
     }
@@ -398,8 +466,11 @@ mod tests {
             new: new_node_provider_id,
         });
 
-        let resp =
-            registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(999));
+        let resp = registry.migrate_node_operator_inner(
+            payload,
+            PrincipalId::new_user_test_id(999),
+            now_plus_13_hours(),
+        );
 
         assert_eq!(resp, expected_err)
     }
@@ -449,8 +520,11 @@ mod tests {
         let expected_err: Result<(), MigrateError> =
             Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
 
-        let resp =
-            registry.migrate_node_operator_inner(payload, PrincipalId::new_user_test_id(999));
+        let resp = registry.migrate_node_operator_inner(
+            payload,
+            PrincipalId::new_user_test_id(999),
+            now_plus_13_hours(),
+        );
 
         assert_eq!(resp, expected_err)
     }
@@ -503,7 +577,7 @@ mod tests {
             expected: node_provider_id,
         });
 
-        let resp = registry.migrate_node_operator_inner(payload, caller);
+        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
 
         assert_eq!(resp, expected_err)
     }
@@ -656,7 +730,7 @@ mod tests {
 
         setup
             .registry
-            .migrate_node_operator_inner(payload, caller)
+            .migrate_node_operator_inner(payload, caller, now_plus_13_hours())
             .unwrap();
 
         // Ensure that the new operator is there
@@ -810,7 +884,7 @@ mod tests {
 
         setup
             .registry
-            .migrate_node_operator_inner(payload, caller)
+            .migrate_node_operator_inner(payload, caller, now_plus_13_hours())
             .unwrap();
 
         // Ensure that the new operator is there
@@ -932,5 +1006,41 @@ mod tests {
             old_mut.is_empty(),
             "Leftover values in old (max_)rewardable_nodes which weren't carried over properly, {old_mut:?}"
         );
+    }
+
+    #[test]
+    fn old_node_operator_rate_limits() {
+        let mut registry = invariant_compliant_registry(1);
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let caller = PrincipalId::new_user_test_id(999);
+        registry.maybe_apply_mutation_internal(vec![upsert(
+            make_node_operator_record_key(old_node_operator_id).as_bytes(),
+            NodeOperatorRecord {
+                node_operator_principal_id: old_node_operator_id.to_vec(),
+                node_provider_principal_id: caller.to_vec(),
+                dc_id: "dc".to_string(),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+        )]);
+
+        let payload = MigrateNodeOperatorPayload {
+            new_node_operator_id: Some(new_node_operator_id),
+            old_node_operator_id: Some(old_node_operator_id),
+        };
+
+        let resp = registry.migrate_node_operator_inner(payload.clone(), caller, now_system_time());
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+            principal: old_node_operator_id,
+        });
+
+        assert_eq!(resp, expected_err);
+
+        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+
+        assert!(resp.is_ok());
     }
 }
