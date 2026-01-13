@@ -121,7 +121,7 @@ impl Registry {
             });
         }
 
-        // Bussiness rules hold. We can update the records.
+        // Business rules hold. We can update the records.
         Self::update_new_node_operator_record(
             &old_node_operator_record,
             &mut new_node_operator_record,
@@ -296,7 +296,29 @@ mod tests {
     };
 
     fn invalid_payloads_with_expected_errors() -> Vec<(MigrateNodeOperatorPayload, MigrateError)> {
-        vec![]
+        vec![
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: None,
+                    old_node_operator_id: None,
+                },
+                MigrateError::MissingInput,
+            ),
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                    old_node_operator_id: None,
+                },
+                MigrateError::MissingInput,
+            ),
+            (
+                MigrateNodeOperatorPayload {
+                    new_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                    old_node_operator_id: Some(PrincipalId::new_user_test_id(1)),
+                },
+                MigrateError::SamePrincipals,
+            ),
+        ]
     }
 
     #[test]
@@ -908,7 +930,7 @@ mod tests {
         );
         assert!(
             old_mut.is_empty(),
-            "Leftover values in old (max_)rewardable_nodes which weren't carried over properly, {new_mut:?}"
+            "Leftover values in old (max_)rewardable_nodes which weren't carried over properly, {old_mut:?}"
         );
     }
 }
