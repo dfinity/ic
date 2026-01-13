@@ -293,26 +293,6 @@ impl From<SubnetRentalRequest> for SelfDescribingValue {
     }
 }
 
-impl From<SubnetRentalProposalPayload> for SelfDescribingValue {
-    fn from(payload: SubnetRentalProposalPayload) -> Self {
-        let SubnetRentalProposalPayload {
-            user,
-            rental_condition_id,
-            proposal_id,
-            proposal_creation_time_seconds,
-        } = payload;
-        ValueBuilder::new()
-            .add_field("user", user)
-            .add_field("rental_condition_id", format!("{:?}", rental_condition_id))
-            .add_field("proposal_id", proposal_id)
-            .add_field(
-                "proposal_creation_time_seconds",
-                proposal_creation_time_seconds,
-            )
-            .build()
-    }
-}
-
 impl From<AddWasmRequest> for SelfDescribingValue {
     fn from(payload: AddWasmRequest) -> Self {
         let AddWasmRequest {
@@ -321,26 +301,8 @@ impl From<AddWasmRequest> for SelfDescribingValue {
             skip_update_latest_version,
         } = payload;
 
-        let wasm_with_hash = wasm.map(|w| {
-            let wasm_hash = Sha256::hash(&w.wasm);
-            let wasm_hash_vec = wasm_hash.to_vec();
-
-            let SnsWasm {
-                canister_type,
-                proposal_id: _,
-                wasm: _,
-            } = w;
-
-            let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
-
-            ValueBuilder::new()
-                .add_field("wasm_hash", wasm_hash_vec)
-                .add_field("canister_type", canister_type)
-                .build()
-        });
-
         ValueBuilder::new()
-            .add_field("wasm", wasm_with_hash)
+            .add_field("wasm", wasm)
             .add_field("hash", hash)
             .add_field("skip_update_latest_version", skip_update_latest_version)
             .build()
@@ -355,12 +317,11 @@ impl From<SnsWasm> for SelfDescribingValue {
             proposal_id: _,
         } = wasm;
 
-        let wasm_hash = Sha256::hash(&wasm);
-        let wasm_hash_vec = wasm_hash.to_vec();
+        let wasm_hash = Sha256::hash(&wasm).to_vec();
         let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
 
         ValueBuilder::new()
-            .add_field("wasm_hash", wasm_hash_vec)
+            .add_field("wasm_hash", wasm_hash)
             .add_field("canister_type", canister_type)
             .build()
     }
