@@ -671,6 +671,8 @@ impl StateSyncMetrics {
             LABEL_PREALLOCATE_DIRECTORIES,
             LABEL_PREALLOCATE_FILES,
             LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+            LABEL_LOAD_CHECKPOINT,
+            LABEL_MARK_FILES_READONLY_AND_SYNC,
             LABEL_ON_SYNCED_CHECKPOINT,
         ] {
             step_duration.with_label_values(&[*step]);
