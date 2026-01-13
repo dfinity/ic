@@ -23,4 +23,4 @@ We employ one of two encryption strategies based on the GuestOS config:
    key is stored in `/boot/config/store.keyfile`. If the file doesn't exist, a new 128-bit random key is generated.
 
 Once a partition is successfully opened, it is mapped to a specific path in the `/dev/mapper/` directory. The `var`
-partition is mapped to `/dev/mapper/var_crypt`, and the `store` partition to `/dev/mapper/vda10-crypt`.
+partition is mapped to `/dev/mapper/var_crypt`, and the `store` partition to `/dev/mapper/store-crypt`.
