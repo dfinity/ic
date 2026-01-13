@@ -2835,6 +2835,7 @@ pub struct FulfillSubnetRentalRequest {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
