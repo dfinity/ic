@@ -3103,12 +3103,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_states_below"])
             .start_timer();
 
-        let latest_subnet_certified_height =
-            update_latest_height(&self.latest_subnet_certified_height, requested_height);
-        self.metrics
-            .latest_subnet_certified_height
-            .set(latest_subnet_certified_height as i64);
-
         let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
 
         // The latest state must be kept.
