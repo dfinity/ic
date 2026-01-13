@@ -14,6 +14,7 @@ use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksRe
 use icrc_ledger_types::icrc3::blocks::{
     GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
 };
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
@@ -349,7 +350,7 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
                 .to_string(),
         },
         SupportedBlockType {
-            block_type: "107feecol".to_string(),
+            block_type: BTYPE_107.to_string(),
             url: "https://github.com/dfinity/ICRC/pull/117".to_string(),
         },
     ]

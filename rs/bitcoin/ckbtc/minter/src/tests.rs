@@ -532,7 +532,6 @@ proptest! {
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
-        prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.txid());
     }
 
     #[test]
@@ -598,6 +597,7 @@ proptest! {
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
         prop_assert_eq!(&arb_tx.wtxid(), &*btc_tx.wtxid());
+        prop_assert_eq!(&<[u8;32]>::from(arb_tx.compute_txid()), &*btc_tx.txid());
         prop_assert_eq!(arb_tx.vsize(), btc_tx.vsize());
     }
 
@@ -824,7 +824,9 @@ proptest! {
             fee_per_vbyte
         )
         .expect("failed to build transaction");
-        let mut txids = vec![tx.txid()];
+        let signed_tx = fake_sign(&tx);
+        let mut txids = vec![signed_tx.compute_txid()];
+
         let submitted_at = 1_234_567_890;
 
         state.push_submitted_transaction(SubmittedBtcTransaction {
@@ -850,8 +852,9 @@ proptest! {
                 fee_per_vbyte + 1000 * i as u64,
             )
             .expect("failed to build transaction");
+            let new_signed_tx = fake_sign(&tx);
 
-            let new_txid = tx.txid();
+            let new_txid = new_signed_tx.compute_txid();
 
             state.replace_transaction(prev_txid, SubmittedBtcTransaction {
                 requests: requests.clone().into(),

@@ -734,7 +734,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 1".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                     KeyConfig {
@@ -742,7 +742,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                             curve: EcdsaCurve::Secp256k1,
                             name: "ecdsa key 2".to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                         max_queue_size: 891,
                     },
                 ],
@@ -1703,7 +1703,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 1".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                     KeyConfig {
                         key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
@@ -1711,7 +1711,7 @@ fn process_batch_updates_subnet_metrics() {
                             name: "ecdsa key 2".to_string(),
                         }),
                         max_queue_size: 891,
-                        pre_signatures_to_create_in_advance: 891,
+                        pre_signatures_to_create_in_advance: Some(891),
                     },
                 ],
                 ..Default::default()

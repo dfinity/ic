@@ -11,6 +11,26 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-05: Proposal 139940
+
+http://dashboard.internetcomputer.org/proposal/139940
+
+Just a maintenance release. That is, no new features, and no bug fixes.
+Just newer code, much of which is inactive now, but will be active later.
+
+
+# 2026-01-05: Proposal 139922
+
+http://dashboard.internetcomputer.org/proposal/139922
+
+## Added
+
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
+
+
 # 2025-12-05: Proposal 139678
 
 http://dashboard.internetcomputer.org/proposal/139678

@@ -707,7 +707,17 @@ message Proposal {
     // Allow node operators to manually intervene in case of disaster to run
     // (NNS-approved) new software.
     BlessAlternativeGuestOsVersion bless_alternative_guest_os_version = 31;
+    // Take a canister snapshot.
+    TakeCanisterSnapshot take_canister_snapshot = 32;
   }
+}
+
+// Take a canister snapshot.
+message TakeCanisterSnapshot {
+  // The canister being snapshotted.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+  // If set, the existing snapshot with this content will be replaced.
+  optional bytes replace_snapshot = 2;
 }
 
 // Empty message to use in oneof fields that represent empty
@@ -2651,6 +2661,7 @@ message SelfDescribingValue {
     bytes int = 4;
     SelfDescribingValueArray array = 5;
     SelfDescribingValueMap map = 6;
+    Empty null = 7;
   }
 }
 

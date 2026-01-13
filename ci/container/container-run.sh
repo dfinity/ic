@@ -122,11 +122,17 @@ mkdir -p "${ZIG_CACHE}"
 ICT_TESTNETS_DIR="/tmp/ict_testnets"
 mkdir -p "${ICT_TESTNETS_DIR}"
 
+MISC_TMP_DIR="/tmp/misc"
+mkdir -p "${MISC_TMP_DIR}"
+
 trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp --suffix=containerrun)
-SUBGID_FILE=$(mktemp --suffix=containerrun)
+SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
+SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 
 IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
+
+# make sure we have all bind-mounts
+mkdir -p ~/.{aws,ssh,cache}
 
 PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
@@ -170,8 +176,10 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
+        # Pre-create target directory to avoid crun 64-bit inode issues
+        mkdir -p "${REPO_ROOT}/target"
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
         )
     fi
 
@@ -196,12 +204,9 @@ chmod +r ${SUBUID_FILE}
 echo "ubuntu:100000:65536" >$SUBGID_FILE
 chmod +r ${SUBGID_FILE}
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid",idmap="${IDMAP}"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
 )
-
-# make sure we have all bind-mounts
-mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 
 PODMAN_RUN_USR_ARGS=()
 if [ -f "$HOME/.container-run.conf" ]; then

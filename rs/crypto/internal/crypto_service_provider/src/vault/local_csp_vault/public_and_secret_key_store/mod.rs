@@ -230,12 +230,7 @@ fn compute_idkg_dealing_encryption_key_id(
         }
     })?;
 
-    let key_id = KeyId::try_from(&idkg_dealing_encryption_pk).map_err(|error| {
-        ExternalPublicKeyError(Box::new(format!(
-            "Malformed public key: failed to derive key ID from MEGa public key: {error}"
-        )))
-    })?;
-    Ok(key_id)
+    Ok(KeyId::from(&idkg_dealing_encryption_pk))
 }
 
 fn compute_tls_certificate_key_id(

@@ -2,14 +2,15 @@ use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
         ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
-        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
+        DeregisterKnownNeuron, GovernanceError, InstallCode, KnownNeuron, ManageNeuron, Motion,
+        NetworkEconomics, ProposalData, RewardNodeProvider, RewardNodeProviders,
+        SelfDescribingProposalAction, StopOrStartCanister, TakeCanisterSnapshot, Topic,
         UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         self_describing::LocallyDescribableProposalAction,
     },
 };
@@ -31,6 +32,7 @@ pub mod manage_neuron;
 pub mod register_known_neuron;
 pub mod self_describing;
 pub mod stop_or_start_canister;
+pub mod take_canister_snapshot;
 pub mod update_canister_settings;
 
 mod decode_candid_args_to_self_describing_value;
@@ -54,8 +56,9 @@ pub(crate) enum ValidProposalAction {
     InstallCode(InstallCode),
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
-    FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    FulfillSubnetRentalRequest(ValidFulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
+    TakeCanisterSnapshot(TakeCanisterSnapshot),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -107,14 +110,18 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::UpdateCanisterSettings(update_canister_settings) => Ok(
                 ValidProposalAction::UpdateCanisterSettings(update_canister_settings),
             ),
-            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
-                ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
-            ),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                ValidFulfillSubnetRentalRequest::try_from(fulfill_subnet_rental_request)
+                    .map(ValidProposalAction::FulfillSubnetRentalRequest)
+            }
             Action::BlessAlternativeGuestOsVersion(bless_alternative_guest_os_version) => {
                 Ok(ValidProposalAction::BlessAlternativeGuestOsVersion(
                     bless_alternative_guest_os_version,
                 ))
             }
+            Action::TakeCanisterSnapshot(take_canister_snapshot) => Ok(
+                ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot),
+            ),
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -159,6 +166,9 @@ impl ValidProposalAction {
             }
             ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
             ValidProposalAction::BlessAlternativeGuestOsVersion(_) => Topic::NodeAdmin,
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                take_canister_snapshot.valid_topic()?
+            }
         };
         Ok(topic)
     }
@@ -225,6 +235,12 @@ impl ValidProposalAction {
             }
             ValidProposalAction::ManageNeuron(manage_neuron) => {
                 Ok(manage_neuron.to_self_describing_action())
+            }
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
+                Ok(manage_network_economics.to_self_describing_action())
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                Ok(fulfill_subnet_rental_request.to_self_describing_action())
             }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
