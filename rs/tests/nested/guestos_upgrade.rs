@@ -130,11 +130,10 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await
         .expect("guest failed to upgrade");
-
-        info!(logger, "Waiting for Orchestrator dashboard...");
-        if let Err(e) = host.await_orchestrator_dashboard_accessible() {
-            try_logging_guestos_diagnostics(&host, &logger);
-            panic!("Orchestrator dashboard is not accessible: {e}");
-        }
     });
+    info!(logger, "Waiting for Orchestrator dashboard...");
+    if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Orchestrator dashboard is not accessible: {e}");
+    }
 }
