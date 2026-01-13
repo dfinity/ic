@@ -137,6 +137,32 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
         let _timer = self.metrics.execution_time.start_timer();
         let start = Instant::now();
 
+        let deliver_state_certification = |height| {
+            match certification_pool.certification_at_height(height) {
+                // if we have a valid certification, deliver it to the state manager
+                Some(certification) => {
+                    // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
+                    // change set for the artifact processor to handle.
+                    self.state_manager
+                        .deliver_state_certification(certification);
+                    self.metrics.last_certified_height.set(height.get() as i64);
+                    debug!(&self.log, "Delivered certification for height {}", height);
+
+                    self.max_certified_height_tx.send_if_modified(|h| {
+                        if height > *h {
+                            *h = height;
+                            true
+                        } else {
+                            false
+                        }
+                    });
+
+                    true
+                }
+                None => false,
+            }
+        };
+
         // First, we iterate over requested heights and deliver certifications to the
         // state manager, if they're available or return those hashes which do not have
         // certifications and for which we did not issue a share yet.
@@ -144,32 +170,15 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             .state_manager
             .list_state_hashes_to_certify()
             .into_iter()
-            .filter_map(
-                |(height, hash)| match certification_pool.certification_at_height(height) {
-                    // if we have a valid certification, deliver it to the state manager and skip
-                    // the pair
-                    Some(certification) => {
-                        // TODO[NET-1711]: Remove deliver_state_certification(), and include them in the
-                        // change set for the artifact processor to handle.
-                        self.state_manager
-                            .deliver_state_certification(certification);
-                        self.metrics.last_certified_height.set(height.get() as i64);
-                        debug!(&self.log, "Delivered certification for height {}", height);
-
-                        self.max_certified_height_tx.send_if_modified(|h| {
-                            if height > *h {
-                                *h = height;
-                                true
-                            } else {
-                                false
-                            }
-                        });
-                        None
-                    }
+            .filter_map(|(height, hash)| {
+                if deliver_state_certification(height) {
+                    // if we delivered a valid certification, we skip the pair
+                    None
+                } else {
                     // return this pair to be signed by the current replica
-                    _ => Some((height, hash)),
-                },
-            )
+                    Some((height, hash))
+                }
+            })
             .collect();
         trace!(
             &self.log,
@@ -177,6 +186,20 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             state_hashes_to_certify.len(),
             start.elapsed()
         );
+        let mut state_heights_to_certify: Vec<_> = self
+            .state_manager
+            .list_state_heights_to_certify()
+            .into_iter()
+            .filter_map(|height| {
+                if deliver_state_certification(height) {
+                    // if we delivered a valid certification, we skip the height
+                    None
+                } else {
+                    // return the pair of the height and no hash available for the height
+                    Some((height, None))
+                }
+            })
+            .collect();
 
         // Next we try to execute 4 steps: signing, purging, aggregating and validating
         // sequentially and stop whenever any of these steps produces a non empty
@@ -212,12 +235,6 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             return vec![ChangeAction::RemoveAllBelow(purge_height)];
         }
 
-        let mut state_heights_to_certify: Vec<_> = self
-            .state_manager
-            .list_state_heights_to_certify()
-            .into_iter()
-            .map(|height| (height, None))
-            .collect();
         let mut state_heights_and_hashes_to_certify: Vec<_> = state_hashes_to_certify
             .into_iter()
             .map(|(height, hash)| (height, Some(hash)))
