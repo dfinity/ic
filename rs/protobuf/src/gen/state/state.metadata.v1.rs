@@ -221,7 +221,6 @@ pub struct CanisterHttpRequestContext {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PaymentInfo {
-    /// TODO(urgent): check those are the correct cycles.
     #[prost(message, optional, tag = "1")]
     pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(message, optional, tag = "2")]

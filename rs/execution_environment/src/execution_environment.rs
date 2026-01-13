@@ -1014,6 +1014,7 @@ impl ExecutionEnvironment {
                                     request.as_ref(),
                                     args,
                                     &registry_settings.node_ids,
+                                    registry_settings.subnet_size,
                                     rng,
                                 ) {
                                     Err(err) => ExecuteSubnetMessageResult::Finished {

@@ -156,7 +156,6 @@ message CanisterHttpRequestContext {
 }
 
 message PaymentInfo {
-  //TODO(urgent): check those are the correct cycles. 
   state.queues.v1.Cycles per_replica_allowance = 1;
   state.queues.v1.Cycles already_refunded = 2;
   repeated types.v1.NodeId refunded_nodes = 3;
