@@ -1,23 +1,4 @@
 //! Metadata key types for ICRC-1 ledger metadata.
-//!
-//! This module provides a validated metadata key type for ICRC-1 ledger metadata.
-//! Metadata keys should follow the pattern `<namespace>:<key>`, where `<namespace>`
-//! is a string not containing colons.
-//!
-//! # Examples
-//!
-//! ```
-//! use icrc_ledger_types::icrc::metadata_key::MetadataKey;
-//!
-//! // Parse a key (validates the format)
-//! let key = MetadataKey::parse("icrc1:name").unwrap();
-//! assert_eq!(key.namespace(), Some("icrc1"));
-//! assert_eq!(key.key(), Some("name"));
-//!
-//! // Create from parts (validates the format)
-//! let key = MetadataKey::new("myapp", "setting").unwrap();
-//! assert_eq!(key.as_str(), "myapp:setting");
-//! ```
 
 use candid::CandidType;
 use serde::{Deserialize, Serialize};
@@ -85,8 +66,6 @@ impl std::error::Error for MetadataKeyError {}
 pub struct MetadataKey(String);
 
 impl MetadataKey {
-    // ==================== Standard Key Constants ====================
-
     /// The name of the token.
     /// When present, should be the same as the result of the icrc1_name query call.
     pub const ICRC1_NAME: &'static str = "icrc1:name";
@@ -117,8 +96,6 @@ impl MetadataKey {
 
     /// The textual representation of the principal of the associated index canister.
     pub const ICRC106_INDEX_PRINCIPAL: &'static str = "icrc106:index_principal";
-
-    // ==================== Constructors ====================
 
     /// Creates a new validated metadata key from namespace and key parts.
     ///
@@ -162,8 +139,6 @@ impl MetadataKey {
         Self(s.into())
     }
 
-    // ==================== Accessors ====================
-
     /// Returns the full key as a string slice.
     pub fn as_str(&self) -> &str {
         &self.0
@@ -191,8 +166,6 @@ impl MetadataKey {
     }
 }
 
-// ==================== Helper function ====================
-
 fn validate_key_format(s: &str) -> Result<(), MetadataKeyError> {
     let colon_pos = s.find(':').ok_or(MetadataKeyError::MissingColon)?;
     let namespace = &s[..colon_pos];
@@ -206,8 +179,6 @@ fn validate_key_format(s: &str) -> Result<(), MetadataKeyError> {
     }
     Ok(())
 }
-
-// ==================== Trait implementations ====================
 
 impl fmt::Display for MetadataKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
