@@ -402,6 +402,7 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
+    use ic_nervous_system_common::ONE_MONTH_SECONDS;
     use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 
     /// Metrics fetched from canisters either before or after testing.
@@ -439,13 +440,21 @@ mod sanity_check {
     }
 
     fn advance_time(state_machine: &StateMachine, before_timestamp: u64) {
-        // Advance time in the state machine to just before the next rewards distribution time.
+        // Advance time in the state machine to just before the next node provider
+        // rewards distribution time.
         state_machine.advance_time(std::time::Duration::from_secs(
             before_timestamp + NODE_PROVIDER_REWARD_PERIOD_SECONDS
                 - state_machine.get_time().as_secs_since_unix_epoch()
                 - 1,
         ));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
+        }
 
+        // Advance time in the state machine by one month to ensure that voting rewards
+        // are also distributed.
+        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
