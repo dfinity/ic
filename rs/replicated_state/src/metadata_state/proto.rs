@@ -495,6 +495,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         }
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
 
         let signals_end = item.signals_end.into();
         let reject_signals = item
@@ -528,6 +529,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags: item
                 .reverse_stream_flags
                 .map(|flags| StreamFlags {
