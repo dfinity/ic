@@ -204,7 +204,8 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
                 .payment_info
                 .refunded_nodes
                 .iter()
-                .map(|node_id| node_id_into_protobuf(*node_id))
+                .copied()
+                .map(node_id_into_protobuf)
                 .collect(),
         };
 
@@ -290,7 +291,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 refunded_nodes: payment_info
                     .refunded_nodes
                     .into_iter()
-                    .map(|node_id_pb| node_id_try_from_protobuf(node_id_pb))
+                    .map(node_id_try_from_protobuf)
                     .collect::<Result<BTreeSet<NodeId>, ProxyDecodeError>>()?,
             },
             None => PaymentInfo::default(),
