@@ -3,13 +3,13 @@
 
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
-use ic_crypto_sha2::Sha256;
-use serde_bytes::{ByteBuf, Bytes};
-use std::fmt;
-
 use crate::{CanisterRuntime, ECDSAPublicKey, management, signature, tx};
 pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
+use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
+use serde_bytes::{ByteBuf, Bytes};
+use std::fmt;
+use std::num::NonZeroU32;
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
@@ -353,11 +353,16 @@ pub struct UnsignedTransaction {
 pub struct SignedRawTransaction {
     signed_tx: Vec<u8>,
     txid: Txid,
+    fee_rate: FeeRate,
 }
 
 impl SignedRawTransaction {
-    pub fn new(signed_tx: Vec<u8>, txid: Txid) -> Self {
-        Self { signed_tx, txid }
+    pub fn new(signed_tx: Vec<u8>, txid: Txid, fee_rate: FeeRate) -> Self {
+        Self {
+            signed_tx,
+            txid,
+            fee_rate,
+        }
     }
 
     pub fn txid(&self) -> Txid {
@@ -372,6 +377,23 @@ impl SignedRawTransaction {
 impl AsRef<[u8]> for SignedRawTransaction {
     fn as_ref(&self) -> &[u8] {
         &self.signed_tx
+    }
+}
+
+#[derive(Eq, PartialEq, Debug, Clone)]
+pub struct FeeRate {
+    /// Total fee in base units (e.g. satoshis).
+    fee: u64,
+
+    /// Length of the signed transaction.
+    ///
+    /// This could be in virtual bytes for bitcoin or an actual number of bytes for Dogecoin.
+    signed_tx_len: NonZeroU32,
+}
+
+impl FeeRate {
+    pub fn new(fee: u64, signed_tx_len: NonZeroU32) -> Self {
+        Self { fee, signed_tx_len }
     }
 }
 
@@ -602,6 +624,17 @@ impl BitcoinTransactionSigner {
             "BUG: expected on account per input"
         );
 
+        let sum_inputs = unsigned_tx
+            .inputs
+            .iter()
+            .map(|input| input.value)
+            .sum::<u64>();
+        let sum_outputs = unsigned_tx
+            .outputs
+            .iter()
+            .map(|output| output.value)
+            .sum::<u64>();
+
         let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
         let sighasher = tx::TxSigHasher::new(&unsigned_tx);
         for (input, account) in unsigned_tx.inputs.iter().zip(accounts) {
@@ -634,9 +667,15 @@ impl BitcoinTransactionSigner {
             outputs: unsigned_tx.outputs,
             lock_time: unsigned_tx.lock_time,
         };
+        let fee_rate = FeeRate::new(
+            sum_inputs - sum_outputs,
+            NonZeroU32::try_from(signed_tx.vsize() as u32)
+                .expect("BUG: signed transaction cannot have zero size"),
+        );
         Ok(SignedRawTransaction::new(
             signed_tx.serialize(),
             signed_tx.compute_txid(),
+            fee_rate,
         ))
     }
 }
