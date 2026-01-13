@@ -212,9 +212,21 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
             return vec![ChangeAction::RemoveAllBelow(purge_height)];
         }
 
+        let mut state_heights_to_certify: Vec<_> = self
+            .state_manager
+            .list_state_heights_to_certify()
+            .into_iter()
+            .map(|height| (height, None))
+            .collect();
+        let mut state_heights_and_hashes_to_certify: Vec<_> = state_hashes_to_certify
+            .into_iter()
+            .map(|(height, hash)| (height, Some(hash)))
+            .collect();
+        state_heights_and_hashes_to_certify.append(&mut state_heights_to_certify);
+
         let start = Instant::now();
 
-        let certifications = state_hashes_to_certify
+        let certifications = state_heights_and_hashes_to_certify
             .iter()
             .flat_map(|(height, _)| self.aggregate(certification_pool, *height))
             .collect::<Vec<_>>();
@@ -235,17 +247,6 @@ impl<T: CertificationPool> PoolMutationsProducer<T> for CertifierImpl {
                 .collect();
         }
 
-        let mut state_heights_to_certify: Vec<_> = self
-            .state_manager
-            .list_state_heights_to_certify()
-            .into_iter()
-            .map(|height| (height, None))
-            .collect();
-        let mut state_heights_and_hashes_to_certify: Vec<_> = state_hashes_to_certify
-            .into_iter()
-            .map(|(height, hash)| (height, Some(hash)))
-            .collect();
-        state_heights_and_hashes_to_certify.append(&mut state_heights_to_certify);
         let start = Instant::now();
         let change_set = self.validate(certification_pool, &state_heights_and_hashes_to_certify);
         if change_set.is_empty() {
