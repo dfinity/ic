@@ -534,6 +534,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
             );
         })?;
     let txid = signed_tx.txid();
+    let fee_rate = signed_tx.fee_rate();
 
     state::mutate_state(|s| {
         for block_index in requests_guard.0.iter_block_index() {
@@ -584,6 +585,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 change_output: Some(req.change_output),
                 submitted_at: runtime.time(),
                 estimated_fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
+                effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
                 withdrawal_fee: Some(total_fee),
                 signed_tx,
             },
@@ -860,7 +862,7 @@ pub async fn resubmit_transactions<
             }
             continue;
         }
-        let tx_fee_per_vbyte = match submitted_tx.estimated_fee_per_vbyte {
+        let tx_fee_per_vbyte = match submitted_tx.effective_fee_per_vbyte {
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
@@ -971,6 +973,7 @@ pub async fn resubmit_transactions<
             }
         };
         let new_txid = signed_tx.txid();
+        let fee_rate = signed_tx.fee_rate();
 
         let signed_tx_hex = hex::encode(&signed_tx);
         match runtime
@@ -1003,6 +1006,7 @@ pub async fn resubmit_transactions<
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
                     estimated_fee_per_vbyte: Some(tx_fee_per_vbyte),
+                    effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
                     signed_tx: None,

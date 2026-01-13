@@ -1,4 +1,5 @@
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
@@ -29,6 +30,7 @@ use proptest::{
 };
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
+use std::num::NonZeroU32;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -826,6 +828,7 @@ proptest! {
         .expect("failed to build transaction");
         let signed_tx = fake_sign(&tx);
         let mut txids = vec![signed_tx.compute_txid()];
+        let fee_rate = FeeRate::new(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(signed_tx.vsize() as u32).unwrap());
 
         let submitted_at = 1_234_567_890;
 
@@ -836,6 +839,7 @@ proptest! {
             submitted_at,
             change_output: Some(change_output),
             estimated_fee_per_vbyte: Some(fee_per_vbyte),
+            effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
             withdrawal_fee: Some(withdrawal_fee),
             signed_tx: None,
         });
@@ -853,6 +857,7 @@ proptest! {
             )
             .expect("failed to build transaction");
             let new_signed_tx = fake_sign(&tx);
+            let new_fee_rate = FeeRate::new(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(new_signed_tx.vsize() as u32).unwrap());
 
             let new_txid = new_signed_tx.compute_txid();
 
@@ -863,6 +868,7 @@ proptest! {
                 submitted_at,
                 change_output: Some(change_output),
                 estimated_fee_per_vbyte: Some(fee_per_vbyte),
+                effective_fee_per_vbyte: Some(new_fee_rate.millis_ceil()),
                 withdrawal_fee: Some(withdrawal_fee),
                 signed_tx: None,
             });

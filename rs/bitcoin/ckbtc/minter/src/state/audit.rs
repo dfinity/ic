@@ -95,6 +95,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
             estimated_fee_per_vbyte: tx.estimated_fee_per_vbyte,
+            effective_fee_per_vbyte: tx.effective_fee_per_vbyte,
             withdrawal_fee: tx.withdrawal_fee,
             signed_tx: tx.signed_tx.clone(),
         },
@@ -226,6 +227,7 @@ pub fn replace_transaction<R: CanisterRuntime>(
             estimated_fee_per_vbyte: new_tx
                 .estimated_fee_per_vbyte
                 .expect("bug: all replacement transactions must have the fee"),
+            effective_fee_per_vbyte: new_tx.effective_fee_per_vbyte,
             withdrawal_fee: new_tx.withdrawal_fee,
             reason: Some(reason),
             new_utxos,

@@ -369,6 +369,10 @@ impl SignedRawTransaction {
         self.txid
     }
 
+    pub fn fee_rate(&self) -> FeeRate {
+        self.fee_rate
+    }
+
     pub fn into_bytes(self) -> Vec<u8> {
         self.signed_tx
     }
@@ -380,7 +384,7 @@ impl AsRef<[u8]> for SignedRawTransaction {
     }
 }
 
-#[derive(Eq, PartialEq, Debug, Clone)]
+#[derive(Copy, Eq, PartialEq, Debug, Clone)]
 pub struct FeeRate {
     /// Total fee in base units (e.g. satoshis).
     fee: u64,
@@ -394,6 +398,21 @@ pub struct FeeRate {
 impl FeeRate {
     pub fn new(fee: u64, signed_tx_len: NonZeroU32) -> Self {
         Self { fee, signed_tx_len }
+    }
+
+    /// Returns the fee rate in millis base unit per (v)byte.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ic_ckbtc_minter::tx::FeeRate;
+    /// use std::num::NonZeroU32;
+    ///
+    /// let fee_rate = FeeRate::new(42_300, NonZeroU32::new(141).unwrap());
+    /// assert_eq!(fee_rate.millis_ceil(), 300_000);
+    /// ```
+    pub fn millis_ceil(&self) -> u64 {
+        (self.fee * 1_000).div_ceil(self.signed_tx_len.get() as u64)
     }
 }
 
