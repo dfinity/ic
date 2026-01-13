@@ -1456,6 +1456,11 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![1, 2, 3]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
 
                 certifier.on_state_change(&cert_pool);
                 assert_eq!(
@@ -1469,6 +1474,11 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![4]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
                 certifier.on_state_change(&cert_pool);
                 assert_eq!(
                     *max_certified_height_rx.borrow_and_update(),
@@ -1482,6 +1492,11 @@ mod tests {
                     .expect_list_state_hashes_to_certify()
                     .times(1)
                     .return_const(state_hashes(vec![4, 3, 2, 1]));
+                state_manager
+                    .get_mut()
+                    .expect_list_state_heights_to_certify()
+                    .times(1)
+                    .return_const(vec![]);
                 certifier.on_state_change(&cert_pool);
                 assert!(
                     !max_certified_height_rx.has_changed().unwrap(),
