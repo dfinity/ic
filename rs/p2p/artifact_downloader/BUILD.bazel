@@ -70,6 +70,7 @@ rust_ic_bench(
     deps = [
         # Keep sorted.
         ":artifact_downloader",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
         "//rs/interfaces",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",

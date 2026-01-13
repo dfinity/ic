@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/ic_os/fstrim_tool",
+    "//rs/ic_os/metrics/fstrim_tool",
     "//rs/registry/subnet_type",
     "//rs/tests/consensus/utils",
     "//rs/tests/driver:ic-system-test-driver",

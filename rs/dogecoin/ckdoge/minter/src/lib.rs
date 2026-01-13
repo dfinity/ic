@@ -8,6 +8,7 @@ pub mod candid_api;
 pub mod event;
 pub mod fees;
 pub mod lifecycle;
+pub mod transaction;
 pub mod updates;
 
 use crate::address::DogecoinAddress;
@@ -15,13 +16,15 @@ use crate::dogecoin_canister::MillikoinuPerByte;
 use crate::event::CkDogeEventLogger;
 use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
+use crate::transaction::DogecoinTransactionSigner;
 use async_trait::async_trait;
 use candid::Principal;
 pub use dogecoin_canister::get_dogecoin_canister_id;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
+use ic_ckbtc_minter::tx::{SignedRawTransaction, UnsignedTransaction};
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
-    GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
+    CanisterRuntime, CheckTransactionResponse, ECDSAPublicKey, GetCurrentFeePercentilesRequest,
+    GetUtxosRequest, GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
@@ -97,6 +100,17 @@ impl CanisterRuntime for DogeCanisterRuntime {
         ic_ckbtc_minter::updates::update_balance::mint(amount, to, memo).await
     }
 
+    async fn sign_transaction(
+        &self,
+        key_name: String,
+        ecdsa_public_key: ECDSAPublicKey,
+        unsigned_tx: UnsignedTransaction,
+        accounts: Vec<Account>,
+    ) -> Result<SignedRawTransaction, CallError> {
+        let signer = DogecoinTransactionSigner::new(key_name, ecdsa_public_key);
+        signer.sign_transaction(unsigned_tx, accounts, self).await
+    }
+
     async fn sign_with_ecdsa(
         &self,
         key_name: String,
@@ -114,19 +128,6 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .await
         .map(|result| result.signature)
         .map_err(CallError::from_sign_error)
-    }
-
-    async fn send_transaction(
-        &self,
-        transaction: &tx::SignedTransaction,
-        network: ic_ckbtc_minter::Network,
-    ) -> Result<(), CallError> {
-        dogecoin_canister::dogecoin_send_transaction(&dogecoin_canister::SendTransactionRequest {
-            transaction: transaction.serialize(),
-            network: network.into(),
-        })
-        .await
-        .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
     }
 
     async fn send_raw_transaction(
