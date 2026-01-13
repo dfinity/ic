@@ -371,7 +371,7 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         enable_head_nns_variant: whether to run the head_nns variant daily.
         enable_mainnet_nns_variant: whether to run the mainnet variant.
         data: TODO.
-        runtime_deps: TODO.
+        runtime_deps: dependencies to make available to the test when it runs. For the mainnet variant this gets merged with the mainnet NNS canisters and for the _head_nns variant it gets merged with the HEAD NNS canisters.
         **kwargs: the arguments of the system-tests.
 
     Returns:
