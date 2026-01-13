@@ -151,7 +151,15 @@ message CanisterHttpRequestContext {
   google.protobuf.BytesValue transform_context = 10;
   optional Replication replication = 11;
   optional PricingVersion pricing_version = 12;
+  optional PaymentInfo payment_info = 13;
   reserved 5;
+}
+
+message PaymentInfo {
+  //TODO(urgent): check those are the correct cycles. 
+  state.queues.v1.Cycles per_replica_allowance = 1;
+  state.queues.v1.Cycles already_refunded = 2;
+  repeated types.v1.NodeId refunded_nodes = 3;
 }
 
 message PricingVersion {

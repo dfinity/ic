@@ -42,12 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
-    artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
-    messages::{CallbackId, RejectContext, Request},
-    node_id_into_protobuf, node_id_try_from_protobuf,
-    signature::*,
+    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time, artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact}, crypto::{CryptoHashOf, Signed}, messages::{CallbackId, RejectContext, Request}, node_id_into_protobuf, node_id_try_from_protobuf, signature::*
 };
 use ic_base_types::{NodeId, NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -134,6 +129,14 @@ pub struct CanisterHttpRequestContext {
     /// The replication strategy for this request.
     pub replication: Replication,
     pub pricing_version: PricingVersion,
+    pub payment_info: PaymentInfo,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct PaymentInfo {
+    pub per_replica_allowance: Cycles,
+    pub already_refunded: Cycles,
+    pub refunded_nodes: BTreeSet<NodeId>,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -245,6 +248,25 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             None => default_pricing_version(),
         };
 
+        let payment_info = match context.payment_info {
+            Some(payment_info) => PaymentInfo {
+                //TODO(next): this Cycles is not defined.
+                per_replica_allowance: Cycles::from(payment_info.per_replica_allowance),
+                already_refunded: Cycles::from(payment_info.already_refunded),
+                refunded_nodes: payment_info
+                    .refunded_nodes
+                    .into_iter()
+                    .map(|node_id_pb| node_id_try_from_protobuf(node_id_pb))
+                    .collect::<Result<BTreeSet<NodeId>, ProxyDecodeError>>()?,
+            },
+            //TODO(urgent): add this to default.    
+            None => PaymentInfo {
+                per_replica_allowance: Cycles::new(0),
+                already_refunded: Cycles::new(0),
+                refunded_nodes: BTreeSet::new(),
+            },
+        };
+
         let transform_method_name = context.transform_method_name;
         let transform_context = context.transform_context;
         let transform = match (transform_method_name, transform_context) {
@@ -294,6 +316,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             time: Time::from_nanos_since_unix_epoch(context.time),
             replication,
             pricing_version,
+            payment_info
         })
     }
 }
