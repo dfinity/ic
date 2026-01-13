@@ -3109,8 +3109,6 @@ impl StateManager for StateManagerImpl {
             .latest_subnet_certified_height
             .set(latest_subnet_certified_height as i64);
 
-        let requested_height = min(requested_height, self.latest_state_height());
-
         let checkpoint_heights: BTreeSet<Height> = self.checkpoint_heights().into_iter().collect();
 
         // The latest state must be kept.
