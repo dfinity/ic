@@ -46,6 +46,7 @@ fn default_init_args(initial_balances: Vec<(Account, Nat)>) -> Vec<u8> {
         max_memo_length: None,
         feature_flags: None,
         index_principal: None,
+        fee_collector_107: None,
     }))
     .unwrap()
 }
