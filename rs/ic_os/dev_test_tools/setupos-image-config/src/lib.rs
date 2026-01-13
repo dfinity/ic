@@ -8,8 +8,8 @@ use std::{
 
 use anyhow::{Context, Error, bail};
 
-use config::setupos::config_ini::ConfigIniSettings;
-use config::setupos::deployment_json::DeploymentSettings;
+use config_tool::setupos::config_ini::ConfigIniSettings;
+use config_tool::setupos::deployment_json::DeploymentSettings;
 
 pub fn create_setupos_config(
     config_dir: &Path,

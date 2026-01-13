@@ -1,8 +1,8 @@
 use crate::GuestVMType;
 use anyhow::{Context, Result, ensure};
 use askama::Template;
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::hostos::guestos_config::generate_guestos_config;
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, calculate_deterministic_mac};
@@ -186,8 +186,8 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
-        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, NetworkSettings,
+        DeterministicIpv6Config, HostOSConfig, HostOSDevSettings, HostOSSettings, ICOSSettings,
+        Ipv6Config, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -196,39 +196,19 @@ mod tests {
 
     fn create_test_hostos_config() -> HostOSConfig {
         HostOSConfig {
-            config_version: "1.0".to_string(),
             network_settings: NetworkSettings {
                 ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
                     prefix: "2001:db8::".to_string(),
                     prefix_length: 64,
                     gateway: "2001:db8::ffff".parse().unwrap(),
                 }),
-                ipv4_config: Some(Ipv4Config {
-                    address: "192.168.1.2".parse().unwrap(),
-                    gateway: "192.168.1.1".parse().unwrap(),
-                    prefix_length: 24,
-                }),
-                domain_name: Some("test.domain".to_string()),
+                ..Default::default()
             },
             icos_settings: ICOSSettings {
-                node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
-                deployment_environment: DeploymentEnvironment::Testnet,
-                nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
-                use_node_operator_private_key: false,
-                enable_trusted_execution_environment: false,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
-            hostos_settings: HostOSSettings {
-                verbose: false,
-                hostos_dev_settings: HostOSDevSettings {
-                    vm_memory: 16,
-                    vm_cpu: "qemu".to_string(),
-                    vm_nr_of_vcpus: 56,
-                },
-            },
-            guestos_settings: Default::default(),
+            ..HostOSConfig::default()
         }
     }
 
