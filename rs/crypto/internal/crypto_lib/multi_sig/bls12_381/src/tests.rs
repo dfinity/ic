@@ -203,7 +203,8 @@ mod advanced_functionality {
     /// that operate on G1Projective points, not exposed in the public API.
     #[test]
     fn single_point_signature_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let rng = &mut reproducible_rng();
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
         let point = multi_crypto::hash_message_to_g1(b"abba");
         let signature = multi_crypto::sign_point(&point, &secret_key);
         assert!(multi_crypto::verify_point(
@@ -213,12 +214,12 @@ mod advanced_functionality {
         ));
     }
 
-    /// Unit test because: uses internal keypair_from_seed (#[cfg(test)] only) and
-    /// internal sign_message/verify_individual_message_signature that operate on
-    /// internal types (SecretKey, PublicKey, IndividualSignature).
+    /// Unit test because: tests internal sign_message/verify_individual_message_signature
+    /// that operate on internal types (SecretKey, PublicKey, IndividualSignature).
     #[test]
     fn individual_multi_signature_contribution_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let rng = &mut reproducible_rng();
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
         let message = b"bjork";
         let signature = multi_crypto::sign_message(message, &secret_key);
         assert!(multi_crypto::verify_individual_message_signature(
@@ -228,21 +229,24 @@ mod advanced_functionality {
         ));
     }
 
-    /// Unit test because: uses internal keypair_from_seed (#[cfg(test)] only) and
-    /// internal create_pop/verify_pop that operate on internal types (Pop, PublicKey).
+    /// Unit test because: tests internal create_pop/verify_pop that operate on
+    /// internal types (Pop, PublicKey).
     #[test]
     fn pop_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let rng = &mut reproducible_rng();
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         assert!(multi_crypto::verify_pop(&pop, &public_key));
     }
 
-    /// Unit test because: uses internal keypair_from_seed (#[cfg(test)] only).
+    /// Unit test because: tests internal verify_combined_message_signature with
+    /// internal types (SecretKey, PublicKey).
     #[test]
     fn double_signature_verifies() {
+        let rng = &mut reproducible_rng();
         let keys = [
-            multi_crypto::keypair_from_seed([1, 2, 3, 4]),
-            multi_crypto::keypair_from_seed([5, 6, 7, 8]),
+            multi_crypto::keypair_from_rng(rng),
+            multi_crypto::keypair_from_rng(rng),
         ];
         check_multi_signature_verifies(&keys, b"abba");
     }
