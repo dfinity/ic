@@ -456,7 +456,7 @@ impl<'a> QueryContext<'a> {
             Err(_) => 0,
         };
 
-        if let Some(atomic) = self.instruction_obvervation.as_ref() {
+        if let Some(atomic) = self.instruction_observation.as_ref() {
             atomic.fetch_add(
                 instructions_executed.get(),
                 std::sync::atomic::Ordering::Relaxed,
