@@ -524,6 +524,7 @@ impl Upgrade {
             return Ok(());
         }
         info!(self.logger, "Starting new replica process");
+        self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
             .ic_binary_dir
