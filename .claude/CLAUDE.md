@@ -40,7 +40,7 @@ If crate dependencies need to be changed or added:
 Testing
 =======
 
-After code can be build it needs to be tested.
+After code can be built it needs to be tested.
 
 After changing a package under `rs/$PACKAGE` run `bazel test //rs/$PACKAGE`.
 
