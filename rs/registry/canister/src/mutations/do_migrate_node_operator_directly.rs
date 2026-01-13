@@ -112,11 +112,7 @@ impl Registry {
 
         // The caller must be the owner of both of the node operator
         // records.
-        if caller.as_slice()
-            != old_node_operator_record
-                .node_operator_principal_id
-                .as_slice()
-        {
+        if caller.to_vec() != old_node_operator_record.node_provider_principal_id {
             return Err(MigrateError::CallerMismatch {
                 caller,
                 expected: PrincipalId(Principal::from_slice(
@@ -273,14 +269,27 @@ impl MigrateNodeOperatorPayload {
 
 #[cfg(test)]
 mod tests {
-    use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-    use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::upsert;
-    use ic_types::PrincipalId;
+    use ic_config::crypto::CryptoConfig;
+    use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_crypto_node_key_validation::ValidNodePublicKeys;
+    use ic_protobuf::registry::{
+        node::v1::{ConnectionEndpoint, NodeRecord, NodeRewardType},
+        node_operator::v1::NodeOperatorRecord,
+    };
+    use ic_registry_keys::{NODE_RECORD_KEY_PREFIX, make_node_operator_record_key};
+    use ic_registry_transport::{
+        pb::v1::{HighCapacityRegistryDelta, RegistryMutation},
+        upsert,
+    };
+    use ic_types::{NodeId, PrincipalId};
     use prost::Message;
 
     use crate::{
-        mutations::do_migrate_node_operator_directly::{MigrateError, MigrateNodeOperatorPayload},
+        common::test_helpers::invariant_compliant_registry,
+        mutations::{
+            do_migrate_node_operator_directly::{MigrateError, MigrateNodeOperatorPayload},
+            node_management::common::make_add_node_registry_mutations,
+        },
         registry::Registry,
     };
 
@@ -473,5 +482,246 @@ mod tests {
         let resp = registry.migrate_node_operator_inner(payload, caller);
 
         assert_eq!(resp, expected_err)
+    }
+
+    #[derive(Clone)]
+    struct NodeInformation {
+        node_operator: PrincipalId,
+        valid_pks: ValidNodePublicKeys,
+    }
+
+    impl NodeInformation {
+        fn new(node_operator: PrincipalId) -> Self {
+            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+            let keys = generate_node_keys_once(&config, None).unwrap();
+
+            Self {
+                node_operator,
+                valid_pks: keys,
+            }
+        }
+
+        fn node_id(&self) -> NodeId {
+            self.valid_pks.node_id()
+        }
+
+        fn to_upsert_mutations(&self, index: usize) -> Vec<RegistryMutation> {
+            // Some of the indices are already added to the invariant registry
+            let ip_addr = format!("128.0.{}.1", 200 - index);
+            make_add_node_registry_mutations(
+                self.node_id(),
+                NodeRecord {
+                    xnet: Some(ConnectionEndpoint {
+                        ip_addr: ip_addr.clone(),
+                        port: 1234,
+                    }),
+                    http: Some(ConnectionEndpoint {
+                        ip_addr,
+                        port: 4321,
+                    }),
+                    node_operator_id: self.node_operator.to_vec(),
+                    ..Default::default()
+                },
+                self.valid_pks.clone(),
+            )
+        }
+    }
+
+    struct TestSetup {
+        nodes: Vec<NodeInformation>,
+        registry: Registry,
+    }
+
+    impl TestSetup {
+        fn new() -> Self {
+            Self {
+                registry: invariant_compliant_registry(1),
+                nodes: vec![],
+            }
+        }
+
+        fn add_node(&mut self, node_operator: PrincipalId) {
+            let node = NodeInformation::new(node_operator);
+
+            self.nodes.push(node.clone());
+
+            let mutations = node.to_upsert_mutations(self.nodes.len());
+
+            self.registry.maybe_apply_mutation_internal(mutations);
+        }
+
+        fn add_node_operator(
+            &mut self,
+            node_operator_id: PrincipalId,
+            node_provider_id: PrincipalId,
+            allowance: u64,
+            dc: &str,
+            rewardable_nodes: Vec<(String, u32)>,
+            max_rewardable_nodes: Vec<(String, u32)>,
+        ) {
+            let node_operator_record = NodeOperatorRecord {
+                node_operator_principal_id: node_operator_id.to_vec(),
+                node_allowance: allowance,
+                node_provider_principal_id: node_provider_id.to_vec(),
+                dc_id: dc.to_string(),
+                max_rewardable_nodes: max_rewardable_nodes.into_iter().collect(),
+                rewardable_nodes: rewardable_nodes.into_iter().collect(),
+                ..Default::default()
+            };
+
+            self.registry.maybe_apply_mutation_internal(vec![upsert(
+                make_node_operator_record_key(node_operator_id).as_bytes(),
+                node_operator_record.encode_to_vec(),
+            )]);
+        }
+
+        fn fetch_nodes_added_for_node_operator(
+            &self,
+            node_operator_id: PrincipalId,
+        ) -> Vec<NodeRecord> {
+            self.nodes
+                .iter()
+                .filter(|node_info| node_info.node_operator == node_operator_id)
+                .map(|node_info| self.registry.get_node_or_panic(node_info.node_id()))
+                .collect()
+        }
+    }
+
+    #[test]
+    fn successful_migration_when_new_operator_doesnt_exist() {
+        let mut setup = TestSetup::new();
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let caller = PrincipalId::new_user_test_id(999);
+
+        // Operator spec variables
+        let rewardable_nodes = vec![
+            (NodeRewardType::Type1.to_string(), 5),
+            (NodeRewardType::Type2.to_string(), 10),
+        ];
+        let allowance = 5;
+        let dc = "dc";
+
+        setup.add_node_operator(
+            old_node_operator_id,
+            caller,
+            allowance,
+            dc,
+            rewardable_nodes.clone(),
+            rewardable_nodes.clone(),
+        );
+
+        // Add 3 nodes owned by the node operator under test
+        for _ in 0..3 {
+            setup.add_node(old_node_operator_id);
+        }
+
+        // Add 3 nodes owned by a random operator that shouldn't be
+        // changed
+        let extra_node_operator = PrincipalId::new_user_test_id(333);
+        for _ in 0..5 {
+            setup.add_node(extra_node_operator);
+        }
+
+        let payload = MigrateNodeOperatorPayload {
+            old_node_operator_id: Some(old_node_operator_id),
+            new_node_operator_id: Some(new_node_operator_id),
+        };
+
+        setup
+            .registry
+            .migrate_node_operator_inner(payload, caller)
+            .unwrap();
+
+        // Ensure that the new operator is there
+        let new_node_operator_record = setup
+            .registry
+            .get_node_operator_or_panic(new_node_operator_id);
+
+        // Ensure that the values are inherited from the old record
+        assert_eq!(
+            new_node_operator_record.node_provider_principal_id,
+            caller.to_vec()
+        );
+        assert_eq!(new_node_operator_record.node_allowance, allowance);
+        assert_eq!(
+            new_node_operator_record.rewardable_nodes,
+            rewardable_nodes.clone().into_iter().collect()
+        );
+        assert_eq!(
+            new_node_operator_record.max_rewardable_nodes,
+            rewardable_nodes.into_iter().collect()
+        );
+        assert_eq!(new_node_operator_record.dc_id, dc.to_string());
+
+        // Ensure that the old operator isn't there
+        let old_node_operator_record = setup.registry.get(
+            make_node_operator_record_key(old_node_operator_id).as_bytes(),
+            setup.registry.latest_version(),
+        );
+        assert!(old_node_operator_record.is_none());
+
+        // Ensure that the nodes owned by the old operator show the new operator now
+        let nodes = setup.fetch_nodes_added_for_node_operator(old_node_operator_id);
+        for node in nodes {
+            assert_eq!(node.node_operator_id, new_node_operator_id.to_vec());
+        }
+
+        // Ensure that the extra nodes weren't touched
+        let nodes = setup.fetch_nodes_added_for_node_operator(extra_node_operator);
+        for node in nodes {
+            assert_eq!(node.node_operator_id, extra_node_operator.to_vec());
+        }
+
+        // Validate number of mutations and their keys, values are checked above
+        let changes = setup
+            .registry
+            .get_changes_since(setup.registry.latest_version() - 1, None);
+
+        assert_eq!(changes.len(), 5);
+
+        // Node changes
+        let node_deltas = filter_changes_for_key_prefix(NODE_RECORD_KEY_PREFIX, &changes);
+        assert_eq!(node_deltas.len(), 3);
+        assert!(
+            node_deltas
+                .iter()
+                .all(|delta| delta.values.len() == 1 && delta.values[0].is_present())
+        );
+
+        // Old node operator should not be pressent
+        let old_node_operator_deltas = filter_changes_for_key_prefix(
+            make_node_operator_record_key(old_node_operator_id).as_str(),
+            &changes,
+        );
+        assert_eq!(old_node_operator_deltas.len(), 1);
+        assert!(
+            old_node_operator_deltas[0].values.len() == 1
+                && !old_node_operator_deltas[0].values[0].is_present()
+        );
+
+        // New node operator should be present
+        let new_node_operator_deltas = filter_changes_for_key_prefix(
+            make_node_operator_record_key(new_node_operator_id).as_str(),
+            &changes,
+        );
+        assert_eq!(new_node_operator_deltas.len(), 1);
+        assert!(
+            new_node_operator_deltas[0].values.len() == 1
+                && new_node_operator_deltas[0].values[0].is_present()
+        );
+    }
+
+    fn filter_changes_for_key_prefix(
+        prefix: &str,
+        deltas: &Vec<HighCapacityRegistryDelta>,
+    ) -> Vec<HighCapacityRegistryDelta> {
+        deltas
+            .iter()
+            .filter(|delta| delta.key.starts_with(prefix.as_bytes()))
+            .cloned()
+            .collect()
     }
 }
