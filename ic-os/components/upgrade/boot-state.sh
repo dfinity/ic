@@ -20,8 +20,29 @@ read_boot_alternative_from_kernel_cmdline() {
     return 1
 }
 
-# Reads "boot_cycle" property from the grubenv file.
-# Echoes the boot_cycle value.
+# Echoes "boot_alternative" property from the grubenv file.
+#
+# Arguments:
+# $1 - name of grubenv file
+read_boot_alternative_from_grubenv() {
+    local GRUBENV_FILE="$1"
+
+    while IFS="=" read -r key value; do
+        case "$key" in
+            '#'*) ;;
+            'boot_alternative')
+                echo "$value"
+                return 0
+                ;;
+            *) ;;
+        esac
+    done <"$GRUBENV_FILE"
+
+    write_log "ERROR: Could not read boot_alternative from grubenv file"
+    return 1
+}
+
+# Echoes "boot_cycle" property from the grubenv file.
 #
 # Arguments:
 # $1 - name of grubenv file

@@ -267,8 +267,8 @@ install_upgrade() {
     log_message "Boot image: $extract_dir/boot.img"
     log_message "Root image: $extract_dir/root.img"
 
-    log_message "Reading current configuration from grubenv and kernel cmdline..."
-    boot_alternative="$(read_boot_alternative_from_kernel_cmdline)"
+    log_message "Reading grubenv configuration..."
+    boot_alternative="$(read_boot_alternative_from_grubenv "${grubdir}/grubenv")"
     boot_cycle="$(read_boot_cycle_from_grubenv "${grubdir}/grubenv")"
 
     log_message "Current boot alternative: ${boot_alternative}"
