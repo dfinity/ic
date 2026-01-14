@@ -5644,7 +5644,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
@@ -5677,7 +5677,7 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "indoc 1.0.9",
@@ -6069,7 +6069,7 @@ name = "hostos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
@@ -14874,7 +14874,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "crossbeam-channel",
@@ -19263,7 +19263,7 @@ dependencies = [
  "async-trait",
  "backoff",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "env-file-reader",
  "exec",
@@ -23017,7 +23017,7 @@ name = "setupos-image-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "partition_tools",
@@ -23032,7 +23032,7 @@ name = "setupos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
