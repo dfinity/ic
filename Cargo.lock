@@ -848,6 +848,7 @@ dependencies = [
  "attestation_testing",
  "candid",
  "der 0.7.9",
+ "getrandom 0.2.15",
  "hex",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -860,6 +861,7 @@ dependencies = [
  "ring",
  "serde",
  "sev",
+ "sha2 0.10.9",
  "thiserror 2.0.17",
 ]
 
