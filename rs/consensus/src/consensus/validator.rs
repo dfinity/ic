@@ -3287,63 +3287,133 @@ pub mod test {
     }
 
     #[test]
-    fn test_should_validate_catch_up_package_state_behind_the_cup_height() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(1),
-            /*finalized_height=*/ Height::new(60),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ true,
-        );
-    }
+    fn test_maybe_hold_back_cup() {
+        const DKG_INTERVAL_LENGTH: u64 = 59;
+        const CUP_HEIGHT: u64 = DKG_INTERVAL_LENGTH + 1;
 
-    #[test]
-    fn test_should_validate_cup_when_state_and_finalization_significantly_behind_the_cup_height() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(1),
-            /*finalized_height=*/ Height::new(1),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ true,
-        );
-    }
+        #[derive(Debug)]
+        enum Decision {
+            Validate,
+            HoldBack,
+        }
 
-    #[test]
-    fn test_should_not_validate_catch_up_package_when_state_close_to_the_cup_height() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(59),
-            /*finalized_height=*/ Height::new(60),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ false,
-        );
-    }
+        struct TestCase {
+            state_height: u64,
+            finalized_height: u64,
+            expected_decision: Decision,
+        }
 
-    #[test]
-    fn test_should_not_validate_catch_up_package_when_finalization_reached_minimum_chain_length() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(50),
-            /*finalized_height=*/ Height::new(50),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate*/ false,
-        );
-    }
+        let test_cases = [
+            // State height reached the CUP height (always validate)
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is one block behind the CUP height and finalized height
+            // reached the minimum chain length (hold back)
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::HoldBack,
+            },
+            // Finalized height did not reach the minimum chain length (validate)
+            TestCase {
+                state_height: CUP_HEIGHT - 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is within the last quarter of the DKG interval and finalized height
+            // reached the minimum chain length (hold back)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::HoldBack,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::HoldBack,
+            },
+            // Finalized height did not reach the minimum chain length (validate)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4 + 1,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+            // State height is outside the last quarter of the DKG interval (always validate)
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - 1,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH,
+                expected_decision: Decision::Validate,
+            },
+            TestCase {
+                state_height: CUP_HEIGHT - DKG_INTERVAL_LENGTH / 4,
+                finalized_height: CUP_HEIGHT - MINIMUM_CHAIN_LENGTH - 1,
+                expected_decision: Decision::Validate,
+            },
+        ];
 
-    #[test]
-    fn test_should_validate_catch_up_package_when_held_back_for_too_long() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(59),
-            /*finalized_height=*/ Height::new(60),
-            /*held_back_duration*/ CATCH_UP_HOLD_OFF_TIME + Duration::from_secs(1),
-            /*expected_to_validate*/ true,
-        );
-    }
+        for test_case in test_cases {
+            println!(
+                "state_height: {}, finalized_height: {}, decision: {:?}",
+                test_case.state_height, test_case.finalized_height, test_case.expected_decision
+            );
+            test_validate_catch_up_package_with_height_60(
+                /*state_height=*/ Height::new(test_case.state_height),
+                /*finalized_height=*/ Height::new(test_case.finalized_height),
+                /*held_back_duration*/ Duration::from_secs(0),
+                matches!(test_case.expected_decision, Decision::Validate),
+            );
 
-    #[test]
-    fn test_should_validate_catch_up_package_when_state_exceeds_the_cup_height() {
-        test_validate_catch_up_package_with_height_60(
-            /*state_height=*/ Height::new(60),
-            /*finalized_height=*/ Height::new(60),
-            /*held_back_duration*/ Duration::from_secs(0),
-            /*expected_to_validate=*/ true,
-        );
+            // The CUP should always be validated if it was held back for too long
+            test_validate_catch_up_package_with_height_60(
+                /*state_height=*/ Height::new(test_case.state_height),
+                /*finalized_height=*/ Height::new(test_case.finalized_height),
+                /*held_back_duration*/ CATCH_UP_HOLD_OFF_TIME + Duration::from_secs(1),
+                /*expected_to_validate=*/ true,
+            );
+        }
     }
 
     /// Tests whether we can validate a CUP at height `60`.
