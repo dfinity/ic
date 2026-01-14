@@ -219,10 +219,14 @@ class Ipv4Args:
 def calculate_ip(mgmt_mac: str, addr_prefix: str, node_type: str, deterministic_ips_tool: str) -> IPv6Address:
     cmd = [
         deterministic_ips_tool,
-        "--mac", mgmt_mac,
-        "--prefix", addr_prefix,
-        "--deployment-environment", "Testnet",
-        "--node-type", node_type,
+        "--mac",
+        mgmt_mac,
+        "--prefix",
+        addr_prefix,
+        "--deployment-environment",
+        "Testnet",
+        "--node-type",
+        node_type,
     ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
     return IPv6Address(result)
@@ -591,7 +595,9 @@ def benchmark_nodes(
     benchmark_tools: List[str],
     file_share_ssh_key: Optional[str] = None,
 ):
-    result = benchmark_node(bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key)
+    result = benchmark_node(
+        bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key
+    )
 
     log.info("Benchmark summary:")
     log.info(result)
