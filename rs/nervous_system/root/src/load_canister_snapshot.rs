@@ -80,7 +80,9 @@ where
                 .await
             {
                 Ok(()) => Ok(LoadCanisterSnapshotOk {}),
-                Err((code, description)) => Err(format!("Code: {code:?}, Description: {description}")),
+                Err((code, description)) => {
+                    Err(format!("Code: {code:?}, Description: {description}"))
+                }
             }
         },
     )

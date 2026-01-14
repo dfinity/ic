@@ -1,4 +1,3 @@
-
 use dfn_core::api::CanisterId;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;

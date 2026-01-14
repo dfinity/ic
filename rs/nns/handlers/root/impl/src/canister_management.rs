@@ -23,9 +23,10 @@ use ic_nns_common::{
     types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, LoadCanisterSnapshotRequest,
-    LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest,
+    TakeCanisterSnapshotResponse, UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
@@ -263,8 +264,6 @@ pub async fn take_canister_snapshot(
     )
     .await
 }
-
-
 
 pub async fn load_canister_snapshot(
     load_canister_snapshot_request: LoadCanisterSnapshotRequest,

@@ -214,8 +214,6 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
-
-
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
@@ -231,7 +229,7 @@ where
         format!("{request:?}"),
         stop_before_installing,
         || async {
-             // Ship code to the canister.
+            // Ship code to the canister.
             //
             // Note that there's no guarantee that the canister to install/reinstall/upgrade
             // is actually stopped here, even if stop_before_installing is true. This is
@@ -251,8 +249,9 @@ where
                     {rejection_code:?}: {message}"
                 )
             })
-        }
-    ).await;
+        },
+    )
+    .await;
 
     res
 }

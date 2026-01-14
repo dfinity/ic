@@ -1,9 +1,7 @@
 use crate::private::perform_locked_canister_action;
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
-use ic_management_canister_types_private::{
-    CanisterSnapshotResponse, TakeCanisterSnapshotArgs,
-};
+use ic_management_canister_types_private::{CanisterSnapshotResponse, TakeCanisterSnapshotArgs};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
 use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
@@ -68,9 +66,7 @@ where
                     let snapshot_id = match SnapshotId::try_from(&snapshot_id) {
                         Ok(ok) => ok,
                         Err(err) => {
-                            return Err(format!(
-                                "Invalid snapshot ID ({snapshot_id:02X?}): {err}"
-                            ));
+                            return Err(format!("Invalid snapshot ID ({snapshot_id:02X?}): {err}"));
                         }
                     };
                     Some(snapshot_id)
@@ -91,7 +87,9 @@ where
                 Ok(result) => Ok(
                     convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(result),
                 ),
-                Err((code, description)) => Err(format!("Code: {code:?}, Description: {description}")),
+                Err((code, description)) => {
+                    Err(format!("Code: {code:?}, Description: {description}"))
+                }
             }
         },
     )
