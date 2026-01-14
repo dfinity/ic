@@ -135,6 +135,9 @@ impl From<ReimbursementRequest> for Memo {
 }
 
 pub fn decode_ledger_memo(args: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    args.validate_input()
+        .map_err(DecodeLedgerMemoError::InvalidMemo)?;
+
     match args.memo_type {
         MemoType::Burn => match minicbor::decode::<BurnMemo>(&args.encoded_memo) {
             Ok(burn_memo) => Ok(Some(DecodedMemo::Burn(Some(endpoints::BurnMemo::from(

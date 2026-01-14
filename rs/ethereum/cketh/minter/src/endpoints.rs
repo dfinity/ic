@@ -1,3 +1,4 @@
+use crate::CKETH_LEDGER_MEMO_SIZE;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
 use crate::memo;
@@ -503,6 +504,19 @@ pub enum MemoType {
 pub struct DecodeLedgerMemoArgs {
     pub memo_type: MemoType,
     pub encoded_memo: Vec<u8>,
+}
+
+impl DecodeLedgerMemoArgs {
+    pub fn validate_input(&self) -> Result<(), String> {
+        if self.encoded_memo.len() > CKETH_LEDGER_MEMO_SIZE as usize {
+            Err(format!(
+                "Memo longer than permitted length {}",
+                CKETH_LEDGER_MEMO_SIZE
+            ))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
