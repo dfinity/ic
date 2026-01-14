@@ -37,7 +37,7 @@ else
     PODMAN_ARGS=()
 fi
 
-IMAGE="ghcr.io/dfinity/ic-build"
+IMAGE="ghcr.io/dfinity/ic-build-dev"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
