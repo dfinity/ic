@@ -1,4 +1,5 @@
 use der::Encode;
+use sha2::{Digest, Sha256, Sha512};
 use std::error::Error;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -42,6 +43,7 @@ impl SevCustomData {
     }
 
     /// Generates a random `SevCustomData` with the given `namespace`.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn random(namespace: SevCustomDataNamespace, rng: &mut impl rand::Rng) -> Self {
         let mut data = [0u8; 32];
         rng.fill(&mut data[..]);
@@ -122,11 +124,7 @@ impl<T: DerEncodedCustomData> EncodeSevCustomData for T {
         self.encode(&mut encoded)
             .map_err(|err| EncodingError(Box::new(err)))?;
 
-        let hash = ring::digest::digest(&ring::digest::SHA256, &encoded);
-        let hash_bytes: [u8; 32] = hash
-            .as_ref()
-            .try_into()
-            .expect("SHA-256 hash should be 32 bytes");
+        let hash_bytes: [u8; 32] = Sha256::digest(&encoded).into();
 
         Ok(SevCustomData::new(self.namespace(), hash_bytes))
     }
@@ -136,8 +134,8 @@ impl<T: DerEncodedCustomData> EncodeSevCustomData for T {
         self.encode(&mut encoded)
             .map_err(|err| EncodingError(Box::new(err)))?;
 
-        let hash = ring::digest::digest(&ring::digest::SHA512, &encoded);
-        Ok(hash.as_ref().try_into().unwrap())
+        let hash: [u8; 64] = Sha512::digest(&encoded).into();
+        Ok(hash)
     }
 }
 
