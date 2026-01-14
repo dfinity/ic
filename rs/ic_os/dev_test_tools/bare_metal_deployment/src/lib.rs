@@ -152,6 +152,7 @@ impl BareMetalIpmiSession {
         Ok(())
     }
 
+    /// Keep the SOL session alive after dropping the BareMetalIpmiSession
     pub fn keep_alive_after_drop(&mut self) {
         self.keep_alive_after_drop = true;
     }
