@@ -21489,6 +21489,7 @@ dependencies = [
  "config_tool",
  "config_types",
  "ic_sev",
+ "rand 0.8.5",
  "remote_attestation_shared",
  "sev",
  "tokio",
