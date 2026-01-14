@@ -32,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       build: ${{ steps.set-output.outputs.build }}
+      image_tag: ${{ steps.set-output.outputs.image_tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +50,7 @@ jobs:
             echo "Modify ci/container/TAG with random string to trigger new build."
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
+            echo "image_tag=$image_tag" >> "$GITHUB_OUTPUT"
           fi
 
   ic-build-image-ci:
@@ -89,7 +91,7 @@ jobs:
           context: .
           file: ci/container/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ steps.cfg.outputs.image_tag }}
+          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ needs.determine-build-image.outputs.image_tag }}
           target: ci
           build-args: |
             CI_USER=1001
@@ -103,7 +105,7 @@ jobs:
           IMG_NAME=${{ github.repository_owner }}/ic-build
           IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ steps.build.outputs.imageid }}"
 
-          echo '${{ steps.cfg.outputs.image_tag }}' > ci/container/TAG
+          echo '${{ needs.determine-build-image.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
           popd
@@ -124,7 +126,7 @@ jobs:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
             message += 'New container image: `${{ steps.build.outputs.imageid }}`\n'
-            message += 'New container tag: `${{ steps.cfg.outputs.image_tag }}`'
+            message += 'New container tag: `${{ needs.determine-build-image.outputs.image_tag }}`'
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -172,7 +174,7 @@ jobs:
           file: ci/container/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/ic-build-dev:${{ steps.cfg.outputs.image_tag }}
+            ghcr.io/${{ github.repository_owner }}/ic-build-dev:${{ needs.determine-build-image.outputs.image_tag }}
           target: devenv
           # for now keep the same, eventually can remove
           build-args: |
