@@ -23,6 +23,54 @@ mod prefetching;
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "sigsegv_handler_checksum")]
+pub(crate) mod checksum {
+    use std::io::Write;
+
+    use crate::AccessKind;
+
+    #[derive(Default)]
+    pub(crate) struct SigsegChecksum {
+        value: usize,
+        index: usize,
+    }
+
+    impl SigsegChecksum {
+        pub(crate) fn record_access(
+            &mut self,
+            base_addr: usize,
+            access_addr: *const libc::c_void,
+            access_kind: AccessKind,
+        ) {
+            self.index += 1;
+            self.value += self
+                .index
+                .wrapping_mul(access_addr as usize - base_addr)
+                .wrapping_mul(match access_kind {
+                    AccessKind::Read => 1,
+                    AccessKind::Write => 1 << 32,
+                });
+        }
+    }
+
+    impl Drop for SigsegChecksum {
+        fn drop(&mut self) {
+            let output_file = std::env::var("CHECKSUM_FILE").unwrap();
+            let mut file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(output_file)
+                .unwrap();
+            writeln!(
+                file,
+                "Memory tracker completed with checksum {}",
+                self.value
+            )
+            .unwrap();
+        }
+    }
+}
+
 use deterministic::DeterministicMemoryTracker;
 pub use prefetching::PrefetchingMemoryTracker;
 /// Only used for benchmarks.

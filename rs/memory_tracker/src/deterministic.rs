@@ -62,6 +62,9 @@ use crate::{
     range_size_in_bytes,
 };
 
+#[cfg(feature = "sigsegv_handler_checksum")]
+use crate::checksum;
+
 use crate::conversions::{
     FromNumBytes, FromNumOsPages, FromNumWasmPages, FromPageIndex, FromWasmPageIndex, WasmPageIndex,
 };
