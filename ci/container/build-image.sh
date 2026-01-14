@@ -2,14 +2,15 @@
 
 set -eEuo pipefail
 
-BUILD_TARGET="devenv"
+BUILD_TARGET="ci"
+IMAGE_NAME="ic-build"
 
 usage() {
     echo "Build ic-build docker image."
     echo " "
     echo "Options:"
     echo "-h, --help        show brief help"
-    echo "--target <name>   set Docker build target (default: devenv)"
+    echo "--target <name>   set Docker build target (default: ci)"
 }
 
 while test $# -gt 0; do
@@ -31,6 +32,10 @@ while test $# -gt 0; do
     shift
 done
 
+if [ "$BUILD_TARGET" == "devenv" ]; then
+    IMAGE_NAME="ic-build-dev"
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DOCKER_IMG_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 
@@ -47,10 +52,9 @@ fi
 
 DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     --target "$BUILD_TARGET" \
-    -t ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:latest \
-    -t ghcr.io/dfinity/ic-build:"$BUILD_TARGET" \
+    -t "$IMAGE_NAME":"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/"$IMAGE_NAME":"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/"$IMAGE_NAME":latest \
     -f ci/container/Dockerfile .
 
 popd
