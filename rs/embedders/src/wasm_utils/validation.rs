@@ -37,7 +37,7 @@ use wirm::{
     wasmparser::{ExternalKind, Operator, TypeRef, ValType},
 };
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use crate::WASM_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests

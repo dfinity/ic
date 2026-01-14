@@ -92,7 +92,7 @@ fn setup(
                 )
                 .unwrap(),
             );
-            return (tracker, page_map, memory, vec);
+            (tracker, page_map, memory, vec)
         }
         _ => {
             let tracker = Box::new(
@@ -110,7 +110,7 @@ fn setup(
                 )
                 .unwrap(),
             );
-            return (tracker, page_map, memory, vec);
+            (tracker, page_map, memory, vec)
         }
     }
 }

@@ -13,7 +13,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     event::CkDogeMinterEvent,
-    lifecycle::init::MinterArg,
+    lifecycle::MinterArg,
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
@@ -217,12 +217,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
     .expect("failed to fetch canister status")
 }
 
-// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
-// both types of events:
-// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
-// 2) Some events, related to KYT are not applicable to Dogecoin.
-// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
-#[query(hidden = true)]
+#[query]
 fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 

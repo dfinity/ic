@@ -16,13 +16,13 @@ use rand::{CryptoRng, Rng};
 /// Domain separator for Hash-to-G1 to be used for signature generation in a
 /// scheme supporting proof of possession, as specified for the Proof of
 /// Possession ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.3
-const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
-    b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
+const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP: &str =
+    "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 /// Domain separator for Hash-to-G1 to be used in a proof of possession as
 /// as specified for the Proof of Possession ciphersuite in
 /// https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.3
-const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
-    b"BLS_POP_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
+const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &str =
+    "BLS_POP_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 /// Domain separation string used in the creation of proof of possessions of BLS
 /// multi-signature public keys.
 pub const DOMAIN_MULTI_SIG_BLS12_381_POP: &str = "ic-multi-sig-bls12381-pop";

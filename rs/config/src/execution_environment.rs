@@ -342,14 +342,6 @@ pub struct Config {
     /// The maximum number of snapshots allowed per canister.
     pub max_number_of_snapshots_per_canister: usize,
 
-    /// Whether canister snapshot metadata and data can be downloaded
-    /// by controllers.
-    pub canister_snapshot_download: FlagStatus,
-
-    /// Whether canister snapshot metadata and data can be uploaded
-    /// by controllers.
-    pub canister_snapshot_upload: FlagStatus,
-
     /// Whether environment variables are supported.
     pub environment_variables: FlagStatus,
 
@@ -365,8 +357,8 @@ pub struct Config {
     /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
 
-    /// Enables filtering by range in `fetch_canister_logs`.
-    pub fetch_canister_logs_filter: FlagStatus,
+    /// Enables the log memory store feature.
+    pub log_memory_store_feature: FlagStatus,
 }
 
 impl Default for Config {
@@ -448,14 +440,12 @@ impl Default for Config {
             max_canister_http_requests_in_flight: MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             default_wasm_memory_limit: DEFAULT_WASM_MEMORY_LIMIT,
             max_number_of_snapshots_per_canister: MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-            canister_snapshot_download: FlagStatus::Enabled,
-            canister_snapshot_upload: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
             max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
             max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
             max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
             replicated_inter_canister_log_fetch: FlagStatus::Disabled,
-            fetch_canister_logs_filter: FlagStatus::Disabled,
+            log_memory_store_feature: FlagStatus::Disabled,
         }
     }
 }

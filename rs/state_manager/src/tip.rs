@@ -1341,6 +1341,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
+            log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,
@@ -1438,6 +1439,16 @@ fn handle_compute_manifest_request(
         fatal!(
             log,
             "Trying to compute manifest for unverified checkpoint @{}",
+            checkpoint_layout.height()
+        );
+    }
+
+    // State sync checkpoints should already have their associated manifests.
+    // If this warning is triggered, it indicates an unexpected situation that should be investigated.
+    if checkpoint_layout.is_unverified_state_sync_checkpoint() {
+        warn!(
+            log,
+            "Trying to compute manifest for state sync checkpoint @{}",
             checkpoint_layout.height()
         );
     }

@@ -260,7 +260,7 @@ pub struct ExecutionTest {
     dirty_heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
-    instruction_limit_without_dts: NumInstructions,
+    instruction_limit_per_query_message: NumInstructions,
     initial_canister_cycles: Cycles,
     ingress_memory_capacity: NumBytes,
     registry_settings: RegistryExecutionSettings,
@@ -1177,10 +1177,6 @@ impl ExecutionTest {
             compute_allocation_used,
             subnet_memory_reservation: self.subnet_memory_reservation,
         };
-        let instruction_limits = InstructionLimits::new(
-            self.instruction_limit_without_dts,
-            self.instruction_limit_without_dts,
-        );
         match task {
             CanisterTask::Heartbeat => {
                 canister
@@ -1210,8 +1206,8 @@ impl ExecutionTest {
         let result = execute_canister(
             &self.exec_env,
             canister,
-            instruction_limits,
-            self.instruction_limit_without_dts,
+            self.instruction_limits.clone(),
+            self.instruction_limit_per_query_message,
             Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
@@ -1251,6 +1247,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             None,
             true,
+            None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1501,7 +1498,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1598,7 +1595,7 @@ impl ExecutionTest {
                     &self.exec_env,
                     canister,
                     self.instruction_limits.clone(),
-                    self.instruction_limit_without_dts,
+                    self.instruction_limit_per_query_message,
                     Arc::clone(&network_topology),
                     self.time,
                     &mut round_limits,
@@ -1797,6 +1794,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
+            None,
         )
     }
 
@@ -1943,10 +1941,10 @@ impl ExecutionTest {
     }
 
     pub fn online_split_state(&mut self, subnet_id: SubnetId, other_subnet_id: SubnetId) {
-        let state = self.state.take().unwrap();
+        let mut state = self.state.take().unwrap();
 
         // Reset the split marker, just in case.
-        // state.metadata.subnet_split_from = None;
+        state.metadata.subnet_split_from = None;
 
         let state_after_split = state.online_split(subnet_id, other_subnet_id).unwrap();
         self.state = Some(state_after_split);
@@ -2133,10 +2131,10 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_instruction_limit_without_dts(mut self, limit: u64) -> Self {
+    pub fn with_instruction_limit_per_query_message(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
-            .max_instructions_per_message_without_dts = NumInstructions::from(limit);
+            .max_instructions_per_query_message = NumInstructions::from(limit);
         self
     }
 
@@ -2425,16 +2423,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshot_metadata_download(mut self) -> Self {
-        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_snapshot_metadata_upload(mut self) -> Self {
-        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_environment_variables_flag(
         mut self,
         environment_variables_flag: FlagStatus,
@@ -2538,7 +2526,9 @@ impl ExecutionTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
 
@@ -2701,10 +2691,10 @@ impl ExecutionTestBuilder {
                     .max_instructions_per_install_code_slice,
             ),
             ingress_memory_capacity: self.execution_config.ingress_history_memory_capacity,
-            instruction_limit_without_dts: self
+            instruction_limit_per_query_message: self
                 .subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts,
+                .max_instructions_per_query_message,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,
             user_id: user_test_id(1),

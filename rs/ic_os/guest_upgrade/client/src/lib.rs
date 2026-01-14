@@ -6,13 +6,14 @@ use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
+use guest_upgrade_shared::STORE_DEVICE;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
 use guest_upgrade_shared::api::{GetDiskEncryptionKeyRequest, SignalStatusRequest};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
 use http::Uri;
 use hyper_rustls::{HttpsConnectorBuilder, MaybeHttpsStream};
 use hyper_util::rt::TokioIo;
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
@@ -101,13 +102,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // (We still have to call signal_status, since the server is expecting us to signal
         // success)
         let can_open_store = (self.can_open_store)(
-            Path::new("/dev/vda10"),
+            Path::new(STORE_DEVICE),
             &self.previous_key_path,
             self.sev_firmware.as_mut(),
         )?;
 
         let retrieve_status = if can_open_store {
-            println!("/dev/vda10 can be opened with our derived key, no need to run exchange");
+            println!("{STORE_DEVICE} can be opened with our derived key, no need to run exchange");
             Ok(())
         } else {
             self.retrieve_disk_encryption_key(
@@ -184,7 +185,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
             self.sev_root_certificate_verification,
             &blessed_measurements,
             &custom_data,
-            Some(my_attestation_report.chip_id.as_ref()),
+            Some(&[my_attestation_report.chip_id]),
         )
         .context("Server attestation report verification failed")?;
 
@@ -293,7 +294,7 @@ fn extract_server_public_key_der(conn: &MaybeHttpsStream<TokioIo<TcpStream>>) ->
 }
 
 pub fn create_nns_registry_client(guestos_config: &GuestOSConfig) -> Result<RegistryClientImpl> {
-    let nns_public_key = parse_threshold_sig_key(Path::new(NNS_PUBLIC_KEY_PATH))
+    let nns_public_key = parse_threshold_sig_key_from_pem_file(Path::new(NNS_PUBLIC_KEY_PATH))
         .context("Cannot read NNS public key")?;
 
     let client = RegistryClientImpl::new(

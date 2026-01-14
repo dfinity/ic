@@ -33,6 +33,7 @@ use ic_cketh_test_utils::{
     MINTER_ADDRESS,
 };
 use ic_ethereum_types::Address;
+use ic_management_canister_types_private::CanisterStatusType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
@@ -129,7 +130,7 @@ fn should_deposit_and_withdraw() {
             });
         assert_eq!(cketh.balance_of(account), Nat::from(0_u8));
 
-        cketh.assert_has_unique_events_in_order(&vec![
+        cketh.assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -226,7 +227,7 @@ fn should_block_deposit_from_blocked_address() {
             ..Default::default()
         })
         .expect_no_mint()
-        .assert_has_unique_events_in_order(&vec![EventPayload::InvalidDeposit {
+        .assert_has_unique_events_in_order(&[EventPayload::InvalidDeposit {
             event_source: EventSource {
                 transaction_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
                 log_index: Nat::from(DEFAULT_DEPOSIT_LOG_INDEX),
@@ -549,7 +550,7 @@ fn should_reimburse() {
             created_at_time: None,
             fee: None,
         })
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::AcceptedEthWithdrawalRequest {
                 withdrawal_amount: withdrawal_amount.clone(),
                 destination: destination.clone(),
@@ -663,7 +664,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
             resubmitted_tx.clone(),
             resubmitted_tx_sig,
         )
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::ReplacedTransaction {
                 withdrawal_id: withdrawal_id.clone(),
                 transaction: UnsignedTransaction {
@@ -743,7 +744,7 @@ fn should_not_overlap_when_scrapping_logs() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: second_to_block.into(),
         }]);
 }
@@ -779,7 +780,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -801,7 +802,7 @@ fn should_retry_from_same_block_when_scrapping_fails() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: Nat::from(to_block),
         }]);
 }
@@ -829,6 +830,132 @@ fn should_scrap_one_block_when_at_boundary_with_last_finalized_block() {
 }
 
 #[test]
+fn should_document_current_behavior_of_being_unstoppable_while_scraping_blocks_has_open_call_context()
+ {
+    // TODO(DEFI-2566): This test documents the current behavior, where the ckETH minter is
+    //  unstoppable while scraping (lots of) logs on a timer. Since log scraping calls are made on
+    //  a loop in the callback handler for log scraping responses, the scraping continues until all
+    //  logs have been scraped. The same call context is reused, and as long as there is an open
+    //  call context, the minter is not stoppable.
+    const UNSCRAPED_BLOCKS: u64 = 5_000;
+    const NUM_BLOCK_RANGES: usize = 10;
+
+    let cketh = CkEthSetup::default();
+    let max_eth_logs_block_range = cketh.as_ref().max_logs_block_range();
+    const MAX_BLOCK: u64 = LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + UNSCRAPED_BLOCKS;
+
+    cketh.env.advance_time(SCRAPING_ETH_LOGS_INTERVAL);
+
+    MockJsonRpcProviders::when(JsonRpcMethod::EthGetBlockByNumber)
+        .respond_for_all_with(block_response(MAX_BLOCK))
+        .build()
+        .expect_rpc_calls(&cketh);
+
+    // Only the first few eth_getLogs requests (e.g., 3 out of 10).
+    // This leaves the scraping in progress with open call contexts.
+    let mut from_block = BlockNumber::from(LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL + 1);
+    let mut to_block = from_block
+        .checked_add(BlockNumber::from(max_eth_logs_block_range))
+        .unwrap();
+
+    const BLOCKS_TO_PROCESS_BEFORE_STOP: usize = 3;
+    for _ in 0..BLOCKS_TO_PROCESS_BEFORE_STOP {
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
+                "topics": [cketh.received_eth_event_topic()]
+            }]))
+            .respond_for_all_with(empty_logs())
+            .build()
+            .expect_rpc_calls(&cketh);
+
+        from_block = to_block.checked_increment().unwrap();
+        to_block = from_block
+            .checked_add(BlockNumber::from(max_eth_logs_block_range))
+            .unwrap();
+    }
+
+    // At this point:
+    // - 3 block ranges have been scraped
+    // - The minter has made an HTTP outcall for the 4th block range
+    // - There's an open call context waiting for that HTTP response
+    // Request to stop the minter (without providing responses to pending HTTP outcalls).
+    // The stop will NOT complete because there's an open call context.
+    cketh.try_stop_minter_without_stopping_ongoing_https_outcalls();
+
+    // Verify the minter is in "Stopping" state (not "Stopped")
+    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopping);
+    assert_eq!(
+        status,
+        CanisterStatusType::Stopping,
+        "Expected minter to be in Stopping state due to open call contexts"
+    );
+
+    // Even while in "Stopping" state, when we provide a response to the pending HTTPS call, the
+    // canister does not stop. Instead, the callback continuation runs and the next loop iteration
+    // makes another outcall. The canister remains in "Stopping" state throughout.
+    for i in BLOCKS_TO_PROCESS_BEFORE_STOP..NUM_BLOCK_RANGES {
+        // Before providing response, verify canister is STILL in Stopping state
+        let status_before = cketh.minter_status();
+        assert_eq!(
+            status_before,
+            CanisterStatusType::Stopping,
+            "Block range {}/{}: Canister should be in Stopping state before receiving response",
+            i + 1,
+            NUM_BLOCK_RANGES
+        );
+
+        // Provide response to the pending HTTPS call.
+        MockJsonRpcProviders::when(JsonRpcMethod::EthGetLogs)
+            .with_request_params(json!([{
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": [ETH_HELPER_CONTRACT_ADDRESS],
+                "topics": [cketh.received_eth_event_topic()]
+            }]))
+            .respond_for_all_with(empty_logs())
+            .build()
+            .expect_rpc_calls(&cketh);
+
+        // After processing the response, verify the canister is still in Stopping state.
+        let status_after = cketh.minter_status();
+
+        if i < NUM_BLOCK_RANGES - 1 {
+            assert_eq!(
+                status_after,
+                CanisterStatusType::Stopping,
+                "Block range {}/{}: Canister should still be in Stopping state after receiving \
+                 response (it made a new HTTP call for the next block range!)",
+                i + 1,
+                NUM_BLOCK_RANGES
+            );
+        } else {
+            // Last block range - canister might transition to Stopped
+            println!(
+                "  Block range {}/{}: Final response received",
+                i + 1,
+                NUM_BLOCK_RANGES
+            );
+        }
+
+        from_block = to_block.checked_increment().unwrap();
+        to_block = from_block
+            .checked_add(BlockNumber::from(max_eth_logs_block_range))
+            .unwrap();
+    }
+
+    // After all scraping is complete, the canister should finally be Stopped.
+    let status = cketh.tick_until_minter_canister_status(CanisterStatusType::Stopped);
+    assert_eq!(
+        status,
+        CanisterStatusType::Stopped,
+        "Expected minter to be Stopped after all call contexts closed"
+    );
+}
+
+#[test]
 fn should_panic_when_last_finalized_block_in_the_past() {
     let cketh = CkEthSetup::default();
     let prev_events_len = cketh.get_all_events().len();
@@ -843,7 +970,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
         .check_audit_logs_and_upgrade(Default::default())
         .check_events()
         .skip(prev_events_len)
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: LAST_SCRAPED_BLOCK_NUMBER_AT_INSTALL.into(),
         }]);
 
@@ -869,7 +996,7 @@ fn should_panic_when_last_finalized_block_in_the_past() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: last_finalized_block.into(),
         }]);
 }
@@ -906,7 +1033,7 @@ fn should_skip_scrapping_when_last_seen_block_newer_than_current_height() {
             ethereum_block_height: Some(CandidBlockTag::Finalized),
             ..Default::default()
         })
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: safe_block_number.into(),
         }]);
     cketh.env.tick();
@@ -978,7 +1105,7 @@ fn should_half_range_of_scrapped_logs_when_response_over_two_mega_bytes() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![EventPayload::SyncedToBlock {
+        .assert_has_unique_events_in_order(&[EventPayload::SyncedToBlock {
             block_number: half_to_block.into(),
         }])
         .assert_has_no_event_satisfying(|event| matches!(event, EventPayload::SkippedBlock { .. }));
@@ -1055,7 +1182,7 @@ fn should_skip_single_block_containing_too_many_events() {
 
     cketh
         .check_audit_logs_and_upgrade(Default::default())
-        .assert_has_unique_events_in_order(&vec![
+        .assert_has_unique_events_in_order(&[
             EventPayload::SkippedBlock {
                 contract_address: Some(
                     ETH_HELPER_CONTRACT_ADDRESS

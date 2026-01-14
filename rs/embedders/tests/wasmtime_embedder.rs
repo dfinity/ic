@@ -29,7 +29,7 @@ use ic_types::{
 };
 use wirm::wasmparser;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use ic_embedders::WASM_PAGE_SIZE;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.

@@ -10,7 +10,7 @@ use ic_ckdoge_minter::{
         RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     event::{CkDogeMinterEvent, CkDogeMinterEventType},
-    lifecycle::init::{MinterArg, UpgradeArgs},
+    lifecycle::{MinterArg, upgrade::UpgradeArgs},
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};

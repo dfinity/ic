@@ -23,8 +23,8 @@ use core::future::Future;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
+    CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
+    CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
@@ -482,8 +482,7 @@ impl NiDkgCspVault for RemoteCspVault {
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
-    ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
+    ) -> Result<CspNiDkgDealing, CspDkgCreateDealingError> {
         self.tokio_block_on(self.tarpc_csp_client.create_dealing(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
@@ -491,7 +490,34 @@ impl NiDkgCspVault for RemoteCspVault {
             threshold,
             epoch,
             receiver_keys,
-            maybe_resharing_secret,
+        ))
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspDkgCreateDealingError::TransientInternalError(
+                InternalError {
+                    internal_error: error_to_string_with_sources(&rpc_error),
+                },
+            ))
+        })
+    }
+
+    #[instrument(skip_all)]
+    fn create_resharing_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
+    ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
+        self.tokio_block_on(self.tarpc_csp_client.create_resharing_dealing(
+            context_with_timeout(self.rpc_timeout),
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            receiver_keys,
+            resharing_secret,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspDkgCreateReshareDealingError::TransientInternalError(

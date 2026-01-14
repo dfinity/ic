@@ -24,7 +24,7 @@ from notification.console_logger_app_owner_msg_subscriber import ConsoleLoggerAp
 JIRA_SERVER = "https://dfinity.atlassian.net"
 JIRA_USER = "vuln-mgmt@dfinity.org"
 JIRA_BOARD_KEY = "SCAVM"
-JIRA_INCIDENT_RESPONDER_EPIC = "PSEC-885"
+JIRA_INCIDENT_RESPONDER_EPIC = "PSEC-2821"
 JIRA_DEFAULT_RISK_ASSESSORS = [
     User(id="62c2a69a7273faf658f02412", name="Thomas Müller", email="thomas.mueller@dfinity.org"),
     User(id="6151750907ac3c00689d2802", name="Venkkatesh Sekar", email="venkkatesh.sekar@dfinity.org"),

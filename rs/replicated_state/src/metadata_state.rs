@@ -30,7 +30,7 @@ use ic_types::{
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
+    subnet_id_into_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
@@ -89,10 +89,6 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
-    /// This flag determines whether cycles are charged. The flag is pulled from
-    /// the registry every round.
-    pub cost_schedule: CanisterCyclesCostSchedule,
-
     /// DER-encoded public keys of the subnet's nodes.
     pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
 
@@ -106,10 +102,16 @@ pub struct SystemMetadata {
     /// this is subnet A' (when equal to `own_subnet_id`) or B (when different).
     pub split_from: Option<SubnetId>,
 
+    /// "Subnet was split" marker. Records the subnet ID from which this subnet was
+    /// split (could be the same as `own_subnet_id`; or different, if this is a
+    /// newly created subnet). Reset in the very next round, once a metric is
+    /// exported.
+    pub subnet_split_from: Option<SubnetId>,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
-    /// The version of StateSync protocol that should be used to compute
+    /// The version of StateSync protocol that should be used to compute the
     /// manifest of this state.
     pub state_sync_version: StateSyncVersion,
 
@@ -369,6 +371,7 @@ impl SystemMetadata {
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+            subnet_split_from: None,
 
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -382,7 +385,6 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             blockmaker_metrics_time_series: BlockmakerMetricsTimeSeries::default(),
             unflushed_checkpoint_ops: Default::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
         }
     }
 
@@ -547,6 +549,8 @@ impl SystemMetadata {
         subnet_id: SubnetId,
         new_subnet_batch_time: Option<Time>,
     ) -> Result<Self, String> {
+        assert_eq!(None, self.split_from);
+        assert_eq!(None, self.subnet_split_from);
         assert_eq!(0, self.heap_delta_estimate.get());
         assert!(self.expected_compiled_wasms.is_empty());
 
@@ -653,6 +657,7 @@ impl SystemMetadata {
             node_public_keys: _,
             api_boundary_nodes: _,
             ref mut split_from,
+            subnet_split_from,
             subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
             state_sync_version: _,
@@ -664,12 +669,11 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses: _,
             blockmaker_metrics_time_series: _,
             unflushed_checkpoint_ops: _,
-            // Overwritten as soon as the round begins, no explicit action needed.
-            cost_schedule: _,
         } = self;
 
         let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
+        assert_eq!(None, subnet_split_from);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -754,6 +758,7 @@ impl SystemMetadata {
             node_public_keys,
             api_boundary_nodes,
             split_from,
+            mut subnet_split_from,
             mut subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -763,10 +768,10 @@ impl SystemMetadata {
             mut bitcoin_get_successors_follow_up_responses,
             blockmaker_metrics_time_series,
             unflushed_checkpoint_ops,
-            cost_schedule,
         } = self;
 
         assert_eq!(None, split_from);
+        assert_eq!(None, subnet_split_from);
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
@@ -777,9 +782,6 @@ impl SystemMetadata {
                 .map(|(_range, subnet_id)| subnet_id)
                 == Some(subnet_id)
         };
-
-        // TODO(DSM-51): Set the split marker to the original subnet ID (that of subnet A).
-        // split_from = Some(own_subnet_id);
 
         if own_subnet_id == subnet_id {
             //
@@ -831,6 +833,9 @@ impl SystemMetadata {
             subnet_metrics = Default::default();
         }
 
+        // Set the split marker to the original subnet ID, on both subnets.
+        subnet_split_from = Some(own_subnet_id);
+
         // Only retain Bitcoin responses for hosted canisters.
         bitcoin_get_successors_follow_up_responses
             .retain(|canister_id, _| is_local_canister(*canister_id));
@@ -853,6 +858,7 @@ impl SystemMetadata {
             node_public_keys,
             api_boundary_nodes,
             split_from,
+            subnet_split_from,
             subnet_call_context_manager,
             state_sync_version,
             certification_version,
@@ -866,7 +872,6 @@ impl SystemMetadata {
             // Just updated by `ReplicatedState::online_split()`, adding delete operations
             // for the snapshots of no longer hosted canisters.
             unflushed_checkpoint_ops,
-            cost_schedule,
         })
     }
 
@@ -1027,6 +1032,9 @@ pub struct Stream {
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
 
+    /// Number of `Refund` messages in the stream.
+    refund_count: usize,
+
     /// Stream flags observed in the header of the reverse stream.
     reverse_stream_flags: StreamFlags,
 
@@ -1040,6 +1048,7 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
@@ -1049,6 +1058,7 @@ impl Default for Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags,
             guaranteed_response_counts,
         }
@@ -1058,16 +1068,7 @@ impl Default for Stream {
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::calculate_size_bytes(&messages);
-        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        Self {
-            messages,
-            signals_end,
-            reject_signals: VecDeque::new(),
-            messages_size_bytes,
-            reverse_stream_flags: Default::default(),
-            guaranteed_response_counts,
-        }
+        Self::with_signals(messages, signals_end, VecDeque::new())
     }
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
@@ -1077,12 +1078,14 @@ impl Stream {
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags: Default::default(),
             guaranteed_response_counts,
         }
@@ -1121,6 +1124,11 @@ impl Stream {
         self.messages.end()
     }
 
+    /// Returns the number of `Refund` messages in the stream.
+    pub fn refund_count(&self) -> usize {
+        self.refund_count
+    }
+
     /// Returns the number of guaranteed responses in the stream for each responding canister.
     pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
         &self.guaranteed_response_counts
@@ -1129,6 +1137,9 @@ impl Stream {
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: StreamMessage) {
         self.messages_size_bytes += message.count_bytes();
+        if let StreamMessage::Refund(_) = &message {
+            self.refund_count += 1;
+        }
         if let StreamMessage::Response(response) = &message
             && !response.is_best_effort()
         {
@@ -1141,6 +1152,10 @@ impl Stream {
         debug_assert_eq!(
             Self::calculate_size_bytes(&self.messages),
             self.messages_size_bytes
+        );
+        debug_assert_eq!(
+            Self::calculate_refund_count(&self.messages),
+            self.refund_count
         );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
@@ -1190,23 +1205,32 @@ impl Stream {
                 self.messages_size_bytes
             );
 
-            if let StreamMessage::Response(response) = &msg
-                && !response.is_best_effort()
-            {
-                match self
-                    .guaranteed_response_counts
-                    .get_mut(&response.respondent)
-                {
-                    Some(0) | None => {
-                        debug_assert!(false);
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(1) => {
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(count) => *count -= 1,
+            // Update the message-type-specific stats.
+            match &msg {
+                StreamMessage::Refund(_) => {
+                    self.refund_count -= 1;
                 }
+                StreamMessage::Response(response) if !response.is_best_effort() => {
+                    match self
+                        .guaranteed_response_counts
+                        .get_mut(&response.respondent)
+                    {
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
+                    }
+                }
+                _ => {}
             }
+            debug_assert_eq!(
+                Self::calculate_refund_count(&self.messages),
+                self.refund_count
+            );
             debug_assert_eq!(
                 Self::calculate_guaranteed_response_counts(&self.messages),
                 self.guaranteed_response_counts
@@ -1261,7 +1285,15 @@ impl Stream {
 
     /// Calculates the estimated byte size of the given messages.
     fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
-        messages.iter().map(|(_, m)| m.count_bytes()).sum()
+        messages.iter().map(|(_, msg)| msg.count_bytes()).sum()
+    }
+
+    /// Calculates the estimated byte size of all `Refunds` in `messages`.
+    fn calculate_refund_count(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
+        messages
+            .iter()
+            .filter(|(_, msg)| matches!(msg, StreamMessage::Refund(_)))
+            .count()
     }
 
     fn calculate_guaranteed_response_counts(
@@ -1847,10 +1879,10 @@ pub(crate) mod testing {
             // Covered in `super::subnet_call_context_manager::testing`.
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
-            cost_schedule: CanisterCyclesCostSchedule::Normal,
             node_public_keys: Default::default(),
             api_boundary_nodes: Default::default(),
             split_from: None,
+            subnet_split_from: None,
             prev_state_hash: Default::default(),
             state_sync_version: CURRENT_STATE_SYNC_VERSION,
             certification_version: CURRENT_CERTIFICATION_VERSION,

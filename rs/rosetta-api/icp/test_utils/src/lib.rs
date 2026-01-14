@@ -1,3 +1,4 @@
+use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_rosetta_api::convert::{
     from_hex, from_model_account_identifier, operations_to_requests, to_hex,
@@ -678,16 +679,9 @@ pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
 }
 
 pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &Blob, path: P) {
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\r\n");
-    for chunk in base64::encode(&pk[..]).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\r\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\r\n");
-
+    let pem_bytes = public_key_der_to_pem(&pk[..]);
     let path = path.as_ref();
-    std::fs::write(path, bytes)
+    std::fs::write(path, pem_bytes)
         .unwrap_or_else(|e| panic!("failed to store public key to {}: {}", path.display(), e));
 }
 

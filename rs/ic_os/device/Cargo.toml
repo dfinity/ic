@@ -10,6 +10,7 @@ gpt = { workspace = true }
 loopdev-3 = { workspace = true }
 nix = { workspace = true }
 partition_tools = { path = "../build_tools/partition_tools" }
+rand = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 uuid = { workspace = true }

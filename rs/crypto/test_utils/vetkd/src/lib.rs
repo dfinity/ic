@@ -19,7 +19,7 @@ pub struct PrivateKey {
 
 impl PrivateKey {
     pub fn generate(seed: &[u8]) -> Self {
-        let secret_key = Scalar::hash(b"ic-crypto-vetkd-test-utils-generate-test-key", seed);
+        let secret_key = Scalar::hash("ic-crypto-vetkd-test-utils-generate-test-key", seed);
         Self::from_scalar(secret_key)
     }
 

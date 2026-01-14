@@ -683,7 +683,8 @@ fn system_metadata_online_split() {
     expected
         .ingress_history
         .split(|canister_id| canister_id != CANISTER_2);
-    // expected.split_from = Some(SUBNET_A);
+    // And the split marker should be set.
+    expected.subnet_split_from = Some(SUBNET_A);
     expected.split_from = None;
 
     // The `install_code` call targeting `CANISTER_2` has been dropped and a reject
@@ -724,8 +725,8 @@ fn system_metadata_online_split() {
     // No canister allocation ranges. Will be initialized in the next round.
     expected.canister_allocation_ranges = Default::default();
     expected.last_generated_canister_id = None;
-    // And the split marker should be reset.
-    // expected.split_from = Some(SUBNET_A);
+    // And the split marker should be set.
+    expected.subnet_split_from = Some(SUBNET_A);
     expected.split_from = None;
     // No management canister calls.
     expected.subnet_call_context_manager = Default::default();

@@ -727,14 +727,12 @@ def inject_config_into_image(
         ipv4_part += f"--domain-name {ipv4_args.domain} "
 
     enable_trusted_execution_environment_part = ""
-    if inject_enable_trusted_execution_environment is not None:
-        enable_trusted_execution_environment_part += (
-            f"--enable-trusted-execution-environment {inject_enable_trusted_execution_environment}"
-        )
+    if inject_enable_trusted_execution_environment:
+        enable_trusted_execution_environment_part = "--enable-trusted-execution-environment "
 
     verbose_part = ""
     if verbose:
-        verbose_part = f"--verbose {verbose} "
+        verbose_part = "--verbose "
 
     admin_key_part = ""
     if pub_key:

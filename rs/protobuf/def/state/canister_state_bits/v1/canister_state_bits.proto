@@ -44,6 +44,7 @@ message CallContext {
   }
   bool responded = 5;
   state.queues.v1.Funds available_funds = 6;
+  state.queues.v1.Cycles available_cycles = 13;
   bool deleted = 8;
   uint64 time_nanos = 9;
   uint64 instructions_executed = 10;
@@ -474,7 +475,8 @@ message CanisterStateBits {
   reserved "log_visibility";
   // Log visibility for the canister.
   LogVisibilityV2 log_visibility_v2 = 51;
-  reserved 56;
+  // The capacity of the canister log in bytes.
+  uint64 log_memory_limit = 56;
   // Log records of the canister.
   repeated CanisterLogRecord canister_log_records = 43;
   // The index of the next log record to be created.

@@ -83,8 +83,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret_key_id: Option<KeyId>,
-    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         debug!(self.logger; crypto.method_name => "create_dealing", crypto.dkg_epoch => epoch.get());
         let start_time = self.metrics.now();
         let result = self.create_dealing_internal(
@@ -93,12 +92,40 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             threshold,
             epoch,
             &receiver_keys,
-            maybe_resharing_secret_key_id,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Local,
             "create_dealing",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+
+    fn create_resharing_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
+        debug!(self.logger; crypto.method_name => "create_resharing_dealing", crypto.dkg_epoch => epoch.get());
+        let start_time = self.metrics.now();
+        let result = self.create_resharing_dealing_internal(
+            algorithm_id,
+            dealer_index,
+            threshold,
+            epoch,
+            &receiver_keys,
+            resharing_secret,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Local,
+            "create_resharing_dealing",
             MetricsResult::from(&result),
             start_time,
         );
@@ -195,7 +222,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<(), CspDkgCreateFsKeyError> {
         let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
         sks_write_lock
-            .insert(key_id, secret_key, None)
+            .insert(key_id, secret_key, Some(NIDKG_FS_SCOPE))
             .map_err(|e| match e {
                 SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspDkgCreateFsKeyError::DuplicateKeyId(format!(
@@ -309,43 +336,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret_key_id: Option<KeyId>,
-    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
-        // If re-sharing, fetch the secret key from the Secret Key Store.
-        let maybe_resharing_secret_key = match maybe_resharing_secret_key_id {
-            Some(key_id) => {
-                let maybe_secret_key: Option<CspSecretKey> = self.sks_read_lock().get(&key_id);
-                let secret_key = maybe_secret_key.ok_or_else(|| {
-                    ni_dkg_errors::CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(
-                        ni_dkg_errors::KeyNotFoundError {
-                            internal_error: format!(
-                                "Cannot find threshold key to be reshared:\n  key id: {key_id}\n  Epoch:  {epoch}"
-                            ),
-                            key_id: key_id.to_string(),
-                        },
-                    )
-                })?;
-                Some(secret_key)
-            }
-            None => None,
-        };
-        // Specialisation to this scheme:
-
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError> {
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
-                let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
-                    Some(secret_key) => {
-                        let secret_key_bytes = specialise::groth20::threshold_secret_key(
-                            secret_key,
-                        )
-                        .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError)?;
-                        Some(secret_key_bytes)
-                    }
-                    None => None,
-                };
                 let receiver_keys = specialise::groth20::receiver_keys(receiver_keys).map_err(
                     |(receiver_index, error)| {
-                        ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
+                        ni_dkg_errors::CspDkgCreateDealingError::MalformedFsPublicKeyError {
                             receiver_index,
                             error,
                         }
@@ -368,9 +364,71 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     &receiver_keys,
                     epoch,
                     dealer_index,
-                    maybe_resharing_secret_key_bytes,
                 )?;
-                // Response
+                Ok(CspNiDkgDealing::Groth20_Bls12_381(dealing))
+            }
+            other => Err(ni_dkg_errors::CspDkgCreateDealingError::UnsupportedAlgorithmId(other)),
+        }
+    }
+
+    fn create_resharing_dealing_internal(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: &BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret_key_id: KeyId,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
+        // Fetch the resharing secret key from the Secret Key Store.
+        let maybe_secret_key: Option<CspSecretKey> =
+            self.sks_read_lock().get(&resharing_secret_key_id);
+        let resharing_secret_key = maybe_secret_key.ok_or_else(|| {
+            ni_dkg_errors::CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(
+                ni_dkg_errors::KeyNotFoundError {
+                    internal_error: format!(
+                        "Cannot find threshold key to be reshared:\n  key id: {resharing_secret_key_id}\n  Epoch:  {epoch}"
+                    ),
+                    key_id: resharing_secret_key_id.to_string(),
+                },
+            )
+        })?;
+
+        match algorithm_id {
+            AlgorithmId::NiDkg_Groth20_Bls12_381 => {
+                let resharing_secret_key_bytes = specialise::groth20::threshold_secret_key(
+                    resharing_secret_key,
+                )
+                .map_err(
+                    ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError,
+                )?;
+                let receiver_keys = specialise::groth20::receiver_keys(receiver_keys).map_err(
+                    |(receiver_index, error)| {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
+                            receiver_index,
+                            error,
+                        }
+                    },
+                )?;
+                // Stateless call to crypto lib
+                // Acquire an rng lock and generate randomness before invoking create_dealing
+                // because:
+                // * acquiring two locks inline in the create_dealing call would lead to a
+                //   deadlock.
+                // * we should not hold the write lock for the whole duration of create_dealing.
+                let (keygen_seed, encryption_seed) = {
+                    let mut rng = self.rng_write_lock();
+                    (Seed::from_rng(&mut *rng), Seed::from_rng(&mut *rng))
+                };
+                let dealing = ni_dkg_clib::create_resharing_dealing(
+                    keygen_seed,
+                    encryption_seed,
+                    threshold,
+                    &receiver_keys,
+                    epoch,
+                    dealer_index,
+                    resharing_secret_key_bytes,
+                )?;
                 Ok(CspNiDkgDealing::Groth20_Bls12_381(dealing))
             }
             other => {

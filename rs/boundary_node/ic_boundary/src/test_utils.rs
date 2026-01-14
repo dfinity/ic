@@ -101,6 +101,7 @@ pub fn new_threshold_key() -> ThresholdSigPublicKey {
     pk
 }
 
+/// Generate test subnet record
 pub fn test_subnet_record() -> SubnetRecord {
     SubnetRecord {
         membership: vec![],
@@ -125,7 +126,7 @@ pub fn test_subnet_record() -> SubnetRecord {
     }
 }
 
-// Generate a fake registry client with some data
+/// Generate a fake registry client with some data
 #[allow(clippy::type_complexity)]
 pub fn create_fake_registry_client(
     subnet_count: usize,
@@ -247,6 +248,7 @@ pub fn create_fake_registry_client(
     (registry_client, nodes, ranges)
 }
 
+/// Inject some dummy ConnInfo
 async fn add_conninfo(
     mut request: axum::extract::Request,
     next: axum::middleware::Next,
@@ -257,6 +259,7 @@ async fn add_conninfo(
     next.run(request).await
 }
 
+/// Create a test router using some bogus data
 pub fn setup_test_router(
     enable_cache: bool,
     enable_logging: bool,
@@ -267,6 +270,8 @@ pub fn setup_test_router(
 ) -> (Router, Vec<Subnet>) {
     let mut args = vec![
         "",
+        "--listen-http-port",
+        "111",
         "--registry-local-store-path",
         "/tmp",
         "--obs-log-null",

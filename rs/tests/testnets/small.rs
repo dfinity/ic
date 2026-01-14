@@ -2,10 +2,10 @@
 //   one 1-node System and one 1-node Application subnets, one unassigned node, single API boundary node, single ic-gateway and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 6 vCPUs, 24 GiB of RAM, and 50 GiB disk.
 //
-// You can setup this testnet with a lifetime of 180 mins by executing the following commands:
+// You can setup this testnet by executing the following commands:
 //
 //   $ ./ci/tools/docker-run
-//   $ ict testnet create small --lifetime-mins=180 --output-dir=./small -- --test_tmpdir=./small
+//   $ ict testnet create small --output-dir=./small -- --test_tmpdir=./small
 //
 // The --output-dir=./small will store the debug output of the test driver in the specified directory.
 // The --test_tmpdir=./small will store the remaining test output in the specified directory.
@@ -42,7 +42,6 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, NnsCustomizations},
 };
@@ -55,9 +54,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -72,5 +68,4 @@ pub fn setup(env: TestEnv) {
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
         .expect("failed to setup ic-gateway");
-    env.sync_with_prometheus();
 }

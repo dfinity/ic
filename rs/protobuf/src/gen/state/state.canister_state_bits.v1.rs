@@ -5,6 +5,8 @@ pub struct CallContext {
     pub responded: bool,
     #[prost(message, optional, tag = "6")]
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
@@ -688,6 +690,9 @@ pub struct CanisterStateBits {
     /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// The capacity of the canister log in bytes.
+    #[prost(uint64, tag = "56")]
+    pub log_memory_limit: u64,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
