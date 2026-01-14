@@ -1,16 +1,14 @@
 use std::{
-    cell::RefCell,
     fmt::Display,
     time::{Duration, SystemTime},
 };
 
 use candid::{CandidType, Principal};
-use ic_nervous_system_rate_limits::{InMemoryRateLimiter, RateLimiterConfig};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::{delete, pb::v1::RegistryMutation, upsert};
-use ic_types::{NodeId, PrincipalId};
+use ic_types::PrincipalId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
@@ -21,17 +19,6 @@ use crate::{
 const MIGRATION_CAPACITY_INTERVAL_HOURS: u64 = 12;
 const MIGRATION_CAPACITY_INTERVAL: Duration =
     Duration::from_secs(MIGRATION_CAPACITY_INTERVAL_HOURS * 60 * 60);
-
-thread_local! {
-    static MIGRATION_LIMITER: RefCell<InMemoryRateLimiter<NodeId>> = RefCell::new(InMemoryRateLimiter::new_in_memory(
-            RateLimiterConfig {
-                add_capacity_amount: 1,
-                add_capacity_interval: MIGRATION_CAPACITY_INTERVAL,
-                max_capacity: 1,
-                max_reservations: 1
-            })
-        );
-}
 
 impl Registry {
     pub fn do_migrate_node_operator_directly(&mut self, payload: MigrateNodeOperatorPayload) {
@@ -139,7 +126,7 @@ impl Registry {
 
         // Both records must be within the same data center.
         //
-        // This is needed to not allow nodes to be transfered to different
+        // This is needed to not allow nodes to be transferred to different
         // locations with this feature.
         //
         // Transfering still must be done with redeployments.
@@ -182,7 +169,7 @@ impl Registry {
     ) {
         new_node_operator_record.node_allowance += old_node_operator_record.node_allowance;
 
-        // In theory these should be the same for the same datacenter.
+        // IPv6 is a legacy field and it isn't used anymore.
         new_node_operator_record.ipv6 = old_node_operator_record.ipv6.clone();
 
         for (node_reward_type, value) in &old_node_operator_record.rewardable_nodes {
@@ -221,7 +208,7 @@ impl Registry {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
 pub struct MigrateNodeOperatorPayload {
     /// Represents the principal of the target node operator to which
     /// the migration is being executed.
@@ -243,7 +230,7 @@ pub struct MigrateNodeOperatorPayload {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum MigrateError {
+pub enum MigrateError {
     MissingInput,
     SamePrincipals,
     MissingNodeOperator {
@@ -274,7 +261,7 @@ impl Display for MigrateError {
             match self {
                 MigrateError::MissingInput => "The provided payload has missing data".to_string(),
                 MigrateError::SamePrincipals =>
-                    "`new_operator_id` and `old_operator_id` must differ".to_string(),
+                    "`new_node_operator_id` and `old_node_operator_id` must differ".to_string(),
 
                 MigrateError::MissingNodeOperator { principal } =>
                     format!("Expected node operator {principal} to exist, but it doesn't"),
@@ -794,7 +781,7 @@ mod tests {
                 .all(|delta| delta.values.len() == 1 && delta.values[0].is_present())
         );
 
-        // Old node operator should not be pressent
+        // Old node operator should not be present
         let old_node_operator_deltas = filter_changes_for_key_prefix(
             make_node_operator_record_key(old_node_operator_id).as_str(),
             &changes,
