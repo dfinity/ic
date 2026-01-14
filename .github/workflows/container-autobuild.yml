@@ -68,6 +68,9 @@ jobs:
           - name: Dev
             target: dev
             image: ic-build-dev
+    outputs:
+      ci_imageid: ${{ steps.set-imageid.outputs.imageid }}
+      dev_imageid: ${{ steps.set-imageid.outputs.imageid }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,6 +97,9 @@ jobs:
           target: ${{ matrix.target }}
           build-args: |
             CI_USER=1001
+      - name: Set imageid output
+        id: set-imageid
+        run: echo "imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
 
   update-image-references:
     name: Update Image References in Repo
@@ -121,7 +127,7 @@ jobs:
           set -xeuo pipefail
 
           IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ steps.build.outputs.imageid }}"
+          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.ci_imageid }}"
 
           echo '${{ needs.determine-build-image.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
@@ -134,7 +140,7 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m 'Updating container image to ${{ steps.build.outputs.imageid }}' -m 'Image tag: ${{ steps.cfg.outputs.image_tag }}'
+          git commit -m 'Updating container image to ${{ needs.ic-build-image.outputs.ci_imageid }}' -m 'Image tag: ${{ steps.cfg.outputs.image_tag }}'
           git push
 
       - name: Add PR Comment
@@ -143,7 +149,7 @@ jobs:
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container image: `${{ steps.build.outputs.imageid }}`\n'
+            message += 'New container image: `${{ needs.ic-build-image.outputs.ci_imageid }}`\n'
             message += 'New container tag: `${{ needs.determine-build-image.outputs.image_tag }}`'
 
             github.rest.issues.createComment({
