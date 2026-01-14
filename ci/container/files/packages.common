@@ -29,7 +29,6 @@ lcov # used for bazel coverage
 
 # RUST
 gcc
-lld
 pkg-config
 libssl-dev
 libunwind-dev
