@@ -407,6 +407,7 @@ fn convert_self_describing_value(
             api::SelfDescribingValue::Int(int)
         }
         pb::self_describing_value::Value::Null(_) => api::SelfDescribingValue::Null,
+        pb::self_describing_value::Value::Bool(v) => api::SelfDescribingValue::Bool(*v),
         pb::self_describing_value::Value::Array(v) => api::SelfDescribingValue::Array(
             v.values
                 .iter()

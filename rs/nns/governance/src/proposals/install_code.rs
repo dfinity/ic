@@ -476,7 +476,7 @@ mod tests {
                 "install_mode".to_string() => SelfDescribingValue::from("Upgrade"),
                 "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
                 "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
-                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(1_u64),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(true),
             })
         );
     }
@@ -503,7 +503,7 @@ mod tests {
                 "install_mode".to_string() => SelfDescribingValue::from("Install"),
                 "wasm_module_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[1, 2, 3]).to_vec()),
                 "arg_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&[]).to_vec()),
-                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(0_u64),
+                "skip_stopping_before_installing".to_string() => SelfDescribingValue::from(false),
             })
         );
     }
