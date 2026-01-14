@@ -1,3 +1,14 @@
+//! Node Operator Migration
+//!
+//! This module provides functionality for node providers to migrate node operator
+//! records from one principal to another within the same data center.
+//!
+//! ## Use Cases
+//!
+//! - **Lost Private Key**: When a node operator loses access to their private key,
+//!   they can migrate to a new node operator identity while preserving all associated data.
+//! - **Consolidation**: Merge multiple node operators into a single node operator within
+//!   the same data center.
 use std::{
     fmt::Display,
     time::{Duration, SystemTime},
@@ -16,16 +27,41 @@ use crate::{
     mutations::node_management::common::get_node_operator_nodes_with_id, registry::Registry,
 };
 
+/// Minimum age a node operator must have before it can be migrated.
+/// This prevents spam by requiring operators to exist for at least this duration
+/// before they can be deleted through migration.
 const MIGRATION_CAPACITY_INTERVAL_HOURS: u64 = 12;
+
+/// The duration form of [`MIGRATION_CAPACITY_INTERVAL_HOURS`].
 const MIGRATION_CAPACITY_INTERVAL: Duration =
     Duration::from_secs(MIGRATION_CAPACITY_INTERVAL_HOURS * 60 * 60);
 
 impl Registry {
+    /// Migrates a node operator record and node records to a new node operator principal.
+    ///
+    /// This is the public entry point called by the canister. It retrieves the caller
+    /// and current time, then delegates to the inner implementation.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any business rule validation fails. See [`MigrateError`] for possible
+    /// failure reasons.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let payload = MigrateNodeOperatorPayload {
+    ///     old_node_operator_id: Some(old_principal),
+    ///     new_node_operator_id: Some(new_principal),
+    /// };
+    /// registry.do_migrate_node_operator_directly(payload);
+    /// ```
     pub fn do_migrate_node_operator_directly(&mut self, payload: MigrateNodeOperatorPayload) {
         self.migrate_node_operator_inner(payload, dfn_core::api::caller(), now_system_time())
             .unwrap_or_else(|e| panic!("{e}"));
     }
 
+    /// Internal implementation of node operator migration with injectable dependencies.
     fn migrate_node_operator_inner(
         &mut self,
         payload: MigrateNodeOperatorPayload,
@@ -53,6 +89,7 @@ impl Registry {
         Ok(())
     }
 
+    /// Validates all business rules and returns the mutations for node operator records.
     fn get_operator_mutations_if_business_rules_are_valid(
         &self,
         old_node_operator_id: PrincipalId,
@@ -163,6 +200,7 @@ impl Registry {
         ])
     }
 
+    /// Merges data from the old node operator record into the new node operator record.
     fn update_new_node_operator_record(
         old_node_operator_record: &NodeOperatorRecord,
         new_node_operator_record: &mut NodeOperatorRecord,
@@ -187,6 +225,12 @@ impl Registry {
         }
     }
 
+    /// Generates mutations to transfer all nodes from old node operator to new node
+    /// operator.
+    ///
+    /// Scans the registry for all nodes owned by `old_node_operator_id` and creates
+    /// mutations that update their `node_operator_id` field to point to
+    /// `new_node_operator_id`.
     fn get_node_mutations(
         &self,
         old_node_operator_id: PrincipalId,
@@ -208,7 +252,11 @@ impl Registry {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
+/// Payload for the node operator migration operation.
+///
+/// Both fields are required; the migration will fail with [`MigrateError::MissingInput`]
+/// if either is `None`.
+#[derive(Clone, Eq, PartialEq, CandidType, Deserialize, Message, Serialize)]
 pub struct MigrateNodeOperatorPayload {
     /// Represents the principal of the target node operator to which
     /// the migration is being executed.
@@ -229,28 +277,35 @@ pub struct MigrateNodeOperatorPayload {
     pub old_node_operator_id: Option<PrincipalId>,
 }
 
+/// Errors that can occur during node operator migration.
+///
+/// Each variant includes relevant context to help diagnose the issue.
 #[derive(Debug, PartialEq, Eq)]
 pub enum MigrateError {
+    /// One or both of the operator IDs in the payload are missing.
     MissingInput,
+
+    /// The old and new operator IDs are identical.
     SamePrincipals,
-    MissingNodeOperator {
-        principal: PrincipalId,
-    },
-    NodeProviderMismatch {
-        old: PrincipalId,
-        new: PrincipalId,
-    },
-    DataCenterMismatch {
-        old: String,
-        new: String,
-    },
+
+    /// The specified old node operator does not exist in the registry.
+    MissingNodeOperator { principal: PrincipalId },
+
+    /// The old and new operators belong to different node providers.
+    NodeProviderMismatch { old: PrincipalId, new: PrincipalId },
+
+    /// The old and new operators are in different data centers.
+    DataCenterMismatch { old: String, new: String },
+
+    /// The caller is not the node provider that owns the operators.
     CallerMismatch {
         caller: PrincipalId,
         expected: PrincipalId,
     },
-    OldOperatorRateLimit {
-        principal: PrincipalId,
-    },
+
+    /// The old operator was created too recently and cannot be migrated yet.
+    /// Operators must exist for at least [`MIGRATION_CAPACITY_INTERVAL_HOURS`] hours.
+    OldOperatorRateLimit { principal: PrincipalId },
 }
 
 impl Display for MigrateError {
@@ -358,16 +413,17 @@ mod tests {
         ]
     }
 
-    // Since seeding of test data takes place _now_
-    // this is a helper to call the migration in the future
-    // to avoid rate limits.
-    //
-    // This just masks the error as it calls the inner
-    // function with a different _now_. Proper testing
-    // of this rate limit cannot be done within unit
-    // tests as `maybe_apply_mutation_internal` doesn't
-    // provide an api for "now" and uses system time
-    // which is hard to mock.
+    /// Returns a timestamp 13 hours in the future.
+    ///
+    /// Since test data is seeded at the current time, the rate limit check would
+    /// fail for newly created operators. This helper bypasses that by simulating
+    /// a call 13 hours later (past the 12-hour limit).
+    ///
+    /// # Limitations
+    ///
+    /// This only works because we inject `now` into `migrate_node_operator_inner`.
+    /// The actual registry mutations still use real system time, so full rate limit
+    /// testing requires PocketIC where time can be controlled.
     fn now_plus_13_hours() -> SystemTime {
         let now = now_system_time();
 
@@ -617,8 +673,11 @@ mod tests {
         }
     }
 
+    /// Test fixture that provides a pre-configured registry and tracks added nodes.
     struct TestSetup {
+        /// Nodes that have been added during the test, tracked for verification.
         nodes: Vec<NodeInformation>,
+        /// The registry under test.
         registry: Registry,
     }
 
