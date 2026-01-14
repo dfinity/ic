@@ -1,0 +1,96 @@
+use crate::private::perform_locked_canister_action;
+use candid::CandidType;
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
+use ic_management_canister_types_private::LoadCanisterSnapshotArgs;
+use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
+use ic_nervous_system_runtime::Runtime;
+use serde::Deserialize;
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct LoadCanisterSnapshotRequest {
+    pub canister_id: PrincipalId,
+    pub snapshot_id: Vec<u8>,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub enum LoadCanisterSnapshotResponse {
+    Ok(LoadCanisterSnapshotOk),
+    Err(LoadCanisterSnapshotError),
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct LoadCanisterSnapshotOk {}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
+pub struct LoadCanisterSnapshotError {
+    pub code: Option<i32>,
+    pub description: String,
+}
+
+pub async fn load_canister_snapshot<Rt>(
+    load_canister_snapshot_request: LoadCanisterSnapshotRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> LoadCanisterSnapshotResponse
+where
+    Rt: Runtime,
+{
+    let canister_id = match CanisterId::try_from(load_canister_snapshot_request.canister_id) {
+        Ok(id) => id,
+        Err(e) => {
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid canister ID: {:?}", e),
+            });
+        }
+    };
+    let description = format!("{:?}", load_canister_snapshot_request);
+
+    let result = perform_locked_canister_action::<Rt, _, _, _>(
+        canister_id,
+        description,
+        true, // stop_before
+        || async {
+            let LoadCanisterSnapshotRequest {
+                canister_id,
+                snapshot_id,
+            } = load_canister_snapshot_request;
+
+            let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(format!("Invalid snapshot ID: {err}"));
+                }
+            };
+
+            let canister_id = match CanisterId::try_from(canister_id) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(format!("Invalid canister ID: {err}"));
+                }
+            };
+
+            let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(
+                canister_id,
+                snapshot_id,
+                management_canister_client.canister_version(),
+            );
+
+            match management_canister_client
+                .load_canister_snapshot(load_canister_snapshot_args)
+                .await
+            {
+                Ok(()) => Ok(LoadCanisterSnapshotOk {}),
+                Err((code, description)) => Err(format!("Code: {code:?}, Description: {description}")),
+            }
+        },
+    )
+    .await;
+
+    match result {
+        Ok(ok) => LoadCanisterSnapshotResponse::Ok(ok),
+        Err(description) => LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+            code: None,
+            description,
+        }),
+    }
+}
