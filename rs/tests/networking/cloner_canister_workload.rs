@@ -27,7 +27,7 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        prometheus_vm::HasPrometheus,
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, load_wasm},
     },
@@ -65,10 +65,6 @@ fn main() -> Result<()> {
 
 pub fn setup(env: TestEnv) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     info!(
         &logger,
         "Step 1: Starting the IC with a subnet of size {SUBNET_SIZE}.",
@@ -91,7 +87,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 
     // Await Replicas
     info!(
