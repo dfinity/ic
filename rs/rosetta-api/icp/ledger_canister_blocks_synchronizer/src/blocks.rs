@@ -1284,7 +1284,9 @@ impl Blocks {
                     return Err(e);
                 }
             }
-            progress_bar.map(|bar| bar.inc(1));
+            if let Some(bar) = progress_bar {
+                bar.inc(1);
+            }
         }
         connection
             .execute_batch("COMMIT TRANSACTION;")
