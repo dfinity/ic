@@ -52,8 +52,6 @@ struct TestConfig {
     server_chip_id: [u8; 64],
     /// Client chip ID
     client_chip_id: [u8; 64],
-    /// Whether to sign attestation reports
-    sign_attestation_reports: bool,
     /// Custom data to use in attestation (None for default)
     /// Allows testing invalid attestation data
     custom_data_override: Option<[u8; 64]>,
@@ -65,7 +63,6 @@ impl Default for TestConfig {
         Self {
             client_measurement: DEFAULT_CLIENT_MEASUREMENT,
             server_measurement: DEFAULT_SERVER_MEASUREMENT,
-            sign_attestation_reports: true,
             custom_data_override: None,
             client_chip_id: DEFAULT_CHIP_ID,
             server_chip_id: DEFAULT_CHIP_ID,
@@ -151,20 +148,12 @@ impl DiskEncryptionKeyExchangeTestFixture {
             server_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.server_chip_id)
                 .with_custom_data_override(config.custom_data_override)
-                .with_signer(
-                    config
-                        .sign_attestation_reports
-                        .then_some(fake_attestation_report_signer.clone()),
-                )
+                .with_signer(Some(fake_attestation_report_signer.clone()))
                 .with_measurement(config.server_measurement),
             client_sev_firmware: MockSevGuestFirmwareBuilder::new()
                 .with_chip_id(config.client_chip_id)
                 .with_custom_data_override(config.custom_data_override)
-                .with_signer(
-                    config
-                        .sign_attestation_reports
-                        .then_some(fake_attestation_report_signer.clone()),
-                )
+                .with_signer(Some(fake_attestation_report_signer.clone()))
                 .with_measurement(config.client_measurement),
             registry_client,
             trusted_execution_environment_config,
@@ -392,20 +381,6 @@ async fn test_server_timeout() {
         .exchange_keys()
         .await
         .expect_err("Key exchange should fail when server times out");
-}
-
-#[tokio::test]
-async fn test_attestation_reports_not_signed() {
-    let config = TestConfig {
-        sign_attestation_reports: false,
-        ..Default::default()
-    };
-    let (server_result, client_result) = DiskEncryptionKeyExchangeTestFixture::new(config)
-        .run_key_exchange_test()
-        .await;
-
-    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
-    assert_statuses_contain_errors((server_result, client_result), "InvalidSignature");
 }
 
 #[tokio::test]

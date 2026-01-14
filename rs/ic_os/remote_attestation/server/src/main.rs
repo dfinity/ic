@@ -78,7 +78,7 @@ impl RemoteAttestationService for RemoteAttestationServiceImpl {
                 })?;
 
         Ok(Response::new(AttestResponse {
-            attestation_package: Some(attestation_package),
+            attestation_package: Some(attestation_package.into()),
         }))
     }
 }

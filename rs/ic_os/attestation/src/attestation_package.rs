@@ -1,5 +1,6 @@
+use crate::SevCertificateChain;
 use crate::custom_data::EncodeSevCustomData;
-use crate::{SevAttestationPackage, SevCertificateChain};
+use crate::verification::{ParsedAttestationPackage, SevRootCertificateVerification};
 use anyhow::{Context, Result, anyhow, bail};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
@@ -13,27 +14,32 @@ pub fn generate_attestation_package(
     sev_firmware: &mut dyn SevGuestFirmware,
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
     custom_data: &(impl EncodeSevCustomData + Debug),
-) -> Result<SevAttestationPackage> {
+) -> Result<ParsedAttestationPackage> {
     let attestation_report = sev_firmware
         .get_report(None, Some(custom_data.encode_for_sev()?.to_bytes()), None)
         .context("Failed to get attestation report from SEV firmware")?;
-    let parsed_attestation_report = AttestationReport::from_bytes(&attestation_report);
-    if let Err(err) = parsed_attestation_report {
-        // Fail in debug mode, but only print a warning in release mode.
+
+    let sev_root_certificate_verification = if sev_firmware.is_mock() {
+        SevRootCertificateVerification::TestOnlySkipVerification
+    } else {
+        SevRootCertificateVerification::Verify
+    };
+
+    ParsedAttestationPackage::new_verified(
+        AttestationReport::from_bytes(&attestation_report)
+            .context("Failed to parse attestation report")?,
+        certificate_chain_from_config(trusted_execution_environment_config)
+            .context("Failed to get SEV certificate chain")?,
+        sev_root_certificate_verification,
+        format!("{custom_data:?}"),
+    )
+    .map_err(|err| {
+        // Fail in debug mode, but only return the error in release mode.
         debug_assert!(
             false,
-            "Own generated attestation report could not be parsed: {err:?}"
+            "Generated attestation report could not be verified: {err}"
         );
-        eprintln!("Own generated attestation report could not be parsed: {err:?}",);
-    }
-
-    Ok(SevAttestationPackage {
-        attestation_report: Some(attestation_report),
-        certificate_chain: Some(
-            certificate_chain_from_config(trusted_execution_environment_config)
-                .context("Failed to get SEV certificate chain")?,
-        ),
-        custom_data_debug_info: format!("{custom_data:?}").into(),
+        anyhow!("Generated attestation report could not be verified: {err}")
     })
 }
 

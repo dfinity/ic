@@ -18,10 +18,12 @@ pub trait SevGuestFirmware: Sync + Send {
         message_version: Option<u32>,
         derived_key_request: DerivedKey,
     ) -> Result<[u8; 32], UserApiError>;
+
+    fn is_mock(&self) -> bool;
 }
 
-#[cfg(target_os = "linux")]
 /// Implementation for the actual AMD firmware.
+#[cfg(target_os = "linux")]
 impl SevGuestFirmware for Firmware {
     fn get_report(
         &mut self,
@@ -38,5 +40,9 @@ impl SevGuestFirmware for Firmware {
         derived_key_request: DerivedKey,
     ) -> Result<[u8; 32], UserApiError> {
         self.get_derived_key(message_version, derived_key_request)
+    }
+
+    fn is_mock(&self) -> bool {
+        false
     }
 }

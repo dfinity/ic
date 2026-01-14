@@ -17,3 +17,4 @@ config_tool = { path = "../../config/tool" }
 config_types = { path = "../../config/types" }
 ic_sev = { path = "../../sev" }
 sev = { workspace = true }
+rand = { workspace = true }

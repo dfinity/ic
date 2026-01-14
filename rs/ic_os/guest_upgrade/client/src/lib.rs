@@ -22,8 +22,6 @@ use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
-use sev::firmware::guest::AttestationReport;
-use sev::parser::ByteParser;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -152,17 +150,11 @@ impl DiskEncryptionKeyExchangeClientAgent {
         )
         .context("Failed to generate attestation package")?;
 
-        let my_attestation_report = AttestationReport::from_bytes(
-            my_attestation_package
-                .attestation_report
-                .as_ref()
-                .context("My attestation report is missing")?,
-        )
-        .context("Failed to parse my attestation report")?;
+        let my_attestation_report = *my_attestation_package.attestation_report();
 
         let get_key_response = upgrade_service_client
             .get_disk_encryption_key(GetDiskEncryptionKeyRequest {
-                sev_attestation_package: Some(my_attestation_package),
+                sev_attestation_package: Some(my_attestation_package.into()),
             })
             .await
             .context("Call to get_disk_encryption_key failed")?

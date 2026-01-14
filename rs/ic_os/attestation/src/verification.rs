@@ -55,12 +55,30 @@ pub trait AttestationVerifier: Sized {
 /// ```
 #[derive(Debug)]
 pub struct ParsedAttestationPackage {
-    // Invariant: attestation report signature is valid
+    // Invariant: attestation_report is signed by certificate_chain
     attestation_report: AttestationReport,
+    certificate_chain: SevCertificateChain,
     custom_data_debug_info: String,
 }
 
 impl ParsedAttestationPackage {
+    pub fn new_verified(
+        attestation_report: AttestationReport,
+        certificate_chain: SevCertificateChain,
+        sev_root_certificate_verification: SevRootCertificateVerification,
+        custom_data_debug_info: String,
+    ) -> Result<Self, VerificationError> {
+        verify_sev_attestation_report_signature(
+            &attestation_report,
+            &certificate_chain,
+            sev_root_certificate_verification,
+        )?;
+        Ok(Self {
+            attestation_report,
+            certificate_chain,
+            custom_data_debug_info,
+        })
+    }
     /// Parse an SEV attestation package and verify the signatures.
     ///
     /// This method:
@@ -89,20 +107,32 @@ impl ParsedAttestationPackage {
             VerificationError::invalid_certificate_chain("Certificate chain is missing")
         })?;
 
-        verify_sev_attestation_report_signature(
-            &attestation_report,
-            &certificate_chain,
-            sev_root_certificate_verification,
-        )?;
-
-        Ok(Self {
+        Self::new_verified(
             attestation_report,
-            custom_data_debug_info: package.custom_data_debug_info.unwrap_or_default(),
-        })
+            certificate_chain,
+            sev_root_certificate_verification,
+            package.custom_data_debug_info.unwrap_or_default(),
+        )
     }
 
     pub fn attestation_report(&self) -> &AttestationReport {
         &self.attestation_report
+    }
+}
+
+impl From<ParsedAttestationPackage> for SevAttestationPackage {
+    fn from(value: ParsedAttestationPackage) -> Self {
+        Self {
+            attestation_report: Some(
+                value
+                    .attestation_report
+                    .to_bytes()
+                    .expect("Failed to encode attestation report")
+                    .to_vec(),
+            ),
+            certificate_chain: Some(value.certificate_chain),
+            custom_data_debug_info: Some(value.custom_data_debug_info),
+        }
     }
 }
 
@@ -213,7 +243,7 @@ impl AttestationVerifier for Result<ParsedAttestationPackage, VerificationError>
     }
 }
 
-fn verify_sev_attestation_report_signature(
+pub(crate) fn verify_sev_attestation_report_signature(
     attestation_report: &AttestationReport,
     certificate_chain: &SevCertificateChain,
     sev_root_certificate_verification: SevRootCertificateVerification,

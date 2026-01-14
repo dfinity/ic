@@ -290,6 +290,8 @@ impl MockSevGuestFirmwareBuilder {
                 .unwrap_or(this.measurement[4..36].try_into().unwrap()))
         });
 
+        firmware.expect_is_mock().returning(|| true);
+
         firmware
     }
 }
@@ -311,6 +313,10 @@ impl SevGuestFirmware for MockSevGuestFirmwareBuilder {
     ) -> Result<[u8; 32], sev::error::UserApiError> {
         self.build()
             .get_derived_key(message_version, derived_key_request)
+    }
+
+    fn is_mock(&self) -> bool {
+        self.build().is_mock()
     }
 }
 
