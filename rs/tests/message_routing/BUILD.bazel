@@ -97,6 +97,7 @@ system_test_nns(
 system_test_nns(
     name = "rejoin_test_long_rounds",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    enable_metrics = True,
     env = UNIVERSAL_CANISTER_ENV | {
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
     },

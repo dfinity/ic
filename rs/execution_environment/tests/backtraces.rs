@@ -30,7 +30,7 @@ Canister Backtrace:.*
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
-canister_update ic0_trap
+_wasm_backtrace_canister::ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(

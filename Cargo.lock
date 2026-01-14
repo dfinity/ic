@@ -219,15 +219,15 @@ dependencies = [
 
 [[package]]
 name = "actix-web-prom"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+checksum = "a7eb266b4c692a4a7e68429fcbe4eb3bd55c053f6d84c0522dc83df22395edf6"
 dependencies = [
  "actix-web",
  "futures-core",
  "log",
  "pin-project-lite",
- "prometheus 0.13.4",
+ "prometheus",
  "regex",
  "strfmt",
 ]
@@ -2039,7 +2039,7 @@ dependencies = [
  "on_wire",
  "rand 0.8.5",
  "tokio",
- "wasmprinter 0.240.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -2219,7 +2219,7 @@ dependencies = [
  "leb128",
  "mockall",
  "pem 3.0.6",
- "prometheus 0.13.4",
+ "prometheus",
  "rcgen 0.13.2",
  "reqwest 0.12.24",
  "serde",
@@ -2252,7 +2252,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "mockall",
  "priority-queue",
- "prometheus 0.13.4",
+ "prometheus",
  "publicsuffix",
  "serde",
  "serde_cbor",
@@ -5743,6 +5743,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashlink"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+dependencies = [
+ "hashbrown 0.15.2",
+]
+
+[[package]]
 name = "hdrhistogram"
 version = "7.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6337,8 +6346,8 @@ dependencies = [
  "hyper-util",
  "ic-adapter-metrics-service",
  "ic-http-endpoints-async-utils",
- "prometheus 0.13.4",
- "protobuf 2.28.0",
+ "prometheus",
+ "protobuf",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -6353,7 +6362,7 @@ dependencies = [
  "ic-adapter-metrics-service",
  "ic-logger",
  "ic-metrics",
- "protobuf 2.28.0",
+ "protobuf",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -6579,7 +6588,7 @@ dependencies = [
  "ic-types-test-utils",
  "mockall",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -6604,7 +6613,7 @@ dependencies = [
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -6639,7 +6648,7 @@ dependencies = [
  "lmdb-rkv",
  "lmdb-rkv-sys",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "rocksdb",
@@ -6786,7 +6795,7 @@ dependencies = [
  "moka",
  "nix 0.30.1",
  "ppp",
- "prometheus 0.14.0",
+ "prometheus",
  "prost 0.14.1",
  "prost-types 0.14.1",
  "rand 0.8.5",
@@ -6852,7 +6861,7 @@ dependencies = [
  "ic-agent 0.44.3",
  "instant-acme 0.8.4",
  "parse-size",
- "prometheus 0.14.0",
+ "prometheus",
  "rcgen 0.14.5",
  "reqwest 0.12.24",
  "rustls 0.23.27",
@@ -6897,7 +6906,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
@@ -7021,7 +7030,7 @@ dependencies = [
  "criterion",
  "flate2",
  "futures",
- "hashlink",
+ "hashlink 0.8.4",
  "hex",
  "http 1.3.1",
  "hyper-util",
@@ -7041,7 +7050,7 @@ dependencies = [
  "lmdb-rkv",
  "parking_lot",
  "primitive-types",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "scrypt",
@@ -7072,7 +7081,7 @@ dependencies = [
  "ic-interfaces-adapter-client",
  "ic-logger",
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "serde_bytes",
  "slog",
@@ -7156,7 +7165,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "slog",
@@ -7252,7 +7261,7 @@ name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "rand 0.8.5",
@@ -7331,7 +7340,7 @@ dependencies = [
  "num-traits",
  "object 0.37.3",
  "once_cell",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rayon",
  "regex",
@@ -7903,7 +7912,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -7942,7 +7951,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
  "strum_macros 0.26.4",
  "tokio",
@@ -7996,7 +8005,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rayon",
  "slog",
@@ -8040,7 +8049,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rayon",
  "slog",
@@ -8068,7 +8077,7 @@ dependencies = [
  "ic-types-test-utils",
  "mockall",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -8129,7 +8138,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "slog",
 ]
@@ -8163,7 +8172,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "num-traits",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rayon",
  "slog",
@@ -8188,8 +8197,6 @@ dependencies = [
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
- "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-bls12-381-type",
@@ -8229,7 +8236,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -8388,7 +8395,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.6",
@@ -8536,7 +8543,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -8638,7 +8645,7 @@ version = "0.9.0"
 dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
  "strum 0.26.3",
  "strum_macros 0.26.4",
 ]
@@ -8784,7 +8791,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "rand 0.8.5",
@@ -8973,7 +8980,7 @@ name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp-test-utils",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
@@ -9165,7 +9172,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -9282,7 +9289,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
 ]
 
@@ -9389,7 +9396,7 @@ dependencies = [
  "ic-bn-lib-common",
  "ic-custom-domains-base",
  "ic-custom-domains-canister-client",
- "prometheus 0.14.0",
+ "prometheus",
  "serde",
  "serde_json",
  "strum 0.27.2",
@@ -9423,7 +9430,7 @@ dependencies = [
  "ic-custom-domains-canister-api",
  "mockall",
  "pem 3.0.6",
- "prometheus 0.14.0",
+ "prometheus",
  "serde",
  "strum 0.27.2",
  "thiserror 2.0.17",
@@ -9486,7 +9493,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "slog",
 ]
@@ -9565,7 +9572,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -9631,7 +9638,7 @@ dependencies = [
  "nix 0.24.3",
  "num-traits",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rayon",
  "rustc-demangle",
@@ -9643,9 +9650,9 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
- "wasm-encoder 0.240.0",
- "wasmparser 0.240.0",
- "wasmprinter 0.240.0",
+ "wasm-encoder 0.243.0",
+ "wasmparser 0.243.0",
+ "wasmprinter",
  "wasmtime",
  "wast",
  "wat",
@@ -9753,7 +9760,7 @@ dependencies = [
  "num-rational 0.2.4",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "regex-lite",
@@ -9770,7 +9777,7 @@ dependencies = [
  "tokio",
  "tower 0.5.2",
  "tracing",
- "wasmparser 0.240.0",
+ "wasmparser 0.243.0",
  "wat",
  "wirm",
 ]
@@ -9836,7 +9843,7 @@ dependencies = [
  "lazy_static",
  "maxminddb 0.26.0",
  "moka",
- "prometheus 0.14.0",
+ "prometheus",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.24",
@@ -9869,7 +9876,7 @@ dependencies = [
  "candid",
  "ic-heap-bytes-derive",
  "paste",
- "prometheus 0.13.4",
+ "prometheus",
  "tempfile",
 ]
 
@@ -9936,7 +9943,7 @@ dependencies = [
  "ic-http-endpoints-async-utils",
  "ic-metrics",
  "ic-test-utilities-logger",
- "prometheus 0.13.4",
+ "prometheus",
  "reqwest 0.12.24",
  "slog",
  "thiserror 2.0.17",
@@ -10010,7 +10017,7 @@ dependencies = [
  "maplit",
  "mockall",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -10075,7 +10082,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "maplit",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "reqwest 0.12.24",
  "serde",
@@ -10157,7 +10164,7 @@ dependencies = [
  "ic-metrics",
  "once_cell",
  "parking_lot",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rstest",
  "rustls 0.23.27",
@@ -10197,7 +10204,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -10236,7 +10243,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -10311,7 +10318,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-runner",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -10346,7 +10353,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.2.7"
+version = "1.2.8"
 dependencies = [
  "anyhow",
  "axum 0.8.4",
@@ -10397,6 +10404,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "tokio-rusqlite",
  "tower-http",
  "tower-request-id",
  "tracing",
@@ -10414,7 +10422,7 @@ dependencies = [
  "clap 4.5.27",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
@@ -10600,7 +10608,7 @@ dependencies = [
  "candid",
  "ic-agent 0.40.1",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
@@ -10738,7 +10746,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "pprof",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "slog",
@@ -10880,7 +10888,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -11221,7 +11229,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -11263,7 +11271,7 @@ dependencies = [
  "messaging-test-utils",
  "mockall",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -11281,8 +11289,8 @@ dependencies = [
  "ic-logger",
  "libc",
  "parking_lot",
- "procfs 0.9.1",
- "prometheus 0.13.4",
+ "procfs",
+ "prometheus",
  "slog",
  "tokio",
  "tokio-metrics",
@@ -12043,7 +12051,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "pprof",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "rustls 0.23.27",
@@ -12707,7 +12715,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "slog",
  "tokio",
@@ -12808,7 +12816,7 @@ name = "ic-pub-key"
 version = "0.2.0"
 dependencies = [
  "hex",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-management-canister-types 0.5.0",
  "ic-secp256k1",
  "ic-vetkeys",
@@ -12829,7 +12837,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-types",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
 ]
 
@@ -12876,7 +12884,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types-test-utils",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "quinn",
  "rstest",
@@ -13043,7 +13051,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-types",
  "ic-utils-thread",
- "prometheus 0.13.4",
+ "prometheus",
 ]
 
 [[package]]
@@ -13269,7 +13277,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -13469,7 +13477,7 @@ dependencies = [
  "num_cpus",
  "pprof",
  "predicates",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "regex",
  "slog",
@@ -13590,7 +13598,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-limits",
@@ -13618,7 +13626,7 @@ dependencies = [
  "nix 0.24.3",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -13688,7 +13696,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
  "ic-icrc1",
@@ -13718,7 +13726,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14529,7 +14537,7 @@ dependencies = [
  "ic-wasm-types",
  "itertools 0.12.1",
  "libc",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "scoped_threadpool",
@@ -14563,7 +14571,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-http-endpoints-public",
@@ -14666,7 +14674,7 @@ dependencies = [
  "maplit",
  "nix 0.24.3",
  "parking_lot",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14704,7 +14712,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -14871,7 +14879,6 @@ dependencies = [
  "json5",
  "lazy_static",
  "macaddr",
- "maplit",
  "nix 0.24.3",
  "num_cpus",
  "on_wire",
@@ -14935,7 +14942,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
@@ -14983,7 +14990,7 @@ dependencies = [
  "serde_cbor",
  "socket2 0.5.9",
  "tempfile",
- "wasmprinter 0.240.0",
+ "wasmprinter",
  "wat",
 ]
 
@@ -15071,7 +15078,7 @@ dependencies = [
  "ic-wasm-types",
  "maplit",
  "num-traits",
- "prometheus 0.13.4",
+ "prometheus",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
@@ -15119,7 +15126,7 @@ name = "ic-test-utilities-metrics"
 version = "0.9.0"
 dependencies = [
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
 ]
 
 [[package]]
@@ -15198,7 +15205,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -15813,7 +15820,7 @@ dependencies = [
  "maplit",
  "mockall",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "reqwest 0.12.24",
@@ -16111,7 +16118,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-fstrim-tool",
  "ic-registry-subnet-type",
  "ic-secp256k1",
@@ -17489,9 +17496,9 @@ dependencies = [
 
 [[package]]
 name = "libsqlite3-sys"
-version = "0.25.2"
+version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29f835d03d717946d28b1d1ed632eb6f0e24a299388ee623d0c23118d3e8a7fa"
+checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
 dependencies = [
  "cc",
  "pkg-config",
@@ -17560,7 +17567,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-test-utils",
- "wasmprinter 0.240.0",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -19213,7 +19220,7 @@ dependencies = [
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -19245,7 +19252,7 @@ dependencies = [
  "indoc 1.0.9",
  "mockall",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "qrcode",
  "rand 0.8.5",
@@ -19958,7 +19965,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
  "ic-doge-interface",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-gateway",
  "ic-http-endpoints-public",
@@ -20008,7 +20015,7 @@ dependencies = [
  "libc",
  "nix 0.29.0",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "registry-canister",
@@ -20326,57 +20333,24 @@ dependencies = [
 
 [[package]]
 name = "procfs"
-version = "0.9.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "chrono",
- "flate2",
- "hex",
- "lazy_static",
- "libc",
-]
-
-[[package]]
-name = "procfs"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
+checksum = "cc5b72d8145275d844d4b5f6d4e1eef00c8cd889edb6035c21675d1bb1f45c9f"
 dependencies = [
  "bitflags 2.10.0",
  "hex",
- "lazy_static",
  "procfs-core",
  "rustix 0.38.44",
 ]
 
 [[package]]
 name = "procfs-core"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
 dependencies = [
  "bitflags 2.10.0",
  "hex",
-]
-
-[[package]]
-name = "prometheus"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
-dependencies = [
- "cfg-if",
- "fnv",
- "lazy_static",
- "libc",
- "memchr",
- "parking_lot",
- "procfs 0.16.0",
- "protobuf 2.28.0",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -20388,9 +20362,11 @@ dependencies = [
  "cfg-if",
  "fnv",
  "lazy_static",
+ "libc",
  "memchr",
  "parking_lot",
- "protobuf 3.7.2",
+ "procfs",
+ "protobuf",
  "thiserror 2.0.17",
 ]
 
@@ -20573,12 +20549,6 @@ checksum = "b9b4db3d6da204ed77bb26ba83b6122a73aeb2e87e25fbf7ad2e84c4ccbf8f72"
 dependencies = [
  "prost 0.14.1",
 ]
-
-[[package]]
-name = "protobuf"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "protobuf"
@@ -21090,7 +21060,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-stable-structures 0.6.8",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "rand_chacha 0.3.1",
  "rate-limit-canister-integration-tests",
  "rate-limits-api",
@@ -21433,6 +21403,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.40.1",
  "slog",
+ "statesync-test",
  "tokio",
 ]
 
@@ -21801,14 +21772,14 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
  "lazy_static",
  "num-bigint 0.4.6",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -21947,14 +21918,14 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.28.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01e213bc3ecb39ac32e81e51ebe31fd888a940515173e3a18a35f8c6e896422a"
+checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
 dependencies = [
- "bitflags 1.3.2",
- "fallible-iterator 0.2.0",
+ "bitflags 2.10.0",
+ "fallible-iterator 0.3.0",
  "fallible-streaming-iterator",
- "hashlink",
+ "hashlink 0.10.0",
  "libsqlite3-sys",
  "smallvec",
 ]
@@ -22363,7 +22334,7 @@ dependencies = [
  "ic-http-types",
  "ic-nns-constants",
  "ic-stable-structures 0.6.8",
- "prometheus 0.13.4",
+ "prometheus",
  "salt-sharing-api",
  "serde",
  "serde_cbor",
@@ -23565,6 +23536,7 @@ name = "statesync-test"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "candid_parser",
  "canister-test",
  "futures",
  "ic-cdk",
@@ -24457,6 +24429,17 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-stream",
+]
+
+[[package]]
+name = "tokio-rusqlite"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "302563ae4a2127f3d2c105f4f2f0bd7cae3609371755600ebc148e0ccd8510d6"
+dependencies = [
+ "crossbeam-channel",
+ "rusqlite",
+ "tokio",
 ]
 
 [[package]]
@@ -25452,7 +25435,7 @@ dependencies = [
  "anyhow",
  "ic-http-utils",
  "mockall",
- "procfs 0.9.1",
+ "procfs",
  "reqwest 0.12.24",
  "rusb",
  "serde",
@@ -25694,16 +25677,6 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.240.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06d642d8c5ecc083aafe9ceb32809276a304547a3a6eeecceb5d8152598bc71f"
-dependencies = [
- "leb128fmt",
- "wasmparser 0.240.0",
-]
-
-[[package]]
-name = "wasm-encoder"
 version = "0.243.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c55db9c896d70bd9fa535ce83cd4e1f2ec3726b0edd2142079f594fc3be1cb35"
@@ -25768,19 +25741,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.240.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b722dcf61e0ea47440b53ff83ccb5df8efec57a69d150e4f24882e4eba7e24a4"
-dependencies = [
- "bitflags 2.10.0",
- "hashbrown 0.15.2",
- "indexmap 2.12.1",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.243.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6d8db401b0528ec316dfbe579e6ab4152d61739cfe076706d2009127970159d"
@@ -25790,17 +25750,6 @@ dependencies = [
  "indexmap 2.12.1",
  "semver",
  "serde",
-]
-
-[[package]]
-name = "wasmprinter"
-version = "0.240.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a84d6e25c198da67d0150ee7c2c62d33d784f0a565d1e670bdf1eeccca8158bc"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.240.0",
 ]
 
 [[package]]
@@ -25877,7 +25826,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.243.0",
  "wasmparser 0.243.0",
- "wasmprinter 0.243.0",
+ "wasmprinter",
 ]
 
 [[package]]
@@ -26004,22 +25953,22 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "240.0.0"
+version = "243.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0efe1c93db4ac562b9733e3dca19ed7fc878dba29aef22245acf84f13da4a19"
+checksum = "df21d01c2d91e46cb7a221d79e58a2d210ea02020d57c092e79255cc2999ca7f"
 dependencies = [
  "bumpalo",
  "leb128fmt",
  "memchr",
  "unicode-width 0.2.0",
- "wasm-encoder 0.240.0",
+ "wasm-encoder 0.243.0",
 ]
 
 [[package]]
 name = "wat"
-version = "1.240.0"
+version = "1.243.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ec9b6eab7ecd4d639d78515e9ea491c9bacf494aa5eda10823bd35992cf8c1e"
+checksum = "226a9a91cd80a50449312fef0c75c23478fcecfcc4092bdebe1dc8e760ef521b"
 dependencies = [
  "wast",
 ]

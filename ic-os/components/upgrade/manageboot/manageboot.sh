@@ -4,7 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
-source /opt/ic/bin/grub.sh
+source /opt/ic/bin/boot-state.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -29,12 +29,12 @@ swap_alternative() {
 }
 
 declare -A GUESTOS_PARTITIONS=(
-    [A_boot]="/dev/vda4"
-    [B_boot]="/dev/vda7"
-    [A_root]="/dev/vda5"
-    [B_root]="/dev/vda8"
-    [A_var]="/dev/vda6"
-    [B_var]="/dev/vda9"
+    [A_boot]="/dev/disk/by-partuuid/ddf618fe-7244-b446-a175-3296e6b9d02e"
+    [B_boot]="/dev/disk/by-partuuid/d5214e4f-f7b0-b945-9a9b-52b9188df4c5"
+    [A_root]="/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7"
+    [B_root]="/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5"
+    [A_var]="/dev/disk/by-partuuid/22d2f5a6-1e39-d247-81cf-90c95c113e21"
+    [B_var]="/dev/disk/by-partuuid/2237d1d1-ce96-584e-8ec5-8ae6661faae9"
 )
 
 declare -A HOSTOS_PARTITIONS=(
@@ -161,8 +161,10 @@ fi
 get_version_noreport
 
 # Read current state
-read_grubenv "${GRUBENV_FILE}"
-write_log "${SYSTEM_TYPE} read grub environment - boot_alternative: ${boot_alternative}, boot_cycle: ${boot_cycle}"
+boot_alternative="$(read_boot_alternative_from_kernel_cmdline)"
+boot_cycle="$(read_boot_cycle_from_grubenv "${GRUBENV_FILE}")"
+
+write_log "${SYSTEM_TYPE} read boot_alternative from kernel cmdline: ${boot_alternative}, boot_cycle from grubenv: ${boot_cycle}"
 
 CURRENT_ALTERNATIVE="${boot_alternative}"
 NEXT_BOOT="${CURRENT_ALTERNATIVE}"

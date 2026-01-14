@@ -22,7 +22,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -590,6 +590,7 @@ pub type QueryExecutionService =
 #[derive(Debug)]
 pub struct TransformExecutionInput {
     pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
 }
 
 /// Interface for the component to execute canister http transform.
@@ -1462,7 +1463,7 @@ pub struct RegistryExecutionSettings {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {
