@@ -205,7 +205,7 @@ impl Registry {
         old_node_operator_id: PrincipalId,
         new_node_operator_id: PrincipalId,
     ) -> Vec<RegistryMutation> {
-        get_node_operator_nodes_with_id(&self, old_node_operator_id)
+        get_node_operator_nodes_with_id(self, old_node_operator_id)
             .into_iter()
             .map(|(key, record)| {
                 upsert(
@@ -819,7 +819,7 @@ mod tests {
 
     fn filter_changes_for_key_prefix(
         prefix: &str,
-        deltas: &Vec<HighCapacityRegistryDelta>,
+        deltas: &[HighCapacityRegistryDelta],
     ) -> Vec<HighCapacityRegistryDelta> {
         deltas
             .iter()
@@ -1056,9 +1056,7 @@ mod tests {
         let caller = PrincipalId::new_user_test_id(999);
         let dc = "dc";
 
-        let old_node_operators: Vec<_> = (1..=3)
-            .map(|no| PrincipalId::new_user_test_id(no))
-            .collect();
+        let old_node_operators: Vec<_> = (1..=3).map(PrincipalId::new_user_test_id).collect();
 
         let node_allowance_per_node_operator = 5;
         let rewardable_nodes_type_1_per_operator = 3;
