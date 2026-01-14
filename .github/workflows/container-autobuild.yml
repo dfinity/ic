@@ -39,6 +39,7 @@ jobs:
 
       - name: Set Build Output
         shell: bash
+        id: set-output
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
