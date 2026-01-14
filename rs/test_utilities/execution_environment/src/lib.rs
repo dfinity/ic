@@ -1247,6 +1247,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             None,
             true,
+            None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1794,6 +1795,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
+            None,
         )
     }
 
@@ -2422,16 +2424,6 @@ impl ExecutionTestBuilder {
         self
     }
 
-    pub fn with_snapshot_metadata_download(mut self) -> Self {
-        self.execution_config.canister_snapshot_download = FlagStatus::Enabled;
-        self
-    }
-
-    pub fn with_snapshot_metadata_upload(mut self) -> Self {
-        self.execution_config.canister_snapshot_upload = FlagStatus::Enabled;
-        self
-    }
-
     pub fn with_environment_variables_flag(
         mut self,
         environment_variables_flag: FlagStatus,
@@ -2525,7 +2517,9 @@ impl ExecutionTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
 

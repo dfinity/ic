@@ -404,20 +404,20 @@ fn test_removal_when_last_dropped() {
         cp3.finalize_and_remove_unverified_marker(None).unwrap();
         assert_eq!(
             vec![Height::new(1), Height::new(2), Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
         std::mem::drop(cp1);
         state_layout.remove_checkpoint_when_unused(Height::new(1));
         state_layout.remove_checkpoint_when_unused(Height::new(2));
         assert_eq!(
             vec![Height::new(2), Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         std::mem::drop(cp2);
         assert_eq!(
             vec![Height::new(3)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
     });
 }
@@ -468,7 +468,7 @@ fn checkpoints_files_are_removed_after_flushing_removal_channel() {
         // from the checkpoints directory, leaving only checkpoint @20.
         assert_eq!(
             vec![Height::new(20)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         state_layout.flush_checkpoint_removal_channel();
@@ -890,7 +890,7 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         // The checkpoint at height 1 still exists because `wasm_on_disk` is alive.
         assert_eq!(
             vec![Height::new(1), Height::new(2)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         // The wasm file is still accessible and the content can be correctly read.
@@ -898,7 +898,7 @@ fn wasm_file_can_hold_checkpoint_for_lazy_loading() {
         assert_eq!(wasm_in_memory.as_slice(), wasm_on_disk.as_slice());
         assert_eq!(
             vec![Height::new(2)],
-            state_layout.checkpoint_heights().unwrap(),
+            state_layout.verified_checkpoint_heights().unwrap(),
         );
 
         // The cached mmap is still accessible after the checkpoint is removed.
@@ -1066,7 +1066,7 @@ fn read_back_checkpoint_directory_names(
             std::fs::create_dir(checkpoint).unwrap();
         }
 
-        let existing_heights = state_layout.checkpoint_heights().unwrap();
+        let existing_heights = state_layout.verified_checkpoint_heights().unwrap();
 
         // We expect the list of heights to be the same including ordering.
         assert_eq!(heights, existing_heights);

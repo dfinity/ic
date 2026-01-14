@@ -5,6 +5,9 @@ use crate::canister_status::{
 };
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_management_canister_types_private::{
+    CanisterSnapshotResponse, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+};
 use rand::{Rng, thread_rng};
 use std::time::Duration;
 
@@ -89,6 +92,13 @@ async fn test_limit_outstanding_calls() {
                 &self,
                 _args: TakeCanisterSnapshotArgs,
             ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+                unimplemented!();
+            }
+
+            async fn load_canister_snapshot(
+                &self,
+                _args: LoadCanisterSnapshotArgs,
+            ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
         }

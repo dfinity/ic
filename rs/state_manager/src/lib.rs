@@ -51,7 +51,9 @@ use ic_replicated_state::{
     ReplicatedState,
     page_map::{PersistenceError, StorageMetrics},
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, error::LayoutError};
+use ic_state_layout::{
+    CheckpointLayout, CheckpointStatus, ReadOnly, StateLayout, error::LayoutError,
+};
 use ic_sys::fs::Clobber;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
@@ -132,6 +134,8 @@ const LABEL_PREALLOCATE_DIRECTORIES: &str = "preallocate_directories";
 const LABEL_PREALLOCATE_FILES: &str = "preallocate_files";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
 const LABEL_LOAD_AND_VALIDATE_CHECKPOINT: &str = "load_and_validate_checkpoint";
+const LABEL_LOAD_CHECKPOINT: &str = "load_checkpoint";
+const LABEL_MARK_FILES_READONLY_AND_SYNC: &str = "mark_files_readonly_and_sync";
 const LABEL_ON_SYNCED_CHECKPOINT: &str = "on_synced_checkpoint";
 const LABEL_FETCH_META_MANIFEST_CHUNK: &str = "fetch_meta_manifest_chunk";
 const LABEL_FETCH_MANIFEST_CHUNK: &str = "fetch_manifest_chunk";
@@ -156,6 +160,7 @@ pub struct StateManagerMetrics {
     last_computed_manifest_height: IntGauge,
     resident_state_count: IntGauge,
     checkpoints_on_disk_count: IntGauge,
+    unfiltered_checkpoint_heights_count: IntGauge,
     state_sync_metrics: StateSyncMetrics,
     state_size: IntGauge,
     states_metadata_pbuf_size: IntGauge,
@@ -398,6 +403,11 @@ impl StateManagerMetrics {
             "Number of verified checkpoints on disk, independent of if they are loaded or not.",
         );
 
+        let unfiltered_checkpoint_heights_count = metrics_registry.int_gauge(
+            "state_manager_unfiltered_checkpoint_heights_count",
+            "Number of unfiltered checkpoints on disk, independent of if they are verified or not.",
+        );
+
         let last_computed_manifest_height = metrics_registry.int_gauge(
             "state_manager_last_computed_manifest_height",
             "Height of the last checkpoint we computed manifest for.",
@@ -460,6 +470,7 @@ impl StateManagerMetrics {
             last_computed_manifest_height,
             resident_state_count,
             checkpoints_on_disk_count,
+            unfiltered_checkpoint_heights_count,
             state_sync_metrics: StateSyncMetrics::new(metrics_registry),
             state_size,
             states_metadata_pbuf_size,
@@ -660,6 +671,8 @@ impl StateSyncMetrics {
             LABEL_PREALLOCATE_DIRECTORIES,
             LABEL_PREALLOCATE_FILES,
             LABEL_LOAD_AND_VALIDATE_CHECKPOINT,
+            LABEL_LOAD_CHECKPOINT,
+            LABEL_MARK_FILES_READONLY_AND_SYNC,
             LABEL_ON_SYNCED_CHECKPOINT,
         ] {
             step_duration.with_label_values(&[*step]);
@@ -1032,7 +1045,7 @@ fn path_age(log: &ReplicaLogger, path: &Path) -> Duration {
 /// On top of that we keep maximum MAX_DIVERGED_STATE_MARKERS_TO_KEEP of diverged markers
 /// no older then ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE
 fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
-    let last_checkpoint: Height = match layout.checkpoint_heights() {
+    let last_checkpoint: Height = match layout.verified_checkpoint_heights() {
         Err(err) => {
             fatal!(log, "Failed to get list of checkpoints: {}", err);
         }
@@ -1330,11 +1343,11 @@ impl StateManagerImpl {
             });
 
         for h in unfiltered_checkpoint_heights {
-            match state_layout.checkpoint_verification_status(h) {
+            match state_layout.checkpoint_status(h) {
                 // If the checkpoint is verified, we don't need to do anything.
-                Ok(true) => {}
-                // If the checkpoint is unverified, we archive it.
-                Ok(false) => {
+                Ok(CheckpointStatus::Verified) => {}
+                // If the checkpoint is unverified (regular or state sync), we archive it.
+                Ok(CheckpointStatus::UnverifiedRegular | CheckpointStatus::UnverifiedStateSync) => {
                     info!(log, "Archiving unverified checkpoint {}", h);
                     state_layout
                         .archive_checkpoint(h)
@@ -1351,8 +1364,8 @@ impl StateManagerImpl {
             }
         }
 
-        let mut checkpoint_heights = state_layout
-            .checkpoint_heights()
+        let mut verified_checkpoint_heights = state_layout
+            .verified_checkpoint_heights()
             .unwrap_or_else(|err| fatal!(&log, "Failed to retrieve checkpoint heights: {:?}", err));
 
         if let Some(starting_height) = starting_height {
@@ -1379,10 +1392,10 @@ impl StateManagerImpl {
             //
             //   3. It looks dangerous to remove the only last state.
             //      What if this somehow happens on all the nodes simultaneously?
-            while checkpoint_heights.len() > 1
-                && checkpoint_heights.last().cloned().unwrap() > starting_height
+            while verified_checkpoint_heights.len() > 1
+                && verified_checkpoint_heights.last().cloned().unwrap() > starting_height
             {
-                let h = checkpoint_heights.pop().unwrap();
+                let h = verified_checkpoint_heights.pop().unwrap();
                 info!(
                     log,
                     "Archiving checkpoint {} (starting height = {})", h, starting_height
@@ -1409,7 +1422,7 @@ impl StateManagerImpl {
 
         let starting_time = Instant::now();
 
-        let states = checkpoint_heights
+        let states = verified_checkpoint_heights
             .iter()
             .map(|height| {
                 let cp_layout = state_layout
@@ -1781,17 +1794,18 @@ impl StateManagerImpl {
         Some((state, certification, hash_tree))
     }
 
-    /// Returns the manifest of the latest checkpoint on disk with its
-    /// checkpoint layout.
-    fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
-        self.checkpoint_heights()
+    /// Returns the manifest and checkpoint layout of the latest checkpoint with a manifest.
+    ///
+    /// Unverified regular checkpoints are naturally excluded since they don't have manifests.
+    fn latest_checkpoint_with_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
+        let states = self.states.read();
+        states
+            .states_metadata
             .iter()
             .rev()
-            .find_map(|checkpointed_height| {
-                let states = self.states.read();
-                let metadata = states.states_metadata.get(checkpointed_height)?;
-                let manifest = metadata.manifest()?.clone();
-                let checkpoint_layout = metadata.checkpoint_layout.clone()?;
+            .find_map(|(_, state_metadata)| {
+                let manifest = state_metadata.manifest()?.clone();
+                let checkpoint_layout = state_metadata.checkpoint_layout.clone()?;
                 Some((manifest, checkpoint_layout))
             })
     }
@@ -2071,21 +2085,23 @@ impl StateManagerImpl {
         // `take_tip()` and update the tip accordingly.
     }
 
-    /// Remove any inmemory state at height h with h < last_height_to_keep
-    /// except for any heights provided in `extra_inmemory_heights_to_keep`, and
-    /// any checkpoint at height h < last_checkpoint_to_keep
+    /// Remove inmemory states below `last_height_to_keep`, except for heights in
+    /// `extra_inmemory_heights_to_keep`. Also remove checkpoints below `last_checkpoint_to_keep`
+    /// if provided. If `last_checkpoint_to_keep` is None, all checkpoints are kept.
     ///
-    /// Shared inner function of the public functions remove_states_below
-    /// and remove_inmemory_states_below
+    /// Shared inner function of the public functions `remove_states_below`
+    /// and `remove_inmemory_states_below`.
     fn remove_states_below_impl(
         &self,
+        requested_height: Height,
         last_height_to_keep: Height,
-        last_checkpoint_to_keep: Height,
+        last_checkpoint_to_keep: Option<Height>,
         extra_inmemory_heights_to_keep: &BTreeSet<Height>,
     ) {
         debug_assert!(
-            last_height_to_keep >= last_checkpoint_to_keep,
-            "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
+            Some(last_height_to_keep) >= last_checkpoint_to_keep,
+            "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {:?}",
+            last_checkpoint_to_keep
         );
 
         // In debug builds we store the latest_state_height here so
@@ -2116,26 +2132,70 @@ impl StateManagerImpl {
 
         // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
         let latest_certified_height = self.latest_certified_height();
-        let latest_manifest_height =
-            states
-                .states_metadata
-                .iter()
-                .rev()
-                .find_map(|(height, state_metadata)| {
-                    state_metadata.bundled_manifest.as_ref().map(|_| *height)
-                });
 
-        // We keep checkpoints at or above the `last_checkpoint_to_keep` height
-        // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
-        let checkpoint_heights_to_keep: BTreeSet<Height> = states
-            .states_metadata
-            .keys()
-            .copied()
-            .filter(|height| {
-                *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
-            })
-            .chain(latest_manifest_height)
-            .collect();
+        let checkpoint_heights_to_keep: BTreeSet<Height> = match last_checkpoint_to_keep {
+            Some(last_checkpoint_to_keep) => {
+                // Keep the latest checkpoint with a manifest (verified or state sync) for incremental
+                // manifest computation and state sync. Both types are valid base checkpoints.
+                let latest_manifest_height =
+                    states
+                        .states_metadata
+                        .iter()
+                        .rev()
+                        .find_map(|(height, state_metadata)| {
+                            state_metadata.bundled_manifest.as_ref()?;
+                            state_metadata
+                                .checkpoint_layout
+                                .as_ref()?
+                                .is_verified_or_state_sync_checkpoint()
+                                .then_some(*height)
+                        });
+
+                // Keep the latest verified checkpoint with a manifest to ensure availability after restart,
+                // since only verified checkpoints survive restarts.
+                // Typically matches `latest_manifest_height` unless state sync checkpoints are present.
+                let latest_verified_checkpoint_with_manifest_height = states
+                    .states_metadata
+                    .iter()
+                    .rev()
+                    .find_map(|(height, state_metadata)| {
+                        state_metadata.bundled_manifest.as_ref()?;
+                        state_metadata
+                            .checkpoint_layout
+                            .as_ref()?
+                            .is_checkpoint_verified()
+                            .then_some(*height)
+                    });
+                // We keep checkpoints at or above the `last_checkpoint_to_keep` height
+                // as well as the one with latest manifest for the purpose of incremental manifest computation and fast state sync.
+                states
+                    .states_metadata
+                    .iter()
+                    .filter_map(|(height, state_metadata)| {
+                        if *height < last_checkpoint_to_keep {
+                            return None;
+                        }
+                        let checkpoint_layout = state_metadata.checkpoint_layout.as_ref()?;
+                        // Exclude state sync checkpoints below `requested_height` to prevent accumulation during state sync loops.
+                        // We use `requested_height` instead of `last_checkpoint_to_keep` because the latter may not advance
+                        // during state sync loops when no new verified checkpoints are created.
+                        // If a state sync checkpoint is also the latest checkpoint, it will be protected via `latest_manifest_height` below
+                        // because state sync checkpoints always have manifests.
+                        //
+                        // Note: Regular unverified checkpoints don't need this handling as they block new checkpoint creation.
+                        if checkpoint_layout.is_unverified_state_sync_checkpoint()
+                            && *height < requested_height
+                        {
+                            return None;
+                        }
+                        Some(*height)
+                    })
+                    .chain(latest_manifest_height)
+                    .chain(latest_verified_checkpoint_with_manifest_height)
+                    .collect()
+            }
+            None => states.states_metadata.keys().copied().collect(),
+        };
 
         // In addition, we retain the latest certified state and any extra states specified to keep.
         // Note that `checkpoint_heights_to_keep` and `inmemory_heights_to_keep` are separate,
@@ -2262,8 +2322,7 @@ impl StateManagerImpl {
                 .unwrap_or_else(|err| {
                     fatal!(
                         &self.log,
-                        "Failed to retrieve unfiltered checkpoint heights: {:?}",
-                        err
+                        "Failed to retrieve unfiltered checkpoint heights: {err}",
                     )
                 });
 
@@ -2289,18 +2348,28 @@ impl StateManagerImpl {
     }
 
     pub fn checkpoint_heights(&self) -> Vec<Height> {
-        let result = self
+        let unfiltered_checkpoint_heights = self
             .state_layout
-            .checkpoint_heights()
+            .unfiltered_checkpoint_heights()
             .unwrap_or_else(|err| {
-                fatal!(self.log, "Failed to gather checkpoint heights: {:?}", err)
+                fatal!(
+                    &self.log,
+                    "Failed to retrieve unfiltered checkpoint heights: {err}",
+                )
             });
+        self.metrics
+            .unfiltered_checkpoint_heights_count
+            .set(unfiltered_checkpoint_heights.len() as i64);
+
+        let verified_checkpoint_heights = self
+            .state_layout
+            .filter_verified_checkpoint_heights(unfiltered_checkpoint_heights);
 
         self.metrics
             .checkpoints_on_disk_count
-            .set(result.len() as i64);
+            .set(verified_checkpoint_heights.len() as i64);
 
-        result
+        verified_checkpoint_heights
     }
 
     /// Returns the list of heights corresponding to snapshots matching
@@ -2367,11 +2436,6 @@ impl StateManagerImpl {
     ) -> CreateCheckpointResult {
         self.observe_num_loaded_pagemaps(&state);
         self.observe_num_loaded_wasm_files(&state);
-        struct PreviousCheckpointInfo {
-            base_manifest: Manifest,
-            base_height: Height,
-            checkpoint_layout: CheckpointLayout<ReadOnly>,
-        }
 
         let start = Instant::now();
         {
@@ -2406,29 +2470,7 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["previous_checkpoint_info"])
                 .start_timer();
-            let states = self.states.read();
-            states
-                .states_metadata
-                .iter()
-                .rev()
-                .find_map(|(base_height, state_metadata)| {
-                    let base_manifest = state_metadata.manifest()?.clone();
-                    Some((base_manifest, *base_height))
-                })
-                .and_then(|(base_manifest, base_height)| {
-                    match self.state_layout.checkpoint_verified(base_height) { Ok(checkpoint_layout) => {
-                        Some(PreviousCheckpointInfo {
-                            base_manifest,
-                            base_height,
-                            checkpoint_layout,
-                        })
-                    } _ => {
-                        warn!(self.log,
-                            "Failed to get base checkpoint layout for height {}. Fallback to full manifest computation",
-                            base_height);
-                        None
-                    }}
-                })
+            self.latest_checkpoint_with_manifest()
         };
 
         let (state, cp_layout) = checkpoint::make_unvalidated_checkpoint(
@@ -2463,20 +2505,14 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["base_manifest_info"])
                 .start_timer();
-            previous_checkpoint_info.map(
-                |PreviousCheckpointInfo {
-                     checkpoint_layout,
-                     base_manifest,
-                     base_height,
-                 }| {
-                    manifest::BaseManifestInfo {
-                        base_manifest,
-                        base_height,
-                        target_height: height,
-                        base_checkpoint: checkpoint_layout,
-                    }
-                },
-            )
+            previous_checkpoint_info.map(|(base_manifest, checkpoint_layout)| {
+                manifest::BaseManifestInfo {
+                    base_manifest,
+                    base_height: checkpoint_layout.height(),
+                    target_height: height,
+                    base_checkpoint: checkpoint_layout,
+                }
+            })
         };
 
         let result = {
@@ -2776,12 +2812,12 @@ impl StateManager for StateManagerImpl {
                         height
                     );
 
-                    match self
-                        .state_layout
-                        .checkpoint_verification_status(checkpoint_height)
-                    {
-                        Ok(true) => {}
-                        Ok(false) => {
+                    match self.state_layout.checkpoint_status(checkpoint_height) {
+                        Ok(CheckpointStatus::Verified) => {}
+                        Ok(
+                            CheckpointStatus::UnverifiedRegular
+                            | CheckpointStatus::UnverifiedStateSync,
+                        ) => {
                             warn!(
                                 self.log,
                                 "Unverified checkpoint @{} cannot be cloned to a new checkpoint height.",
@@ -3041,8 +3077,9 @@ impl StateManager for StateManagerImpl {
 
         // The public interface does not protect extra states, so we pass an empty set here.
         self.remove_states_below_impl(
+            requested_height,
             oldest_height_to_keep,
-            oldest_checkpoint_to_keep,
+            Some(oldest_checkpoint_to_keep),
             &BTreeSet::new(),
         );
     }
@@ -3106,8 +3143,9 @@ impl StateManager for StateManagerImpl {
         }
 
         self.remove_states_below_impl(
+            requested_height,
             oldest_height_to_keep,
-            Self::INITIAL_STATE_HEIGHT,
+            None,
             extra_heights_to_keep,
         );
     }

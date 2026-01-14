@@ -1,4 +1,4 @@
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -13,6 +13,7 @@ use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
 use slog::info;
+use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Debug;
@@ -39,6 +40,8 @@ const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
 const GIB: u64 = 1 << 30;
+
+const BACKOFF_TIME_MILLIS: u64 = 1000;
 
 pub async fn rejoin_test(
     env: &TestEnv,
@@ -298,18 +301,44 @@ async fn deploy_canisters_for_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
-        let bytes = Encode!(&num_canisters_per_seed_canister)
-            .expect("Failed to candid encode argument for a seed canister");
-        let fut = agent
-            .update(&seed_canister_id, "create_many_canisters")
-            .with_arg(bytes)
-            .call_and_wait();
+        let agent = agent.clone();
+        let fut = async move {
+            loop {
+                let bytes = Encode!(&num_canisters_per_seed_canister)
+                    .expect("Failed to candid encode argument for a seed canister");
+                let res = agent
+                    .update(&seed_canister_id, "create_many_canisters")
+                    .with_arg(bytes)
+                    .call_and_wait()
+                    .await;
+                if res.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+            loop {
+                let bytes = Encode!(&()).expect("Failed to candid encode unit type");
+                let res = agent
+                    .query(&seed_canister_id, "canister_creation_status")
+                    .with_arg(bytes)
+                    .call()
+                    .await;
+                if let Ok(bytes) = res {
+                    let status = Decode!(&bytes, CanisterCreationStatus)
+                        .expect("Failed to candid decode canister creation status");
+                    match status {
+                        CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
+                        CanisterCreationStatus::Done(_) => {
+                            break;
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+        };
         create_many_canisters_futs.push(fut);
     }
-    let res = join_all(create_many_canisters_futs).await;
-    for r in res {
-        r.expect("Failed to create canisters via a seed canister");
-    }
+    join_all(create_many_canisters_futs).await;
 
     // We deploy 8 "busy" canisters: this way,
     // there are 2 canisters per each of the 4 scheduler threads
@@ -430,7 +459,6 @@ pub async fn assert_state_sync_has_happened(
     base_count: u64,
 ) -> f64 {
     const NUM_RETRIES: u32 = 300;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,
@@ -514,7 +542,6 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
