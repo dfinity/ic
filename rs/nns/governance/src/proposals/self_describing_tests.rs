@@ -390,10 +390,7 @@ fn test_derive_single_tuple_enum() {
 
 #[test]
 fn test_derive_mixed_enum_unit_variant() {
-    assert_self_describing_value_is(
-        TestMixedEnum::Empty,
-        SelfDescribingValue::from("Empty"),
-    );
+    assert_self_describing_value_is(TestMixedEnum::Empty, SelfDescribingValue::from("Empty"));
 }
 
 #[test]
