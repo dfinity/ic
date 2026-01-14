@@ -183,10 +183,8 @@ pub struct SubmittedBtcTransaction {
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
     pub change_output: Option<ChangeOutput>,
-    /// Fee per vbyte in millisatoshi.
-    pub estimated_fee_per_vbyte: Option<u64>,
     /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
-    /// It may be higher than `estimated_fee_per_vbyte` due to signatures not having constant-size DER encodings.
+    /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
     pub effective_fee_per_vbyte: Option<u64>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,

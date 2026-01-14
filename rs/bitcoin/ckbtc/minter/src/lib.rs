@@ -490,13 +490,12 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         }
     });
     if let Some((req, total_fee)) = maybe_sign_request {
-        let _ = sign_and_submit_request(req, fee_millisatoshi_per_vbyte, total_fee, runtime).await;
+        let _ = sign_and_submit_request(req, total_fee, runtime).await;
     }
 }
 
 async fn sign_and_submit_request<R: CanisterRuntime>(
     req: SignTxRequest,
-    fee_millisatoshi_per_vbyte: u64,
     total_fee: WithdrawalFee,
     runtime: &R,
 ) -> Result<Txid, CallError> {
@@ -584,7 +583,6 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 used_utxos,
                 change_output: Some(req.change_output),
                 submitted_at: runtime.time(),
-                estimated_fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                 effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
                 withdrawal_fee: Some(total_fee),
                 signed_tx,
@@ -1005,7 +1003,6 @@ pub async fn resubmit_transactions<
                     txid: new_txid,
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
-                    estimated_fee_per_vbyte: Some(tx_fee_per_vbyte),
                     effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
@@ -1542,7 +1539,7 @@ pub async fn consolidate_utxos<R: CanisterRuntime>(
         utxos,
     });
 
-    sign_and_submit_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+    sign_and_submit_request(request, total_fee, runtime)
         .await
         .map_err(ConsolidateUtxosError::SubmitRequest)
 }

@@ -2658,9 +2658,9 @@ fn test_retrieve_btc_with_approval() {
             ckbtc.get_events().pop().unwrap().payload,
             EventType::SentBtcTransaction {
                 txid: txid_event,
-                estimated_fee_per_vbyte,
+                effective_fee_per_vbyte,
                 ..
-            } if txid_event == txid && estimated_fee_per_vbyte == Some(expected_fee_per_vbyte)
+            } if txid_event == txid && effective_fee_per_vbyte.unwrap() >= expected_fee_per_vbyte
         );
 
         // Step 4: confirm the transaction

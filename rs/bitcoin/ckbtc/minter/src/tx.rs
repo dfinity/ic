@@ -691,6 +691,12 @@ impl BitcoinTransactionSigner {
             NonZeroU32::try_from(signed_tx.vsize() as u32)
                 .expect("BUG: signed transaction cannot have zero size"),
         );
+        canlog::log!(
+            crate::logs::Priority::Debug,
+            "[sign_transaction] fee rate {:?}",
+            fee_rate
+        );
+
         Ok(SignedRawTransaction::new(
             signed_tx.serialize(),
             signed_tx.compute_txid(),
