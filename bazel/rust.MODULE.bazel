@@ -1869,8 +1869,8 @@ crate.spec(
         "parallel-compilation",
         "runtime",
     ],
+    git = "https://github.com/bytecodealliance/wasmtime.git",
     package = "wasmtime",
-    git = "https://github.com/bytecodealliance/wasmtime.git",	
     rev = "f0cdcc71693e95423fa653991b2c7906507d551c",
 )
 crate.spec(
