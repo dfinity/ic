@@ -52,6 +52,7 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
+lld
 mtools # used for mcopy and mmd
 nasm # to build OVMF
 zstd
