@@ -1870,7 +1870,8 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^40.0.0",
+    git = "https://github.com/bytecodealliance/wasmtime.git",	
+    rev = "f0cdcc71693e95423fa653991b2c7906507d551c",
 )
 crate.spec(
     package = "wast",
