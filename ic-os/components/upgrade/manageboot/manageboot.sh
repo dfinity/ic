@@ -4,7 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
-source /opt/ic/bin/grub.sh
+source /opt/ic/bin/boot-state.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -161,8 +161,10 @@ fi
 get_version_noreport
 
 # Read current state
-read_grubenv "${GRUBENV_FILE}"
-write_log "${SYSTEM_TYPE} read grub environment - boot_alternative: ${boot_alternative}, boot_cycle: ${boot_cycle}"
+boot_alternative="$(read_boot_alternative_from_kernel_cmdline)"
+boot_cycle="$(read_boot_cycle_from_grubenv "${GRUBENV_FILE}")"
+
+write_log "${SYSTEM_TYPE} read boot_alternative from kernel cmdline: ${boot_alternative}, boot_cycle from grubenv: ${boot_cycle}"
 
 CURRENT_ALTERNATIVE="${boot_alternative}"
 NEXT_BOOT="${CURRENT_ALTERNATIVE}"
