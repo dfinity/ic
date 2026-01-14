@@ -1,7 +1,7 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
 use attestation::attestation_package::{
-    AttestationPackageVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -127,7 +127,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
 
         let my_attestation_report = *my_attestation_package.attestation_report();
 
-        ParsedAttestationPackage::parse(
+        ParsedSevAttestationPackage::parse(
             client_attestation_package,
             self.sev_root_certificate_verification,
         )

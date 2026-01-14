@@ -1,7 +1,7 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::{
-    AttestationPackageVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use config_types::GuestOSConfig;
@@ -172,7 +172,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
         // inject malicious files into the data partition then trigger an upgrade to a
         // legit version. The malicious data would remain on the data partition.
-        ParsedAttestationPackage::parse(
+        ParsedSevAttestationPackage::parse(
             server_attestation_package,
             self.sev_root_certificate_verification,
         )

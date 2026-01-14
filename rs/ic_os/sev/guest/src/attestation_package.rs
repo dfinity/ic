@@ -1,7 +1,9 @@
 use crate::firmware::SevGuestFirmware;
 use anyhow::{Context, Result, anyhow, bail};
 use attestation::SevCertificateChain;
-use attestation::attestation_package::{ParsedAttestationPackage, SevRootCertificateVerification};
+use attestation::attestation_package::{
+    ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use attestation::custom_data::EncodeSevCustomData;
 use config_types::TrustedExecutionEnvironmentConfig;
 use sev::firmware::guest::AttestationReport;
@@ -14,7 +16,7 @@ pub fn generate_attestation_package(
     sev_firmware: &mut dyn SevGuestFirmware,
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
     custom_data: &(impl EncodeSevCustomData + Debug),
-) -> Result<ParsedAttestationPackage> {
+) -> Result<ParsedSevAttestationPackage> {
     let attestation_report = sev_firmware
         .get_report(None, Some(custom_data.encode_for_sev()?.to_bytes()), None)
         .context("Failed to get attestation report from SEV firmware")?;
@@ -25,7 +27,7 @@ pub fn generate_attestation_package(
         SevRootCertificateVerification::Verify
     };
 
-    ParsedAttestationPackage::new_verified(
+    ParsedSevAttestationPackage::new_verified(
         AttestationReport::from_bytes(&attestation_report)
             .context("Failed to parse attestation report")?,
         certificate_chain_from_config(trusted_execution_environment_config)

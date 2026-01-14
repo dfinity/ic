@@ -1,5 +1,5 @@
 use crate::attestation_package::{
-    AttestationPackageVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData, SevCustomDataNamespace};
 use crate::{
@@ -62,7 +62,7 @@ fn generate_valid_attestation_package() -> SevAttestationPackage {
 
 #[test]
 fn test_valid_attestation_package() {
-    let attestation_report = *ParsedAttestationPackage::parse(
+    let attestation_report = *ParsedSevAttestationPackage::parse(
         generate_valid_attestation_package(),
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -94,7 +94,7 @@ fn test_invalid_attestation_report() {
         .unwrap()
         .truncate(5);
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -122,7 +122,7 @@ fn test_invalid_signature() {
         report[0] ^= 0xFF; // Flip some bits
     }
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -145,7 +145,7 @@ fn test_invalid_custom_data() {
         b: 1234567890,
     };
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -165,7 +165,7 @@ fn test_invalid_custom_data() {
 fn test_invalid_measurement() {
     let attestation_package = generate_valid_attestation_package();
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -185,7 +185,7 @@ fn test_invalid_measurement() {
 fn test_invalid_chip_id() {
     let attestation_package = generate_valid_attestation_package();
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -213,7 +213,7 @@ fn test_invalid_certificate_chain() {
         .ask_pem
         .replace(FakeAttestationReportSigner::new([1; 32]).get_ask_pem());
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
@@ -236,7 +236,7 @@ fn test_invalid_root_certificate() {
     // which won't pass root cert verification.
     let attestation_package = generate_valid_attestation_package();
 
-    let error = ParsedAttestationPackage::parse(
+    let error = ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::Verify,
     )
@@ -281,7 +281,7 @@ fn test_legacy_custom_data_accepted() {
         custom_data_debug_info: None,
     };
 
-    ParsedAttestationPackage::parse(
+    ParsedSevAttestationPackage::parse(
         attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
