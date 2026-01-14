@@ -2314,6 +2314,10 @@ impl StateManagerImpl {
             .latest_certified_height
             .set(latest_certified_height.get() as i64);
 
+        let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        std::mem::swap(&mut certifications, &mut states.certifications);
+        self.deallocator_thread.send(Box::new(certifications));
+
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
         for h in checkpoint_heights_to_keep.iter() {
