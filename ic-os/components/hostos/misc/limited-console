@@ -23,6 +23,7 @@ show_menu() {
     echo "  ping-gateway            - Test connectivity to IPv6 gateway"
     echo "  routes                  - Show routing table"
     echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
+    echo "  system-stats            - Show system stats"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
@@ -150,6 +151,10 @@ execute_command() {
 
                 /opt/ic/bin/hostos_tool manual-recovery
             fi
+            ;;
+        "system-stats")
+            echo "=== System Stats ==="
+            /opt/ic/bin/system_stats_tui
             ;;
         "rbash-console")
             echo "=== Dropping into Restricted Bash Console ==="
