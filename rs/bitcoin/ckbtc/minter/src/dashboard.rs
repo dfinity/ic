@@ -16,15 +16,19 @@ fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
 // Number of entries per page for the account_to_utxos table.
 const DEFAULT_PAGE_SIZE: u64 = 100;
 
+type DisplayAddressFn = Box<dyn Fn(&BitcoinAddress, Network) -> String>;
+
 pub struct DashboardBuilder {
-    display_address: Box<dyn Fn(&BitcoinAddress, Network) -> String>,
+    display_address: DisplayAddressFn,
+}
+
+impl Default for DashboardBuilder {
+    fn default() -> Self {
+        Self::new_with(|address, network| address.display(network))
+    }
 }
 
 impl DashboardBuilder {
-    pub fn new() -> Self {
-        Self::new_with(|address, network| address.display(network))
-    }
-
     pub fn new_with<F: Fn(&BitcoinAddress, Network) -> String + 'static>(f: F) -> Self {
         Self {
             display_address: Box::new(f),
@@ -426,7 +430,7 @@ impl DashboardBuilder {
                             </table>",
                                 req.block_index(),
                                 DisplayAmount(req.amount()),
-                                (self.display_address)(&req.address(), s.btc_network),
+                                (self.display_address)(req.address(), s.btc_network),
                                 req.received_at(),
                             )
                             .unwrap();
@@ -457,7 +461,7 @@ impl DashboardBuilder {
                         <td><code>{}</code></td>
                         <td>{}</td>",
                     req.request.block_index(),
-                    (self.display_address)(&req.request.address(), s.btc_network),
+                    (self.display_address)(req.request.address(), s.btc_network),
                     DisplayAmount(req.request.amount()),
                 )
                 .unwrap();
@@ -600,7 +604,7 @@ impl DashboardBuilder {
 #[test]
 fn test_txid_link() {
     assert_eq!(
-        DashboardBuilder::new().txid_link_on(
+        DashboardBuilder::default().txid_link_on(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
@@ -612,7 +616,7 @@ fn test_txid_link() {
     );
 
     assert_eq!(
-        DashboardBuilder::new().txid_link_on(
+        DashboardBuilder::default().txid_link_on(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6

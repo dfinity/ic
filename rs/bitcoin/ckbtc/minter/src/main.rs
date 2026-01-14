@@ -270,7 +270,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req, &DashboardBuilder::new())
+    ic_ckbtc_minter::queries::http_request(req, &DashboardBuilder::default())
 }
 
 #[query]
