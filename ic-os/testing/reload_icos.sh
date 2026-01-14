@@ -145,7 +145,6 @@ setup_config() {
 commit_and_reboot() {
     local boot_args="$1"
 
-
     if command -v kexec >/dev/null 2>&1; then
         echo "Preparing kexec for fast reboot..."
         kexec -l "$TARGET_BOOT_PARTITION_MOUNT/vmlinuz" \
