@@ -45,7 +45,8 @@ use ic_nns_governance_api::{
     ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, Vote,
+    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, StakeNeuronRequest,
+    StakeNeuronResult, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -82,9 +83,12 @@ use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
     SendArgs, Tokens,
 };
-use icrc_ledger_types::icrc1::{
-    account::Account,
-    transfer::{TransferArg, TransferError},
+use icrc_ledger_types::{
+    icrc1::{
+        account::Account,
+        transfer::{TransferArg, TransferError},
+    },
+    icrc2::approve::{ApproveArgs, ApproveError},
 };
 use num_traits::ToPrimitive;
 use prost::Message;
@@ -932,6 +936,32 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
     .unwrap();
 }
 
+pub fn nns_approve_governance_to_spend_from_account(
+    state_machine: &StateMachine,
+    source: PrincipalId,
+    amount: Tokens,
+) {
+    icrc2_approve(
+        state_machine,
+        LEDGER_CANISTER_ID,
+        source,
+        ApproveArgs {
+            from_subaccount: None,
+            spender: Account {
+                owner: GOVERNANCE_CANISTER_ID.get().0,
+                subaccount: None,
+            },
+            amount: Nat::from(amount.get_e8s()),
+            created_at_time: None,
+            fee: None,
+            memo: None,
+            expires_at: None,
+            expected_allowance: None,
+        },
+    )
+    .unwrap();
+}
+
 fn manage_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
@@ -1098,6 +1128,30 @@ pub fn nns_claim_or_refresh_neuron(
         _ => panic!("{result:?}"),
     };
     *neuron_id
+}
+
+pub fn nns_stake_neuron(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    amount_e8s: u64,
+) -> Result<NeuronId, String> {
+    let result: Result<Result<StakeNeuronResult, GovernanceError>, String> = update_with_sender(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "stake_neuron",
+        StakeNeuronRequest {
+            amount_e8s: Some(amount_e8s),
+            source_subaccount: None,
+            controller: None,
+            followees: None,
+            dissolve_delay_seconds: None,
+        },
+        sender,
+    );
+    result
+        .unwrap()
+        .map(|r| r.neuron_id.unwrap())
+        .map_err(|e| format!("Error when staking neuron: {:?}", e))
 }
 
 pub fn nns_disburse_neuron(
@@ -1880,6 +1934,26 @@ pub fn icrc1_token_logo(machine: &StateMachine, ledger_id: CanisterId) -> Option
             MetadataValue::Text(s) => s,
             m => panic!("Unexpected metadata value {m:?}"),
         })
+}
+
+pub fn icrc2_approve(
+    state_machine: &StateMachine,
+    ledger_id: CanisterId,
+    sender: PrincipalId,
+    icrc2_approve_args: ApproveArgs,
+) -> Result<BlockIndex, String> {
+    let result: Result<Result<Nat, ApproveError>, String> = update_with_sender(
+        state_machine,
+        ledger_id,
+        "icrc2_approve",
+        icrc2_approve_args,
+        sender,
+    );
+    let result = result.unwrap();
+    match result {
+        Ok(n) => Ok(n.0.to_u64().unwrap()),
+        Err(e) => Err(format!("{:?}", e)),
+    }
 }
 
 /// Claim a staked neuron for an SNS StateMachine test

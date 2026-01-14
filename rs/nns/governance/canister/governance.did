@@ -1504,7 +1504,24 @@ type SelfDescribingValue = variant {
 
 type GetPendingProposalsRequest = record {
   return_self_describing_action : opt bool;
-}
+};
+
+type StakeNeuronRequest = record {
+  amount_e8s : opt nat64;
+  source_subaccount: opt blob;
+  controller : opt principal;
+  followees : opt SetFollowing;
+  dissolve_delay_seconds : opt nat64;
+};
+
+type StakeNeuronResult = record {
+  neuron_id : opt NeuronId;
+};
+
+type StakeNeuronResponse = variant {
+  Ok : StakeNeuronResult;
+  Err : GovernanceError;
+};
 
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
@@ -1545,6 +1562,7 @@ service : (Governance) -> {
   list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
+  stake_neuron : (StakeNeuronRequest) -> (StakeNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
