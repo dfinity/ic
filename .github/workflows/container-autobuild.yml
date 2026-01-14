@@ -108,7 +108,7 @@ jobs:
   update-image-references:
     name: Update Image References in Repo
     runs-on: ubuntu-latest
-    needs: [ic-build-image]
+    needs: [determine-build-image, ic-build-image]
     if: ${{ needs.determine-build-image.outputs.build == 'true' }}
     steps:
       - name: Update Image References
