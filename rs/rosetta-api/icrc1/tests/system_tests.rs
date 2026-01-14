@@ -1058,7 +1058,7 @@ fn test_fee_collector_107() {
         )
         .await;
 
-        // Fee collecor was set to None, no fees should be collectes.
+        // Fee collector was set to None, no fees should be collected.
         let (block_index, block_hash) = transfer_and_check_collected_fees(
             &agent,
             &env,
