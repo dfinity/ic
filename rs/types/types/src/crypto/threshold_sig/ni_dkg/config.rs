@@ -4,6 +4,7 @@ use crate::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use core::fmt;
 use dealers::NiDkgDealers;
 use errors::{NiDkgConfigValidationError, NiDkgThresholdZeroError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
@@ -66,37 +67,35 @@ impl From<&NiDkgConfig> for pb::NiDkgConfig {
 }
 
 impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(config: pb::NiDkgConfig) -> Result<Self, Self::Error> {
         let data = NiDkgConfigData {
-            dkg_id: NiDkgId::from_option_protobuf(config.dkg_id, "NiDkgConfig")?,
+            dkg_id: try_from_option_field(config.dkg_id, "NiDkgConfig::dkg_id")?,
             max_corrupt_dealers: NumberOfNodes::from(config.max_corrupt_dealers),
             dealers: config
                 .dealers
                 .into_iter()
                 .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
-                .collect::<Result<BTreeSet<_>, _>>()
-                .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {err:?}"))?,
+                .collect::<Result<BTreeSet<_>, _>>()?,
             max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
             receivers: config
                 .receivers
                 .into_iter()
                 .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
-                .collect::<Result<BTreeSet<_>, _>>()
-                .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?,
+                .collect::<Result<BTreeSet<_>, _>>()?,
             threshold: NumberOfNodes::from(config.threshold),
             registry_version: RegistryVersion::from(config.registry_version),
             resharing_transcript: config
                 .resharing_transcript
-                .map(|transcript| {
-                    NiDkgTranscript::try_from(&transcript)
-                        .map_err(|e| format!("Converting resharing transcript failed: {e:?}"))
-                })
+                .map(|transcript| NiDkgTranscript::try_from(&transcript))
                 .transpose()?,
         };
 
-        NiDkgConfig::new(data)
-            .map_err(|e| format!("Invariant check failed while constructing NiDkgConfig: {e:?}"))
+        NiDkgConfig::new(data).map_err(|e| {
+            ProxyDecodeError::Other(format!(
+                "Invariant check failed while constructing NiDkgConfig: {e:?}"
+            ))
+        })
     }
 }
 

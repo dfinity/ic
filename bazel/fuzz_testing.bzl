@@ -22,6 +22,7 @@ DEFAULT_RUSTC_FLAGS = [
     "-Ccodegen-units=1",
     "-Zextra-const-ub-checks",
     "-Zstrict-init-checks",
+    "-Cforce-frame-pointers=yes",
     # TODO(PSEC): Add configuration to enable only during profiling
     # "-Cinstrument-coverage",
 ]
@@ -102,7 +103,7 @@ def rust_fuzz_test_binary_afl(name, srcs, rustc_flags = [], crate_features = [],
 
     RUSTC_FLAGS_AFL = DEFAULT_RUSTC_FLAGS + [
         "-Cllvm-args=-sanitizer-coverage-trace-pc-guard",
-        "-Clink-arg=-fuse-ld=gold",
+        "-Clink-arg=-fuse-ld=lld",
         "-Clink-arg=-fsanitize=fuzzer",
         "-Clink-arg=-fsanitize=address",
     ]

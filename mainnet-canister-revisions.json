@@ -84,20 +84,20 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "f093cfcfd53d49bf42f26558ed6cab154f35603d",
-    "sha256": "9264baddc5c3a15bafeb6ccc002aad744ae42ec12550d85a78cec18834e0c717"
+    "rev": "b43f2bac9f93a2b927419d647c8ac56aadd7db54",
+    "sha256": "91d605a410c309580e607ea37a4777a5909ffa99400ec97ad1cf68c008bca186"
   },
   "governance-canister_test": {
-    "rev": "f093cfcfd53d49bf42f26558ed6cab154f35603d",
-    "sha256": "0aa1946e89440917a7dbd9732737eb99aa2bba436c2556f0f5ea3f882436dddc"
+    "rev": "b43f2bac9f93a2b927419d647c8ac56aadd7db54",
+    "sha256": "49883db962c3fe4333717934d5c128f58456d12c9fbe2b8fbd4e97525d6ac995"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "27e856d64668e62eeebbbcd6c8996b1e0c4798bfe20ceb88405d6e3348ada4ef",
-    "tag": "release-2025-12-27"
+    "sha256": "ecb57dd85e1d4f5c564cd7e01bdde49cf2f05a19baa02ba1f81e4cf4a0e39260",
+    "tag": "release-2026-01-10"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -112,16 +112,16 @@
     "sha256": "baf5ecae2c260caa3705832a1dc280c31968b5eaf9e300377ca521f8e0e11787"
   },
   "nns_dapp_test": {
-    "sha256": "37935da32289fb7f42d5b166b1e858322a7144422eccd9b03c6081da51b878f3",
-    "tag": "proposal-139676"
+    "sha256": "6e7db14870dfdb40d7b84c2b696d9556eb3580b7a97b436b8a8c0f7496125f98",
+    "tag": "proposal-139939"
   },
   "node-rewards": {
-    "rev": "d2a13f0ecb29c96818d24076925d5da19ae61e93",
-    "sha256": "53cc70006aa957e655c28d30198ba945dffda4d71515954c4c7e596c0caede59"
+    "rev": "2f21d74c33949bf556a980c85f8c1ddf85a78439",
+    "sha256": "19b893f2e17ec04a17e21c386fa62b8b9a55f98a4f4d9753c5c065bd21513fe4"
   },
   "registry": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "c5ceecda0dbc8bc50d246ef0fa6aa93fb02138e09192533bb9ca150fd9e348ee"
+    "rev": "b43f2bac9f93a2b927419d647c8ac56aadd7db54",
+    "sha256": "9a8a90c6bbfd1c4a411f8347ffba5a0b3b33441e20809701916fa93bca186251"
   },
   "root": {
     "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",

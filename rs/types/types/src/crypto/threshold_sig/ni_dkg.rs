@@ -10,7 +10,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, Csp
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
-use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use ic_protobuf::types::v1::NiDkgId as NiDkgIdProto;
 use serde::{Deserialize, Serialize};
@@ -256,27 +256,24 @@ impl From<&NiDkgTranscript> for pb::NiDkgTranscript {
 }
 
 impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(summary: &pb::NiDkgTranscript) -> Result<Self, Self::Error> {
         Ok(Self {
-            dkg_id: NiDkgId::from_option_protobuf(summary.dkg_id.clone(), "NiDkgTranscript")?,
+            dkg_id: try_from_option_field(summary.dkg_id.clone(), "NiDkgTranscript::dkg_id")?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(summary.threshold))
-                .map_err(|e| format!("threshold error {e:?}"))?,
+                .map_err(|e| ProxyDecodeError::Other(format!("threshold error {e:?}")))?,
             committee: NiDkgReceivers::new(
                 summary
                     .committee
                     .iter()
                     .cloned()
                     .map(|committee_member| crate::node_id_try_from_option(Some(committee_member)))
-                    .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| {
-                        format!("Problem loading committee in NiDkgTranscript: {err:?}")
-                    })?,
+                    .collect::<Result<BTreeSet<_>, _>>()?,
             )
-            .map_err(|e| format!("{e:?}"))?,
+            .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
             registry_version: RegistryVersion::from(summary.registry_version),
             internal_csp_transcript: bincode::deserialize(&summary.internal_csp_transcript)
-                .map_err(|e| format!("{e:?}"))?,
+                .map_err(|e| ProxyDecodeError::Other(format!("{e:?}")))?,
         })
     }
 }
