@@ -89,7 +89,9 @@ jobs:
           context: .
           file: ci/container/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ steps.cfg.outputs.image_tag }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/ic-build:${{ steps.cfg.outputs.image_tag }}
+            ghcr.io/${{ github.repository_owner }}/ic-build:ci
           target: ci
           build-args: |
             CI_USER=1001
