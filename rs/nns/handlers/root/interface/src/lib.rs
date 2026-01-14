@@ -3,6 +3,12 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_clients::update_settings::CanisterSettings;
 use serde::Deserialize;
 
+#[doc(inline)]
+pub use ic_nervous_system_root::load_canister_snapshot::{
+    LoadCanisterSnapshotError, LoadCanisterSnapshotOk, LoadCanisterSnapshotRequest,
+    LoadCanisterSnapshotResponse,
+};
+
 pub mod client;
 
 /// The request structure to the `change_canister_controllers` API.
@@ -104,27 +110,6 @@ pub struct TakeCanisterSnapshotOk {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotError {
-    pub code: Option<i32>,
-    pub description: String,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
-pub struct LoadCanisterSnapshotRequest {
-    pub canister_id: PrincipalId,
-    pub snapshot_id: Vec<u8>,
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
-pub enum LoadCanisterSnapshotResponse {
-    Ok(LoadCanisterSnapshotOk),
-    Err(LoadCanisterSnapshotError),
-}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
-pub struct LoadCanisterSnapshotOk {}
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
-pub struct LoadCanisterSnapshotError {
     pub code: Option<i32>,
     pub description: String,
 }
