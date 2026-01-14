@@ -168,6 +168,9 @@ impl LogMemoryStore {
 
     /// Appends a delta log to the ring buffer if it exists.
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
+        if delta_log.is_empty() {
+            return; // Don't append if delta is empty.
+        }
         let mut ring_buffer = match self.load_ring_buffer() {
             Some(rb) => rb,
             None => return, // No ring buffer exists.

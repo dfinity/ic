@@ -519,23 +519,26 @@ impl SystemStateModifications {
             system_state.log_memory_store.set_log_memory_limit(limit);
         }
 
-        // TODO(DSM-11): cleanup population logic after migration is done.
-        // We need to copy existing canister_log to log_memory_store in order
-        // not to loose any log records until the migration is complete.
-        if system_state.log_memory_store.is_empty() && !system_state.canister_log.is_empty() {
+        // Append non-empty delta logs.
+        if !self.canister_log.is_empty() {
+            // TODO(DSM-11): cleanup population logic after migration is done.
+            // We need to copy existing canister_log to log_memory_store in order
+            // not to loose any log records until the migration is complete.
+            let old_total = &system_state.canister_log;
+            if system_state.log_memory_store.is_empty() && !old_total.is_empty() {
+                system_state
+                    .log_memory_store
+                    .append_delta_log(&mut old_total.clone());
+            }
+
+            // Append delta log to the total canister log.
             system_state
                 .log_memory_store
-                .append_delta_log(&mut system_state.canister_log.clone());
+                .append_delta_log(&mut self.canister_log.clone());
+            system_state
+                .canister_log
+                .append_delta_log(&mut self.canister_log);
         }
-
-        // Append delta log to the total canister log.
-        let mut canister_log_copy = self.canister_log.clone();
-        system_state
-            .log_memory_store
-            .append_delta_log(&mut canister_log_copy);
-        system_state
-            .canister_log
-            .append_delta_log(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
