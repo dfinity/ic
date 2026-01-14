@@ -141,4 +141,4 @@ USER $CI_USER
 CMD ["/bin/bash"]
 
 FROM base as ci
-FROM base as devenv
+FROM base as dev

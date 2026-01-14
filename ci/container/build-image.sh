@@ -32,7 +32,7 @@ while test $# -gt 0; do
     shift
 done
 
-if [ "$BUILD_TARGET" == "devenv" ]; then
+if [ "$BUILD_TARGET" == "dev" ]; then
     IMAGE_NAME="ic-build-dev"
 fi
 
