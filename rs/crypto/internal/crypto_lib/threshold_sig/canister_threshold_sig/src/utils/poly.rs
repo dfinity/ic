@@ -631,22 +631,6 @@ impl PolynomialCommitment {
         Ok(opening.clone())
     }
 
-    pub fn verify_is(
-        &self,
-        ctype: PolynomialCommitmentType,
-        curve: EccCurveType,
-    ) -> CanisterThresholdResult<()> {
-        if self.curve_type() != curve {
-            return Err(CanisterThresholdError::CurveMismatch);
-        }
-
-        if self.ctype() != ctype {
-            return Err(CanisterThresholdError::UnexpectedCommitmentType);
-        }
-
-        Ok(())
-    }
-
     pub fn check_opening(
         &self,
         eval_point: NodeIndex,
