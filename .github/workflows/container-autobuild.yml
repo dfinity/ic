@@ -101,7 +101,7 @@ jobs:
           file: ci/container/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.determine-build-image.outputs.image_tag }}
-          target: matrix.name
+          target: ${{ matrix.target }}
           build-args: |
             CI_USER=1001
 
