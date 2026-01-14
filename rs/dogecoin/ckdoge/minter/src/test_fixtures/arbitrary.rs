@@ -239,6 +239,7 @@ pub mod ckbtc {
             change_output: option::of(change_output()),
             submitted_at: any::<u64>(),
             estimated_fee_per_vbyte: option::of(any::<u64>()),
+            effective_fee_per_vbyte: option::of(any::<u64>()),
             withdrawal_fee: option::of(withdrawal_fee()),
             signed_tx: option::of(pvec(any::<u8>(), 1..10_000)),
         })
@@ -251,6 +252,7 @@ pub mod ckbtc {
             change_output: change_output(),
             submitted_at: any::<u64>(),
             estimated_fee_per_vbyte: any::<u64>(),
+            effective_fee_per_vbyte: option::of(any::<u64>()),
             withdrawal_fee: option::of(withdrawal_fee()),
             reason: option::of(replaced_reason()),
             new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),

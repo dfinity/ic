@@ -37,6 +37,7 @@ pub use ic_ckbtc_minter::{
     state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
     state::eventlog::{CkBtcMinterEvent, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
+    tx::FeeRate,
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
