@@ -19,6 +19,8 @@ pub enum SevCustomDataNamespace {
     RawRemoteAttestation = 1,
     /// Custom data for disk encryption key exchange during GuestOS upgrades.
     GetDiskEncryptionKeyToken = 2,
+    /// Custom data for node registration attestation to prove its chip_id.
+    NodeRegistration = 3,
 }
 
 impl SevCustomDataNamespace {
@@ -68,6 +70,28 @@ impl SevCustomData {
 impl PartialEq<[u8; 64]> for SevCustomData {
     fn eq(&self, other: &[u8; 64]) -> bool {
         self.verify(other)
+    }
+}
+
+/// Empty custom data for node registration attestation.
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Default)]
+pub struct NodeRegistrationAttestationCustomData;
+
+impl Encode for NodeRegistrationAttestationCustomData {
+    fn encoded_len(&self) -> der::Result<der::Length> {
+        // Empty DER SEQUENCE: tag (1 byte) + length (1 byte) = 2 bytes total
+        Ok(der::Length::new(2))
+    }
+
+    fn encode(&self, encoder: &mut impl der::Writer) -> der::Result<()> {
+        // Encode as empty DER SEQUENCE: 0x30 (SEQUENCE tag) + 0x00 (zero length)
+        encoder.write(&[0x30, 0x00])
+    }
+}
+
+impl DerEncodedCustomData for NodeRegistrationAttestationCustomData {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::NodeRegistration
     }
 }
 
