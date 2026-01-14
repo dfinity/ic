@@ -39,12 +39,11 @@ jobs:
 
       - name: Set Build Output
         shell: bash
-        id: set-output
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
           image_tag="$(ci/container/get-image-tag.sh)"
-          if grep '${{ image_tag }}' ci/container/TAG; then
+          if grep $image_tag ci/container/TAG; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
             echo "Modify ci/container/TAG with random string to trigger new build."
