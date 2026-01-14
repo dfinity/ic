@@ -1981,7 +1981,9 @@ impl CanisterManager {
         }
 
         let uninstalled_canister_size = if uninstall_code {
-            canister.execution_memory_usage() + canister.wasm_chunk_store_memory_usage()
+            canister.execution_memory_usage()
+                //+ canister.log_memory_store_memory_usage() // TODO: double check this.
+                + canister.wasm_chunk_store_memory_usage()
         } else {
             NumBytes::from(0)
         };
@@ -3213,6 +3215,10 @@ pub fn uninstall_canister(
 
     // Clear log.
     canister.clear_log_obsolete();
+    canister
+        .system_state
+        .log_memory_store
+        .clear(fd_factory.clone());
 
     // Clear the Wasm chunk store.
     canister.system_state.wasm_chunk_store = WasmChunkStore::new(fd_factory);
