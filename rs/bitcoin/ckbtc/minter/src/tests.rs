@@ -1081,7 +1081,7 @@ fn can_form_a_batch_conditions() {
 
 #[test]
 fn test_build_account_to_utxos_table_pagination() {
-    use crate::dashboard;
+    use crate::dashboard::DashboardBuilder;
 
     let mut state = CkBtcMinterState::from(InitArgs {
         retrieve_btc_min_amount: 5_000u64,
@@ -1101,26 +1101,27 @@ fn test_build_account_to_utxos_table_pagination() {
     state.add_utxos::<CheckInvariantsImpl>(account1, utxos[..10].to_vec());
     state.add_utxos::<CheckInvariantsImpl>(account2, utxos[10..].to_vec());
 
+    let dashboard = DashboardBuilder::default();
     // Check if all pages combined together would give the full utxos set.
     let pages = [
-        dashboard::build_account_to_utxos_table(&state, 0, 7),
-        dashboard::build_account_to_utxos_table(&state, 7, 7),
-        dashboard::build_account_to_utxos_table(&state, 14, 7),
-        dashboard::build_account_to_utxos_table(&state, 21, 7),
-        dashboard::build_account_to_utxos_table(&state, 28, 7),
+        dashboard.build_account_to_utxos_table(&state, 0, 7),
+        dashboard.build_account_to_utxos_table(&state, 7, 7),
+        dashboard.build_account_to_utxos_table(&state, 14, 7),
+        dashboard.build_account_to_utxos_table(&state, 21, 7),
+        dashboard.build_account_to_utxos_table(&state, 28, 7),
     ];
     for (i, utxo) in utxos.iter().enumerate() {
         assert!(pages[i / 7].contains(&format!("{}", utxo.outpoint.txid)));
     }
     // Check if everything is on the same page when page_size = number of utxos.
-    let single_page = dashboard::build_account_to_utxos_table(&state, 0, utxos.len() as u64);
+    let single_page = dashboard.build_account_to_utxos_table(&state, 0, utxos.len() as u64);
     for utxo in utxos.iter() {
         assert!(single_page.contains(&format!("{}", utxo.outpoint.txid)));
     }
     // Content should be equal when page size is greater than total number of utxos.
     assert_eq!(
         single_page,
-        dashboard::build_account_to_utxos_table(&state, 0, 1 + utxos.len() as u64)
+        dashboard.build_account_to_utxos_table(&state, 0, 1 + utxos.len() as u64)
     );
     // After removing the last line (which are links to other pages), the size of
     // the paginated content should be less than 1/4 of size of a full page.
@@ -1131,7 +1132,7 @@ fn test_build_account_to_utxos_table_pagination() {
     };
     assert!(remove_last_line(&pages[0]).len() * 4 < remove_last_line(&single_page).len());
     // No utxos should be displayed when start is out of range.
-    let no_utxo_page = dashboard::build_account_to_utxos_table(&state, utxos.len() as u64, 7);
+    let no_utxo_page = dashboard.build_account_to_utxos_table(&state, utxos.len() as u64, 7);
     for utxo in utxos.iter() {
         assert!(!no_utxo_page.contains(&format!("{}", utxo.outpoint.txid)));
     }
