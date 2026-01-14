@@ -297,10 +297,18 @@ def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) 
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
     result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
-    if not result or not result.ok:
+
+    if result.failed:
+        # Check if the error is because ping6 is missing (Exit code 127)
+        if result.exited == 127:
+            log.error(f"Execution failed: 'ping6' command not found on this system.")
+        else:
+            # Log the actual stderr from the ping command (e.g., Network unreachable)
+            log.warning(f"Ping failed for {ip_address}. Error: {result.stderr.strip()}")
+
         return False
 
-    log.info("Ping success.")
+    log.info(f"Ping success for {ip_address}.")
     return True
 
 
