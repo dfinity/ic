@@ -334,7 +334,7 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append non-empty delta log to the total canister log.
-        if !canister_log.is_empty() {
+        if !self.canister_log.is_empty() {
             system_state
                 .canister_log
                 .append_delta_log(&mut self.canister_log);
