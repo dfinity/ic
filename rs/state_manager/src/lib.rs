@@ -173,6 +173,7 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
+    tip_hash_count: IntCounter,
 }
 
 #[derive(Clone)]
@@ -458,6 +459,11 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
+        let tip_hash_count = metrics_registry.int_counter(
+            "state_manager_tip_hash_count",
+            "Number of tip heights whose state snapshot was not stored by this node and whose state hash was computed by this node.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -483,6 +489,7 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
+            tip_hash_count,
         }
     }
 
@@ -2690,6 +2697,8 @@ impl StateManager for StateManagerImpl {
                     if let Some((hash_tree, _)) = tip_certification_metadata.hash_tree.take() {
                         self.deallocator_thread.send(Box::new(hash_tree));
                     }
+
+                    self.metrics.tip_hash_count.inc();
 
                     CryptoHashOfPartialState::from(tip_certified_state_hash)
                 };
