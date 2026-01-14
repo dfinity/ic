@@ -66,7 +66,7 @@ const LOG_EVERY_N_SECONDS: i32 = 60;
 
 /// The time, after which we will load a CUP even if we
 /// where holding it back before, to give recomputation a chance during catch up.
-const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
+const CATCH_UP_HOLD_OFF_TIME: Duration = Duration::from_secs(150);
 
 /// Possible transient validation failures.
 #[derive(Debug)]
@@ -1903,12 +1903,12 @@ impl Validator {
                 .unvalidated()
                 .get_timestamp(&catch_up_package.get_id())
             {
-                Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
+                Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OFF_TIME => {
                     warn!(
                         self.log,
                         "Validating CUP at height {} after holding it back for {} seconds",
                         cup_height,
-                        CATCH_UP_HOLD_OF_TIME.as_secs()
+                        CATCH_UP_HOLD_OFF_TIME.as_secs()
                     );
                     Ok(())
                 }
@@ -3331,7 +3331,7 @@ pub mod test {
         test_validate_catch_up_package(
             /*state_height=*/ Height::new(59),
             /*finalized_height=*/ Height::new(60),
-            /*held_back_duration*/ CATCH_UP_HOLD_OF_TIME + Duration::from_secs(1),
+            /*held_back_duration*/ CATCH_UP_HOLD_OFF_TIME + Duration::from_secs(1),
             /*expected_to_validate*/ true,
         );
     }
