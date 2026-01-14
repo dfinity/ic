@@ -81,8 +81,10 @@ impl LogMemoryStore {
         RingBuffer::load_checked(self.page_map.clone())
     }
 
+    // TODO: maybe remove this completely.
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
+    #[cfg(test)]
     pub fn total_allocated_bytes(&self) -> usize {
         self.load_ring_buffer()
             .map(|rb| rb.total_allocated_bytes())
