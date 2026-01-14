@@ -13,6 +13,7 @@ rust_binary(
         "//rs/ic_os/remote_attestation/shared",
         "//rs/ic_os/sev",
         "@crate_index//:anyhow",
+        "@crate_index//:rand",
         "@crate_index//:sev",
         "@crate_index//:tokio",
         "@crate_index//:tonic",

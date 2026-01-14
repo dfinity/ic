@@ -123,6 +123,8 @@ fn main() {
 mod tests {
     use super::*;
     use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+    use rand::SeedableRng;
+    use rand::rngs::SmallRng;
     use sev::firmware::guest::AttestationReport;
     use sev::parser::ByteParser;
     use tokio::test;
@@ -163,9 +165,8 @@ mod tests {
     }
 
     #[test]
-    async fn test_wrong_namespace_fails() {
-        let mut custom_data = [0u8; 64];
-        custom_data[0] = 42;
+    async fn test_31_bytes_fails() {
+        let custom_data = [0u8; 31];
         let request = AttestRequest {
             custom_data: Some(custom_data.to_vec()),
         };
@@ -174,18 +175,20 @@ mod tests {
             .await
             .expect_err("Expected error");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
-        assert!(err.message().contains("first 4 bytes"));
+        assert!(err.message().contains("32 bytes"));
     }
 
     #[test]
     async fn test_correct_namespace_works() {
-        let custom_data =
-            SevCustomData::new(SevCustomDataNamespace::RawRemoteAttestation, [0; 32]).to_bytes();
+        let custom_data = SevCustomData::random(
+            SevCustomDataNamespace::RawRemoteAttestation,
+            &mut SmallRng::seed_from_u64(42),
+        );
         let request = AttestRequest {
-            custom_data: Some(custom_data.to_vec()),
+            custom_data: Some(custom_data.data.to_vec()),
         };
 
         let attestation_report = attest_and_get_report(request).await.unwrap();
-        assert_eq!(attestation_report.report_data, custom_data);
+        assert_eq!(custom_data, attestation_report.report_data);
     }
 }
