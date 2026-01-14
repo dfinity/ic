@@ -2672,6 +2672,7 @@ message SelfDescribingValue {
     SelfDescribingValueArray array = 5;
     SelfDescribingValueMap map = 6;
     Empty null = 7;
+    bool bool = 8;
   }
 }
 
