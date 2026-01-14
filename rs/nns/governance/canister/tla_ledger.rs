@@ -5,7 +5,10 @@ use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::NervousSystemError;
 use ic_nervous_system_runtime::Runtime;
 use icp_ledger::{AccountIdentifier, Subaccount as IcpSubaccount, Tokens};
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc3::blocks::{GetBlocksRequest, GetBlocksResult},
+};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
@@ -71,6 +74,19 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         );
 
         result
+    }
+
+    async fn icrc2_transfer_from(
+        &self,
+        from: Account,
+        to: Account,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        self.0
+            .icrc2_transfer_from(from, to, amount_e8s, fee_e8s, memo)
+            .await
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
