@@ -336,6 +336,12 @@ impl DeterministicMemoryTracker {
         access_kind: Option<AccessKind>,
         faulting_address: *mut libc::c_void,
     ) -> bool {
+        #[cfg(feature = "sigsegv_handler_checksum")]
+        self.checksum.borrow_mut().record_access(
+            self.memory_area.start,
+            fault_address,
+            access_kind.unwrap_or(AccessKind::Read),
+        );
         // SAFETY: The caller must ensure that the tracker has a deterministic state.
         let state = &mut *self.state.borrow_mut();
         if !self.memory_area.contains(faulting_address) {
