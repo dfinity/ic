@@ -209,8 +209,8 @@ where
         MemoryAllocation::CrossedDuringTest => {
             // Things to consider when chosing offset:
             // - chunk store changes memory usage by 1 MiB at most
-            // - canister logging changes memory by 3 OS-pages of 4 KiB (12 KiB)
-            let memory_allocation_crossed_offset = 6 * KIB;
+            // - canister logging changes memory by 1 OS-page of 4 KiB
+            let memory_allocation_crossed_offset = 2 * KIB;
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
                     // What increases memory usage: chunk upload, installing code (canister logs).
