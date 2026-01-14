@@ -138,3 +138,6 @@ test_tmpdir/**
 
 # Bare metal deployment secrets files
 zh2-dll01.csv
+
+# Claude Code settings
+.claude/settings.local.json

@@ -109,7 +109,6 @@ rust_library(
         "@crate_index//:json5",
         "@crate_index//:lazy_static",
         "@crate_index//:macaddr",
-        "@crate_index//:maplit",
         "@crate_index//:nix",
         "@crate_index//:num_cpus",
         "@crate_index//:once_cell",

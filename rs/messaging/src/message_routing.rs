@@ -13,7 +13,7 @@ use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKe
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -706,6 +706,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -924,7 +925,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics
@@ -1606,6 +1607,7 @@ impl MessageRoutingImpl {
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(

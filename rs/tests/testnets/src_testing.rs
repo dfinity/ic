@@ -49,7 +49,6 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm};
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
-    prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
     test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
 };
@@ -100,11 +99,6 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(rate: u64) -> XrcMockIn
 }
 
 pub fn setup(env: TestEnv) {
-    // start p8s for metrics and dashboards
-    PrometheusVm::default()
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     // set up IC
     let mut ic = InternetComputer::new().with_api_boundary_nodes(1);
     // the following subnets are gonna have IDs 1, 2, 3, ...
@@ -140,7 +134,6 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup ic-gateway");
     let ic_gateway = env.get_deployed_ic_gateway(ic_gatewway_name).unwrap();
     let ic_gateway_url = ic_gateway.get_public_url();
-    env.sync_with_prometheus();
 
     // install II, NNS dapp, and Subnet Rental Canister
     install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
