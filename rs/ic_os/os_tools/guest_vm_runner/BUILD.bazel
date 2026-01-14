@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/ic_os/device",
     "//rs/ic_os/metrics/metrics_tool",
     "//rs/ic_os/networking/deterministic_ips",
-    "//rs/ic_os/sev",
+    "//rs/ic_os/sev/host",
     "@crate_index//:anyhow",
     "@crate_index//:askama",
     "@crate_index//:clap",

@@ -1,4 +1,4 @@
-use crate::guest::firmware::SevGuestFirmware;
+use crate::firmware::SevGuestFirmware;
 use anyhow::Context;
 use anyhow::Result;
 use hkdf::SimpleHkdf;
@@ -49,7 +49,7 @@ impl Key<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::guest::firmware::MockSevGuestFirmware;
+    use crate::firmware::MockSevGuestFirmware;
     use std::collections::HashSet;
 
     #[test]

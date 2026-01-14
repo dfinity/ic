@@ -1,10 +1,9 @@
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, anyhow};
 
-pub mod custom_data;
+pub mod attestation_package;
 pub mod firmware;
 pub mod key_deriver;
-pub mod testing;
 
 /// Checks if SEV is active in the Guest Virtual Machine
 #[cfg(target_os = "linux")]

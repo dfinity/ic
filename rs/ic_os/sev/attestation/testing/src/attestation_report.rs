@@ -1,4 +1,3 @@
-use crate::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
 use der::EncodePem;
 use der::pem::LineEnding;
 use p384::ecdsa::Signature;
@@ -19,7 +18,6 @@ use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfo;
 use x509_cert::time::Validity;
 
-/// Builder for creating test attestation reports with customizable fields.
 pub struct AttestationReportBuilder {
     attestation_report: AttestationReport,
 }
@@ -73,10 +71,6 @@ impl Default for AttestationReportBuilder {
     }
 }
 
-/// An AMD SEV-SNP attestation report signer for testing.
-/// Creates a fake certificate chain (ARK -> ASK -> VCEK) and uses it to sign attestation reports
-/// in a way that passes validation with the SEV verification library.
-/// Obviously, this is not secure and should only be used in tests.
 #[derive(Clone)]
 pub struct FakeAttestationReportSigner {
     ark_cert: Certificate,
@@ -91,17 +85,14 @@ impl FakeAttestationReportSigner {
     pub fn new(seed: [u8; 32]) -> Self {
         let mut rng = rand::rngs::StdRng::from_seed(seed);
 
-        // ARK - RSA with RSASSA-PSS (root cert)
         let ark_key = RsaPrivateKey::new(&mut rng, 1024).unwrap();
         let ark_cert =
             create_certificate("ARK", ark_key.to_public_key(), ark_key.clone(), None).unwrap();
 
-        // ASK - RSA with RSASSA-PSS (signed by ARK)
-        let ask_key = ark_key.clone(); // Reuse the key to save some time
+        let ask_key = ark_key.clone();
         let ask_cert =
             create_certificate("ASK", ask_key.to_public_key(), ark_key, Some(&ark_cert)).unwrap();
 
-        // VCEK - P384 ECDSA (signed by ASK)
         let vcek_key = p384::ecdsa::SigningKey::random(&mut rng);
         let vcek_cert =
             create_certificate("VCEK", *vcek_key.verifying_key(), ask_key, Some(&ask_cert))
@@ -115,14 +106,11 @@ impl FakeAttestationReportSigner {
         }
     }
 
-    /// Signs the provided attestation report using the VCEK and stores the signature in the
-    /// report's signature field.
     pub fn sign_report(
         &self,
         attestation_report: &mut AttestationReport,
     ) -> Result<(), std::io::Error> {
         let mut raw_report_bytes = vec![];
-        // Write the report without signature to a byte vector.
         attestation_report.encode(&mut raw_report_bytes, ())?;
 
         let measurable_bytes: &[u8] = &raw_report_bytes[..Self::ATTESTATION_REPORT_MEASURABLE_LEN];
@@ -134,7 +122,6 @@ impl FakeAttestationReportSigner {
         Ok(())
     }
 
-    /// Returns the complete certificate chain (VCEK + ASK + ARK) in PEM format.
     pub fn get_certificate_chain_pem(&self) -> String {
         let mut cert_chain = String::new();
         cert_chain.push_str(&self.get_vcek_pem());
@@ -192,8 +179,6 @@ fn create_certificate(
 
 fn convert_signature(signature: &Signature) -> AttestationReportSignature {
     let mut r_source = signature.r().to_bytes();
-    // to_bytes returns big-endian, but AttestationReportSignature is little-endian (see AMD
-    // documentation)
     r_source.reverse();
     let mut s_source = signature.s().to_bytes();
     s_source.reverse();
@@ -203,121 +188,6 @@ fn convert_signature(signature: &Signature) -> AttestationReportSignature {
     s[0..48].copy_from_slice(&s_source);
 
     AttestationReportSignature::new(r, s)
-}
-
-#[derive(Clone)]
-pub struct MockSevGuestFirmwareBuilder {
-    custom_data_override: Option<[u8; 64]>,
-    /// If not set, the derived key will be derived from the measurement bytes.
-    derived_key: Option<[u8; 32]>,
-    measurement: [u8; 48],
-    chip_id: [u8; 64],
-    signer: Option<FakeAttestationReportSigner>,
-}
-
-impl Default for MockSevGuestFirmwareBuilder {
-    fn default() -> Self {
-        Self {
-            derived_key: None,
-            custom_data_override: None,
-            measurement: [0u8; 48],
-            chip_id: [0u8; 64],
-            signer: None,
-        }
-    }
-}
-
-impl MockSevGuestFirmwareBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_custom_data_override(mut self, custom_data: Option<[u8; 64]>) -> Self {
-        self.custom_data_override = custom_data;
-        self
-    }
-
-    pub fn with_derived_key(mut self, derived_key: Option<[u8; 32]>) -> Self {
-        self.derived_key = derived_key;
-        self
-    }
-
-    pub fn with_measurement(mut self, measurement: [u8; 48]) -> Self {
-        self.measurement = measurement;
-        self
-    }
-
-    pub fn with_chip_id(mut self, chip_id: [u8; 64]) -> Self {
-        self.chip_id = chip_id;
-        self
-    }
-
-    pub fn with_signer(mut self, signer: Option<FakeAttestationReportSigner>) -> Self {
-        self.signer = signer;
-        self
-    }
-
-    pub fn build(&self) -> MockSevGuestFirmware {
-        let mut firmware = MockSevGuestFirmware::new();
-        let this = self.clone();
-        firmware
-            .expect_get_report()
-            .returning(move |_, custom_data, _| {
-                let actual_custom_data =
-                    this.custom_data_override.or(custom_data).unwrap_or([0; 64]);
-
-                let builder = AttestationReportBuilder::new()
-                    .with_measurement(this.measurement)
-                    .with_custom_data(actual_custom_data)
-                    .with_chip_id(this.chip_id);
-
-                let attestation_report = if let Some(signer) = &this.signer {
-                    builder.build_signed(signer)
-                } else {
-                    builder.build_unsigned()
-                };
-
-                let mut out = vec![];
-                attestation_report.encode(&mut out, ()).unwrap();
-                Ok(out)
-            });
-
-        firmware.expect_get_derived_key().returning(move |_, _| {
-            // In reality, the chip would use a more complex process to derive the key from the
-            // measurement. In testing, we use a simple approach.
-            Ok(this
-                .derived_key
-                .unwrap_or(this.measurement[4..36].try_into().unwrap()))
-        });
-
-        firmware.expect_is_mock().returning(|| true);
-
-        firmware
-    }
-}
-
-impl SevGuestFirmware for MockSevGuestFirmwareBuilder {
-    fn get_report(
-        &mut self,
-        message_version: Option<u32>,
-        data: Option<[u8; 64]>,
-        vmpl: Option<u32>,
-    ) -> Result<Vec<u8>, sev::error::UserApiError> {
-        self.build().get_report(message_version, data, vmpl)
-    }
-
-    fn get_derived_key(
-        &mut self,
-        message_version: Option<u32>,
-        derived_key_request: sev::firmware::guest::DerivedKey,
-    ) -> Result<[u8; 32], sev::error::UserApiError> {
-        self.build()
-            .get_derived_key(message_version, derived_key_request)
-    }
-
-    fn is_mock(&self) -> bool {
-        self.build().is_mock()
-    }
 }
 
 #[cfg(test)]

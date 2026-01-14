@@ -6,9 +6,9 @@ use guest_disk::crypt::{
 };
 use guest_disk::sev::can_open_store;
 use ic_device::device_mapping::{Bytes, TempDevice};
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use ic_sev::guest::testing::MockSevGuestFirmwareBuilder;
 use libcryptsetup_rs::consts::flags::CryptActivate;
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use sev_guest_testing::MockSevGuestFirmwareBuilder;
 use std::fs;
 use std::fs::{File, Permissions};
 use std::io::Read;

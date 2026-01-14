@@ -1,10 +1,9 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
-use attestation::attestation_package::generate_attestation_package;
-use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::{
-    AttestationVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
 };
+use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::api::disk_encryption_key_exchange_service_client::DiskEncryptionKeyExchangeServiceClient;
@@ -17,11 +16,12 @@ use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_interfaces_registry::RegistryClient;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use rcgen::CertifiedKey;
 use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::firmware::SevGuestFirmware;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;

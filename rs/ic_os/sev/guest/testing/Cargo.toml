@@ -1,0 +1,10 @@
+[package]
+name = "sev_guest_testing"
+edition.workspace = true
+
+[dependencies]
+sev = { workspace = true }
+
+attestation_testing = { path = "../../attestation/testing" }
+sev_guest = { path = ".." }
+

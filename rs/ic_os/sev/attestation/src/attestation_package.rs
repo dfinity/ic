@@ -17,7 +17,7 @@ pub enum SevRootCertificateVerification {
 }
 
 /// Extension trait for verifying attestation packages.
-pub trait AttestationVerifier: Sized {
+pub trait AttestationPackageVerifier: Sized {
     /// Verify that the attestation report chip ID matches one of the expected chip IDs.
     fn verify_chip_id(
         self,
@@ -136,7 +136,7 @@ impl From<ParsedAttestationPackage> for SevAttestationPackage {
     }
 }
 
-impl AttestationVerifier for ParsedAttestationPackage {
+impl AttestationPackageVerifier for ParsedAttestationPackage {
     fn verify_chip_id(
         self,
         expected_chip_ids: &[[u8; 64]],
@@ -220,7 +220,7 @@ impl AttestationVerifier for ParsedAttestationPackage {
 }
 
 /// Allows chaining verification methods
-impl AttestationVerifier for Result<ParsedAttestationPackage, VerificationError> {
+impl AttestationPackageVerifier for Result<ParsedAttestationPackage, VerificationError> {
     fn verify_chip_id(
         self,
         expected_chip_ids: &[[u8; 64]],

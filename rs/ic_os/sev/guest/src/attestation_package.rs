@@ -1,9 +1,9 @@
-use crate::SevCertificateChain;
-use crate::custom_data::EncodeSevCustomData;
-use crate::verification::{ParsedAttestationPackage, SevRootCertificateVerification};
+use crate::firmware::SevGuestFirmware;
 use anyhow::{Context, Result, anyhow, bail};
+use attestation::SevCertificateChain;
+use attestation::attestation_package::{ParsedAttestationPackage, SevRootCertificateVerification};
+use attestation::custom_data::EncodeSevCustomData;
 use config_types::TrustedExecutionEnvironmentConfig;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 use std::fmt::Debug;

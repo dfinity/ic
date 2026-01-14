@@ -1,17 +1,13 @@
-use crate::attestation_package::generate_attestation_package;
-use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
-use crate::verification::{
-    AttestationVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+use crate::attestation_package::{
+    AttestationPackageVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
 };
+use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData, SevCustomDataNamespace};
 use crate::{
     SevAttestationPackage, SevCertificateChain, VerificationErrorDescription,
     VerificationErrorDetail,
 };
-use config_types::TrustedExecutionEnvironmentConfig;
-use ic_sev::guest::custom_data::SevCustomDataNamespace;
-use ic_sev::guest::firmware::MockSevGuestFirmware;
-use ic_sev::guest::testing::{
-    AttestationReportBuilder, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+use attestation_testing::attestation_report::{
+    AttestationReportBuilder, FakeAttestationReportSigner,
 };
 use sev::parser::ByteParser;
 
@@ -35,25 +31,33 @@ const CUSTOM_DATA: FooCustomData = FooCustomData {
     b: 1234567890,
 };
 
-fn valid_sev_firmware() -> MockSevGuestFirmware {
-    let signer = FakeAttestationReportSigner::default();
-    MockSevGuestFirmwareBuilder::new()
-        .with_chip_id(CHIP_ID)
-        .with_measurement(MEASUREMENT)
-        .with_signer(Some(signer))
-        .build()
-}
-
 fn generate_valid_attestation_package() -> SevAttestationPackage {
-    generate_attestation_package(
-        &mut valid_sev_firmware(),
-        &TrustedExecutionEnvironmentConfig {
-            sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),
-        },
-        &CUSTOM_DATA,
-    )
-    .expect("Failed to generate attestation package")
-    .into()
+    let signer = FakeAttestationReportSigner::default();
+
+    let custom_data_bytes = CUSTOM_DATA
+        .encode_for_sev()
+        .expect("Failed to encode custom data for SEV")
+        .to_bytes();
+
+    let attestation_report = AttestationReportBuilder::new()
+        .with_custom_data(custom_data_bytes)
+        .with_measurement(MEASUREMENT)
+        .with_chip_id(CHIP_ID)
+        .build_signed(&signer);
+
+    let attestation_report_bytes = attestation_report
+        .to_bytes()
+        .expect("Failed to serialize attestation report");
+
+    SevAttestationPackage {
+        attestation_report: Some(attestation_report_bytes.to_vec()),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: Some(format!("{CUSTOM_DATA:?}")),
+    }
 }
 
 #[test]
