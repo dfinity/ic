@@ -31,8 +31,8 @@ lcov # used for bazel coverage
 gcc
 pkg-config
 libclang-18-dev
-libssl-dev # required for ovmf_sev genrule
 libusb-1.0-0-dev
+lld # required for ovmf_sev genrule
 protobuf-compiler
 llvm
 
@@ -52,7 +52,6 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
-lld
 mtools # used for mcopy and mmd
 nasm # to build OVMF
 zstd
