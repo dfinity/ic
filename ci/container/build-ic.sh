@@ -14,7 +14,8 @@ export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
 # Drop into the container if we're not already inside it. This ensures
 # we run in a predictable environment (Ubuntu with known deps).
-if ! ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ]); then
+if [ "${DFINITY_CONTAINER:-}" != true ] && \
+   ( [ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ] ); then
     echo dropping into container
     exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
 fi
