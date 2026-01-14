@@ -1,13 +1,12 @@
 #![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
-use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::call::{RejectionCode, call_with_payment},
     call, caller, print,
 };
 use ic_management_canister_types_private::{
-    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CanisterSnapshotResponse,
-    CreateCanisterArgs, InstallCodeArgs, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -24,9 +23,8 @@ use ic_nns_common::{
     types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, LoadCanisterSnapshotError,
-    LoadCanisterSnapshotOk, LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse,
-    TakeCanisterSnapshotError, TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest,
     TakeCanisterSnapshotResponse, UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
     UpdateCanisterSettingsResponse,
 };
@@ -266,8 +264,6 @@ pub async fn take_canister_snapshot(
     )
     .await
 }
-
-
 
 pub async fn load_canister_snapshot(
     load_canister_snapshot_request: LoadCanisterSnapshotRequest,
