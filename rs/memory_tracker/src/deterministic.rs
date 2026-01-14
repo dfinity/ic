@@ -339,7 +339,7 @@ impl DeterministicMemoryTracker {
         #[cfg(feature = "sigsegv_handler_checksum")]
         self.checksum.borrow_mut().record_access(
             self.memory_area.start,
-            fault_address,
+            faulting_address,
             access_kind.unwrap_or(AccessKind::Read),
         );
         // SAFETY: The caller must ensure that the tracker has a deterministic state.
