@@ -483,7 +483,7 @@ impl IDkgDealingInternal {
                     signature_curve,
                 )?;
                 check_comm_type(
-                    &previous_commitment,
+                    previous_commitment,
                     PolynomialCommitmentType::Simple,
                     signature_curve,
                 )?;
