@@ -8,6 +8,7 @@ der = { workspace = true, features = ["alloc", "derive", "std"] }
 hex = { workspace = true }
 itertools = { workspace = true }
 prost = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sev = { workspace = true }
 sha2 = { workspace = true }
