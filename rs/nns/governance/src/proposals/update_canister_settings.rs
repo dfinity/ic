@@ -400,7 +400,6 @@ mod tests {
 
     #[test]
     fn test_update_canister_settings_to_self_describing() {
-
         let update_canister_settings = UpdateCanisterSettings {
             canister_id: Some(SNS_WASM_CANISTER_ID.get()),
             settings: Some(CanisterSettings {
