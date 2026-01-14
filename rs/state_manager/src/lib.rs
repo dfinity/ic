@@ -2650,41 +2650,51 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["take_tip"])
             .start_timer();
 
-        let hash_at = |tip_height: Height, certifications_metadata: &CertificationsMetadata| {
-            if tip_height > Self::INITIAL_STATE_HEIGHT {
-                let tip_metadata = certifications_metadata.get(&tip_height).unwrap_or_else(|| {
-                    fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
-                });
-
-                // Since the state machine will use this tip to compute the *next* state,
-                // we populate the prev_state_hash with the hash of the current tip.
-                Some(CryptoHashOfPartialState::from(
-                    tip_metadata.certified_state_hash.clone(),
-                ))
-            } else {
-                // This code is executed at most once per subnet, no need to
-                // optimize this.
-                let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(
-                    initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-                ))
-                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
-                update_hash_tree_metrics(&hash_tree, &self.metrics);
-                Some(CryptoHashOfPartialState::from(crypto_hash_of_tree(
-                    &hash_tree,
-                )))
-            }
-        };
-
         let mut states = self.states.write();
         let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
 
         let (target_snapshot, target_hash) = match states.snapshots.back() {
-            Some(snapshot) if snapshot.height > tip_height => (
-                snapshot.clone(),
-                hash_at(snapshot.height, &states.certifications_metadata),
-            ),
+            Some(snapshot) if snapshot.height > tip_height => {
+                let tip_height = snapshot.height;
+
+                let tip_metadata = states
+                    .certifications_metadata
+                    .get(&tip_height)
+                    .unwrap_or_else(|| {
+                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height)
+                    });
+
+                // Since the state machine will use this tip to compute the *next* state,
+                // we populate the prev_state_hash with the hash of the current tip.
+                let tip_hash =
+                    CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone());
+
+                (snapshot.clone(), tip_hash)
+            }
             _ => {
-                tip.metadata.prev_state_hash = hash_at(tip_height, &states.certifications_metadata);
+                let tip_hash = if let Some(tip_metadata) =
+                    states.certifications_metadata.get(&tip_height)
+                {
+                    CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
+                } else {
+                    if tip_height != Self::INITIAL_STATE_HEIGHT {
+                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height);
+                    }
+
+                    let mut tip_certification_metadata =
+                        Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
+                            .unwrap_or_else(|err| {
+                                fatal!(self.log, "Failed to compute hash tree: {:?}", err)
+                            });
+                    let tip_certified_state_hash = tip_certification_metadata.certified_state_hash;
+                    if let Some((hash_tree, _)) = tip_certification_metadata.hash_tree.take() {
+                        self.deallocator_thread.send(Box::new(hash_tree));
+                    }
+
+                    CryptoHashOfPartialState::from(tip_certified_state_hash)
+                };
+
+                tip.metadata.prev_state_hash = Some(tip_hash);
                 return (tip_height, tip);
             }
         };
@@ -2726,7 +2736,7 @@ impl StateManager for StateManagerImpl {
             checkpoint_layout,
         );
 
-        new_tip.metadata.prev_state_hash = target_hash;
+        new_tip.metadata.prev_state_hash = Some(target_hash);
 
         // This might still not be the latest version: there might have been
         // another successful state sync while we were updating the tip.
