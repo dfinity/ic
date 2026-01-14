@@ -3288,7 +3288,7 @@ pub mod test {
 
     #[test]
     fn test_should_validate_catch_up_package_state_behind_the_cup_height() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(1),
             /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ Duration::from_secs(0),
@@ -3298,7 +3298,7 @@ pub mod test {
 
     #[test]
     fn test_should_validate_cup_when_state_and_finalization_significantly_behind_the_cup_height() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(1),
             /*finalized_height=*/ Height::new(1),
             /*held_back_duration*/ Duration::from_secs(0),
@@ -3308,7 +3308,7 @@ pub mod test {
 
     #[test]
     fn test_should_not_validate_catch_up_package_when_state_close_to_the_cup_height() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(59),
             /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ Duration::from_secs(0),
@@ -3318,7 +3318,7 @@ pub mod test {
 
     #[test]
     fn test_should_not_validate_catch_up_package_when_finalization_reached_minimum_chain_length() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(50),
             /*finalized_height=*/ Height::new(50),
             /*held_back_duration*/ Duration::from_secs(0),
@@ -3328,7 +3328,7 @@ pub mod test {
 
     #[test]
     fn test_should_validate_catch_up_package_when_held_back_for_too_long() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(59),
             /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ CATCH_UP_HOLD_OFF_TIME + Duration::from_secs(1),
@@ -3338,7 +3338,7 @@ pub mod test {
 
     #[test]
     fn test_should_validate_catch_up_package_when_state_exceeds_the_cup_height() {
-        test_validate_catch_up_package(
+        test_validate_catch_up_package_with_height_60(
             /*state_height=*/ Height::new(60),
             /*finalized_height=*/ Height::new(60),
             /*held_back_duration*/ Duration::from_secs(0),
@@ -3347,7 +3347,7 @@ pub mod test {
     }
 
     /// Tests whether we can validate a CUP at height `60`.
-    fn test_validate_catch_up_package(
+    fn test_validate_catch_up_package_with_height_60(
         state_height: Height,
         finalized_height: Height,
         // How long has the CUP been in the pool
@@ -3355,6 +3355,7 @@ pub mod test {
         expected_to_validate: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let cup_height = Height::from(60);
             // Setup validator dependencies.
             let ValidatorAndDependencies {
                 validator,
@@ -3365,12 +3366,11 @@ pub mod test {
             } = setup_dependencies_with_dkg_interval_length(
                 pool_config,
                 &(0..4).map(node_test_id).collect::<Vec<_>>(),
-                59,
+                cup_height.get() - 1,
             );
 
             pool.advance_round_normal_operation_no_cup_n(finalized_height.get());
 
-            let cup_height = Height::from(60);
             let fake_block = Block::new(
                 CryptoHashOf::from(CryptoHash(vec![])),
                 Payload::new(
