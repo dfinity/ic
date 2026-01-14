@@ -260,69 +260,14 @@ pub async fn take_canister_snapshot(
     take_canister_snapshot_request: TakeCanisterSnapshotRequest,
     management_canister_client: &mut impl ManagementCanisterClient,
 ) -> TakeCanisterSnapshotResponse {
-    let TakeCanisterSnapshotRequest {
-        canister_id,
-        replace_snapshot,
-    } = take_canister_snapshot_request;
-
-    let replace_snapshot = match replace_snapshot {
-        None => None,
-        Some(snapshot_id) => {
-            let snapshot_id = match SnapshotId::try_from(&snapshot_id) {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
-                        code: None,
-                        description: format!("Invalid snapshot ID ({snapshot_id:02X?}): {err}"),
-                    });
-                }
-            };
-
-            Some(snapshot_id)
-        }
-    };
-
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs {
-        canister_id,
-        replace_snapshot,
-        uninstall_code: None,
-        sender_canister_version: management_canister_client.canister_version(),
-    };
-
-    match management_canister_client
-        .take_canister_snapshot(take_canister_snapshot_args)
-        .await
-    {
-        Ok(result) => {
-            let result =
-                convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(result);
-            TakeCanisterSnapshotResponse::Ok(result)
-        }
-
-        Err((code, description)) => TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
-            code: Some(code),
-            description,
-        }),
-    }
+    ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot::<CdkRuntime>(
+        take_canister_snapshot_request,
+        management_canister_client,
+    )
+    .await
 }
 
-fn convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(
-    response: CanisterSnapshotResponse,
-) -> TakeCanisterSnapshotOk {
-    let CanisterSnapshotResponse {
-        id,
-        taken_at_timestamp,
-        total_size,
-    } = response;
 
-    let id = id.to_vec();
-
-    TakeCanisterSnapshotOk {
-        id,
-        taken_at_timestamp,
-        total_size,
-    }
-}
 
 pub async fn load_canister_snapshot(
     load_canister_snapshot_request: LoadCanisterSnapshotRequest,
