@@ -594,7 +594,7 @@ fn ckdoge_withdrawal_fee_to_ckbtc(
     }
 }
 
-fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
+pub fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
     match address {
         BitcoinAddress::P2wpkhV0(_) | BitcoinAddress::P2wshV0(_) | BitcoinAddress::P2trV1(_) => {
             Err(format!("BUG: unexpected address type {address:?}"))

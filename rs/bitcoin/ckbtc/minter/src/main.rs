@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::dashboard::DashboardBuilder;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::queries::{
@@ -269,7 +270,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req)
+    ic_ckbtc_minter::queries::http_request(req, &DashboardBuilder::new())
 }
 
 #[query]

@@ -1,4 +1,5 @@
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::dashboard::DashboardBuilder;
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
@@ -12,7 +13,7 @@ use ic_ckdoge_minter::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
-    event::CkDogeMinterEvent,
+    event::{CkDogeMinterEvent, bitcoin_to_dogecoin},
     lifecycle::MinterArg,
     updates,
 };
@@ -234,7 +235,15 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req)
+    ic_ckbtc_minter::queries::http_request(
+        req,
+        &DashboardBuilder::new_with(|address, network| {
+            let address =
+                bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
+            let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
+            address.display(&network)
+        }),
+    )
 }
 
 fn main() {}
