@@ -92,7 +92,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Container Image CI
+      - name: Build Container Image  {{ matrix.name }}
         # this sets the output 'imageid' to the sha256 of the output image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
         id: build
@@ -101,7 +101,7 @@ jobs:
           file: ci/container/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:${{ needs.determine-build-image.outputs.image_tag }}
-          target: {{ matrix.name }}
+          target: matrix.name
           build-args: |
             CI_USER=1001
 
