@@ -301,7 +301,7 @@ def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) 
     if result.failed:
         # Check if the error is because ping6 is missing (Exit code 127)
         if result.exited == 127:
-            log.error(f"Execution failed: 'ping6' command not found on this system.")
+            log.error("Execution failed: 'ping6' command not found on this system.")
         else:
             # Log the actual stderr from the ping command (e.g., Network unreachable)
             log.warning(f"Ping failed for {ip_address}. Error: {result.stderr.strip()}")
