@@ -162,7 +162,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
         fee_per_vbyte: u64,
     ) -> u64 {
         let tx_vsize = fake_sign(unsigned_tx).vsize();
-        (tx_vsize as u64 * fee_per_vbyte) / 1000
+        (tx_vsize as u64 * fee_per_vbyte).div_ceil(1000)
     }
 
     fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64 {

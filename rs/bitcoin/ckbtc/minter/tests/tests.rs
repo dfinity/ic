@@ -565,7 +565,7 @@ pub fn get_btc_address(
             .bytes(),
         String
     )
-    .expect("failed to decode String response")
+        .expect("failed to decode String response")
 }
 
 #[test]
@@ -670,9 +670,9 @@ fn bitcoin_canister_id(btc_network: Network) -> CanisterId {
             }
             Network::Mainnet => ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID,
         })
-        .unwrap(),
+            .unwrap(),
     )
-    .unwrap()
+        .unwrap()
 }
 
 fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
@@ -683,7 +683,7 @@ fn install_bitcoin_mock_canister(env: &StateMachine, btc_network: Network) {
         bitcoin_mock_wasm(),
         Encode!(&ic_cdk::bitcoin_canister::Network::from(btc_network)).unwrap(),
     )
-    .unwrap();
+        .unwrap();
 }
 
 struct CkBtcSetup {
@@ -726,9 +726,9 @@ impl CkBtcSetup {
                     .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
                     .build()
             ))
-            .unwrap(),
+                .unwrap(),
         )
-        .expect("failed to install the ledger");
+            .expect("failed to install the ledger");
 
         env.install_existing_canister(
             minter_id,
@@ -742,9 +742,9 @@ impl CkBtcSetup {
                 btc_checker_principal: btc_checker_id.into(),
                 ..default_init_args()
             }))
-            .unwrap(),
+                .unwrap(),
         )
-        .expect("failed to install the minter");
+            .expect("failed to install the minter");
 
         let caller = PrincipalId::new_user_test_id(1);
 
@@ -756,16 +756,16 @@ impl CkBtcSetup {
                 check_mode: CheckMode::AcceptAll,
                 num_subnet_nodes: 1,
             }))
-            .unwrap(),
+                .unwrap(),
         )
-        .expect("failed to install the Bitcoin checker canister");
+            .expect("failed to install the Bitcoin checker canister");
 
         env.execute_ingress(
             bitcoin_id,
             "set_fee_percentiles",
             Encode!(&(1..=100).map(|i| i * 100).collect::<Vec<u64>>()).unwrap(),
         )
-        .expect("failed to set fee percentiles");
+            .expect("failed to set fee percentiles");
 
         Self {
             env,
@@ -793,7 +793,7 @@ impl CkBtcSetup {
             ),
             Vec<MillisatoshiPerByte>
         )
-        .expect("Failed to call bitcoin_get_current_fee_percentiles")
+            .expect("Failed to call bitcoin_get_current_fee_percentiles")
     }
 
     pub fn set_fee_percentiles(&self, fees: &Vec<MillisatoshiPerByte>) {
@@ -816,7 +816,7 @@ impl CkBtcSetup {
             .expect("failed to set fee tip height");
     }
 
-    pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
+    pub fn push_utxos<I: IntoIterator<Item=Utxo>>(&self, utxos: I, address: String) {
         let request = PushUtxosToAddress {
             utxos: utxos.into_iter().collect(),
             address,
@@ -851,7 +851,7 @@ impl CkBtcSetup {
             ),
             String
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn get_minter_info(&self) -> MinterInfo {
@@ -863,7 +863,7 @@ impl CkBtcSetup {
             ),
             MinterInfo
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
@@ -886,7 +886,7 @@ impl CkBtcSetup {
             ),
             HttpResponse
         )
-        .unwrap();
+            .unwrap();
         serde_json::from_slice::<canlog::Log<Priority>>(&response.body)
             .expect("failed to parse ckBTC minter log")
             .entries
@@ -920,7 +920,7 @@ impl CkBtcSetup {
             ),
             Vec<CkBtcMinterEvent>
         )
-        .expect("Failed to call get_events")
+            .expect("Failed to call get_events")
     }
 
     pub fn refresh_fee_percentiles(&self) {
@@ -937,7 +937,7 @@ impl CkBtcSetup {
             ),
             Option<Nat>
         )
-        .unwrap();
+            .unwrap();
     }
 
     pub fn estimate_withdrawal_fee(&self, amount: Option<u64>) -> WithdrawalFee {
@@ -954,7 +954,7 @@ impl CkBtcSetup {
             ),
             WithdrawalFee
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn deposit_utxos_with_value(
@@ -1023,7 +1023,7 @@ impl CkBtcSetup {
             ),
             Result<Vec<UtxoStatus>, UpdateBalanceError>
         )
-        .unwrap();
+            .unwrap();
 
         let minted = utxo_status.unwrap();
         assert_eq!(minted.len(), utxos.len());
@@ -1052,7 +1052,7 @@ impl CkBtcSetup {
             ),
             GetTransactionsResponse
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn get_known_utxos(&self, account: impl Into<Account>) -> Vec<Utxo> {
@@ -1073,7 +1073,7 @@ impl CkBtcSetup {
             ),
             Vec<Utxo>
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn balance_of(&self, account: impl Into<Account>) -> Nat {
@@ -1089,7 +1089,7 @@ impl CkBtcSetup {
             ),
             Nat
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn withdrawal_account(&self, owner: PrincipalId) -> Account {
@@ -1106,7 +1106,7 @@ impl CkBtcSetup {
             ),
             Account
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn transfer(&self, from: impl Into<Account>, to: impl Into<Account>, amount: u64) -> Nat {
@@ -1127,8 +1127,8 @@ impl CkBtcSetup {
             ).expect("failed to execute token transfer")),
             Result<Nat, TransferError>
         )
-        .unwrap()
-        .expect("token transfer failed")
+            .unwrap()
+            .expect("token transfer failed")
     }
 
     pub fn approve_minter(
@@ -1157,8 +1157,8 @@ impl CkBtcSetup {
             ).expect("failed to execute token transfer")),
             Result<Nat, ApproveError>
         )
-        .unwrap()
-        .expect("approve failed")
+            .unwrap()
+            .expect("approve failed")
     }
 
     pub fn retrieve_btc(
@@ -1210,7 +1210,7 @@ impl CkBtcSetup {
             ),
             RetrieveBtcStatus
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn retrieve_btc_status_v2(&self, block_index: u64) -> RetrieveBtcStatusV2 {
@@ -1226,7 +1226,7 @@ impl CkBtcSetup {
             ),
             RetrieveBtcStatusV2
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn retrieve_btc_status_v2_by_account(
@@ -1245,7 +1245,7 @@ impl CkBtcSetup {
             ),
             Vec<BtcRetrievalStatusV2>
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn tick_until<R>(
@@ -1405,15 +1405,15 @@ impl CkBtcSetup {
             ),
             Vec<Vec<u8>>
         )
-        .unwrap()
-        .iter()
-        .map(|tx_bytes| {
-            let tx = bitcoin::Transaction::deserialize(tx_bytes)
-                .expect("failed to parse a bitcoin transaction");
+            .unwrap()
+            .iter()
+            .map(|tx_bytes| {
+                let tx = bitcoin::Transaction::deserialize(tx_bytes)
+                    .expect("failed to parse a bitcoin transaction");
 
-            (vec_to_txid(tx.txid().to_vec()), tx)
-        })
-        .collect()
+                (vec_to_txid(tx.txid().to_vec()), tx)
+            })
+            .collect()
     }
 
     pub fn reset_mempool(&self) {
@@ -1425,7 +1425,7 @@ impl CkBtcSetup {
             ),
             ()
         )
-        .unwrap()
+            .unwrap()
     }
 
     pub fn minter_self_check(&self) {
@@ -1437,8 +1437,8 @@ impl CkBtcSetup {
             ),
             Result<(), String>
         )
-        .unwrap()
-        .expect("minter self-check failed")
+            .unwrap()
+            .expect("minter self-check failed")
     }
 
     pub fn check_minter_metrics(&self) -> MetricsAssert<&Self> {
@@ -1450,7 +1450,7 @@ impl CkBtcSetup {
             None => Encode!(&()),
             Some(args) => Encode!(&Some(MinterArg::Upgrade(Some(args)))),
         }
-        .unwrap();
+            .unwrap();
         self.env
             .upgrade_canister(self.minter_id, minter_wasm(), encoded_args)
             .unwrap();
@@ -1465,10 +1465,10 @@ impl CkBtcSetup {
             ),
             Nat
         )
-        .unwrap()
-        .0
-        .to_u64()
-        .unwrap()
+            .unwrap()
+            .0
+            .to_u64()
+            .unwrap()
     }
 
     pub fn get_ledger_burn_amount(&self, burn_index: u64) -> u64 {
@@ -1543,7 +1543,7 @@ impl CkBtcSetup {
             ),
             DecodeLedgerMemoResult
         )
-        .unwrap()
+            .unwrap()
     }
 }
 
@@ -2864,7 +2864,7 @@ fn test_retrieve_btc_with_approval_fail() {
                 check_mode: Some(CheckMode::RejectAll),
                 ..CheckerUpgradeArg::default()
             })))
-            .unwrap(),
+                .unwrap(),
         )
         .expect("failed to upgrade the Bitcoin checker canister");
 

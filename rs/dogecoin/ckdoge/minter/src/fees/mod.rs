@@ -121,7 +121,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         fee_per_byte: u64,
     ) -> u64 {
         let tx_size = DogecoinTransactionSigner::fake_sign(unsigned_tx).len();
-        (tx_size as u64 * fee_per_byte) / 1000
+        (tx_size as u64 * fee_per_byte).div_ceil(1000)
     }
 
     fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64 {
