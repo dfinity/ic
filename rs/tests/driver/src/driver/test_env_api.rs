@@ -1292,7 +1292,7 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-/// Returns the build version specified by the build. May be an actual version of a
+/// Returns the build version specified by the build. May be an actual version or a
 /// placeholder version. See build files for exact semantics.
 pub fn get_ic_build_version() -> ReplicaVersion {
     ReplicaVersion::try_from(read_dependency_from_env_to_string("IC_VERSION_FILE").unwrap())
