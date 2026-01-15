@@ -329,6 +329,22 @@ pub(crate) struct DeterministicMemoryTracker {
 }
 
 impl DeterministicMemoryTracker {
+    /// Marks a Wasm page as accessed and adds its OS pages to the accessed_pages list.
+    fn mark_wasm_page_accessed(
+        &self,
+        state: &mut DeterministicState,
+        wasm_page_idx: WasmPageIndex,
+    ) {
+        state.mark_wasm_page_accessed(wasm_page_idx);
+
+        // Add the corresponding OS pages to the accessed_pages vector
+        let os_page_range = Range::from_wasm_page_idx(wasm_page_idx);
+        let mut accessed_pages = self.accessed_pages.borrow_mut();
+        for os_page_idx in os_page_range.start.get()..os_page_range.end.get() {
+            accessed_pages.push(PageIndex::new(os_page_idx));
+        }
+    }
+
     /// A missing OS page handler that provides deterministic prefetching behavior
     /// and works on all platforms.
     pub fn handle_missing_os_page(
@@ -368,7 +384,7 @@ impl DeterministicMemoryTracker {
                 );
                 state.non_deterministic_metrics.map_ignoring += 1;
                 // When ignoring dirty pages, we only report accessed pages.
-                state.mark_wasm_page_accessed(faulting_wasm_page_idx);
+                self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
             }
             (Some(AccessKind::Read), DirtyPageTracking::Track) => {
                 state.map_wasm_page_as(
@@ -379,7 +395,7 @@ impl DeterministicMemoryTracker {
                     READ,
                 );
                 state.non_deterministic_metrics.map_read += 1;
-                state.mark_wasm_page_accessed(faulting_wasm_page_idx);
+                self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
             }
             (Some(AccessKind::Write), DirtyPageTracking::Track) => {
                 if state.try_write_protect_wasm_page(&self.memory_area, faulting_wasm_page_idx) {
@@ -394,7 +410,7 @@ impl DeterministicMemoryTracker {
                         READ | WRITE,
                     );
                     state.non_deterministic_metrics.map_read_write += 1;
-                    state.mark_wasm_page_accessed(faulting_wasm_page_idx);
+                    self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
                     state.mark_wasm_page_dirty(faulting_wasm_page_idx);
                 }
             }
@@ -411,7 +427,7 @@ impl DeterministicMemoryTracker {
                         READ,
                     );
                     state.non_deterministic_metrics.map_read += 1;
-                    state.mark_wasm_page_accessed(faulting_wasm_page_idx);
+                    self.mark_wasm_page_accessed(state, faulting_wasm_page_idx);
                 }
             }
         }
