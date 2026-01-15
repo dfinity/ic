@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
@@ -12,7 +12,7 @@ rust_library(
         "src/lib.rs",
         "src/setup.rs",
     ],
-    compile_data = COUNTER_CANISTER_RUNTIME_DEPS,
+    compile_data = COUNTER_CANISTER_DATA,
     crate_name = "ic_boundary_nodes_system_test_utils",
     deps = [
         # Keep sorted.

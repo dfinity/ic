@@ -219,15 +219,15 @@ dependencies = [
 
 [[package]]
 name = "actix-web-prom"
-version = "0.9.0"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56a34f1825c3ae06567a9d632466809bbf34963c86002e8921b64f32d48d289d"
+checksum = "a7eb266b4c692a4a7e68429fcbe4eb3bd55c053f6d84c0522dc83df22395edf6"
 dependencies = [
  "actix-web",
  "futures-core",
  "log",
  "pin-project-lite",
- "prometheus 0.13.4",
+ "prometheus",
  "regex",
  "strfmt",
 ]
@@ -1136,9 +1136,12 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap 4.5.27",
+ "deterministic_ips",
  "http 1.3.1",
+ "macaddr",
  "rand 0.8.5",
  "rexpect",
+ "rust-ini",
  "ssh2",
  "thiserror 2.0.17",
 ]
@@ -2220,7 +2223,7 @@ dependencies = [
  "leb128",
  "mockall",
  "pem 3.0.6",
- "prometheus 0.13.4",
+ "prometheus",
  "rcgen 0.13.2",
  "reqwest 0.12.24",
  "serde",
@@ -2253,7 +2256,7 @@ dependencies = [
  "ic-stable-structures 0.6.8",
  "mockall",
  "priority-queue",
- "prometheus 0.13.4",
+ "prometheus",
  "publicsuffix",
  "serde",
  "serde_cbor",
@@ -6347,8 +6350,8 @@ dependencies = [
  "hyper-util",
  "ic-adapter-metrics-service",
  "ic-http-endpoints-async-utils",
- "prometheus 0.13.4",
- "protobuf 2.28.0",
+ "prometheus",
+ "protobuf",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -6363,7 +6366,7 @@ dependencies = [
  "ic-adapter-metrics-service",
  "ic-logger",
  "ic-metrics",
- "protobuf 2.28.0",
+ "protobuf",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -6589,7 +6592,7 @@ dependencies = [
  "ic-types-test-utils",
  "mockall",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -6614,7 +6617,7 @@ dependencies = [
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "tokio",
  "tokio-stream",
  "tracing",
@@ -6649,7 +6652,7 @@ dependencies = [
  "lmdb-rkv",
  "lmdb-rkv-sys",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "rocksdb",
@@ -6796,7 +6799,7 @@ dependencies = [
  "moka",
  "nix 0.30.1",
  "ppp",
- "prometheus 0.14.0",
+ "prometheus",
  "prost 0.14.1",
  "prost-types 0.14.1",
  "rand 0.8.5",
@@ -6862,7 +6865,7 @@ dependencies = [
  "ic-agent 0.44.3",
  "instant-acme 0.8.4",
  "parse-size",
- "prometheus 0.14.0",
+ "prometheus",
  "rcgen 0.14.5",
  "reqwest 0.12.24",
  "rustls 0.23.27",
@@ -6907,7 +6910,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-threshold-sig-der",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-limits",
@@ -7051,7 +7054,7 @@ dependencies = [
  "lmdb-rkv",
  "parking_lot",
  "primitive-types",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "scrypt",
@@ -7082,7 +7085,7 @@ dependencies = [
  "ic-interfaces-adapter-client",
  "ic-logger",
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "serde_bytes",
  "slog",
@@ -7166,7 +7169,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "slog",
@@ -7262,7 +7265,7 @@ name = "ic-canister-client-sender"
 version = "0.9.0"
 dependencies = [
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "rand 0.8.5",
@@ -7341,7 +7344,7 @@ dependencies = [
  "num-traits",
  "object 0.37.3",
  "once_cell",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rayon",
  "regex",
@@ -7913,7 +7916,7 @@ dependencies = [
  "mockall",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -7952,7 +7955,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
  "strum_macros 0.26.4",
  "tokio",
@@ -8006,7 +8009,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rayon",
  "slog",
@@ -8050,7 +8053,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rayon",
  "slog",
@@ -8078,7 +8081,7 @@ dependencies = [
  "ic-types-test-utils",
  "mockall",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -8139,7 +8142,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "slog",
 ]
@@ -8173,7 +8176,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "num-traits",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rayon",
  "slog",
@@ -8198,8 +8201,6 @@ dependencies = [
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
- "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-bls12-381-type",
@@ -8239,7 +8240,7 @@ dependencies = [
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-canister-threshold-sig",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -8398,7 +8399,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "num-bigint 0.4.6",
@@ -8546,7 +8547,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -8648,7 +8649,7 @@ version = "0.9.0"
 dependencies = [
  "convert_case 0.6.0",
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
  "strum 0.26.3",
  "strum_macros 0.26.4",
 ]
@@ -8794,7 +8795,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
  "ic-types",
  "rand 0.8.5",
@@ -8983,7 +8984,7 @@ name = "ic-crypto-test-utils"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-internal-csp-test-utils",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces-registry",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
@@ -9175,7 +9176,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -9292,7 +9293,7 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-protobuf",
 ]
 
@@ -9399,7 +9400,7 @@ dependencies = [
  "ic-bn-lib-common",
  "ic-custom-domains-base",
  "ic-custom-domains-canister-client",
- "prometheus 0.14.0",
+ "prometheus",
  "serde",
  "serde_json",
  "strum 0.27.2",
@@ -9433,7 +9434,7 @@ dependencies = [
  "ic-custom-domains-canister-api",
  "mockall",
  "pem 3.0.6",
- "prometheus 0.14.0",
+ "prometheus",
  "serde",
  "strum 0.27.2",
  "thiserror 2.0.17",
@@ -9496,7 +9497,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "slog",
 ]
@@ -9575,7 +9576,7 @@ dependencies = [
 
 [[package]]
 name = "ic-ed25519"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -9641,7 +9642,7 @@ dependencies = [
  "nix 0.24.3",
  "num-traits",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rayon",
  "rustc-demangle",
@@ -9763,7 +9764,7 @@ dependencies = [
  "num-rational 0.2.4",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "regex-lite",
@@ -9846,7 +9847,7 @@ dependencies = [
  "lazy_static",
  "maxminddb 0.26.0",
  "moka",
- "prometheus 0.14.0",
+ "prometheus",
  "rand 0.8.5",
  "regex",
  "reqwest 0.12.24",
@@ -9879,7 +9880,7 @@ dependencies = [
  "candid",
  "ic-heap-bytes-derive",
  "paste",
- "prometheus 0.13.4",
+ "prometheus",
  "tempfile",
 ]
 
@@ -9946,7 +9947,7 @@ dependencies = [
  "ic-http-endpoints-async-utils",
  "ic-metrics",
  "ic-test-utilities-logger",
- "prometheus 0.13.4",
+ "prometheus",
  "reqwest 0.12.24",
  "slog",
  "thiserror 2.0.17",
@@ -10020,7 +10021,7 @@ dependencies = [
  "maplit",
  "mockall",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -10085,7 +10086,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "maplit",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "reqwest 0.12.24",
  "serde",
@@ -10167,7 +10168,7 @@ dependencies = [
  "ic-metrics",
  "once_cell",
  "parking_lot",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rstest",
  "rustls 0.23.27",
@@ -10207,7 +10208,7 @@ dependencies = [
  "ic-test-utilities-time",
  "ic-test-utilities-types",
  "ic-types",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
  "tokio",
  "tonic 0.12.3",
@@ -10246,7 +10247,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.9.0",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -10321,7 +10322,7 @@ dependencies = [
  "candid",
  "hex",
  "ic-base-types",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-runner",
  "ic-nns-constants",
  "ic-nns-governance-api",
@@ -10425,7 +10426,7 @@ dependencies = [
  "clap 4.5.27",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-runner",
  "ic-rosetta-api",
@@ -10611,7 +10612,7 @@ dependencies = [
  "candid",
  "ic-agent 0.40.1",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icrc1",
  "ic-ledger-core",
  "ic-ledger-hash-of",
@@ -10749,7 +10750,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "pprof",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "slog",
@@ -10876,6 +10877,7 @@ dependencies = [
  "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
+ "indicatif",
  "on_wire",
  "proptest",
  "reqwest 0.12.24",
@@ -10891,7 +10893,7 @@ dependencies = [
 name = "ic-ledger-canister-blocks-synchronizer-test-utils"
 version = "0.9.0"
 dependencies = [
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-ledger-canister-blocks-synchronizer",
  "ic-ledger-core",
  "ic-types",
@@ -11232,7 +11234,7 @@ dependencies = [
  "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -11274,7 +11276,7 @@ dependencies = [
  "messaging-test-utils",
  "mockall",
  "pretty_assertions",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -11292,8 +11294,8 @@ dependencies = [
  "ic-logger",
  "libc",
  "parking_lot",
- "procfs 0.9.1",
- "prometheus 0.13.4",
+ "procfs",
+ "prometheus",
  "slog",
  "tokio",
  "tokio-metrics",
@@ -12054,7 +12056,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "pprof",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "rustls 0.23.27",
@@ -12718,7 +12720,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-test-utilities-registry",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "slog",
  "tokio",
@@ -12819,7 +12821,7 @@ name = "ic-pub-key"
 version = "0.2.0"
 dependencies = [
  "hex",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-management-canister-types 0.5.0",
  "ic-secp256k1",
  "ic-vetkeys",
@@ -12840,7 +12842,7 @@ dependencies = [
  "ic-test-utilities-state",
  "ic-types",
  "ic-types-test-utils",
- "prometheus 0.13.4",
+ "prometheus",
  "slog",
 ]
 
@@ -12887,7 +12889,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types-test-utils",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "quinn",
  "rstest",
@@ -13054,7 +13056,7 @@ dependencies = [
  "ic-test-utilities-metrics",
  "ic-types",
  "ic-utils-thread",
- "prometheus 0.13.4",
+ "prometheus",
 ]
 
 [[package]]
@@ -13280,7 +13282,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -13480,7 +13482,7 @@ dependencies = [
  "num_cpus",
  "pprof",
  "predicates",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "regex",
  "slog",
@@ -13601,7 +13603,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-interfaces",
  "ic-limits",
@@ -13629,7 +13631,7 @@ dependencies = [
  "nix 0.24.3",
  "num-traits",
  "phantom_newtype",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -13699,7 +13701,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-icp-rosetta-client",
  "ic-icp-rosetta-runner",
  "ic-icrc1",
@@ -13729,7 +13731,7 @@ dependencies = [
  "num-traits",
  "on_wire",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14540,7 +14542,7 @@ dependencies = [
  "ic-wasm-types",
  "itertools 0.12.1",
  "libc",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "scoped_threadpool",
@@ -14574,7 +14576,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-http-endpoints-public",
@@ -14677,7 +14679,7 @@ dependencies = [
  "maplit",
  "nix 0.24.3",
  "parking_lot",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "prost 0.13.4",
  "rand 0.8.5",
@@ -14715,7 +14717,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "rand 0.8.5",
  "slog",
@@ -14882,7 +14884,6 @@ dependencies = [
  "json5",
  "lazy_static",
  "macaddr",
- "maplit",
  "nix 0.24.3",
  "num_cpus",
  "on_wire",
@@ -14946,7 +14947,7 @@ name = "ic-test-identity"
 version = "0.9.0"
 dependencies = [
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
@@ -15082,7 +15083,7 @@ dependencies = [
  "ic-wasm-types",
  "maplit",
  "num-traits",
- "prometheus 0.13.4",
+ "prometheus",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
@@ -15130,7 +15131,7 @@ name = "ic-test-utilities-metrics"
 version = "0.9.0"
 dependencies = [
  "ic-metrics",
- "prometheus 0.13.4",
+ "prometheus",
 ]
 
 [[package]]
@@ -15209,7 +15210,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "ic-canister-client-sender",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
@@ -15824,7 +15825,7 @@ dependencies = [
  "maplit",
  "mockall",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "proptest",
  "rand 0.8.5",
  "reqwest 0.12.24",
@@ -16122,7 +16123,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-fstrim-tool",
  "ic-registry-subnet-type",
  "ic-secp256k1",
@@ -19225,7 +19226,7 @@ dependencies = [
  "ic-crypto-tls-interfaces-mocks",
  "ic-crypto-utils-threshold-sig-der",
  "ic-dashboard",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-http-endpoints-async-utils",
  "ic-http-endpoints-metrics",
  "ic-http-utils",
@@ -19257,7 +19258,7 @@ dependencies = [
  "indoc 1.0.9",
  "mockall",
  "nix 0.24.3",
- "prometheus 0.13.4",
+ "prometheus",
  "prost 0.13.4",
  "qrcode",
  "rand 0.8.5",
@@ -19970,7 +19971,7 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
  "ic-doge-interface",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-error-types 0.2.0",
  "ic-gateway",
  "ic-http-endpoints-public",
@@ -20020,7 +20021,7 @@ dependencies = [
  "libc",
  "nix 0.29.0",
  "pocket-ic",
- "prometheus 0.13.4",
+ "prometheus",
  "rand 0.8.5",
  "rcgen 0.13.2",
  "registry-canister",
@@ -20338,57 +20339,24 @@ dependencies = [
 
 [[package]]
 name = "procfs"
-version = "0.9.1"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
-dependencies = [
- "bitflags 1.3.2",
- "byteorder",
- "chrono",
- "flate2",
- "hex",
- "lazy_static",
- "libc",
-]
-
-[[package]]
-name = "procfs"
-version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
+checksum = "cc5b72d8145275d844d4b5f6d4e1eef00c8cd889edb6035c21675d1bb1f45c9f"
 dependencies = [
  "bitflags 2.10.0",
  "hex",
- "lazy_static",
  "procfs-core",
  "rustix 0.38.44",
 ]
 
 [[package]]
 name = "procfs-core"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
 dependencies = [
  "bitflags 2.10.0",
  "hex",
-]
-
-[[package]]
-name = "prometheus"
-version = "0.13.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
-dependencies = [
- "cfg-if",
- "fnv",
- "lazy_static",
- "libc",
- "memchr",
- "parking_lot",
- "procfs 0.16.0",
- "protobuf 2.28.0",
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -20400,9 +20368,11 @@ dependencies = [
  "cfg-if",
  "fnv",
  "lazy_static",
+ "libc",
  "memchr",
  "parking_lot",
- "protobuf 3.7.2",
+ "procfs",
+ "protobuf",
  "thiserror 2.0.17",
 ]
 
@@ -20585,12 +20555,6 @@ checksum = "b9b4db3d6da204ed77bb26ba83b6122a73aeb2e87e25fbf7ad2e84c4ccbf8f72"
 dependencies = [
  "prost 0.14.1",
 ]
-
-[[package]]
-name = "protobuf"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
 
 [[package]]
 name = "protobuf"
@@ -21102,7 +21066,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-stable-structures 0.6.8",
  "mockall",
- "prometheus 0.13.4",
+ "prometheus",
  "rand_chacha 0.3.1",
  "rate-limit-canister-integration-tests",
  "rate-limits-api",
@@ -21445,6 +21409,7 @@ dependencies = [
  "ic-universal-canister",
  "ic-utils 0.40.1",
  "slog",
+ "statesync-test",
  "tokio",
 ]
 
@@ -21814,14 +21779,14 @@ dependencies = [
  "candid",
  "hex",
  "ic-agent 0.40.1",
- "ic-ed25519 0.5.0",
+ "ic-ed25519 0.6.0",
  "ic-secp256k1",
  "ic-types",
  "icp-ledger",
  "icrc-ledger-types",
  "lazy_static",
  "num-bigint 0.4.6",
- "prometheus 0.13.4",
+ "prometheus",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -22376,7 +22341,7 @@ dependencies = [
  "ic-http-types",
  "ic-nns-constants",
  "ic-stable-structures 0.6.8",
- "prometheus 0.13.4",
+ "prometheus",
  "salt-sharing-api",
  "serde",
  "serde_cbor",
@@ -23578,6 +23543,7 @@ name = "statesync-test"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "candid_parser",
  "canister-test",
  "futures",
  "ic-cdk",
@@ -25476,7 +25442,7 @@ dependencies = [
  "anyhow",
  "ic-http-utils",
  "mockall",
- "procfs 0.9.1",
+ "procfs",
  "reqwest 0.12.24",
  "rusb",
  "serde",

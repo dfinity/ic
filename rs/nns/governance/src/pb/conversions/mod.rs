@@ -457,6 +457,12 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
             }
+            api::proposal::Action::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            api::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
         }
     }
 }
@@ -508,6 +514,12 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::BlessAlternativeGuestOsVersion(v) => {
                 pb::proposal::Action::BlessAlternativeGuestOsVersion(v.into())
+            }
+            api::ProposalActionRequest::TakeCanisterSnapshot(v) => {
+                pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
@@ -2759,6 +2771,23 @@ fn convert_guest_launch_measurement_metadata_from_api_to_pb(
     }
 }
 
+impl From<pb::LoadCanisterSnapshot> for api::LoadCanisterSnapshot {
+    fn from(item: pb::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: Some(item.snapshot_id),
+        }
+    }
+}
+impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
+    fn from(item: api::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id.unwrap_or_default(),
+        }
+    }
+}
+
 impl From<pb::update_canister_settings::CanisterSettings>
     for api::update_canister_settings::CanisterSettings
 {
@@ -4138,6 +4167,24 @@ impl From<pb::MaturityDisbursement> for api::MaturityDisbursement {
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
             ),
+        }
+    }
+}
+
+impl From<pb::TakeCanisterSnapshot> for api::TakeCanisterSnapshot {
+    fn from(item: pb::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
+        }
+    }
+}
+
+impl From<api::TakeCanisterSnapshot> for pb::TakeCanisterSnapshot {
+    fn from(item: api::TakeCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            replace_snapshot: item.replace_snapshot,
         }
     }
 }
