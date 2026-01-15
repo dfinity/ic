@@ -108,8 +108,8 @@
     "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
   },
   "migration": {
-    "rev": "ccc1ff6c7fd4dec3cadefcaf1eb168ee3892e03f",
-    "sha256": "2bcf1c2c8adba6f7bff5e7abda164f22e0a8f6a07120fbe3596c94234727d04c"
+    "rev": "035a2c7a2b19bc7ce7c4d977169583eb64b0e3cb",
+    "sha256": "7a594bfe3083d98cbbb43e45179bf11a2bc2792ed3cb5efaa064e719e0fea174"
   },
   "nns_dapp_test": {
     "sha256": "ab640ac8df064da1c4b9feb3b9938b3cc0a8f578b702a34e99ca9a0e36da7b85",

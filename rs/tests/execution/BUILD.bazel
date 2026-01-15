@@ -130,7 +130,7 @@ system_test(
 
 system_test_nns(
     name = "canister_migration_test",
-    enable_mainnet_nns_variant = False,
+    enable_mainnet_nns_variant = True,
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
