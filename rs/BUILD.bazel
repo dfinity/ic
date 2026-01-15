@@ -42,6 +42,8 @@ package_group(
     packages = [
         "//ic-os/...",
         "//rs/ic_os/...",
+        "//rs/tests/nested/...",
+        "//rs/tests/node/...",
     ],
 )
 

@@ -24,6 +24,7 @@ deterministic_ips = { path = "../../ic_os/networking/deterministic_ips" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ed25519-dalek = { workspace = true }
+bare_metal_deployment = { path = "../../ic_os/dev_test_tools/bare_metal_deployment" }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }

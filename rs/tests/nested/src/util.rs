@@ -7,6 +7,7 @@ use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions,
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
@@ -41,13 +42,12 @@ use reqwest::Client;
 use std::net::Ipv6Addr;
 use std::time::Duration;
 
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use slog::{Logger, info, warn};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
-pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+pub const NODE_UPGRADE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_UPGRADE_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
