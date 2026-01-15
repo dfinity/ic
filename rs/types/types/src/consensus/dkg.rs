@@ -620,6 +620,8 @@ pub enum InvalidDkgPayloadReason {
         limit: usize,
         actual: usize,
     },
+    /// The early transcripts that were included with this payload where invalid
+    InvalidTranscripts,
 }
 
 /// Possible failures which could occur while validating a dkg payload. They don't imply that the

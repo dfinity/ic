@@ -1,5 +1,5 @@
 use self::payload_builder::create_early_remote_transcripts;
-use super::{PayloadCreationError, crypto_validate_dealing, payload_builder, utils};
+use super::{crypto_validate_dealing, payload_builder, utils};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{
     dkg::{DkgPayloadValidationError, DkgPool},
@@ -11,107 +11,15 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, SubnetId,
+    SubnetId,
     batch::ValidationContext,
     consensus::{
         Block, BlockPayload,
-        dkg::{DkgDataPayload, DkgPayloadCreationError, DkgSummary},
+        dkg::{DkgDataPayload, DkgPayloadValidationFailure, DkgSummary, InvalidDkgPayloadReason},
     },
-    crypto::{
-        CryptoError, threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError,
-    },
-    registry::RegistryClientError,
 };
 use prometheus::IntCounterVec;
 use std::collections::HashSet;
-
-/// Reasons for why a dkg payload might be invalid.
-// The `Debug` implementation is ignored during the dead code analysis and we are getting a `field
-// is never used` warning on this enum even though we are implicitly reading them when we log the
-// enum. See https://github.com/rust-lang/rust/issues/88900
-#[allow(dead_code)]
-#[derive(PartialEq, Debug)]
-pub(crate) enum InvalidDkgPayloadReason {
-    CryptoError(CryptoError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(DkgSummary, DkgSummary),
-    MissingDkgConfigForDealing,
-    DkgStartHeightDoesNotMatchParentBlock,
-    DkgSummaryAtNonStartHeight(Height),
-    DkgDealingAtStartHeight(Height),
-    InvalidDealer(NodeId),
-    DealerAlreadyDealt(NodeId),
-    /// There are multiple dealings from the same dealer in the payload.
-    DuplicateDealers,
-    /// The number of dealings in the payload exceeds the maximum allowed number of dealings.
-    TooManyDealings {
-        limit: usize,
-        actual: usize,
-    },
-    /// The early transcripts that were included with this payload where invalid
-    InvalidTranscripts,
-}
-
-/// Possible failures which could occur while validating a dkg payload. They don't imply that the
-/// payload is invalid.
-#[allow(dead_code)]
-#[derive(PartialEq, Debug)]
-pub(crate) enum DkgPayloadValidationFailure {
-    PayloadCreationFailed(PayloadCreationError),
-    /// Crypto related errors.
-    CryptoError(CryptoError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetMaxDealingsPerBlock(RegistryClientError),
-    FailedToGetRegistryVersion,
-}
-
-/// Dkg errors.
-pub(crate) type PayloadValidationError =
-    ValidationError<InvalidDkgPayloadReason, DkgPayloadValidationFailure>;
-
-impl From<DkgVerifyDealingError> for InvalidDkgPayloadReason {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        InvalidDkgPayloadReason::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for DkgPayloadValidationFailure {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        DkgPayloadValidationFailure::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<CryptoError> for InvalidDkgPayloadReason {
-    fn from(err: CryptoError) -> Self {
-        InvalidDkgPayloadReason::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for DkgPayloadValidationFailure {
-    fn from(err: CryptoError) -> Self {
-        DkgPayloadValidationFailure::CryptoError(err)
-    }
-}
-
-impl From<InvalidDkgPayloadReason> for PayloadValidationError {
-    fn from(err: InvalidDkgPayloadReason) -> Self {
-        PayloadValidationError::InvalidArtifact(err)
-    }
-}
-
-impl From<DkgPayloadValidationFailure> for PayloadValidationError {
-    fn from(err: DkgPayloadValidationFailure) -> Self {
-        PayloadValidationError::ValidationFailed(err)
-    }
-}
-
-impl From<DkgPayloadCreationError> for PayloadValidationError {
-    fn from(err: DkgPayloadCreationError) -> Self {
-        PayloadValidationError::ValidationFailed(
-            DkgPayloadValidationFailure::PayloadCreationFailed(err),
-        )
-    }
-}
 
 /// Validates the DKG payload. The parent block is expected to be a valid block.
 #[allow(clippy::too_many_arguments)]
@@ -160,7 +68,7 @@ pub fn validate_payload(
                 registry_version,
                 state_manager,
                 validation_context,
-                logger,
+                log.clone(),
             )?;
             if summary_payload.dkg != expected_summary {
                 return Err(InvalidDkgPayloadReason::MismatchedDkgSummary(
@@ -218,7 +126,7 @@ pub fn validate_payload(
                 &parent,
                 state_manager,
                 validation_context,
-                logger,
+                log,
                 metrics,
             )
         }
@@ -237,7 +145,7 @@ fn validate_dealings_payload(
     parent: &Block,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
-    logger: ReplicaLogger,
+    log: &ReplicaLogger,
     metrics: &IntCounterVec,
 ) -> ValidationResult<DkgPayloadValidationError> {
     if dealings.start_height != parent.payload.as_ref().dkg_interval_start_height() {
@@ -294,7 +202,7 @@ fn validate_dealings_payload(
 
     // TODO: Remove this
     info!(
-        logger,
+        log,
         "This payload contains {} early remote DKG transcripts in regular block payload!!",
         dealings.transcripts_for_remote_subnets.len()
     );
@@ -310,12 +218,12 @@ fn validate_dealings_payload(
             last_summary,
             state_manager,
             validation_context,
-            logger.clone(),
+            log.clone(),
         );
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
             info!(
-                logger,
+                log,
                 "Failed to validate {} early remote DKG transcripts in regular block payload",
                 dealings.transcripts_for_remote_subnets.len()
             );
@@ -323,7 +231,7 @@ fn validate_dealings_payload(
         }
 
         info!(
-            logger,
+            log,
             "Validated {} early remote DKG transcripts in regular block payload",
             dealings.transcripts_for_remote_subnets.len()
         );

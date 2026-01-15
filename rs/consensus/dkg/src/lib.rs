@@ -411,6 +411,7 @@ mod tests {
         p2p::consensus::{MutablePool, UnvalidatedArtifact},
     };
     use ic_interfaces_registry::RegistryClient;
+    use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, VetKdCurve, VetKdKeyId};
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -420,7 +421,7 @@ mod tests {
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         RegistryVersion, ReplicaVersion,
-        consensus::{Block, BlockPayload, HasHeight, HasVersion},
+        consensus::{Block, BlockPayload, HasHeight},
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTargetId, NiDkgTargetSubnet,
         },
@@ -1735,12 +1736,12 @@ mod tests {
                     &block.payload.as_ref(),
                     state_manager.as_ref(),
                     &block.context,
-                    no_op_logger(),
                     &MetricsRegistry::new().int_counter_vec(
                         "consensus_dkg_validator",
                         "DKG validator counter",
                         &["type"],
-                    )
+                    ),
+                    &no_op_logger(),
                 )
                 .is_ok()
             );

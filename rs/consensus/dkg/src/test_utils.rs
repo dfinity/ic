@@ -1,11 +1,22 @@
+use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces_state_manager::Labeled;
 use ic_management_canister_types_private::{MasterPublicKeyId, VetKdKeyId};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     ReshareChainKeyContext, SetupInitialDkgContext, SubnetCallContext,
 };
+use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
 use ic_test_utilities_types::{ids::node_test_id, messages::RequestBuilder};
-use ic_types::{Height, RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgTargetId};
+use ic_types::{
+    Height, RegistryVersion, ReplicaVersion,
+    consensus::dkg::{DealingContent, DealingMessages},
+    crypto::{
+        BasicSig,
+        threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTranscript},
+    },
+    messages::CallbackId,
+    signature::{BasicSignature, BasicSigned},
+};
 use std::sync::Arc;
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
@@ -119,7 +130,9 @@ pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<Deal
     BasicSigned {
         content: DealingContent {
             version: ReplicaVersion::default(),
-            dealing: NiDkgDealing::dummy_dealing_for_tests(node_idx as u8),
+            dealing: NiDkgDealing {
+                internal_dealing: ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(node_idx as u8),
+            },
             dkg_id,
         },
         signature: BasicSignature {

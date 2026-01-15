@@ -245,7 +245,10 @@ pub(crate) fn create_early_remote_transcripts(
                     .iter()
                     .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
                     .collect::<BTreeSet<_>>();
-                let expected_tags = TAGS.iter().cloned().collect::<BTreeSet<_>>();
+                let expected_tags: BTreeSet<_> = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
+                    .iter()
+                    .cloned()
+                    .collect();
 
                 if tags != expected_tags {
                     continue;
@@ -301,7 +304,7 @@ pub(super) fn create_summary_payload(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Result<DkgSummary, PayloadCreationError> {
+) -> Result<DkgSummary, DkgPayloadCreationError> {
     dbg!("Creating summary payload");
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
     dbg!(&all_dealings.len());
@@ -928,7 +931,7 @@ fn process_setup_initial_dkg_contexts(
         // Dealers must be in the same registry_version.
         let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
-        match create_low_high_remote_dkg_configs(
+        match create_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
             context.target_id,
