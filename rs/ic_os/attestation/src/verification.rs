@@ -84,40 +84,36 @@ pub fn verify_attestation_package(
     Ok(())
 }
 
-fn verify_custom_data(
+fn verify_custom_data<T: EncodeSevCustomData + Debug>(
     attestation_report: &AttestationReport,
     actual_debug_info: &str,
-    expected_custom_data: &(impl EncodeSevCustomData + Debug),
+    expected_custom_data: &T,
 ) -> Result<(), VerificationError> {
     let actual_report_data = &attestation_report.report_data;
-    let expected_report_data = expected_custom_data.encode_for_sev().map_err(|e| {
-        VerificationError::internal(format!("Could not encode expected custom data: {e}"))
-    });
-    // TODO: remove this once clients no longer send legacy custom data
-    #[allow(deprecated)]
-    let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy().map_err(|e| {
-        VerificationError::internal(format!(
-            "Could not encode expected custom data (legacy): {e}"
-        ))
-    });
-    if !expected_report_data
-        .as_ref()
-        .is_ok_and(|expected| expected.verify(actual_report_data))
-        && !expected_report_data_legacy
-            .as_ref()
-            .is_ok_and(|expected| actual_report_data == expected)
+    let expected_report_data = expected_custom_data.encode_for_sev();
+    if let Ok(expected_report_data) = expected_report_data
+        && expected_report_data.verify(actual_report_data)
     {
-        return Err(VerificationError::invalid_custom_data(format!(
-            "Expected attestation report custom data: {expected_report_data:?}, \
+        return Ok(());
+    }
+
+    // TODO(NODE-1784): remove this once clients no longer send legacy custom data
+    let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy();
+    if T::needs_legacy_encoding()
+        && let Ok(expected_report_data_legacy) = expected_report_data_legacy
+        && &expected_report_data_legacy == actual_report_data
+    {
+        return Ok(());
+    }
+
+    Err(VerificationError::invalid_custom_data(format!(
+        "Expected attestation report custom data: {expected_report_data:?}, \
              legacy: {expected_report_data_legacy:?}, \
              actual: {actual_report_data:?} \
              Debug info: \
              expected: {expected_custom_data:?} \
              actual: {actual_debug_info}",
-        )));
-    }
-
-    Ok(())
+    )))
 }
 
 fn verify_measurement(

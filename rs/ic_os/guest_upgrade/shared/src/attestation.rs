@@ -18,6 +18,10 @@ impl DerEncodedCustomData for GetDiskEncryptionKeyTokenCustomData<'_> {
     fn namespace(&self) -> SevCustomDataNamespace {
         SevCustomDataNamespace::GetDiskEncryptionKeyToken
     }
+
+    fn needs_legacy_encoding() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -34,7 +38,6 @@ mod tests {
             server_tls_public_key,
         };
 
-        #[allow(deprecated)]
         let result = custom_data.encode_for_sev_legacy().unwrap();
         assert_eq!(
             &result,
