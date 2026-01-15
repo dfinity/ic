@@ -27,7 +27,7 @@ pub trait AttestationVerifier: Sized {
     /// Verify that the attestation report custom data matches the expected custom data.
     fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &(impl EncodeSevCustomData + Debug),
+        expected_custom_data: &T,
     ) -> Result<ParsedAttestationPackage, VerificationError>;
 
     /// Verify that the attestation report launch measurement matches one of the blessed guest
@@ -129,13 +129,13 @@ impl AttestationVerifier for ParsedAttestationPackage {
     fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
-    ) -> Result<(), VerificationError> {
+    ) -> Result<ParsedAttestationPackage, VerificationError> {
         let actual_report_data = &self.attestation_report.report_data;
         let expected_report_data = expected_custom_data.encode_for_sev();
         if let Ok(expected_report_data) = expected_report_data
             && expected_report_data.verify(actual_report_data)
         {
-            return Ok(());
+            return Ok(self);
         }
 
         // TODO(NODE-1784): remove this once clients no longer send legacy custom data
@@ -144,7 +144,7 @@ impl AttestationVerifier for ParsedAttestationPackage {
             && let Ok(expected_report_data_legacy) = expected_report_data_legacy
             && &expected_report_data_legacy == actual_report_data
         {
-            return Ok(());
+            return Ok(self);
         }
 
         Err(VerificationError::invalid_custom_data(format!(

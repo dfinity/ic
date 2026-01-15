@@ -327,13 +327,11 @@ fn test_legacy_custom_data_not_accepted_for_new_types() {
         custom_data_debug_info: None,
     };
 
-    let error = verify_attestation_package(
-        &attestation_package,
+    let error = ParsedAttestationPackage::parse(
+        attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
-        &[MEASUREMENT],
-        &NEW_CUSTOM_DATA,
-        Some(&[CHIP_ID]),
     )
+    .verify_custom_data(&NEW_CUSTOM_DATA)
     .expect_err(
         "Verification should fail because legacy custom data format is not accepted for new types",
     )
