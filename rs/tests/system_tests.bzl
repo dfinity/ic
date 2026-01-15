@@ -347,6 +347,7 @@ def system_test(
         visibility = visibility,
     )
 
+    # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
         name = test_name + "_colocate",
@@ -365,7 +366,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = tags + (["colocated"] if "colocate" in tags else ["manual"]) + additional_colocate_tags,
+        tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
