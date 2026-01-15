@@ -91,7 +91,7 @@ BIN_DEPENDENCIES = [
 
 rust_library(
     name = "state_manager",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     crate_features = select({
         "//bazel:malicious_code_enabled": ["malicious_code"],
         "//conditions:default": [],
@@ -107,7 +107,9 @@ rust_test(
     timeout = "long",
     crate = ":state_manager",
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEV_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES + [
+        "//rs/test_utilities/metrics",
+    ],
 )
 
 rust_ic_test(
