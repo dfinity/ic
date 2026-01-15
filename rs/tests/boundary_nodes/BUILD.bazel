@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -26,7 +26,6 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -34,6 +33,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/networking/subnet_update_workload",
@@ -137,10 +137,10 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -158,13 +158,13 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
@@ -181,13 +181,13 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/tests/boundary_nodes/performance_test_common",
