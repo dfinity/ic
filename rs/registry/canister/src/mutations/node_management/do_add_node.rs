@@ -1,4 +1,11 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
+use attestation::{
+    SevAttestationPackage,
+    attestation_package::{
+        AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+    },
+    custom_data::NodeRegistrationAttestationCustomData,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
@@ -185,13 +192,16 @@ impl Registry {
             ));
         }
 
+        // Determine chip_id: prefer extracting from attestation package if provided
+        let chip_id = extract_chip_id_from_payload(&payload)?;
+
         // Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: caller_id.into_vec(),
             hostos_version_id: None,
-            chip_id: payload.chip_id.clone(),
+            chip_id,
             public_ipv4_config: ipv4_intf_config,
             domain,
             node_reward_type: node_reward_type.map(|t| t as i32),
@@ -257,6 +267,44 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
             port: sa.port() as u32, // because protobufs don't have u16
         },
     }
+}
+
+/// Extracts the chip_id from the AddNodePayload.
+///
+/// If `node_registration_attestation` is provided, it will be parsed and verified,
+/// and the chip_id will be extracted from the attestation report.
+///
+/// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
+fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u8>>, String> {
+    let Some(attestation_bytes) = &payload.node_registration_attestation else {
+        return Ok(None);
+    };
+
+    let attestation_package =
+        SevAttestationPackage::decode(attestation_bytes.as_slice()).map_err(|e| {
+            format!("{LOG_PREFIX}do_add_node: Failed to decode node_registration_attestation: {e}")
+        })?;
+
+    let parsed = ParsedSevAttestationPackage::parse(
+        attestation_package,
+        SevRootCertificateVerification::Verify,
+    )
+    .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to verify attestation package: {e}"))?;
+
+    let parsed = parsed
+        .verify_custom_data(&NodeRegistrationAttestationCustomData)
+        .map_err(|e| {
+            format!("{LOG_PREFIX}do_add_node: Attestation custom data verification failed: {e}")
+        })?;
+
+    let chip_id = parsed.attestation_report().chip_id.to_vec();
+
+    println!(
+        "{LOG_PREFIX}do_add_node: Successfully extracted chip_id from attestation report: {}",
+        hex::encode(&chip_id)
+    );
+
+    Ok(Some(chip_id))
 }
 
 /// Validates the payload and extracts node's public keys
@@ -391,6 +439,7 @@ mod tests {
             xnet_endpoint: format!("128.0.{mutation_id}.100:1234"),
             http_endpoint: format!("128.0.{mutation_id}.100:4321"),
             chip_id: None,
+            node_registration_attestation: None,
             public_ipv4_config: None,
             domain: Some("api-example.com".to_string()),
             // Unused section follows
@@ -430,6 +479,7 @@ mod tests {
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
             chip_id: None,
+            node_registration_attestation: None,
             public_ipv4_config: None,
             domain: None,
             // Unused section follows

@@ -182,7 +182,17 @@ pub struct AddNodePayload {
     pub xnet_endpoint: String,
     pub http_endpoint: String,
 
+    /// Deprecated: Use `node_registration_attestation` instead when running on SEV-SNP hardware.
+    /// This field is kept for backwards compatibility with nodes not running on SEV-SNP hardware
+    /// or older orchestrator versions.
     pub chip_id: Option<Vec<u8>>,
+
+    /// SEV-SNP attestation package for node registration. When provided, the registry canister
+    /// will verify the attestation and extract the chip_id from the attestation report.
+    /// This is the preferred method for nodes running on SEV-SNP hardware.
+    /// The bytes should be a protobuf-encoded `SevAttestationPackage`.
+    #[serde(default)]
+    pub node_registration_attestation: Option<Vec<u8>>,
 
     pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,
