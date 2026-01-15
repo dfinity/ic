@@ -2684,6 +2684,8 @@ impl StateManager for StateManagerImpl {
                 {
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
                 } else {
+                    std::mem::drop(states);
+
                     if tip_height != Self::INITIAL_STATE_HEIGHT {
                         fatal!(self.log, "Bug: missing tip metadata @{}", tip_height);
                     }
