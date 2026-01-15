@@ -953,10 +953,10 @@ impl SystemState {
                 }
             }
             CanisterInput::DeadlineExpired(callback_id) => {
-                self.to_reject_response(callback_id, "Call deadline has expired.")
+                self.as_reject_response(callback_id, "Call deadline has expired.")
             }
             CanisterInput::ResponseDropped(callback_id) => {
-                self.to_reject_response(callback_id, "Response was dropped.")
+                self.as_reject_response(callback_id, "Response was dropped.")
             }
         })
     }
@@ -968,7 +968,7 @@ impl SystemState {
     /// `CallbackId`, generates a reject response with arbitrary values (but
     /// matching `CallbackId`). The missing callback will generate a critical error
     /// when the response is about to be executed, regardless.
-    fn to_reject_response(&mut self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+    fn as_reject_response(&mut self, callback_id: CallbackId, message: &str) -> CanisterMessage {
         const UNKNOWN_CANISTER_ID: CanisterId =
             CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
         const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);

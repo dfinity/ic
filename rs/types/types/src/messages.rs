@@ -378,7 +378,7 @@ impl Display for CanisterMessage {
 //     }
 // }
 
-/// A wrapper around ingress messages and canister requests/responses, as
+/// A wrapper around ingress messages and canister requests/responses as
 /// management canister inputs.
 ///
 /// As opposed to `CanisterMessage`, there is no `Callback` associated with

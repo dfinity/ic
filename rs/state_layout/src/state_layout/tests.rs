@@ -334,10 +334,10 @@ fn test_encode_decode_task_queue() {
             call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response((
-                Arc::clone(&response),
-                Arc::clone(&callback),
-            ))),
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                response: Arc::clone(&response),
+                callback: Arc::clone(&callback),
+            }),
             prepaid_execution_cycles: Cycles::new(4),
         },
         ExecutionTask::AbortedExecution {
