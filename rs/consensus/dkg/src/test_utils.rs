@@ -108,7 +108,7 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
                 SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                     request: RequestBuilder::new().build(),
                     nodes_in_target_subnet: nodes_in_target_subnet.clone(),
-                    target_id: target_id.clone(),
+                    target_id: *target_id,
                     registry_version,
                     time: state.time(),
                 }),
