@@ -2640,7 +2640,7 @@ mod metrics {
     fn should_export_archiving_histogram_metrics_after_archiving() {
         use ic_base_types::PrincipalId;
         use ic_ledger_suite_state_machine_helpers::{retrieve_metrics, transfer};
-        use ic_ledger_suite_state_machine_tests::{setup, MINTER};
+        use ic_ledger_suite_state_machine_tests::{MINTER, setup};
         use ic_ledger_suite_state_machine_tests_constants::ARCHIVE_TRIGGER_THRESHOLD;
 
         let (env, ledger_id) = setup(ledger_wasm(), encode_init_args, vec![]);
@@ -2657,8 +2657,7 @@ mod metrics {
         // Make enough transactions to trigger archiving
         let p1 = PrincipalId::new_user_test_id(1);
         for i in 0..=ARCHIVE_TRIGGER_THRESHOLD {
-            transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i)
-                .expect("mint failed");
+            transfer(&env, ledger_id, MINTER, p1.0, 10_000_000 + i).expect("mint failed");
         }
 
         // Now verify that archiving histogram metrics ARE present after archiving

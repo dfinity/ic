@@ -282,21 +282,24 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 
         // Get the CanisterId and remaining capacity of the node that can
         // accept at least the first block.
-        let (node_canister_id, node_index, remaining_capacity) =
-            match node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes() as u64)
-                .await
-            {
-                Ok(result) => result,
-                Err(e) => {
-                    stats.duration_nanos = Rt::time().saturating_sub(start_time);
-                    stats.blocks_archived = num_sent_blocks;
-                    return Err(ArchivingError {
-                        blocks_archived: num_sent_blocks,
-                        error: e.0,
-                        stats,
-                    });
-                }
-            };
+        let (node_canister_id, node_index, remaining_capacity) = match node_and_capacity(
+            log_sink.clone(),
+            &archive,
+            blocks[0].size_bytes() as u64,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                stats.duration_nanos = Rt::time().saturating_sub(start_time);
+                stats.blocks_archived = num_sent_blocks;
+                return Err(ArchivingError {
+                    blocks_archived: num_sent_blocks,
+                    error: e.0,
+                    stats,
+                });
+            }
+        };
 
         // Take as many blocks as can be sent and send those in
         let mut first_blocks: VecDeque<_> = take_prefix(&mut blocks, remaining_capacity).into();

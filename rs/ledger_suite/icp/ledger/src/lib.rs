@@ -213,7 +213,10 @@ impl HistogramData {
 
     /// Get the buckets and their cumulative counts.
     pub fn buckets(&self) -> impl Iterator<Item = (f64, u64)> + '_ {
-        self.buckets.iter().copied().zip(self.counts.iter().copied())
+        self.buckets
+            .iter()
+            .copied()
+            .zip(self.counts.iter().copied())
     }
 
     /// Get the sum of all observations.
