@@ -24,6 +24,8 @@ getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
 attestation_testing = { path = "testing" }
+prost-build = { workspace = true }
+tempfile = { workspace = true }
 
 [build-dependencies]
 prost-build = { workspace = true }
