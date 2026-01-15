@@ -449,7 +449,6 @@ system_test(
     name = "cloner_canister_workload",
     data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
-    e> master
     tags = [
         "manual",
     ],
