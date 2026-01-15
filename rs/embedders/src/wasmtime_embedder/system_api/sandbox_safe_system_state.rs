@@ -334,10 +334,9 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append non-empty delta log to the total canister log.
-        if !self.canister_log.is_empty() {
-            system_state
-                .canister_log
-                .append_delta_log(&mut self.canister_log);
+        let delta = &mut self.canister_log;
+        if !delta.is_empty() {
+            system_state.canister_log.append_delta_log(delta);
         }
 
         // Verify total cycle change is not positive and update cycles balance.

@@ -249,6 +249,9 @@ impl CanisterLog {
 
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
+        if delta_log.is_empty() {
+            return; // Nothing to append.
+        }
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.records.bytes_used);
 
