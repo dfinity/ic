@@ -1161,8 +1161,16 @@ mod tests {
         service1.check_vm_running().unwrap();
         service2.check_vm_running().unwrap();
 
-        assert!(service1.get_kernel_cmdline().contains("root=/dev/vda5"));
-        assert!(service2.get_kernel_cmdline().contains("root=/dev/vda8"));
+        assert!(
+            service1
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7")
+        );
+        assert!(
+            service2
+                .get_kernel_cmdline()
+                .contains("root=/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5")
+        );
     }
 
     #[tokio::test]

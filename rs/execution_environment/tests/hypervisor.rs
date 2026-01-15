@@ -10679,3 +10679,36 @@ fn can_access_reject_code_in_cleanup_call_replied() {
     let result = test.ingress(main_canister_id, "dummy", vec![]).unwrap();
     assert_eq!(WasmResult::Reply(vec![0]), result);
 }
+
+#[test]
+fn test_deep_i32_eqz_chain() {
+    // Test installing a canister with a very deep chain of i32.eqz instructions.
+    // This tests whether the system handles deeply nested operations gracefully.
+    let eqz_chain = "i32.eqz\n".repeat(6000);
+    let wat = format!(
+        r#"(module
+                (type (;0;) (func))
+                (global (;0;) (mut i32) i32.const 0)
+                (func (;0;) (type 0)
+                    i32.const 1
+                    {}
+                    i32.const -1
+                    i32.xor
+                    global.set 0
+                )
+            )"#,
+        eqz_chain
+    );
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let result = test.canister_from_wat(&wat);
+
+    // Compilation of this Wasm doesn't overflow on arm.
+    #[cfg(target_arch = "x86_64")]
+    result
+        .unwrap_err()
+        .assert_contains(ErrorCode::CanisterWasmEngineError, "compiler died");
+
+    #[cfg(not(target_arch = "x86_64"))]
+    result.unwrap();
+}

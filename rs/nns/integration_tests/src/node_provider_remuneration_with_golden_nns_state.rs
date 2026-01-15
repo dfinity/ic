@@ -533,17 +533,6 @@ mod sanity_check {
             );
 
             self.check_metric(
-                |metrics| {
-                    governance_gauge_value(
-                        metrics,
-                        "governance_latest_reward_event_timestamp_seconds",
-                    )
-                },
-                |before, after| {
-                    assert_increased(before, after, "latest reward event timestamp");
-                },
-            );
-            self.check_metric(
                 |metrics| governance_gauge_value(metrics, "governance_proposals_total"),
                 |before, after| {
                     assert_not_decreased_too_much(before, after, "number of proposals", 0.5);

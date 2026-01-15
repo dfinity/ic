@@ -27,7 +27,8 @@ pub struct RegistryParams {
 struct KeyConfigRequest {
     subnet_id: SubnetId,
     key_id: String,
-    pre_signatures_to_create_in_advance: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pre_signatures_to_create_in_advance: Option<String>,
     max_queue_size: String,
 }
 
@@ -183,8 +184,14 @@ impl AdminHelper {
                     subnet_id,
                     key_id: key_config.key_id.to_string(),
                     pre_signatures_to_create_in_advance: key_config
-                        .pre_signatures_to_create_in_advance
-                        .to_string(),
+                        .key_id
+                        .requires_pre_signatures()
+                        .then_some(
+                            key_config
+                                .pre_signatures_to_create_in_advance
+                                .unwrap_or_default()
+                                .to_string(),
+                        ),
                     max_queue_size: key_config.max_queue_size.to_string(),
                 })
                 .collect::<Vec<_>>();
@@ -461,7 +468,7 @@ mod tests {
                         curve: EcdsaCurve::Secp256k1,
                         name: "test_key_1".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: 77,
+                    pre_signatures_to_create_in_advance: Some(77),
                     max_queue_size: 30,
                 },
                 KeyConfig {
@@ -469,7 +476,7 @@ mod tests {
                         algorithm: SchnorrAlgorithm::Bip340Secp256k1,
                         name: "test_key_2".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: 12,
+                    pre_signatures_to_create_in_advance: Some(12),
                     max_queue_size: 32,
                 },
                 KeyConfig {
@@ -477,7 +484,7 @@ mod tests {
                         curve: VetKdCurve::Bls12_381_G2,
                         name: "test_key_3".to_string(),
                     }),
-                    pre_signatures_to_create_in_advance: 0,
+                    pre_signatures_to_create_in_advance: None,
                     max_queue_size: 32,
                 },
             ],
@@ -517,7 +524,7 @@ mod tests {
             --initial-chain-key-configs-to-request '[\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"ecdsa:Secp256k1:test_key_1\",\"pre_signatures_to_create_in_advance\":\"77\",\"max_queue_size\":\"30\"},\
                 {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"schnorr:Bip340Secp256k1:test_key_2\",\"pre_signatures_to_create_in_advance\":\"12\",\"max_queue_size\":\"32\"},\
-                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"pre_signatures_to_create_in_advance\":\"0\",\"max_queue_size\":\"32\"}]' \
+                {\"subnet_id\":\"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\",\"key_id\":\"vetkd:Bls12_381_G2:test_key_3\",\"max_queue_size\":\"32\"}]' \
             --idkg-key-rotation-period-ms 321654 \
             --signature-request-timeout-ns 123456 \
             --max-parallel-pre-signature-transcripts-in-creation 123654 \

@@ -27,7 +27,6 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -94,10 +93,6 @@ fn setup(env: TestEnv, config: Config) {
         config.nodes_count >= 4,
         "at least 4 nodes are required for state sync"
     );
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -123,8 +118,6 @@ fn setup(env: TestEnv, config: Config) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-
-    env.sync_with_prometheus();
 }
 
 fn test(env: TestEnv, config: Config) {

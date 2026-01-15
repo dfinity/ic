@@ -23,7 +23,6 @@ use ic_system_test_driver::{
     },
     canister_requests,
     driver::{
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
@@ -320,15 +319,8 @@ pub fn setup(
 }
 
 /// Sets up and starts the IC, and creates two subnets (one system subnet and
-/// one application subnet). If `fast_test_setup` is false, also sets up
-/// Prometheus.
+/// one application subnet).
 fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
-    if !fast_test_setup {
-        PrometheusVm::default()
-            .start(env)
-            .expect("failed to start prometheus VM");
-    }
-
     let mut ic = InternetComputer::new()
         // NNS
         .add_subnet(
@@ -357,10 +349,6 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
     }
     ic.setup_and_start(env)
         .expect("failed to setup IC under test");
-
-    if !fast_test_setup {
-        env.sync_with_prometheus();
-    }
 }
 
 /// Sets up an SNS using "openchat-ish" parameters.

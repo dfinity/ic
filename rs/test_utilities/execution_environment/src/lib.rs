@@ -1247,6 +1247,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), Arc::clone(&state)),
             None,
             true,
+            None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1793,6 +1794,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
+            None,
         )
     }
 
@@ -2514,7 +2516,9 @@ impl ExecutionTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
 

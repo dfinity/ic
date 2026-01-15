@@ -18,6 +18,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) critical_error_state_removal_failed: IntCounter,
     pub(crate) fstrim_duration: IntGauge,
     pub(crate) critical_error_task_failed: IntCounterVec,
+    pub(crate) replica_process_start_attempts: IntCounter,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
@@ -98,6 +99,10 @@ impl OrchestratorMetrics {
                 "Number of times a task failed, \
                 grouped by the task name and the reason of the failure",
                 &["task_name", "reason"],
+            ),
+            replica_process_start_attempts: metrics_registry.int_counter(
+                "orchestrator_replica_process_start_attempts_total",
+                "Number of times the replica process was attempted to be started",
             ),
         }
     }

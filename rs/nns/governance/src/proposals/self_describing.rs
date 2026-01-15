@@ -4,7 +4,7 @@ use crate::pb::v1::{
     self_describing_value::Value::{self, Array, Blob, Map, Text},
 };
 
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 use ic_nervous_system_proto::pb::v1::{
     Canister, Countries, Decimal, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
@@ -116,6 +116,14 @@ impl From<&str> for SelfDescribingValue {
 
 impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue {
+            value: Some(Text(value.to_string())),
+        }
+    }
+}
+
+impl From<CanisterId> for SelfDescribingValue {
+    fn from(value: CanisterId) -> Self {
         SelfDescribingValue {
             value: Some(Text(value.to_string())),
         }

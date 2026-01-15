@@ -39,7 +39,6 @@ use ic_nested_nns_recovery_common::{
     SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
@@ -57,10 +56,6 @@ fn setup(env: TestEnv) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
-
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
 
     ic_nested_nns_recovery_common::setup(
         env.clone(),
@@ -103,8 +98,6 @@ fn log_instructions(env: TestEnv) {
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
     grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
-
-    env.sync_with_prometheus();
 
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();

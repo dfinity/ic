@@ -2,7 +2,7 @@ use anyhow::{Context, Result, bail, ensure};
 use bare_metal_deployment::deploy::{
     DeploymentConfig, DeploymentError, ImageSource, deploy_to_bare_metal, establish_ssh_connection,
 };
-use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo, parse_login_info_from_csv};
+use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo, parse_login_info_from_ini};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -154,9 +154,9 @@ fn main() -> Result<()> {
     println!("Using SSH key: {:?}.pub", ssh_private_key_path);
 
     println!("Reading login info from {:?}", args.login_info);
-    let login_csv = fs::read_to_string(&args.login_info)
+    let login_ini = fs::read_to_string(&args.login_info)
         .with_context(|| format!("Failed to read login info from {:?}", args.login_info))?;
-    let login_info = parse_login_info_from_csv(&login_csv)?;
+    let login_info = parse_login_info_from_ini(&login_ini)?;
 
     let host_ip = login_info.hostos_address();
 

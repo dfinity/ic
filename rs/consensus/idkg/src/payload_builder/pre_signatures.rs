@@ -356,7 +356,8 @@ fn make_new_pre_signatures_if_needed_helper(
         .key_configs
         .iter()
         .find(|key_config| &key_config.key_id == key_id.inner())
-        .map(|key_config| key_config.pre_signatures_to_create_in_advance as usize)
+        .and_then(|key_config| key_config.pre_signatures_to_create_in_advance)
+        .map(|pre_sigs_to_create| pre_sigs_to_create as usize)
     else {
         return new_pre_signatures;
     };
@@ -592,7 +593,7 @@ pub(super) fn make_new_pre_signatures_by_priority(
         };
         let max_stash_size = chain_key_config
             .key_config(key_id.inner())
-            .map(|config| config.pre_signatures_to_create_in_advance)
+            .and_then(|config| config.pre_signatures_to_create_in_advance)
             .unwrap_or_default();
         priority_queue.push(PrioritizedStash {
             count: *total_pre_signatures.get(key_id).unwrap_or(&0),
@@ -1107,7 +1108,7 @@ pub(super) mod tests {
                 .into_iter()
                 .map(|(key_id, max)| KeyConfig {
                     key_id: key_id.inner().clone(),
-                    pre_signatures_to_create_in_advance: max as u32,
+                    pre_signatures_to_create_in_advance: Some(max as u32),
                     max_queue_size: 20,
                 })
                 .collect(),
@@ -1417,7 +1418,7 @@ pub(super) mod tests {
             let chain_key_config = ChainKeyConfig {
                 key_configs: vec![KeyConfig {
                     key_id: key_id.clone().into(),
-                    pre_signatures_to_create_in_advance,
+                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
                     max_queue_size: 1,
                 }],
                 ..ChainKeyConfig::default()
@@ -1483,7 +1484,7 @@ pub(super) mod tests {
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
                 key_id: key_id.clone().into(),
-                pre_signatures_to_create_in_advance,
+                pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
                 max_queue_size: 1,
             }],
             ..ChainKeyConfig::default()
