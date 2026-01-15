@@ -326,8 +326,8 @@ system_test_nns(
 system_test_nns(
     name = "mainnet_nns",
     data = IC_GATEWAY_DATA + ["//rs/tests:recovery/binaries"],
-    env = MAINNET_ENV,
     enable_metrics = True,
+    env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
     guestos = "mainnet_nns",
     # Requires more resources to scrape mainnet topology
