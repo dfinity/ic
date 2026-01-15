@@ -64,13 +64,13 @@ pub(crate) fn evict(
 mod tests {
     use std::time::{Duration, Instant};
 
-    use super::{evict, EvictionCandidate};
+    use super::{EvictionCandidate, evict};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::AccumulatedPriority;
     use ic_types::NumBytes;
+    use rand::Rng;
     use rand::seq::SliceRandom;
     use rand::thread_rng;
-    use rand::Rng;
 
     #[test]
     fn evict_empty() {

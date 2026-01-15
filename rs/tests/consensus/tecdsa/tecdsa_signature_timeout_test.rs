@@ -3,8 +3,8 @@ use std::time::Duration;
 use anyhow::Result;
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::AgentError;
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     enable_chain_key_signing_with_timeout, get_public_key_with_logger, get_signature_with_logger,
@@ -19,7 +19,7 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister},
+    util::{MessageCanister, block_on, runtime_from_url},
 };
 
 /// Tests whether a call to `sign_with_ecdsa`/`sign_with_schnorr` can be timed out when setting signature_request_timeout_ns.
@@ -42,7 +42,7 @@ fn test(env: TestEnv) {
             &governance,
             app_subnet.subnet_id,
             key_ids.clone(),
-            Some(Duration::from_secs(1)),
+            Some(Duration::from_millis(1)),
             &log,
         )
         .await;
@@ -62,14 +62,20 @@ fn test(env: TestEnv) {
             )
             .await
             .unwrap_err();
-            assert_eq!(
-                error,
-                AgentError::CertifiedReject(RejectResponse {
-                    reject_code: RejectCode::CanisterReject,
-                    reject_message: "Signature request expired".to_string(),
-                    error_code: None
-                })
-            )
+            let expected_message = if key_id.is_idkg_key() {
+                "Signature request expired"
+            } else {
+                "VetKD request expired"
+            };
+            let expected_reject = RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: expected_message.to_string(),
+                error_code: Some("IC0406".to_string()),
+            };
+            match error {
+                AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
+                _ => panic!("Unexpected error: {error:?}"),
+            };
         }
     });
 }

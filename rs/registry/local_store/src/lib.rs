@@ -1,11 +1,11 @@
-use ic_interfaces_registry::{RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
 use ic_registry_common_proto::pb::local_store::v1::{
     ChangelogEntry as PbChangelogEntry, Delta as PbDelta, KeyMutation as PbKeyMutation,
     MutationType,
 };
-use ic_sys::fs::write_protobuf_using_tmp_file;
-use ic_types::registry::RegistryDataProviderError;
+use ic_sys::fs::{sync_path, write_protobuf_simple, write_protobuf_using_tmp_file};
 use ic_types::RegistryVersion;
+use ic_types::registry::RegistryDataProviderError;
 use prost::Message;
 use std::{
     io::{self},
@@ -68,13 +68,57 @@ impl LocalStoreImpl {
         }
     }
 
+    /// Efficiently creates a `LocalStore` from a `Changelog`.
+    pub fn from_changelog<P: AsRef<Path>>(changelog: Changelog, path: P) -> io::Result<Self> {
+        let store = Self {
+            path: PathBuf::from(path.as_ref()),
+        };
+
+        let mut last_parent_dir = None;
+        for (v, changelog_entry) in changelog.into_iter().enumerate() {
+            let version = (v + 1) as u64;
+            let path = store.get_path(version);
+
+            // Create the parent directories if we haven't already.
+            let parent_dir = path.parent().expect(
+                "get_path returns a non-empty path whose parent isn't the root or prefix, see the definition of v_path in get_path."
+            );
+            match last_parent_dir.as_ref() {
+                // First parent dir: create and remember it.
+                None => {
+                    std::fs::create_dir_all(parent_dir)?;
+                    last_parent_dir = Some(parent_dir.to_path_buf());
+                }
+
+                // New parent dir: sync the last parent dir, create the new one and remember it.
+                Some(last_parent_dir_) if last_parent_dir_ != parent_dir => {
+                    sync_path(last_parent_dir_)?;
+                    std::fs::create_dir_all(parent_dir)?;
+                    last_parent_dir = Some(parent_dir.to_path_buf());
+                }
+
+                // Same parent dir as last file: do nothing.
+                _ => {}
+            }
+
+            let changelog_entry = changelog_entry_to_protobuf(changelog_entry);
+            write_protobuf_simple(&path, &changelog_entry).unwrap();
+        }
+        // Also sync the last parent dir.
+        if let Some(last_parent_dir) = last_parent_dir {
+            sync_path(&last_parent_dir)?;
+        }
+
+        Ok(store)
+    }
+
     // precondition: version > 0
     // there exists no path for a version 0, as version 0 represents the empty
     // registry.
     fn get_path(&self, version: u64) -> PathBuf {
         assert!(version > 0);
 
-        let path_str = format!("{:016x}.pb", version);
+        let path_str = format!("{version:016x}.pb");
         // 00 01 02 03 04 / 05 / 06 / 07.pb
         let v_path = &[
             &path_str[0..10],
@@ -89,8 +133,7 @@ impl LocalStoreImpl {
 
     fn read_changelog_entry<P: AsRef<Path>>(p: P) -> io::Result<PbChangelogEntry> {
         let bytes = std::fs::read(p)?;
-        PbChangelogEntry::decode(bytes.as_slice())
-            .map_err(|e| io::Error::new(std::io::ErrorKind::Other, e))
+        PbChangelogEntry::decode(bytes.as_slice()).map_err(io::Error::other)
     }
 
     // precondition: version > 0
@@ -161,17 +204,17 @@ impl RegistryDataProvider for LocalStoreImpl {
     fn get_updates_since(
         &self,
         version: RegistryVersion,
-    ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+    ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
-                source: format!("Error when reading changelog from local storage: {:?}", e),
+                source: format!("Error when reading changelog from local storage: {e:?}"),
             }
         })?;
         let res: Vec<_> = changelog
             .iter()
             .enumerate()
             .flat_map(|(i, cle)| cle.iter().map(move |km| (i, km)))
-            .map(|(i, km)| RegistryTransportRecord {
+            .map(|(i, km)| RegistryRecord {
                 version: version + RegistryVersion::from((i as u64) + 1),
                 key: km.key.clone(),
                 value: km.value.clone(),
@@ -204,7 +247,7 @@ fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io:
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid mutation type.",
-            ))
+            ));
         }
     };
     let res = match mut_type {
@@ -247,7 +290,7 @@ pub fn compact_delta_to_changelog(source: &[u8]) -> std::io::Result<(RegistryVer
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Protobuf encoding for registry delta failed: {:?}", e),
+                format!("Protobuf encoding for registry delta failed: {e:?}"),
             )
         })
         .and_then(|delta| {
@@ -326,10 +369,12 @@ mod tests {
 
         store.clear().unwrap();
 
-        assert!(store
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .unwrap()
-            .is_empty());
+        assert!(
+            store
+                .get_changelog_since_version(RegistryVersion::from(0))
+                .unwrap()
+                .is_empty()
+        );
 
         let changelog = get_random_changelog(1, &mut rng);
         store
@@ -397,7 +442,7 @@ mod tests {
         // some pseudo random entries
         (0..n)
             .map(|_i| {
-                let k = rng.gen::<usize>() % 64 + 2;
+                let k = rng.r#gen::<usize>() % 64 + 2;
                 (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
@@ -405,7 +450,7 @@ mod tests {
 
     fn key_mutation(k: usize, rng: &mut ThreadRng) -> KeyMutation {
         let s = rng.next_u64() & 64;
-        let set: bool = rng.gen();
+        let set: bool = rng.r#gen();
         KeyMutation {
             key: k.to_string(),
             value: if set {

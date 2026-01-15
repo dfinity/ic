@@ -1,0 +1,14 @@
+[Unit]
+Description=Set up hostname
+Before=systemd-networkd.service
+DefaultDependencies=no
+Wants=init-config.service systemd-tmpfiles-setup.service
+After=init-config.service systemd-tmpfiles-setup.service
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-hostname.sh --type=guest

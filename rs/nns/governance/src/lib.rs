@@ -123,11 +123,11 @@
 use crate::{
     governance::{Governance, TimeWarp},
     pb::v1::{
-        governance::{
-            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
-            GovernanceCachedMetrics,
-        },
         ProposalStatus,
+        governance::{
+            GovernanceCachedMetrics,
+            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
+        },
     },
 };
 use candid::DecoderConfig;
@@ -140,12 +140,15 @@ use std::{
     io,
     time::{Duration, SystemTime},
 };
+use storage::VOTING_POWER_SNAPSHOTS;
+use timer_tasks::encode_timer_task_metrics;
 
 #[cfg(any(test, feature = "canbench-rs"))]
 pub mod test_utils;
 
 mod account_id_index;
 mod audit_event;
+pub mod canister_state;
 pub mod data_migration;
 mod garbage_collection;
 /// The 'governance' module contains the canister (smart contract)
@@ -161,18 +164,22 @@ pub mod governance;
 pub mod governance_proto_builder;
 mod heap_governance_data;
 mod known_neuron_index;
-mod migrations;
+mod maturity_disbursement_index;
+mod network_economics;
 mod neuron;
 pub mod neuron_data_validation;
+mod neuron_lock;
 mod neuron_store;
 pub mod neurons_fund;
 mod node_provider_rewards;
 pub mod pb;
 pub mod proposals;
-mod reward;
+pub mod reward;
 pub mod storage;
 mod subaccount_index;
+pub mod timer_tasks;
 mod voting;
+mod voting_history_store;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
@@ -190,28 +197,25 @@ const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 /// field is always populated in new neurons.
 pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 
-// TODO(NNS1-3248): Delete this once the feature has made it through the
-// probation period. At that point, we will not need this "kill switch". We can
-// leave this here indefinitely, but it will just be clutter after a modest
-// amount of time.
 thread_local! {
+    static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static IS_VOTING_POWER_ADJUSTMENT_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ENABLE_COMPREHENSIVE_NEURON_LIST: Cell<bool>
+        = const { Cell::new(true) };
 
-    static IS_PRUNE_FOLLOWING_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
+        = const { Cell::new(true) };
 
-    // TODO(NNS1-3247): To release the feature, set this to true. Do not simply
-    // delete. That way, if we need to recall the feature, we can do that via a
-    // 1-line change (by replacing true with `cfg!(feature = "test")`). After
-    // the feature has been released, it will go through its "probation" period.
-    // If that goes well, then, this can be deleted.
-    static IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED: Cell<bool> = const { Cell::new(true) };
+    static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
+        = const { Cell::new(false) };
 
-    static ARE_SET_VISIBILITY_PROPOSALS_ENABLED: Cell<bool> = const { Cell::new(true) };
+    static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 
-    static ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
-
-    static USE_STABLE_MEMORY_FOLLOWING_INDEX: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    // This covers both taking and loading canister snapshots.
+    static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -221,100 +225,98 @@ thread_local! {
         const { Cell::new(0) };
 }
 
-pub fn is_voting_power_adjustment_enabled() -> bool {
-    IS_VOTING_POWER_ADJUSTMENT_ENABLED.with(|ok| ok.get())
+thread_local! {
+    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(true) };
+}
+
+pub(crate) fn are_performance_based_rewards_enabled() -> bool {
+    ARE_PERFORMANCE_BASED_REWARDS_ENABLED.get()
+}
+
+pub fn are_nf_fund_proposals_disabled() -> bool {
+    DISABLE_NF_FUND_PROPOSALS.get()
 }
 
 /// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, true)
+pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
+    Temporary::new(&DISABLE_NF_FUND_PROPOSALS, false)
 }
 
 /// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_voting_power_adjustment() -> Temporary {
-    Temporary::new(&IS_VOTING_POWER_ADJUSTMENT_ENABLED, false)
+pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
+    Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
 }
 
-pub fn is_prune_following_enabled() -> bool {
-    IS_PRUNE_FOLLOWING_ENABLED.with(|ok| ok.get())
+pub fn is_comprehensive_neuron_list_enabled() -> bool {
+    ENABLE_COMPREHENSIVE_NEURON_LIST.get()
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, true)
+pub fn temporarily_enable_comprehensive_neuron_list() -> Temporary {
+    Temporary::new(&ENABLE_COMPREHENSIVE_NEURON_LIST, true)
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_prune_following() -> Temporary {
-    Temporary::new(&IS_PRUNE_FOLLOWING_ENABLED, false)
+pub fn temporarily_disable_comprehensive_neuron_list() -> Temporary {
+    Temporary::new(&ENABLE_COMPREHENSIVE_NEURON_LIST, false)
 }
 
-pub fn is_private_neuron_enforcement_enabled() -> bool {
-    IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED.with(|ok| ok.get())
+pub fn is_neuron_follow_restrictions_enabled() -> bool {
+    ENABLE_NEURON_FOLLOW_RESTRICTIONS.get()
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_private_neuron_enforcement() -> Temporary {
-    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, true)
+pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
+    Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, true)
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_private_neuron_enforcement() -> Temporary {
-    Temporary::new(&IS_PRIVATE_NEURON_ENFORCEMENT_ENABLED, false)
+pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
+    Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
 }
 
-pub fn are_set_visibility_proposals_enabled() -> bool {
-    ARE_SET_VISIBILITY_PROPOSALS_ENABLED.with(|ok| ok.get())
+pub fn is_self_describing_proposal_actions_enabled() -> bool {
+    ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS.get()
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_set_visibility_proposals() -> Temporary {
-    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, true)
+pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, true)
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_set_visibility_proposals() -> Temporary {
-    Temporary::new(&ARE_SET_VISIBILITY_PROPOSALS_ENABLED, false)
+pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
 }
 
-pub fn is_active_neurons_in_stable_memory_enabled() -> bool {
-    ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED.with(|ok| ok.get())
+pub fn are_bless_alternative_guest_os_version_proposals_enabled() -> bool {
+    ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS.get()
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, true)
+pub fn temporarily_enable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, true)
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_active_neurons_in_stable_memory() -> Temporary {
-    Temporary::new(&ACTIVE_NEURONS_IN_STABLE_MEMORY_ENABLED, false)
+pub fn temporarily_disable_bless_alternative_guest_os_version_proposals() -> Temporary {
+    Temporary::new(&ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS, false)
 }
 
-pub fn use_stable_memory_following_index() -> bool {
-    USE_STABLE_MEMORY_FOLLOWING_INDEX.with(|ok| ok.get())
+pub fn are_canister_snapshot_proposals_enabled() -> bool {
+    ENABLE_CANISTER_SNAPSHOT_PROPOSALS.get()
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, true)
+pub fn temporarily_enable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, true)
 }
 
-/// Only integration tests should use this.
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_stable_memory_following_index() -> Temporary {
-    Temporary::new(&USE_STABLE_MEMORY_FOLLOWING_INDEX, false)
+pub fn temporarily_disable_canister_snapshot_proposals() -> Temporary {
+    Temporary::new(&ENABLE_CANISTER_SNAPSHOT_PROPOSALS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
@@ -368,8 +370,7 @@ impl Clock for IcClock {
         // Step 3: Convert back to u64.
         u64::try_from(modified_timestamp_seconds).unwrap_or_else(|err| {
             panic!(
-                "Timestamp no longer fits in u64 {} + {}. err: {}",
-                real_timestamp_seconds, delta_s, err,
+                "Timestamp no longer fits in u64 {real_timestamp_seconds} + {delta_s}. err: {err}",
             );
         })
     }
@@ -485,11 +486,6 @@ pub fn encode_metrics(
         "Total number of neurons that have been locked for disburse operations.",
     )?;
     w.encode_gauge(
-        "governance_heap_neuron_count",
-        governance.neuron_store.heap_neuron_store_len() as f64,
-        "The number of neurons in NNS Governance canister's heap memory.",
-    )?;
-    w.encode_gauge(
         "governance_stable_memory_neuron_count",
         governance.neuron_store.stable_neuron_store_len() as f64,
         "The number of neurons in NNS Governance canister's stable memory.",
@@ -543,14 +539,7 @@ pub fn encode_metrics(
         .proposals
         .values()
         // Exclude ManageNeuron proposals.
-        .filter(|proposal_data| {
-            proposal_data
-                .proposal
-                .as_ref()
-                .map(|proposal| !proposal.is_manage_neuron())
-                .unwrap_or_default()
-        })
-        .next_back();
+        .rfind(|proposal_data| !proposal_data.is_manage_neuron());
     let mut total_deciding_voting_power = 0.0;
     let mut total_potential_voting_power = 0.0;
     if let Some(most_recent_proposal) = &most_recent_proposal {
@@ -582,6 +571,18 @@ pub fn encode_metrics(
         "The total amount of potential voting power (in the most recent proposal).",
     )?;
 
+    let proposals_using_previous_voting_power_snapshots = governance
+        .heap_data
+        .proposals
+        .values()
+        .filter(|proposal| proposal.previous_ballots_timestamp_seconds.is_some())
+        .count();
+    w.encode_gauge(
+        "governance_proposals_using_previous_voting_power_snapshots",
+        proposals_using_previous_voting_power_snapshots as f64,
+        "The number of proposals that are using previous voting power snapshots.",
+    )?;
+
     // Neuron Indexes
 
     let neuron_store::NeuronIndexesLens {
@@ -590,6 +591,7 @@ pub fn encode_metrics(
         following: following_index_len,
         known_neuron: known_neuron_index_len,
         account_id: account_id_index_len,
+        maturity_disbursement: maturity_disbursement_index_len,
     } = governance.neuron_store.stable_indexes_lens();
 
     w.encode_gauge(
@@ -616,6 +618,11 @@ pub fn encode_metrics(
         "governance_account_id_index_len",
         account_id_index_len as f64,
         "Total number of entries in the account_id index",
+    )?;
+    w.encode_gauge(
+        "governance_maturity_disbursement_index_len",
+        maturity_disbursement_index_len as f64,
+        "Total number of entries in the maturity disbursement index",
     )?;
 
     let mut builder = w.gauge_vec(
@@ -662,6 +669,36 @@ pub fn encode_metrics(
             .unwrap();
     }
 
+    // Timer tasks
+    encode_timer_task_metrics(w)?;
+
+    // Voting power snapshots
+    let now_seconds = now_seconds();
+    let (latest_snapshot_is_spike, latest_snapshot_timestamp_seconds) = VOTING_POWER_SNAPSHOTS
+        .with_borrow(|voting_power_snapshots| {
+            let latest_snapshot_is_spike =
+                voting_power_snapshots.is_latest_snapshot_a_spike(now_seconds);
+            let latest_snapshot_timestamp_seconds =
+                voting_power_snapshots.latest_snapshot_timestamp_seconds();
+            (latest_snapshot_is_spike, latest_snapshot_timestamp_seconds)
+        });
+
+    w.encode_gauge(
+        "governance_voting_power_snapshots_latest_snapshot_is_spike",
+        if latest_snapshot_is_spike { 1.0 } else { 0.0 },
+        "Indicates whether the latest voting power snapshot is a spike compared to previous snapshots.",
+    )?;
+
+    w.encode_gauge(
+        "governance_voting_power_snapshots_time_since_latest_snapshot_seconds",
+        if let Some(latest_snapshot_timestamp_seconds) = latest_snapshot_timestamp_seconds {
+            now_seconds.saturating_sub(latest_snapshot_timestamp_seconds) as f64
+        } else {
+            f64::INFINITY
+        },
+        "Time since the latest voting power snapshot, in seconds. If no snapshot has been taken yet, this will be infinity.",
+    )?;
+
     // Periodically Calculated (almost entirely detailed neuron breakdowns/rollups)
 
     if let Some(metrics) = &governance.heap_data.metrics {
@@ -701,6 +738,7 @@ pub fn encode_metrics(
             dissolving_neurons_e8s_buckets_ect,
             not_dissolving_neurons_e8s_buckets_seed,
             not_dissolving_neurons_e8s_buckets_ect,
+            spawning_neurons_count,
 
             // Non-self-authenticating neurons.
             total_voting_power_non_self_authenticating_controller: _,
@@ -963,6 +1001,12 @@ pub fn encode_metrics(
                 w,
             )?;
         }
+
+        w.encode_gauge(
+            "governance_spawning_neurons_count",
+            *spawning_neurons_count as f64,
+            "The number of neurons that are in the \"spawning\" state.",
+        )?;
     }
 
     Ok(())
@@ -1013,71 +1057,61 @@ impl NeuronSubsetMetricsPb {
         } = self;
 
         w.encode_gauge(
-            &format!("governance_{}_neurons_count", neuron_subset_name),
+            &format!("governance_{neuron_subset_name}_neurons_count"),
             count.unwrap_or_default() as f64,
-            &format!("The number of neurons that {}.", neuron_subset_description,),
+            &format!("The number of neurons that {neuron_subset_description}.",),
         )?;
 
         w.encode_gauge(
-            &format!("governance_total_staked_e8s_{}", neuron_subset_name),
+            &format!("governance_total_staked_e8s_{neuron_subset_name}"),
             total_staked_e8s.unwrap_or_default() as f64,
             &format!(
-                "The total amount of staked ICP (in e8s) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of staked ICP (in e8s) in neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_staked_maturity_e8s_equivalent_{}",
-                neuron_subset_name
+                "governance_total_staked_maturity_e8s_equivalent_{neuron_subset_name}"
             ),
             total_staked_maturity_e8s_equivalent.unwrap_or_default() as f64,
             &format!(
-                "The total amount of staked maturity (in e8s equivalent) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of staked maturity (in e8s equivalent) in neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_maturity_e8s_equivalent_{}",
-                neuron_subset_name
+                "governance_total_maturity_e8s_equivalent_{neuron_subset_name}"
             ),
             total_maturity_e8s_equivalent.unwrap_or_default() as f64,
             &format!(
-                "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of unstaked maturity (in e8s equivalent) in neurons that {neuron_subset_description}.",
             ),
         )?;
 
         w.encode_gauge(
-            &format!("governance_total_voting_power_{}", neuron_subset_name),
+            &format!("governance_total_voting_power_{neuron_subset_name}"),
             total_voting_power.unwrap_or_default() as f64,
             &format!(
-                "Deprecated. Use governance_total_deciding_voting_power_{} or \
-                 governance_total_potential_voting_power_{} instead.",
-                neuron_subset_name, neuron_subset_name,
+                "Deprecated. Use governance_total_deciding_voting_power_{neuron_subset_name} or \
+                 governance_total_potential_voting_power_{neuron_subset_name} instead.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_deciding_voting_power_{}",
-                neuron_subset_name
+                "governance_total_deciding_voting_power_{neuron_subset_name}"
             ),
             total_deciding_voting_power.unwrap_or_default() as f64,
             &format!(
-                "The total amount of deciding voting power of all neurons that {}.",
-                neuron_subset_description,
+                "The total amount of deciding voting power of all neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_potential_voting_power_{}",
-                neuron_subset_name
+                "governance_total_potential_voting_power_{neuron_subset_name}"
             ),
             total_potential_voting_power.unwrap_or_default() as f64,
             &format!(
-                "The total amount of potential voting power of all neurons that {}.",
-                neuron_subset_description,
+                "The total amount of potential voting power of all neurons that {neuron_subset_description}.",
             ),
         )?;
 
@@ -1085,10 +1119,9 @@ impl NeuronSubsetMetricsPb {
 
         encode_dissolve_delay_buckets(
             w.gauge_vec(
-                &format!("governance_{}_neurons_count_buckets", neuron_subset_name),
+                &format!("governance_{neuron_subset_name}_neurons_count_buckets"),
                 &format!(
-                    "Number of neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                    "Number of neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             count_buckets,
@@ -1100,11 +1133,10 @@ impl NeuronSubsetMetricsPb {
                 // does not contain "staked"). This is to maintain consistency with existing
                 // metrics. Whereas, the name of the field is consistent with the analogous
                 // singular field, total_staked_e8s.
-                &format!("governance_{}_neurons_e8s_buckets", neuron_subset_name),
+                &format!("governance_{neuron_subset_name}_neurons_e8s_buckets"),
                 &format!(
-                    "The total amount of staked ICP (in e8s) in neurons that {}, \
+                    "The total amount of staked ICP (in e8s) in neurons that {neuron_subset_description}, \
                      grouped by dissolve delay.",
-                    neuron_subset_description,
                 ),
             )?,
             staked_e8s_buckets,
@@ -1112,54 +1144,46 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_neurons_staked_maturity_e8s_equivalent_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_neurons_staked_maturity_e8s_equivalent_buckets"
                 ),
                 &format!(
-                    "The total amount of staked maturity (in e8s equivalent) in neurons that {}, \
+                    "The total amount of staked maturity (in e8s equivalent) in neurons that {neuron_subset_description}, \
                          grouped by dissolve delay.",
-                    neuron_subset_description,
                 ),
             )?,
             staked_maturity_e8s_equivalent_buckets,
         );
         encode_dissolve_delay_buckets(
-            w
-                .gauge_vec(
-                    &format!("governance_{}_neurons_maturity_e8s_equivalent_buckets", neuron_subset_name),
-                    &format!(
-                        "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}, \
+            w.gauge_vec(
+                &format!(
+                    "governance_{neuron_subset_name}_neurons_maturity_e8s_equivalent_buckets"
+                ),
+                &format!(
+                    "The total amount of unstaked maturity (in e8s equivalent) in neurons that {neuron_subset_description}, \
                          grouped by dissolve delay.",
-                        neuron_subset_description,
-                    ),
-                )?,
+                ),
+            )?,
             maturity_e8s_equivalent_buckets,
         );
 
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_neurons_voting_power_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_neurons_voting_power_buckets"
                 ),
                 &format!(
-                    "Deprecated. Use either governance_{}_deciding_voting_power_buckets, \
-                     or governance_{}_potential_voting_power_buckets instead.",
-                    neuron_subset_name, neuron_subset_name,
+                    "Deprecated. Use either governance_{neuron_subset_name}_deciding_voting_power_buckets, \
+                     or governance_{neuron_subset_name}_potential_voting_power_buckets instead.",
                 ),
             )?,
             voting_power_buckets,
         );
         encode_dissolve_delay_buckets(
             w.gauge_vec(
-                &format!(
-                    "governance_{}_deciding_voting_power_buckets",
-                    neuron_subset_name
-                ),
+                &format!("governance_{neuron_subset_name}_deciding_voting_power_buckets"),
                 &format!(
                     "The total amount of deciding voting power (used to decide proposals) \
-                     in neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                     in neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             deciding_voting_power_buckets,
@@ -1167,13 +1191,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_potential_voting_power_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_potential_voting_power_buckets"
                 ),
                 &format!(
                     "The total amount of potential voting power (used to decide \
-                     voting rewards) in neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                     voting rewards) in neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             potential_voting_power_buckets,
@@ -1185,3 +1207,6 @@ impl NeuronSubsetMetricsPb {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(feature = "canbench-rs")]
+mod benches_util;

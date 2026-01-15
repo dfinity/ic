@@ -19,7 +19,7 @@ pub fn timestamp_to_iso8601(ts: TimeStamp) -> String {
 
 pub fn iso8601_to_timestamp(s: String) -> TimeStamp {
     let nanos = chrono::DateTime::<chrono::FixedOffset>::parse_from_rfc3339(&s)
-        .unwrap_or_else(|e| panic!("Unable to parse timestamp from rfc3339 {}: {}", s, e))
+        .unwrap_or_else(|e| panic!("Unable to parse timestamp from rfc3339 {s}: {e}"))
         .with_timezone(&chrono::Utc)
         .timestamp_nanos_opt()
         .unwrap() as u64;

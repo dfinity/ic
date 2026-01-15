@@ -6,11 +6,13 @@ use std::{
 // Also possible to define a wrapper macro, in order to ensure that logging is only
 // done when certain crate features are enabled
 use tla_instrumentation::{
-    tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
+    Destination, InstrumentationState, tla_log_label, tla_log_locals, tla_log_request,
+    tla_log_response,
     tla_value::{TlaValue, ToTla},
-    Destination, InstrumentationState,
 };
 use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
+
+use async_trait::async_trait;
 
 mod common;
 use common::check_tla_trace;
@@ -20,6 +22,7 @@ use common::check_tla_trace;
 mod tla_stuff {
     use crate::StructCanister;
     use std::collections::BTreeSet;
+    use std::sync::Mutex;
 
     use candid::Int;
 
@@ -29,19 +32,20 @@ mod tla_stuff {
     use local_key::task_local;
     use std::{collections::BTreeMap, sync::RwLock};
     use tla_instrumentation::{
-        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla, Update,
-        UpdateTrace, VarAssignment,
+        GlobalState, InstrumentationState, Label, TlaConstantAssignment, TlaValue, ToTla,
+        UnsafeSendPtr, Update, UpdateTrace, VarAssignment,
     };
 
     task_local! {
         pub static TLA_INSTRUMENTATION_STATE: InstrumentationState;
-        pub static TLA_TRACES_LKEY: std::cell::RefCell<Vec<UpdateTrace>>;
+        pub static TLA_TRACES_LKEY: Mutex<Vec<UpdateTrace>>;
     }
 
-    pub static TLA_TRACES_MUTEX: RwLock<Vec<UpdateTrace>> = RwLock::new(Vec::new());
+    pub static TLA_TRACES_MUTEX: Option<RwLock<Vec<UpdateTrace>>> = Some(RwLock::new(Vec::new()));
 
-    pub fn tla_get_globals(c: &StructCanister) -> GlobalState {
+    pub fn tla_get_globals(p: &UnsafeSendPtr<StructCanister>) -> GlobalState {
         let mut state = GlobalState::new();
+        let c = unsafe { &*(p.0) };
         state.add("counter", c.counter.to_tla_value());
         state.add("empty_fun", TlaValue::Function(BTreeMap::new()));
         state
@@ -49,9 +53,12 @@ mod tla_stuff {
 
     // #[macro_export]
     macro_rules! tla_get_globals {
-        ($self:expr) => {
-            tla_stuff::tla_get_globals($self)
-        };
+        ($self:expr_2021) => {{
+            let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($self as *const _);
+            ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
+                tla_stuff::tla_get_globals(&raw_ptr)
+            }))
+        }};
     }
 
     pub fn my_f_desc() -> Update {
@@ -91,14 +98,14 @@ mod tla_stuff {
                 let incoming = incoming.as_str();
                 for pair in trace {
                     for s in [&mut pair.start, &mut pair.end] {
-                        if !s.0 .0.contains_key(outgoing) {
-                            s.0 .0.insert(
+                        if !s.0.0.contains_key(outgoing) {
+                            s.0.0.insert(
                                 outgoing.to_string(),
                                 Vec::<TlaValue>::new().to_tla_value(),
                             );
                         }
-                        if !s.0 .0.contains_key(incoming) {
-                            s.0 .0.insert(
+                        if !s.0.0.contains_key(incoming) {
+                            s.0.0.insert(
                                 incoming.to_string(),
                                 BTreeSet::<TlaValue>::new().to_tla_value(),
                             );
@@ -112,7 +119,7 @@ mod tla_stuff {
 }
 
 use tla_stuff::{
-    my_f_desc, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX, my_f_desc,
 };
 
 struct StructCanister {
@@ -121,36 +128,47 @@ struct StructCanister {
 
 static mut GLOBAL: StructCanister = StructCanister { counter: 0 };
 
-#[tla_function]
-async fn call_maker() {
-    tla_log_request!(
-        "WaitForResponse",
-        Destination::new("othercan"),
-        "Target_Method",
-        2_u64
-    );
-    tla_log_response!(
-        Destination::new("othercan"),
-        TlaValue::Variant {
-            tag: "Ok".to_string(),
-            value: Box::new(3_u64.to_tla_value())
-        }
-    );
+struct CallMaker {}
+
+#[async_trait]
+trait CallMakerTrait {
+    async fn call_maker(&self);
+}
+
+#[async_trait]
+impl CallMakerTrait for CallMaker {
+    #[tla_function(force_async_fn = true)]
+    async fn call_maker(&self) {
+        tla_log_request!(
+            "WaitForResponse",
+            Destination::new("othercan"),
+            "Target_Method",
+            2_u64
+        );
+        tla_log_response!(
+            Destination::new("othercan"),
+            TlaValue::Variant {
+                tag: "Ok".to_string(),
+                value: Box::new(3_u64.to_tla_value())
+            }
+        );
+    }
 }
 
 impl StructCanister {
-    #[tla_update_method(my_f_desc())]
+    #[tla_update_method(my_f_desc(), tla_get_globals!())]
     pub async fn my_method(&mut self) {
         self.counter += 1;
+        let call_maker = CallMaker {};
         let mut my_local: u64 = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase1");
-        call_maker().await;
+        call_maker.call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         tla_log_locals! {my_local: my_local};
         tla_log_label!("Phase2");
-        call_maker().await;
+        call_maker.call_maker().await;
         self.counter += 1;
         my_local = self.counter;
         // Note that this would not be necessary (and would be an error) if
@@ -165,7 +183,7 @@ fn multiple_calls_test() {
         let canister = &mut *addr_of_mut!(GLOBAL);
         tokio_test::block_on(canister.my_method());
     }
-    let trace = &TLA_TRACES_MUTEX.read().unwrap()[0];
+    let trace = &TLA_TRACES_MUTEX.as_ref().unwrap().read().unwrap()[0];
     assert_eq!(
         trace.constants.to_map().get("MAX_COUNTER"),
         Some(&3_u64.to_string())

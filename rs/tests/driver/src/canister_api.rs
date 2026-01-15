@@ -2,7 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
 };
 use ic_nns_gtc::pb::v1::AccountState;
@@ -13,9 +13,9 @@ use ic_sns_governance::pb::v1::{
     ManageNeuronResponse as ManageSnsNeuronRes, NeuronId,
 };
 use ic_sns_root::{
-    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
     GetSnsCanistersSummaryRequest as GetSnsCanistersSummaryReq,
     GetSnsCanistersSummaryResponse as GetSnsCanistersSummaryRes,
+    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
 };
 use ic_sns_swap::pb::v1::{
     FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
@@ -46,7 +46,7 @@ use ic_sns_wasm::pb::v1::{
 };
 
 use ic_utils::interfaces::http_request::HttpResponse;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     driver::test_env::{TestEnv, TestEnvAttribute},
@@ -97,7 +97,6 @@ pub trait Request<T: Response> {
 /// via an appropriate `Request<ResponseType>`, for which `ResponseType` <: `Response` is a Candid type that can be decoded.
 ///
 /// Some examples of when this type is appropriate:
-/// - Counter Canister (//rs/workload_generator:counter.wat)
 /// - Universal Canister (//rs/universal_canister/lib)
 #[derive(Clone)]
 pub struct GenericRequest {
@@ -200,7 +199,7 @@ impl CanisterHttpRequestProvider {
     pub fn http_request(
         &self,
         relative_url: String,
-    ) -> impl Request<HttpResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<HttpResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         CanisterHttpRequest::new(self.http_canister, relative_url)
     }
 }
@@ -256,14 +255,14 @@ impl NnsDappRequestProvider {
         &self,
         account_address: String,
         mode: CallMode,
-    ) -> impl Request<GetAccountResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetAccountResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         GetAccountRequest::new(self.nns_dapp_canister, account_address, mode)
     }
 
     pub fn http_request(
         &self,
         relative_url: String,
-    ) -> impl Request<HttpResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<HttpResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         CanisterHttpRequest::new(self.nns_dapp_canister, relative_url)
     }
 }
@@ -642,14 +641,14 @@ impl Icrc1RequestProvider {
     pub fn icrc1_transfer_request(
         &self,
         transfer_arg: TransferArg,
-    ) -> impl Request<Icrc1TransferResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<Icrc1TransferResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         Icrc1TransferRequest::new(self.icrc1_canister, transfer_arg)
     }
 
     pub fn icrc1_metadata_request(
         &self,
         mode: CallMode,
-    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         Icrc1MetadataRequest::new(self.icrc1_canister, mode)
     }
 
@@ -657,7 +656,7 @@ impl Icrc1RequestProvider {
         &self,
         account: Account,
         mode: CallMode,
-    ) -> impl Request<Icrc1BalanceOfResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<Icrc1BalanceOfResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         Icrc1BalanceOfRequest::new(self.icrc1_canister, account, mode)
     }
 }
@@ -738,6 +737,9 @@ impl ListNnsNeuronsRequest {
                 include_neurons_readable_by_caller,
                 include_empty_neurons_readable_by_caller: None,
                 include_public_neurons_in_full_neurons: None,
+                page_number: None,
+                page_size: None,
+                neuron_subaccounts: None,
             },
         }
     }
@@ -985,7 +987,7 @@ impl SnsRequestProvider {
         &self,
         amount_icp_e8s: u64,
         subaccount: Option<Subaccount>,
-    ) -> impl Request<NewSaleTicketRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<NewSaleTicketRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         NewSaleTicketRequest::new(sale_canister, amount_icp_e8s, subaccount)
     }
@@ -994,7 +996,7 @@ impl SnsRequestProvider {
         &self,
         buyer: Option<PrincipalId>,
         confirmation_text: Option<String>,
-    ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         RefreshBuyerTokensRequest::new(sale_canister, buyer, confirmation_text)
     }
@@ -1003,7 +1005,7 @@ impl SnsRequestProvider {
         &self,
         buyer: Option<PrincipalId>,
         mode: CallMode,
-    ) -> impl Request<GetBuyerStateRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetBuyerStateRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetBuyerStateRequest::new(sale_canister, buyer, mode)
     }
@@ -1011,14 +1013,14 @@ impl SnsRequestProvider {
     pub fn get_open_ticket(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetOpenTicketRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetOpenTicketRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetOpenTicketRequest::new(sale_canister, mode)
     }
 
     pub fn finalize_swap(
         &self,
-    ) -> impl Request<FinalizeSwapResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<FinalizeSwapResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         FinalizeSwapRequest::new(sale_canister)
     }
@@ -1028,7 +1030,7 @@ impl SnsRequestProvider {
     pub fn list_deployed_snses(
         &self,
         mode: CallMode,
-    ) -> impl Request<ListDeployedSnsesRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ListDeployedSnsesRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sns_wasm_canister = self.sns_wasm_canister_id.into();
         ListDeployedSnsesRequest::new(sns_wasm_canister, mode)
     }
@@ -1036,7 +1038,7 @@ impl SnsRequestProvider {
     pub fn list_sns_canisters(
         &self,
         mode: CallMode,
-    ) -> impl Request<ListSnsCanistersRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ListSnsCanistersRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let root_canister = self.sns_canisters.root().get().into();
         ListSnsCanistersRequest::new(root_canister, mode)
     }
@@ -1044,7 +1046,7 @@ impl SnsRequestProvider {
     pub fn get_metadata(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetMetadataRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetMetadataRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let governance_canister = self.sns_canisters.governance().get().into();
         GetMetadataRequest::new(governance_canister, mode)
     }
@@ -1052,7 +1054,7 @@ impl SnsRequestProvider {
     pub fn icrc1_metadata(
         &self,
         mode: CallMode,
-    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
         self.sns_ledger_request_provider
             .icrc1_metadata_request(mode)
     }
@@ -1060,7 +1062,7 @@ impl SnsRequestProvider {
     pub fn metadata(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetMetadataRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetMetadataRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let governance_canister = self.sns_canisters.governance().get().into();
         GetMetadataRequest::new(governance_canister, mode)
     }
@@ -1068,7 +1070,7 @@ impl SnsRequestProvider {
     pub fn get_state(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetStateRequest::new(swap_canister, mode)
     }
@@ -1076,7 +1078,7 @@ impl SnsRequestProvider {
     pub fn get_lifecycle(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetLifecycleRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetLifecycleRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetLifecycleRequest::new(swap_canister, mode)
     }
@@ -1084,7 +1086,7 @@ impl SnsRequestProvider {
     pub fn get_derived_swap_state(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetDerivedSwapStateRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetDerivedSwapStateRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetDerivedSwapStateRequest::new(swap_canister, mode)
     }
@@ -1092,7 +1094,8 @@ impl SnsRequestProvider {
     pub fn get_auto_finalization_status(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetAutoFinalizationStatusRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetAutoFinalizationStatusRes> + std::fmt::Debug + Clone + Sync + Send + use<>
+    {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetAutoFinalizationStatusRequest::new(swap_canister, mode)
     }
@@ -1103,7 +1106,7 @@ impl SnsRequestProvider {
         start_page_at: Option<NeuronId>,
         of_principal: Option<PrincipalId>,
         mode: CallMode,
-    ) -> impl Request<ListSnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ListSnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sns_governance_canister = self.sns_canisters.governance().get().into();
         ListSnsNeuronsRequest::new(
             sns_governance_canister,
@@ -1118,21 +1121,22 @@ impl SnsRequestProvider {
         &self,
         subaccount: Vec<u8>,
         command: ic_sns_governance::pb::v1::manage_neuron::Command,
-    ) -> impl Request<ManageSnsNeuronRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ManageSnsNeuronRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sns_governance_canister = self.sns_canisters.governance().get().into();
         ManageSnsNeuronRequest::new(sns_governance_canister, subaccount, command)
     }
 
     pub fn get_sns_canisters_summary(
         &self,
-    ) -> impl Request<GetSnsCanistersSummaryRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetSnsCanistersSummaryRes> + std::fmt::Debug + Clone + Sync + Send + use<>
+    {
         let sns_root_canister = self.sns_canisters.root().get().into();
         GetSnsCanistersSummaryRequest::new(sns_root_canister)
     }
 
     pub fn get_sns_governance_mode(
         &self,
-    ) -> impl Request<GetModeRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetModeRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sns_governance_canister = self.sns_canisters.governance().get().into();
         GetModeRequest::new(sns_governance_canister)
     }
@@ -1147,7 +1151,7 @@ impl NnsRequestProvider {
         neuron_ids: Vec<u64>,
         include_neurons_readable_by_caller: bool,
         mode: CallMode,
-    ) -> impl Request<ListNnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ListNnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         ListNnsNeuronsRequest::new(neuron_ids, include_neurons_readable_by_caller, mode)
     }
 }

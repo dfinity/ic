@@ -93,10 +93,9 @@ impl ActiveExecutionStateRegistry {
     /// Removes the given [`ExecId`] and returns its [`CompletionFunction`].
     pub fn take(&self, exec_id: ExecId) -> Option<CompletionFunction> {
         let mut mut_states = self.states.lock().unwrap();
-        if let Some(entry) = mut_states.remove(&exec_id) {
-            entry.completion
-        } else {
-            None
+        match mut_states.remove(&exec_id) {
+            Some(entry) => entry.completion,
+            _ => None,
         }
     }
 

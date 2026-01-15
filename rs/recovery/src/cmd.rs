@@ -42,17 +42,23 @@ pub struct RecoveryToolArgs {
     #[clap(long, default_value = "/var/lib/ic/data")]
     pub dir: PathBuf,
 
-    /// The path to a private key to be considered for SSH connections
+    /// The path to a private key to be considered for admin SSH connections
     #[clap(long)]
-    pub key_file: Option<PathBuf>,
+    pub admin_key_file: Option<PathBuf>,
 
     /// Flag to enter test mode
     #[clap(long)]
-    pub test: bool,
+    pub test_mode: bool,
 
     /// Flag to make the tool non interactive. No input from the user is requested.
     #[clap(long)]
     pub skip_prompts: bool,
+
+    /// Flag to indicate we're running recovery directly on a node, and should use
+    /// the locally available binaries. If this option is not set, missing binaries
+    /// will be downloaded.
+    #[clap(long)]
+    pub use_local_binaries: bool,
 
     #[clap(subcommand)]
     pub subcmd: Option<SubCommand>,

@@ -7,8 +7,8 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-ed25519 = { path = "../ed25519" }
 ic-crypto-internal-csp-test-utils = { path = "../internal/csp_test_utils" }
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }

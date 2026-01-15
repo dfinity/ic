@@ -2,8 +2,8 @@ use ic_interfaces::messaging::{
     MessageRouting, MessageRoutingError, XNetPayloadBuilder, XNetPayloadValidationError,
 };
 use ic_types::{
-    batch::{Batch, ValidationContext, XNetPayload},
     Height, NumBytes,
+    batch::{Batch, ValidationContext, XNetPayload},
 };
 use mockall::mock;
 use std::sync::RwLock;

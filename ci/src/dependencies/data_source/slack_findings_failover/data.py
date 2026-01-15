@@ -15,9 +15,10 @@ class SlackVulnerabilityEventType(Enum):
     VULN_ADDED = 1
     VULN_REMOVED = 2
     VULN_CHANGED = 3
-    DEP_ADDED = 4
-    DEP_REMOVED = 5
-    RISK_UNKNOWN = 6
+    VULN_UNCHANGED = 4
+    DEP_ADDED = 5
+    DEP_REMOVED = 6
+    RISK_UNKNOWN = 7
 
 
 @dataclass
@@ -43,6 +44,10 @@ class SlackVulnerabilityEvent:
         return SlackVulnerabilityEvent(
             SlackVulnerabilityEventType.VULN_CHANGED, vuln_id, channel_id, updated_fields=updated_fields
         )
+
+    @staticmethod
+    def vuln_unchanged(vuln_id: str, channel_id: str):
+        return SlackVulnerabilityEvent(SlackVulnerabilityEventType.VULN_UNCHANGED, vuln_id, channel_id)
 
     @staticmethod
     def dep_added(vuln_id: str, channel_id: str, finding_id: Tuple[str, str, str, str], added_projects: List[str]):

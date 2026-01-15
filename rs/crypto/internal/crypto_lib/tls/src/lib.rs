@@ -8,11 +8,8 @@
 #![warn(rust_2018_idioms)]
 #![warn(future_incompatible)]
 
-use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
-use ic_crypto_internal_basic_sig_ed25519::{
-    secret_key_to_pkcs8_v1_der, secret_key_to_pkcs8_v2_der,
-};
 use ic_crypto_secrets_containers::SecretBytes;
+use ic_ed25519::{PrivateKey, PrivateKeyFormat};
 use rand::{CryptoRng, Rng};
 use rcgen::{
     Certificate, CertificateParams, DistinguishedName, DnType, DnValue, KeyPair, SerialNumber,
@@ -72,10 +69,9 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let serial: [u8; 19] = csprng.gen();
-    let (secret_key, public_key) = ic_crypto_internal_basic_sig_ed25519::keypair_from_rng(csprng);
+    let serial: [u8; 19] = csprng.r#gen();
+    let secret_key = PrivateKey::generate_using_rng(csprng);
     let x509_cert = x509_v3_certificate(
-        &public_key,
         common_name,
         serial,
         not_before_secs_since_unix_epoch,
@@ -94,12 +90,11 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
 /// number argument is interpreted as an unsigned integer and thus fits in 20
 /// bytes, encoded as a signed ASN1 integer.
 fn x509_v3_certificate(
-    public_key: &ed25519_types::PublicKeyBytes,
     common_name: &str,
     serial: [u8; 19],
     not_before_secs_since_unix_epoch: u64,
     not_after_secs_since_unix_epoch: u64,
-    secret_key: &ed25519_types::SecretKeyBytes,
+    secret_key: &PrivateKey,
 ) -> Result<rcgen::Certificate, TlsKeyPairAndCertGenerationError> {
     let not_before_i64 = i64::try_from(not_before_secs_since_unix_epoch).map_err(|_e| {
         TlsKeyPairAndCertGenerationError::InvalidArguments(
@@ -108,8 +103,7 @@ fn x509_v3_certificate(
     })?;
     let not_before = OffsetDateTime::from_unix_timestamp(not_before_i64).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "invalid notBefore date: failed to convert to OffsetDateTime: {}",
-            e
+            "invalid notBefore date: failed to convert to OffsetDateTime: {e}"
         ))
     })?;
     let not_after_i64 = i64::try_from(not_after_secs_since_unix_epoch).map_err(|_e| {
@@ -119,14 +113,12 @@ fn x509_v3_certificate(
     })?;
     let not_after = OffsetDateTime::from_unix_timestamp(not_after_i64).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "invalid notAfter date: failed to convert to OffsetDateTime: {}",
-            e
+            "invalid notAfter date: failed to convert to OffsetDateTime: {e}"
         ))
     })?;
     if not_before >= not_after {
         return Err(TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "notBefore date ({}) must be before notAfter date ({})",
-            not_before, not_after,
+            "notBefore date ({not_before}) must be before notAfter date ({not_after})",
         )));
     }
     let mut distinguished_name = DistinguishedName::new();
@@ -134,7 +126,7 @@ fn x509_v3_certificate(
         DnType::CommonName,
         DnValue::Utf8String(common_name.to_string()),
     );
-    let mut key_pair = rcgen_keypair_from_ed25519_keypair(secret_key, public_key)?;
+    let mut key_pair = rcgen_keypair_from_ed25519_key(secret_key)?;
 
     let mut cert_params = CertificateParams::default();
     cert_params.not_before = not_before;
@@ -144,38 +136,36 @@ fn x509_v3_certificate(
 
     let cert_result = cert_params.self_signed(&key_pair).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
-            "failed to create X509 certificate: {}",
-            e
+            "failed to create X509 certificate: {e}"
         ))
     });
     key_pair.zeroize();
     cert_result
 }
 
-fn rcgen_keypair_from_ed25519_keypair(
-    secret_key: &ed25519_types::SecretKeyBytes,
-    public_key: &ed25519_types::PublicKeyBytes,
+fn rcgen_keypair_from_ed25519_key(
+    secret_key: &PrivateKey,
 ) -> Result<KeyPair, TlsKeyPairAndCertGenerationError> {
-    let keypair_der = secret_key_to_pkcs8_v2_der(secret_key, public_key);
-    KeyPair::try_from(keypair_der.expose_secret()).map_err(|e| {
+    let keypair_der = secret_key.serialize_pkcs8(PrivateKeyFormat::Pkcs8v2);
+
+    KeyPair::try_from(keypair_der).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
-            "failed to create Ed25519 key pair from raw private key: {}",
-            e
+            "failed to create Ed25519 key pair from raw private key: {e}"
         ))
     })
 }
 
 fn der_encode_cert_and_secret_key(
     x509_cert: Certificate,
-    secret_key: &ed25519_types::SecretKeyBytes,
+    secret_key: &PrivateKey,
 ) -> Result<
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
     let cert_der = x509_cert.der().as_ref().to_vec();
-    let private_key_pkcs8_v1_der = secret_key_to_pkcs8_v1_der(secret_key);
+    let private_key_pkcs8_v1_der = secret_key.serialize_pkcs8(PrivateKeyFormat::Pkcs8v1);
     Ok((
         TlsEd25519CertificateDerBytes { bytes: cert_der },
-        TlsEd25519SecretKeyDerBytes::from(private_key_pkcs8_v1_der),
+        TlsEd25519SecretKeyDerBytes::new(private_key_pkcs8_v1_der),
     ))
 }

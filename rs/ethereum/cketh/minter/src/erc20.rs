@@ -79,7 +79,7 @@ impl TryFrom<AddCkErc20Token> for CkErc20Token {
                 .ok_or("ERROR: chain_id does not fit in a u64")?,
         )?;
         let erc20_contract_address =
-            Address::from_str(&value.address).map_err(|e| format!("ERROR: {}", e))?;
+            Address::from_str(&value.address).map_err(|e| format!("ERROR: {e}"))?;
         Ok(Self {
             erc20_ethereum_network,
             erc20_contract_address,

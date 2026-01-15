@@ -6,7 +6,13 @@
 
 set -exo pipefail
 
-while getopts "o:t:v:p:x:" OPT; do
+cleanup() {
+    podman rm -f "${CONTAINER}"
+    rm -rf "${TMP_DIR}"
+}
+trap cleanup EXIT
+
+while getopts "o:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
@@ -18,16 +24,11 @@ while getopts "o:t:v:p:x:" OPT; do
     esac
 done
 
-trap 'mountpoint "${TMPFS}" && sudo umount "${TMPFS}"; rm -rf "${TMPFS}"' exit
-TMPFS=$(mktemp -d /tmp/mytempdir.XXXXXX)
-sudo mount -t tmpfs tmpfs-podman "${TMPFS}"
+TMP_DIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
-trap 'rm -rf "${TMPDIR}"; sudo podman --root "${TMPFS}" rm -f "${CONTAINER}"' exit
-TMPDIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
+BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:5d070ad5f7fe63623cbb99b4fc0fd997f5591303d4b03ccce50f403957d0ddc4"
-
-sudo podman --root "${TMPFS}" build --iidfile ${TMPDIR}/iidfile - <<<"
+podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -44,10 +45,9 @@ sudo podman --root "${TMPFS}" build --iidfile ${TMPDIR}/iidfile - <<<"
         echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
-IMAGE=$(cat ${TMPDIR}/iidfile | cut -d':' -f2)
+IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
 
-CONTAINER=$(sudo podman --root "${TMPFS}" run --network=host --cgroupns=host -d "$IMAGE")
+CONTAINER=$(podman run -d "${IMAGE_ID}")
 
-sudo podman --root "${TMPFS}" export "$CONTAINER" | tar -C "$TMPDIR" -x build --strip-components=1
-tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMPDIR}" boot
-find "$TMPDIR/boot" -type f -exec sha256sum {} \; | sed "s|$TMPDIR||"
+podman export "${CONTAINER}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
+tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}" boot

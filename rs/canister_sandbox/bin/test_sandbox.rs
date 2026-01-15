@@ -20,12 +20,8 @@ impl sandbox_service::SandboxService for DummySandboxService {
         rpc::Call::new_resolved(Ok(sbxsvc::TerminateReply {}))
     }
 
-    fn open_wasm_serialized(
-        &self,
-        _req: sbxsvc::OpenWasmSerializedRequest,
-    ) -> rpc::Call<sbxsvc::OpenWasmSerializedReply> {
-        println!("Sandbox: Received 'open_wasm_serialized' request");
-        rpc::Call::new_resolved(Ok(sbxsvc::OpenWasmSerializedReply(Ok(()))))
+    fn open_wasm(&self, _req: sbxsvc::OpenWasmRequest) -> rpc::Call<sbxsvc::OpenWasmReply> {
+        unimplemented!()
     }
 
     fn close_wasm(&self, _req: sbxsvc::CloseWasmRequest) -> rpc::Call<sbxsvc::CloseWasmReply> {
@@ -64,10 +60,10 @@ impl sandbox_service::SandboxService for DummySandboxService {
         unimplemented!()
     }
 
-    fn create_execution_state_serialized(
+    fn create_execution_state(
         &self,
-        _req: sbxsvc::CreateExecutionStateSerializedRequest,
-    ) -> rpc::Call<sbxsvc::CreateExecutionStateSerializedReply> {
+        _req: sbxsvc::CreateExecutionStateRequest,
+    ) -> rpc::Call<sbxsvc::CreateExecutionStateReply> {
         unimplemented!()
     }
 }

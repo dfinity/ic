@@ -188,9 +188,11 @@ fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
             ad,
         )?;
 
-        assert!(ctext
-            .decrypt(alg, ad, dealer_index, 1, &b_sk, &b_pk)
-            .is_ok());
+        assert!(
+            ctext
+                .decrypt(alg, ad, dealer_index, 1, &b_sk, &b_pk)
+                .is_ok()
+        );
         assert_eq!(
             ctext.verify_pop(alg, b"wrong_ad", dealer_index),
             Err(CanisterThresholdError::InvalidProof)
@@ -221,8 +223,8 @@ fn mega_private_key_should_redact_logs() -> Result<(), CanisterThresholdError> {
     for curve in EccCurveType::all() {
         let sk = MEGaPrivateKey::generate(curve, rng);
 
-        let log = format!("{:?}", sk);
-        assert_eq!(format!("MEGaPrivateKey({}) - REDACTED", curve), log);
+        let log = format!("{sk:?}");
+        assert_eq!(format!("MEGaPrivateKey({curve}) - REDACTED"), log);
     }
 
     Ok(())
@@ -238,7 +240,7 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), CanisterThresholdEr
 
     let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
 
-    let log = format!("{:?}", bytes);
+    let log = format!("{bytes:?}");
     assert_eq!("MEGaPrivateKeyK256Bytes - REDACTED", log);
 
     Ok(())
@@ -419,8 +421,8 @@ mod mega_cipher_text {
                         MEGaCiphertextSingle::encrypt(
                             seed,
                             alg,
-                            &[ptext.clone()],
-                            &[a_pk.clone()],
+                            std::slice::from_ref(&ptext),
+                            std::slice::from_ref(&a_pk),
                             dealer_index,
                             associated_data,
                         )
@@ -434,8 +436,8 @@ mod mega_cipher_text {
                         MEGaCiphertextPair::encrypt(
                             seed,
                             alg,
-                            &[ptext.clone()],
-                            &[a_pk.clone()],
+                            std::slice::from_ref(&ptext),
+                            std::slice::from_ref(&a_pk),
                             dealer_index,
                             associated_data,
                         )

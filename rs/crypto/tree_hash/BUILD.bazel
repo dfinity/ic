@@ -27,6 +27,11 @@ DEV_DEPENDENCIES = [
     "@crate_index//:serde_cbor",
 ]
 
+MACRO_DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:test-strategy",
+]
+
 rust_library(
     name = "tree_hash",
     srcs = glob(["src/**"]),
@@ -48,6 +53,7 @@ rust_test(
 rust_test_suite(
     name = "tree_hash_integration",
     srcs = glob(["tests/**"]),
+    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
 

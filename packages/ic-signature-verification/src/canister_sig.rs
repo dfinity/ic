@@ -1,5 +1,5 @@
 use ic_certification::{
-    leaf, Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult,
+    Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult, leaf,
 };
 use ic_principal::Principal;
 use ic_verify_bls_signature::verify_bls_signature;
@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 pub const IC_STATE_ROOT_DOMAIN_SEPARATOR: &[u8; 14] = b"\x0Dic-state-root";
 
-use ic_canister_sig_creation::{extract_raw_root_pk_from_der, CanisterSigPublicKey};
+use ic_canister_sig_creation::{CanisterSigPublicKey, extract_raw_root_pk_from_der};
 
 /// Verifies that `signature` is a valid canister signature on `message`.
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
@@ -21,7 +21,7 @@ pub fn verify_canister_sig(
 ) -> Result<(), String> {
     let signature = parse_signature_cbor(signature_cbor)?;
     let public_key = CanisterSigPublicKey::try_from(public_key_der)
-        .map_err(|e| format!("failed to parse canister sig public key: {}", e))?;
+        .map_err(|e| format!("failed to parse canister sig public key: {e}"))?;
     let certificate =
         check_certified_data_and_get_certificate(&signature, &public_key.canister_id)?;
     check_sig_path(&signature, &public_key, message)?;
@@ -83,7 +83,7 @@ fn parse_signature_cbor(signature_cbor: &[u8]) -> Result<CanisterSignature, Stri
         return Err("signature CBOR doesn't have a self-describing tag".to_string());
     }
     serde_cbor::from_slice::<CanisterSignature>(signature_cbor)
-        .map_err(|e| format!("failed to parse signature CBOR: {}", e))
+        .map_err(|e| format!("failed to parse signature CBOR: {e}"))
 }
 
 fn parse_certificate_cbor(certificate_cbor: &[u8]) -> Result<Certificate, String> {
@@ -93,7 +93,7 @@ fn parse_certificate_cbor(certificate_cbor: &[u8]) -> Result<Certificate, String
         return Err("certificate CBOR doesn't have a self-describing tag".to_string());
     }
     serde_cbor::from_slice::<Certificate>(certificate_cbor)
-        .map_err(|e| format!("failed to parse certificate CBOR: {}", e))
+        .map_err(|e| format!("failed to parse certificate CBOR: {e}"))
 }
 
 fn verify_certificate(
@@ -116,7 +116,7 @@ fn verify_delegation(
     root_public_key: &[u8],
 ) -> Result<Vec<u8>, String> {
     let cert: Certificate = parse_certificate_cbor(&delegation.certificate)
-        .map_err(|e| format!("invalid delegation certificate: {}", e))?;
+        .map_err(|e| format!("invalid delegation certificate: {e}"))?;
 
     // disallow nested delegations
     if cert.delegation.is_some() {
@@ -136,7 +136,7 @@ fn verify_delegation(
     };
 
     let canister_ranges: Vec<(Principal, Principal)> = serde_cbor::from_slice(canister_range)
-        .map_err(|e| format!("invalid canister range: {}", e))?;
+        .map_err(|e| format!("invalid canister range: {e}"))?;
     if !principal_is_within_ranges(&signing_canister_id, &canister_ranges[..]) {
         return Err("signing canister id not in canister_ranges".to_string());
     }

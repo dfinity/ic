@@ -9,7 +9,7 @@ pub use on_wire::{bytes, from};
 /// Over allows you to create canister endpoints easily
 /// ```no_run
 /// # use dfn_core::over;
-/// #[export_name = "canister_query happy_birthday"]
+/// #[unsafe(export_name = "canister_query happy_birthday")]
 /// fn hb() {
 ///     fn happy_birthday((name, age): (String, u16)) -> String {
 ///         format!("Happy Birthday {}", name)
@@ -74,7 +74,7 @@ where
 /// # use dfn_core::over_explicit;
 /// use dfn_json::Json;
 ///
-/// #[export_name = "canister_query happy_birthday"]
+/// #[unsafe(export_name = "canister_query happy_birthday")]
 /// fn hb() {
 ///     fn happy_birthday(Json((name, age)) :Json<(String, u16)>) -> Json<String> {
 ///         Json(format!("Happy Birthday {} {}", name, age))
@@ -101,7 +101,7 @@ where
 /// # async fn get_age(_: &str) -> Result<u16, String> {
 /// #     Ok(28)
 /// # }
-/// #[export_name = "canister_query happy_birthday"]
+/// #[unsafe(export_name = "canister_query happy_birthday")]
 /// fn hb() {
 ///     async fn happy_birthday(name :String) -> Result<String, String> {
 ///         let age = get_age(&name).await?;

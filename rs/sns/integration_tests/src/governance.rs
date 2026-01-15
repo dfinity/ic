@@ -2,8 +2,8 @@ use dfn_candid::candid_one;
 use ic_sns_governance::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
 };
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds};
-use ic_sns_test_utils::itest_helpers::{local_test_on_sns_subnet, SnsCanisters};
+use ic_sns_init::{SnsCanisterIds, pb::v1::SnsInitPayload};
+use ic_sns_test_utils::itest_helpers::{SnsCanisters, local_test_on_sns_subnet};
 use ic_types::PrincipalId;
 
 #[test]
@@ -37,7 +37,8 @@ fn test_sns_initialization_parameters_are_set() {
                 .await
                 .expect("Error calling get_sns_initialization_parameters api");
 
-        let expected_initialization_parameters = serde_yaml::to_string(&sns_init_payload).unwrap();
+        let expected_initialization_parameters =
+            sns_init_payload.stringify_without_logos().unwrap();
 
         assert_eq!(
             get_sns_initialization_parameters_response.sns_initialization_parameters,

@@ -1,3 +1,4 @@
+use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
@@ -5,7 +6,6 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgTranscript};
-use ic_types::NodeId;
 use std::collections::{BTreeMap, HashSet};
 
 /// The result of loading a transcript
@@ -80,7 +80,7 @@ pub trait NiDkgAlgorithm {
     ///   [`NiDkgAlgorithm::load_transcript`]  must be called prior to calling
     ///   this method.
     /// * [`DkgCreateDealingError::TransientInternalError`] if there is a transient internal error,
-    ///    e.g., an RPC error when calling a remote CSP vault.
+    ///   e.g., an RPC error when calling a remote CSP vault.
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError>;
 
     /// Verifies a non-interactive DKG dealing.

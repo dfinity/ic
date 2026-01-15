@@ -5,8 +5,10 @@ use paste::paste;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(100);
+
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G1Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -18,7 +20,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G2Projective::hash("domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -43,6 +45,22 @@ fn random_scalar<R: Rng + CryptoRng>(rng: &mut R) -> Scalar {
 
 fn random_sparse_scalar<R: Rng + CryptoRng>(num_bits: u8, rng: &mut R) -> Scalar {
     Scalar::random_sparse(rng, num_bits)
+}
+
+fn random_nodes<R: Rng + CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex> {
+    let mut r = vec![];
+
+    let mut idx = 1;
+    while r.len() != count + 3 {
+        r.push(idx);
+        idx += 1;
+    }
+
+    while r.len() != count {
+        r.remove(rng.r#gen::<usize>() % r.len());
+    }
+
+    r
 }
 
 fn n_random_scalar<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> {
@@ -73,6 +91,15 @@ fn g1_muln_instance<R: Rng + CryptoRng>(
     (points, scalars)
 }
 
+fn g1_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G1Affine>, Vec<Scalar>) {
+    let (points, scalars) = g1_muln_instance(terms, rng);
+    let points = G1Projective::batch_normalize(&points);
+    (points, scalars)
+}
+
 fn g1_sparse_muln_instance<R: Rng + CryptoRng>(
     terms: usize,
     num_bits: u8,
@@ -98,6 +125,15 @@ fn g2_muln_instance<R: Rng + CryptoRng>(
         points.push(random_g2(rng));
         scalars.push(random_scalar(rng));
     }
+    (points, scalars)
+}
+
+fn g2_muln_affine_instance<R: Rng + CryptoRng>(
+    terms: usize,
+    rng: &mut R,
+) -> (Vec<G2Affine>, Vec<Scalar>) {
+    let (points, scalars) = g2_muln_instance(terms, rng);
+    let points = G2Projective::batch_normalize(&points);
     (points, scalars)
 }
 
@@ -163,13 +199,14 @@ fn g2_multiexp_naive(points: &[G2Projective], scalars: &[Scalar]) -> G2Projectiv
 
 fn bls12_381_scalar_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_scalar");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
             || random_scalar(rng),
-            |pt| pt.serialize(),
+            |s| s.serialize(),
             BatchSize::SmallInput,
         )
     });
@@ -215,14 +252,30 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
     });
 }
 
+fn bls12_381_interpolation_ops(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_interpolation");
+    group.warm_up_time(WARMUP_TIME);
+
+    let rng = &mut reproducible_rng();
+
+    group.bench_function("Interpolation setup (n=32)", |b| {
+        b.iter_batched_ref(
+            || random_nodes(32, rng),
+            |nodes| LagrangeCoefficients::at_zero(&NodeIndices::from_slice(nodes).unwrap()),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
 fn bls12_381_g1_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g1");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng),
+            || random_g1(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -230,24 +283,24 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g1(rng).serialize(),
-            |bytes| G1Projective::deserialize_unchecked(bytes),
+            || random_g1(rng).to_affine().serialize(),
+            |bytes| G1Affine::deserialize_unchecked(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
-            |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
+            || rng.r#gen::<[u8; 32]>(),
+            |bytes| G1Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -276,6 +329,14 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || (random_g1(rng), random_scalar(rng)),
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply_vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g1(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -309,6 +370,23 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g1(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -353,17 +431,24 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| g1_multiexp_naive(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n, rng),
                 |(points, scalars)| G1Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g1_muln_affine_instance(n, rng),
+                |(points, scalars)| G1Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
@@ -384,12 +469,13 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
 fn bls12_381_g2_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_g2");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
     group.bench_function("serialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng),
+            || random_g2(rng).to_affine(),
             |pt| pt.serialize(),
             BatchSize::SmallInput,
         )
@@ -397,24 +483,44 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("deserialize_unchecked", |b| {
         b.iter_batched_ref(
-            || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes),
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_unchecked(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_cached", |b| {
+        b.iter_batched_ref(
+            || {
+                (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100))
+                    .to_affine()
+                    .serialize()
+            },
+            |bytes| G2Affine::deserialize_cached(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_cached_miss", |b| {
+        b.iter_batched_ref(
+            || random_g2(rng).to_affine().serialize(),
+            |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
     });
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
-            |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
+            || rng.r#gen::<[u8; 32]>(),
+            |bytes| G2Projective::hash("dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
     });
@@ -443,6 +549,14 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || (random_g2(rng), random_scalar(rng)),
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime", |b| {
+        b.iter_batched_ref(
+            || (random_g2(rng).to_affine(), random_scalar(rng)),
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -476,6 +590,23 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
                 )
             },
             |(pt, scalar)| pt.clone() * scalar.clone(),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("multiply vartime with precompute", |b| {
+        b.iter_batched_ref(
+            || {
+                (
+                    {
+                        let mut pt = random_g2(rng).to_affine();
+                        pt.precompute();
+                        pt
+                    },
+                    random_scalar(rng),
+                )
+            },
+            |(pt, scalar)| pt.mul_vartime(scalar),
             BatchSize::SmallInput,
         )
     });
@@ -528,7 +659,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
     });
 
     for n in [2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 256] {
-        group.bench_function(format!("multiexp_naive_{}", n), |b| {
+        group.bench_function(format!("multiexp_naive_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| g2_multiexp_naive(&points[..], &scalars[..]),
@@ -536,10 +667,17 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             )
         });
 
-        group.bench_function(format!("multiexp_muln_{}", n), |b| {
+        group.bench_function(format!("multiexp_muln_{n}"), |b| {
             b.iter_batched_ref(
                 || g2_muln_instance(n, rng),
                 |(points, scalars)| G2Projective::muln_vartime(&points[..], &scalars[..]),
+                BatchSize::SmallInput,
+            )
+        });
+        group.bench_function(format!("multiexp_muln_affine_{n}"), |b| {
+            b.iter_batched_ref(
+                || g2_muln_affine_instance(n, rng),
+                |(points, scalars)| G2Projective::muln_affine_vartime(&points[..], &scalars[..]),
                 BatchSize::SmallInput,
             )
         });
@@ -560,6 +698,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
 fn pairing_ops(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_gt");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -585,7 +724,7 @@ fn pairing_ops(c: &mut Criterion) {
 
     group.bench_function("multiply_u16", |b| {
         b.iter_batched_ref(
-            || rng.gen::<u16>(),
+            || rng.r#gen::<u16>(),
             |s| Gt::g_mul_u16(*s),
             BatchSize::SmallInput,
         )
@@ -632,7 +771,7 @@ fn pairing_ops(c: &mut Criterion) {
     });
 
     for n in [2, 3, 10, 20] {
-        group.bench_function(format!("{}-pairing", n), |b| {
+        group.bench_function(format!("{n}-pairing"), |b| {
             b.iter_batched_ref(
                 || n_pairing_instance(n, rng),
                 |terms| {
@@ -661,6 +800,7 @@ fn pairing_ops(c: &mut Criterion) {
 
 fn bls12_381_batch_sig_verification(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -753,6 +893,7 @@ fn bls12_381_batch_sig_verification(c: &mut Criterion) {
 
 fn bls12_381_batch_sig_verification_multithreaded(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification_multithreaded");
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -886,6 +1027,7 @@ macro_rules! crypto_bls12_381_mul2_precomputation_init {
             fn [< mul2_precomputation_ $group >](c: &mut Criterion) {
                 let mut group =
                     c.benchmark_group(format!("crypto_bls12_381_mul2_precomputation_{}", stringify!($group)));
+                group.warm_up_time(WARMUP_TIME);
                 let random = [< random_ $group >];
 
                 let rng = &mut reproducible_rng();
@@ -951,6 +1093,7 @@ criterion_group!(
     bls12_381_scalar_ops,
     bls12_381_g1_ops,
     bls12_381_g2_ops,
+    bls12_381_interpolation_ops,
     pairing_ops,
     bls12_381_batch_sig_verification,
     bls12_381_batch_sig_verification_multithreaded,

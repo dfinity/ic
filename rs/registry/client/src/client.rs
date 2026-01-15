@@ -3,15 +3,15 @@
 //! background when start_polling() is called.
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
 pub use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
+    POLLING_PERIOD, RegistryClient, RegistryClientVersionedResult, RegistryDataProvider,
+    RegistryRecord, ZERO_REGISTRY_VERSION, empty_zero_registry_record,
 };
 use ic_metrics::MetricsRegistry;
 pub use ic_types::{
+    RegistryVersion, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
     time::current_time,
-    RegistryVersion, Time,
 };
 use ic_utils_thread::JoinOnDrop;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -152,7 +152,7 @@ impl RegistryClientImpl {
     fn check_version(
         &self,
         version: RegistryVersion,
-    ) -> Result<RwLockReadGuard<CacheState>, RegistryClientError> {
+    ) -> Result<RwLockReadGuard<'_, CacheState>, RegistryClientError> {
         let cache_state = self.cache.read().unwrap();
         if version > cache_state.latest_version {
             return Err(RegistryClientError::VersionNotAvailable { version });
@@ -188,7 +188,7 @@ impl Drop for PollThread {
 
 #[derive(Clone)]
 struct CacheState {
-    records: Vec<RegistryTransportRecord>,
+    records: Vec<RegistryRecord>,
     timestamps: BTreeMap<RegistryVersion, Time>,
     latest_version: RegistryVersion,
 }
@@ -202,7 +202,7 @@ impl CacheState {
         }
     }
 
-    fn update(&mut self, records: Vec<RegistryTransportRecord>, new_version: RegistryVersion) {
+    fn update(&mut self, records: Vec<RegistryRecord>, new_version: RegistryVersion) {
         assert!(new_version > self.latest_version);
         self.timestamps.insert(new_version, current_time());
         for record in records {
@@ -374,10 +374,12 @@ mod tests {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry = RegistryClientImpl::new(data_provider, None);
 
-        assert!(registry
-            .get_test_proto("any_key", RegistryVersion::new(0))
-            .unwrap()
-            .is_none());
+        assert!(
+            registry
+                .get_test_proto("any_key", RegistryVersion::new(0))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -523,7 +525,7 @@ mod tests {
         let registry = RegistryClientImpl::new(data_provider.clone(), None);
 
         if let Err(e) = registry.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
+            panic!("fetch_and_start_polling failed: {e}");
         }
         std::thread::sleep(Duration::from_secs(1));
         std::mem::drop(registry);
@@ -628,7 +630,7 @@ mod tests {
         fn get_updates_since(
             &self,
             _version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
             self.poll_counter.fetch_add(1, Ordering::Relaxed);
             Ok(vec![])
         }
@@ -655,7 +657,7 @@ mod tests {
         fn get_updates_since(
             &self,
             version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
             let mut res = self.data_provider.get_updates_since(version)?;
             res.retain(|r| r.version <= version + self.changelog_size);
             Ok(res)

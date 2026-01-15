@@ -1,29 +1,39 @@
+use crate::benches_util::check_projected_instructions;
+use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
+use crate::pb::v1::{Motion, VotingPowerEconomics};
+use crate::test_utils::MockRandomness;
 use crate::{
-    governance::{Governance, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS},
+    governance::{
+        Governance, MAX_NUMBER_OF_NEURONS,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+    },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
-        neuron::Followees, proposal::Action, Ballot, BallotInfo, Governance as GovernanceProto,
-        KnownNeuron, Neuron as NeuronProto, ProposalData, Topic, Vote, VotingPowerEconomics,
+        Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
+        NnsFunction, Proposal, ProposalData, Topic, Vote, install_code::CanisterInstallMode,
+        proposal::Action,
     },
-    temporarily_disable_active_neurons_in_stable_memory,
-    temporarily_disable_stable_memory_following_index,
-    temporarily_enable_active_neurons_in_stable_memory,
-    temporarily_enable_stable_memory_following_index,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
+use ic_crypto_sha2::Sha256;
+use ic_ledger_core::Tokens;
+use ic_nervous_system_proto::pb::v1::Image;
 use ic_nns_common::{
     pb::v1::{NeuronId as NeuronIdProto, ProposalId},
     types::NeuronId,
 };
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance_api as api;
 use icp_ledger::Subaccount;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 enum SetUpStrategy {
     // Every neuron follows a single neuron.
@@ -55,6 +65,15 @@ fn set_up<R: Rng>(
         1,
         ProposalData {
             id: Some(ProposalId { id: 1 }),
+            proposal: Some(Proposal {
+                summary: "Summary".to_string(),
+                url: "".to_string(),
+                title: Some("Title".to_string()),
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Motion".to_string(),
+                })),
+                self_describing_action: None,
+            }),
             ..Default::default()
         },
     );
@@ -312,14 +331,12 @@ fn set_up_chain<R: Rng>(
 fn cast_vote_cascade_helper(strategy: SetUpStrategy, topic: Topic) -> BenchResult {
     let mut rng = ChaCha20Rng::seed_from_u64(0);
 
-    let governance_proto = GovernanceProto {
-        ..Default::default()
-    };
     let mut governance = Governance::new(
-        governance_proto,
-        Box::new(MockEnvironment::new(Default::default(), 0)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        Default::default(),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
     let neuron_id = set_up(strategy, &mut rng, &mut governance, topic);
@@ -349,9 +366,13 @@ fn make_neuron(
     let subaccount = Subaccount::try_from(account.as_slice()).unwrap();
 
     let now = 123_456_789;
+    let dissolve_delay_seconds =
+        VotingPowerEconomics::DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS;
+    let aging_since_timestamp_seconds = now - dissolve_delay_seconds;
+
     let dissolve_state_and_age = DissolveStateAndAge::NotDissolving {
-        dissolve_delay_seconds: MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-        aging_since_timestamp_seconds: now - MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        dissolve_delay_seconds,
+        aging_since_timestamp_seconds,
     };
 
     let hot_keys = (0..15).map(PrincipalId::new_user_test_id).collect();
@@ -390,24 +411,7 @@ fn make_neuron(
 }
 
 #[bench(raw)]
-fn cascading_vote_stable_neurons_with_heap_index() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
 fn cascading_vote_stable_everything() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
     cast_vote_cascade_helper(
         SetUpStrategy::Chain {
             num_neurons: 151,
@@ -418,38 +422,7 @@ fn cascading_vote_stable_everything() -> BenchResult {
 }
 
 #[bench(raw)]
-fn cascading_vote_all_heap() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
-    let _b = temporarily_disable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn cascading_vote_heap_neurons_stable_index() -> BenchResult {
-    let _a = temporarily_disable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
-    cast_vote_cascade_helper(
-        SetUpStrategy::Chain {
-            num_neurons: 151,
-            num_followees: 15,
-        },
-        Topic::NetworkEconomics,
-    )
-}
-
-#[bench(raw)]
-fn single_vote_all_stable() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
+fn single_vote_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::SingleVote { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -457,10 +430,7 @@ fn single_vote_all_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn centralized_following_all_stable() -> BenchResult {
-    let _a = temporarily_enable_active_neurons_in_stable_memory();
-    let _b = temporarily_enable_stable_memory_following_index();
-
+fn centralized_following_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::Centralized { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -470,45 +440,309 @@ fn centralized_following_all_stable() -> BenchResult {
 #[bench(raw)]
 fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     let now_seconds = 1732817584;
+    let num_neurons = 100;
 
-    let _f = temporarily_enable_active_neurons_in_stable_memory();
-    let neurons = (0..100)
-        .map(|id| {
-            (
+    let mut governance = Governance::new(
+        Default::default(),
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    for id in 1..=num_neurons {
+        governance
+            .add_neuron(
                 id,
                 make_neuron(
                     id,
                     PrincipalId::new_user_test_id(id),
                     1_000_000_000,
                     hashmap! {}, // get the default followees
-                )
-                .into_proto(&VotingPowerEconomics::DEFAULT, now_seconds),
+                ),
+            )
+            .unwrap();
+    }
+
+    let bench_result = bench_fn(|| {
+        governance
+            .compute_ballots_for_standard_proposal(123_456_789)
+            .expect("Failed!");
+    });
+
+    check_projected_instructions(
+        bench_result,
+        num_neurons,
+        MAX_NUMBER_OF_NEURONS as u64,
+        25_000_000_000,
+    )
+}
+
+#[bench(raw)]
+fn distribute_rewards_with_stable_neurons() -> BenchResult {
+    let now_seconds = 1732817584;
+    let neurons = (1..=100)
+        .map(|id| {
+            make_neuron(
+                id,
+                PrincipalId::new_user_test_id(id),
+                1_000_000_000,
+                hashmap! {}, // get the default followees
             )
         })
-        .collect::<BTreeMap<u64, NeuronProto>>();
+        .collect::<Vec<_>>();
 
-    let governance_proto = GovernanceProto {
-        neurons,
-        ..GovernanceProto::default()
+    let ballots = neurons
+        .iter()
+        .map(|n| {
+            (
+                n.id().id,
+                api::Ballot {
+                    vote: Vote::Yes.into(),
+                    voting_power: n.cached_neuron_stake_e8s,
+                },
+            )
+        })
+        .collect();
+    let governance_api = api::Governance {
+        genesis_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS * 101,
+        latest_reward_event: Some(api::RewardEvent {
+            day_after_genesis: 100,
+            actual_timestamp_seconds: now_seconds - REWARD_DISTRIBUTION_PERIOD_SECONDS - 1,
+            settled_proposals: vec![],
+            distributed_e8s_equivalent: 0,
+            total_available_e8s_equivalent: 0,
+            latest_round_available_e8s_equivalent: None,
+            rounds_since_last_distribution: Some(0),
+        }),
+        proposals: btreemap! {
+            1 => api::ProposalData {
+                id: Some(ProposalId { id: 1 }),
+                wait_for_quiet_state: Some(api::WaitForQuietState {current_deadline_timestamp_seconds: now_seconds - 200}),
+                decided_timestamp_seconds: now_seconds - 100,
+                executed_timestamp_seconds: now_seconds - 100,
+                ballots,
+                proposal: Some(api::Proposal {
+                    summary: "Summary".to_string(),
+                    url: "".to_string(),
+                    title: Some("Title".to_string()),
+                    action: Some(api::proposal::Action::Motion(api::Motion {
+                        motion_text: "Motion".to_string(),
+                    })),
+                    self_describing_action: None,
+                }),
+                ..Default::default()
+            }
+        },
+        ..Default::default()
     };
 
     let mut governance = Governance::new(
-        governance_proto,
-        Box::new(MockEnvironment::new(vec![], now_seconds)),
-        Box::new(StubIcpLedger {}),
-        Box::new(StubCMC {}),
+        governance_api,
+        Arc::new(MockEnvironment::new(vec![], now_seconds)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
     );
 
+    for neuron in neurons {
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
+    }
+
     bench_fn(|| {
-        governance
-            .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
-                }),
-                &NeuronIdProto { id: 1 },
-                123_456_789,
-            )
-            .expect("Failed!");
+        governance.distribute_voting_rewards_to_neurons(Tokens::new(10_000_000, 0).unwrap())
     })
+}
+
+#[bench(raw)]
+fn list_neurons() -> BenchResult {
+    let mut governance = Governance::new(
+        Default::default(),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    for id in 1..=100 {
+        let mut neuron = make_neuron(
+            id,
+            PrincipalId::new_user_test_id(id),
+            1_000_000_000,
+            hashmap! {}, // get the default followees
+        );
+        neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
+        governance.add_neuron(id, neuron).unwrap();
+    }
+
+    let request = api::ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: true,
+        include_empty_neurons_readable_by_caller: Some(false),
+        include_public_neurons_in_full_neurons: None,
+        page_number: None,
+        page_size: None,
+        neuron_subaccounts: None,
+    };
+
+    bench_fn(|| {
+        governance.list_neurons(&request, PrincipalId::new_user_test_id(1));
+    })
+}
+
+#[bench(raw)]
+fn list_neurons_by_subaccount() -> BenchResult {
+    let num_neurons = 100;
+    let neurons = (1..=num_neurons)
+        .map(|id| {
+            let mut neuron = make_neuron(
+                id,
+                PrincipalId::new_user_test_id(id),
+                1_000_000_000,
+                hashmap! {}, // get the default followees
+            );
+            neuron.hot_keys = vec![PrincipalId::new_user_test_id(1)];
+            neuron
+        })
+        .collect::<Vec<_>>();
+
+    let subaccounts = neurons
+        .iter()
+        .map(|neuron| api::list_neurons::NeuronSubaccount {
+            subaccount: neuron.subaccount().to_vec(),
+        })
+        .collect();
+
+    let mut governance = Governance::new(
+        Default::default(),
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    for neuron in neurons {
+        governance.add_neuron(neuron.id().id, neuron).unwrap();
+    }
+
+    let request = api::ListNeurons {
+        neuron_ids: vec![],
+        include_neurons_readable_by_caller: false,
+        include_empty_neurons_readable_by_caller: Some(false),
+        include_public_neurons_in_full_neurons: None,
+        page_number: None,
+        page_size: None,
+        neuron_subaccounts: Some(subaccounts),
+    };
+
+    bench_fn(|| {
+        governance.list_neurons(&request, PrincipalId::new_user_test_id(1));
+    })
+}
+
+fn create_service_nervous_system_action_with_large_payload() -> CreateServiceNervousSystem {
+    let mut action = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
+
+    let large_image = Some(Image {
+        base64_encoding: Some(format!("data:image/png;base64,{}", "A".repeat(1 << 18))), // 256 KiB
+    });
+
+    action.logo = large_image.clone();
+    action.ledger_parameters.as_mut().unwrap().token_logo = large_image;
+
+    action
+}
+
+fn list_proposals_benchmark() -> BenchResult {
+    let mut governance = Governance::new(
+        api::Governance {
+            economics: Some(api::NetworkEconomics::with_default_values()),
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(Default::default(), 0)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    for id in 1..=100 {
+        governance
+            .add_neuron(
+                id,
+                make_neuron(
+                    id,
+                    PrincipalId::new_user_test_id(id),
+                    1_000_000_000,
+                    hashmap! {}, // get the default followees
+                ),
+            )
+            .unwrap();
+    }
+
+    let request = api::ListProposalInfoRequest {
+        limit: 100,
+        omit_large_fields: Some(true),
+        ..Default::default()
+    };
+
+    let proposal_actions = vec![
+        Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::HardResetNnsRootToVersion as i32,
+            payload: vec![0u8; 1 << 20], // 1 MiB
+        }),
+        Action::InstallCode(InstallCode {
+            canister_id: Some(GOVERNANCE_CANISTER_ID.get()),
+            wasm_module: Some(vec![0u8; 1 << 20]), // 1 MiB
+            arg: Some(vec![0u8; 1 << 20]),         // 1 MiB
+            install_mode: Some(CanisterInstallMode::Install as i32),
+            wasm_module_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            arg_hash: Some(Sha256::hash(&vec![0u8; 1 << 20]).to_vec()),
+            skip_stopping_before_installing: None,
+        }),
+        Action::CreateServiceNervousSystem(
+            create_service_nervous_system_action_with_large_payload(),
+        ),
+    ];
+
+    for proposal_action in proposal_actions {
+        governance
+            .make_proposal(
+                &NeuronIdProto { id: 1 },
+                &PrincipalId::new_user_test_id(1),
+                &Proposal {
+                    summary: "Summary".to_string(),
+                    url: "".to_string(),
+                    title: Some("Title".to_string()),
+                    action: Some(proposal_action),
+                    self_describing_action: None,
+                },
+            )
+            .now_or_never()
+            .expect("Failed to await for making proposal")
+            .expect("Failed to make proposal");
+    }
+
+    bench_fn(|| {
+        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), request);
+    })
+}
+
+#[bench(raw)]
+fn list_proposals() -> BenchResult {
+    list_proposals_benchmark()
+}
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[unsafe(export_name = "canister_update update_empty")]
+fn update_empty() {
+    ic_cdk::api::msg_reply([]);
+}
+
+/// Used for benchmarking compilation/instrumentation/execution changes in the
+/// embedders crate.
+#[unsafe(export_name = "canister_query go")]
+fn go() {
+    let _ = list_neurons();
+    ic_cdk::api::msg_reply([]);
 }

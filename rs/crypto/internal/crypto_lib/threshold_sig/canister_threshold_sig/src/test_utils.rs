@@ -72,7 +72,7 @@ pub enum ComplaintCorrupter {
 }
 
 impl ComplaintCorrupter {
-    /// Corrupts a complaint using the function that this sturct was initialized with.
+    /// Corrupts a complaint using the function that this struct was initialized with.
     pub fn clone_and_corrupt_complaint(
         &self,
         complaint: &IDkgComplaintInternal,

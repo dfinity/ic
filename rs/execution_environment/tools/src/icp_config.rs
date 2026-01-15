@@ -15,12 +15,12 @@ fn main() -> Result<()> {
     let json = serde_json::to_string_pretty(&icp_config_as_json(replica_version))?;
     match output {
         None => {
-            println!("{}", json);
+            println!("{json}");
         }
         Some(filename) => {
             let path = std::fs::canonicalize(filename)?;
             std::fs::write(path.clone(), json)?;
-            println!("Wrote ICP config to {:?}", path);
+            println!("Wrote ICP config to {path:?}");
         }
     }
     Ok(())
@@ -84,8 +84,8 @@ fn json_config(
     embedder: &ic_config::embedders::Config,
     execution: &ic_config::execution_environment::Config,
 ) -> serde_json::Value {
+    use ic_embedders::wasmtime_embedder::system_api::MULTIPLIER_MAX_SIZE_LOCAL_SUBNET;
     use ic_replicated_state::canister_state::DEFAULT_QUEUE_CAPACITY;
-    use ic_system_api::MULTIPLIER_MAX_SIZE_LOCAL_SUBNET;
     use ic_types::messages::MAX_XNET_PAYLOAD_IN_BYTES;
     json!({
         "fees": serde_json::to_value(*cycles_account_manager).unwrap(),

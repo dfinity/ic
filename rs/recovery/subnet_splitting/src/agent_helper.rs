@@ -1,12 +1,12 @@
-use ic_agent::{export::Principal, hash_tree::Label, lookup_value, Agent, Certificate};
+use ic_agent::{Agent, Certificate, export::Principal, hash_tree::Label, lookup_value};
 use ic_base_types::SubnetId;
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key_from_pem_file, public_key_to_der};
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{read_bytes, write_bytes},
     util::{block_on, write_public_key_to_file},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use url::Url;
 
 use std::{fmt::Display, path::Path};
@@ -100,7 +100,7 @@ impl AgentHelper {
                 nns_public_key_path.display()
             );
 
-            let nns_public_key = parse_threshold_sig_key(nns_public_key_path)
+            let nns_public_key = parse_threshold_sig_key_from_pem_file(nns_public_key_path)
                 .map_err(|err| agent_error("Failed to parse NNS public key", err))?;
             let der_bytes = public_key_to_der(&nns_public_key.into_bytes())
                 .map_err(|err| agent_error("Failed to convert the NNS public key to DER", err))?;
@@ -151,7 +151,7 @@ impl AgentHelper {
 }
 
 fn agent_error(message: impl Display, error: impl Display) -> RecoveryError {
-    RecoveryError::AgentError(format!("{}: {}", message, error))
+    RecoveryError::AgentError(format!("{message}: {error}"))
 }
 
 fn create_path(subnet_id: SubnetId, label: &[u8]) -> Vec<Label<StorageType>> {

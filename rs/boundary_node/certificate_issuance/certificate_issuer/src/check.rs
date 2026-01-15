@@ -4,7 +4,7 @@ use candid::Principal;
 use flate2::bufread::GzDecoder;
 use ic_agent::Agent;
 use ic_http_certification::{HttpRequest, HttpResponse};
-use ic_response_verification::{verify_request_response_pair, MIN_VERIFICATION_VERSION};
+use ic_response_verification::{MIN_VERIFICATION_VERSION, verify_request_response_pair};
 use ic_utils::{
     call::SyncCall,
     interfaces::http_request::{HeaderField, HttpRequestCanister},
@@ -77,7 +77,7 @@ impl Checker {
 impl Check for Checker {
     async fn check(&self, name: &str) -> Result<Principal, CheckError> {
         // Phase 1 - Ensure NO existing TXT challenge record exists
-        let txt_src = format!("_acme-challenge.{}.", name);
+        let txt_src = format!("_acme-challenge.{name}.");
 
         match self.resolver.lookup(&txt_src, RecordType::TXT).await {
             Ok(lookup) => {
@@ -107,7 +107,7 @@ impl Check for Checker {
         }?;
 
         // Phase 2 - Ensure a challenge delegation CNAME record exists
-        let cname_src = format!("_acme-challenge.{}.", name);
+        let cname_src = format!("_acme-challenge.{name}.");
         let cname_dst = format!("_acme-challenge.{}.{}.", name, self.delegation_domain);
 
         self.resolver
@@ -132,7 +132,7 @@ impl Check for Checker {
             })?;
 
         // Phase 3 - Ensure a TXT record for a canister mapping exists
-        let txt_src = format!("_canister-id.{}.", name);
+        let txt_src = format!("_canister-id.{name}.");
 
         let canister_id = self
             .resolver
@@ -171,15 +171,10 @@ impl Check for Checker {
             })?;
 
         // Phase 4 - Ensure canister mentions known domain.
-        let request = HttpRequest {
-            method: String::from("GET"),
-            url: String::from("/.well-known/ic-domains"),
-            headers: vec![],
-            body: vec![],
-        };
+        let request = HttpRequest::get("/.well-known/ic-domains").build();
 
         let (response,) = HttpRequestCanister::create(&self.agent, canister_id)
-            .http_request(&request.method, &request.url, vec![], vec![], None)
+            .http_request(&request.method(), &request.url(), vec![], vec![], None)
             .call()
             .await
             .map_err(|_| CheckError::KnownDomainsUnavailable {
@@ -197,16 +192,18 @@ impl Check for Checker {
         }?;
 
         // Check response certification
-        let response_for_verification = HttpResponse {
-            status_code: response.status_code,
-            headers: response
+        let response_for_verification = HttpResponse::ok(
+            // body
+            response.body.clone(),
+            // headers
+            response
                 .headers
                 .iter()
                 .map(|field| (field.0.to_string(), field.1.to_string()))
                 .collect::<Vec<(String, String)>>(),
-            body: response.body.clone(),
-            upgrade: response.upgrade,
-        };
+        )
+        .with_upgrade(response.upgrade.unwrap_or_default())
+        .build();
         let max_cert_time_offset_ns = 300_000_000_000;
         let current_time_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)

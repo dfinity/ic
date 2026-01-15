@@ -34,11 +34,11 @@ impl RoseHashTree {
 impl fmt::Debug for RoseHashTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RoseHashTree::Leaf(digest) => write!(f, "{}", digest),
+            RoseHashTree::Leaf(digest) => write!(f, "{digest}"),
             RoseHashTree::Fork { digest, children } => {
-                let mut s = f.debug_struct(&format!("fork@{}", digest));
+                let mut s = f.debug_struct(&format!("fork@{digest}"));
                 for (label, child) in children {
-                    s.field(&format!("{}", label), child);
+                    s.field(&format!("{label}"), child);
                 }
                 s.finish()
             }
@@ -103,7 +103,7 @@ pub type Changes = BTreeMap<Path, Change>;
 impl std::fmt::Display for Change {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InsertLeaf(h) => write!(f, "→ {}", h),
+            Self::InsertLeaf(h) => write!(f, "→ {h}"),
             Self::InsertEmptyFork => write!(f, "→ ∅"),
             Self::DeleteSubtree => write!(f, "✗"),
         }
@@ -116,7 +116,7 @@ struct PathDisplay<'a>(&'a Path);
 impl fmt::Display for PathDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for label in self.0.iter() {
-            write!(f, "/{}", label)?;
+            write!(f, "/{label}")?;
         }
         Ok(())
     }
@@ -285,10 +285,7 @@ mod tests {
     fn rehash(t: &mut RoseHashTree) {
         match t {
             RoseHashTree::Leaf(_) => (),
-            RoseHashTree::Fork {
-                children,
-                ref mut digest,
-            } => {
+            RoseHashTree::Fork { children, digest } => {
                 let mut hasher = Sha256::new();
                 for (label, child) in children.iter_mut() {
                     rehash(child);
@@ -308,9 +305,7 @@ mod tests {
     fn num_leaves(t: &RoseHashTree) -> usize {
         match t {
             RoseHashTree::Leaf(_) => 1,
-            RoseHashTree::Fork { children, .. } => {
-                children.iter().map(|(_, t)| num_leaves(t)).sum()
-            }
+            RoseHashTree::Fork { children, .. } => children.values().map(num_leaves).sum(),
         }
     }
 
@@ -318,7 +313,7 @@ mod tests {
         match t {
             RoseHashTree::Leaf(_) => 0,
             RoseHashTree::Fork { children, .. } => {
-                children.len() + children.iter().map(|(_, t)| num_edges(t)).sum::<usize>()
+                children.len() + children.values().map(num_edges).sum::<usize>()
             }
         }
     }
@@ -333,7 +328,7 @@ mod tests {
             path: &mut Path,
         ) -> Result<(Path, Digest), usize> {
             match t {
-                RoseHashTree::Leaf(ref mut hash) if idx == 0 => {
+                RoseHashTree::Leaf(hash) if idx == 0 => {
                     let old_hash = std::mem::replace(hash, new_hash);
                     Ok((path.clone(), old_hash))
                 }
@@ -522,30 +517,50 @@ mod tests {
             .boxed()
     }
 
-    proptest! {
-        #[test]
-        fn tree_diff_against_self_is_empty(tree in arb_tree(4, 3)) {
-            prop_assert!(diff_rose_trees(&tree, &tree).is_empty());
-        }
+    #[test_strategy::proptest]
+    fn tree_diff_against_self_is_empty(
+        #[strategy(arb_tree(
+            4, // max_height
+            3, // max_width
+        ))]
+        tree: RoseHashTree,
+    ) {
+        prop_assert!(diff_rose_trees(&tree, &tree).is_empty());
+    }
 
-        #[test]
-        fn tree_diff_detects_changing_single_hash((tree, idx) in arb_tree_and_leaf_index(4, 3),
-                                                  new_hash in any::<[u8; 32]>().prop_map(Digest)) {
-            let size = num_leaves(&tree);
-            prop_assume!(idx < size);
-            let mut tree_2 = tree.clone();
-            let (path, _old_hash) = modify_leaf_at_index(&mut tree_2, idx, new_hash.clone()).unwrap();
-            let expected_diff = changes(&[(path, Change::InsertLeaf(new_hash))][..]);
-            assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
-        }
+    #[test_strategy::proptest]
+    fn tree_diff_detects_changing_single_hash(
+        #[strategy(arb_tree_and_leaf_index(
+            4, // max_height
+            3, // max_width
+        ))]
+        test_tree: (RoseHashTree, usize),
+        #[strategy(any::<[u8; 32]>())] new_hash: [u8; 32],
+    ) {
+        let (tree, idx) = test_tree;
+        let new_hash = Digest(new_hash);
 
-        #[test]
-        fn tree_diff_detects_removing_a_node((tree, idx) in arb_tree_and_edge_index(4, 3)) {
-            let mut tree_2 = tree.clone();
-            let (path, _node) = remove_edge_at_index(&mut tree_2, idx).unwrap();
-            let expected_diff = changes(&[(path, Change::DeleteSubtree)][..]);
-            assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
-        }
+        let size = num_leaves(&tree);
+        prop_assume!(idx < size);
+        let mut tree_2 = tree.clone();
+        let (path, _old_hash) = modify_leaf_at_index(&mut tree_2, idx, new_hash.clone()).unwrap();
+        let expected_diff = changes(&[(path, Change::InsertLeaf(new_hash))][..]);
+        assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
+    }
+
+    #[test_strategy::proptest]
+    fn tree_diff_detects_removing_a_node(
+        #[strategy(arb_tree_and_edge_index(
+            4, // max_height
+            3, // max_width
+        ))]
+        test_tree: (RoseHashTree, usize),
+    ) {
+        let (tree, idx) = test_tree;
+        let mut tree_2 = tree.clone();
+        let (path, _node) = remove_edge_at_index(&mut tree_2, idx).unwrap();
+        let expected_diff = changes(&[(path, Change::DeleteSubtree)][..]);
+        assert_eq!(diff_rose_trees(&tree, &tree_2), expected_diff);
     }
 
     #[test]

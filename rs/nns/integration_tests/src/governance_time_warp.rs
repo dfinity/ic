@@ -7,18 +7,17 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance_api::{
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron::{Disburse, NeuronIdOrSubaccount},
-        manage_neuron_response,
-        neuron::DissolveState,
-        ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
-    },
+    GovernanceError, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
+    NeuronInfo,
+    governance_error::ErrorType,
+    manage_neuron::{Disburse, NeuronIdOrSubaccount},
+    manage_neuron_response,
+    neuron::DissolveState,
     test_api::TimeWarp,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::AccountIdentifier;
 
@@ -64,6 +63,8 @@ fn test_time_warp() {
         let nns_init_payload = nns_builder.build();
         // Very slow...
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
+        let nns_up_timestamp_s = get_timestamp_s();
+        println!("setup time (s): {}", nns_up_timestamp_s - start_timestamp_s);
 
         // Make sure that neuron cannot be disbursed yet.
         let disburse_result: ManageNeuronResponse = nns_canisters
@@ -87,19 +88,19 @@ fn test_time_warp() {
         let command = disburse_result.command.unwrap();
         let governance_error = match command {
             manage_neuron_response::Command::Error(error) => error,
-            _ => panic!("\n\n{:?}\n\n", command),
+            _ => panic!("\n\n{command:?}\n\n"),
         };
         assert_eq!(
-            governance_error.error_type(),
-            ErrorType::PreconditionFailed,
-            "{:?}",
-            governance_error
+            governance_error.error_type,
+            ErrorType::PreconditionFailed as i32,
+            "{governance_error:?}"
         );
 
         // Fast forward in time to right before the neuron-held funds becomes eligible for
         // disbursal.
         let duration_since_start_s = get_timestamp_s() - start_timestamp_s;
-        let mut delta_s = (TWELVE_MONTHS_SECONDS - duration_since_start_s - 100) as i64;
+        println!("duration_since_start_s = {duration_since_start_s}");
+        let delta_s = (TWELVE_MONTHS_SECONDS - duration_since_start_s - 100) as i64;
         () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
@@ -126,18 +127,24 @@ fn test_time_warp() {
         let command = disburse_result.command.unwrap();
         let governance_error = match command {
             manage_neuron_response::Command::Error(error) => error,
-            _ => panic!("\n\n{:?}\n\n", command),
+            _ => panic!("\n\n{command:?}\n\n"),
         };
         assert_eq!(
-            governance_error.error_type(),
-            ErrorType::PreconditionFailed,
-            "{:?}",
-            governance_error
+            governance_error.error_type,
+            ErrorType::PreconditionFailed as i32,
+            "{governance_error:?}"
         );
+        let error_message = governance_error.error_message.to_lowercase();
+        {
+            let key_word = "dissolve";
+            assert!(
+                error_message.contains(key_word),
+                "{key_word:?} not in {error_message:?}"
+            );
+        }
 
-        // Advance time slightly (200 s) such that that the neuron should be fully
-        // dissolved.
-        delta_s += 200;
+        // Advance time slightly such that the neuron would be considered dissolved.
+        let delta_s = (TWELVE_MONTHS_SECONDS + 1000) as i64;
         () = nns_canisters
             .governance
             .update_("set_time_warp", candid_one, TimeWarp { delta_s })
@@ -163,9 +170,24 @@ fn test_time_warp() {
             .await?;
         let command = disburse_result.command.unwrap();
         match command {
-            manage_neuron_response::Command::Disburse(disburse) => disburse,
-            _ => panic!("\n\n{:?}\n\n", command),
-        };
+            manage_neuron_response::Command::Disburse(_) => (),
+
+            _ => {
+                let neuron_info: Result<NeuronInfo, GovernanceError> = nns_canisters
+                    .governance
+                    .update_from_sender(
+                        "get_neuron_info",
+                        candid_one,
+                        neuron_id_4.id,
+                        &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+                    )
+                    .await
+                    .unwrap();
+                let neuron_info = neuron_info.unwrap();
+
+                panic!("\n\n{command:?}\n\n{neuron_info:#?}");
+            }
+        }
 
         Ok(())
     });

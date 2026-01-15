@@ -19,14 +19,13 @@ use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
         },
     },
     systest,
-    util::{assert_create_agent, block_on, MessageCanister},
+    util::{MessageCanister, assert_create_agent, block_on},
 };
 use ic_types::Height;
 use slog::info;
@@ -53,9 +52,6 @@ pub fn setup(env: TestEnv) {
         memory_kibibytes: Some(AmountOfMemoryKiB::new(4195000)), // 4GiB
         boot_image_minimal_size_gibibytes: None,
     };
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -72,7 +68,6 @@ pub fn setup(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv) {
@@ -133,7 +128,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Step 5: Kill {} nodes", FAULTY);
     let nodes: Vec<_> = subnet.nodes().collect();
     for node in nodes.iter().take(FAULTY) {
-        node.vm().kill();
+        block_on(async { node.vm().await.kill().await });
     }
     for node in nodes.iter().take(FAULTY) {
         node.await_status_is_unavailable()
@@ -155,7 +150,7 @@ pub fn test(env: TestEnv) {
         "Step 7: Kill an additonal node causing consensus to stop due to {} (f+1) faulty nodes",
         FAULTY + 1
     );
-    nodes[FAULTY].vm().kill();
+    block_on(async { nodes[FAULTY].vm().await.kill().await });
     nodes[FAULTY]
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -168,15 +163,23 @@ pub fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     info!(log, "Step 8: Restart one node again",);
-    nodes[FAULTY].vm().start();
+    block_on(async { nodes[FAULTY].vm().await.start().await });
     for n in nodes.iter().skip(FAULTY) {
         n.await_status_is_healthy().unwrap();
     }
+    ic_consensus_system_test_utils::assert_node_is_making_progress(
+        &nodes[FAULTY],
+        &log,
+        Height::new(1),
+    );
+
+    info!(log, "Storing message '{}' ...", UPDATE_MSG_5);
     block_on(message_canister.try_store_msg(UPDATE_MSG_5)).expect("Update canister call failed.");
+    info!(log, "Reading message '{}' ...", UPDATE_MSG_5);
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_5.to_string()))

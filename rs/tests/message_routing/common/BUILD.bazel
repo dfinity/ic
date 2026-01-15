@@ -13,7 +13,7 @@ rust_library(
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:candid",
         "@crate_index//:futures",
-        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:slog",
     ],
 )

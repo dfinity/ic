@@ -4,17 +4,17 @@ use crate::common::MAX_ALGORITHM_ID_INDEX;
 #[test]
 fn should_be_maximal_algorithm_index_id_to_ensure_all_variants_covered_by_strategy() {
     assert_eq!(
-        AlgorithmId::ThresholdEd25519,
+        AlgorithmId::VetKD,
         AlgorithmId::from(MAX_ALGORITHM_ID_INDEX)
     );
     assert_eq!(
-        AlgorithmId::Placeholder,
+        AlgorithmId::Unspecified,
         AlgorithmId::from(MAX_ALGORITHM_ID_INDEX + 1)
     );
 }
 
 macro_rules! should_have_a_strategy_for_each_variant {
-    ($enum_name:ty, $base_case:expr, $($variant:ident $($pattern:tt)?),+ $(,)?) => {
+    ($enum_name:ty, $base_case:expr_2021, $($variant:ident $($pattern:tt)?),+ $(,)?) => {
         paste::paste! {
             #[test]
             fn [<should_have_a_strategy_for_each_variant_of_ $enum_name:snake >]() {
@@ -34,14 +34,12 @@ macro_rules! should_have_a_strategy_for_each_variant {
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 should_have_a_strategy_for_each_variant!(
     CspBasicSignatureError,
-    CspBasicSignatureError::TransientInternalError {
-        internal_error: "dummy error to match upon".to_string(),
-    },
-    SecretKeyNotFound { .. },
-    UnsupportedAlgorithm { .. },
+    CspBasicSignatureError::MalformedPublicKey("dummy error to match upon".to_string()),
+    MalformedPublicKey(_),
+    SecretKeyNotFound(_),
     WrongSecretKeyType { .. },
-    MalformedSecretKey { .. },
-    TransientInternalError { .. }
+    TransientInternalError { .. },
+    PublicKeyNotFound
 );
 
 use ic_crypto_internal_csp::types::CspSignature;
@@ -160,6 +158,7 @@ should_have_a_strategy_for_each_variant!(
         error: "dummy error to match upon".to_string(),
     },
     VersionNotAvailable { .. },
+    NoVersionsBefore { .. },
     DataProviderQueryFailed { .. },
     PollLockFailed { .. },
     PollingLatestVersionFailed { .. },
@@ -260,6 +259,5 @@ should_have_a_strategy_for_each_variant!(
     SecretKeyNotFound { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    SigningFailed { .. },
     TransientInternalError { .. },
 );

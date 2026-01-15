@@ -1,17 +1,17 @@
 //! A custom, configurable TLS client that does not rely on the crypto
 //! implementation. It is purely for testing the server.
-use crate::x509_certificates::CertWithPrivateKey;
 use crate::CipherSuite;
 use crate::CipherSuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
 use crate::TlsVersion;
+use crate::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::NodeId;
 use rand::{CryptoRng, Rng};
 use rustls::{
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, DigitallySignedStruct, SignatureScheme,
 };
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -186,16 +186,12 @@ impl CustomClient {
             let error = result.expect_err("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
-                    "expected the client error to contain \"{}\" but got error: {:?}",
-                    expected_error, error
+                    "expected the client error to contain \"{expected_error}\" but got error: {error:?}"
                 )
             }
         } else {
             match result {
-                Err(error) => panic!(
-                    "expected the client result to be ok but got error: {}",
-                    error
-                ),
+                Err(error) => panic!("expected the client result to be ok but got error: {error}"),
                 Ok(_tls_stream) => (),
             }
         }

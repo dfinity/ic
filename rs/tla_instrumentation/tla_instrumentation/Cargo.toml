@@ -12,8 +12,10 @@ documentation.workspace = true
 candid = { workspace = true }
 sha2 = { workspace = true }
 uuid = { workspace = true }
+serde = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 tokio-test = { workspace = true }
 local_key = { path = "../local_key" }
 tla_instrumentation_proc_macros = { path = "../tla_instrumentation_proc_macros" }

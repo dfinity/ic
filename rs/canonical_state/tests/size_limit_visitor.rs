@@ -1,10 +1,11 @@
 use ic_canonical_state::{
+    Control, LabelLike, MAX_SUPPORTED_CERTIFICATION_VERSION, Visitor,
     size_limit_visitor::{Matcher::*, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, Control, LabelLike, Visitor, MAX_SUPPORTED_CERTIFICATION_VERSION,
+    traverse,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, testing::ReplicatedStateTesting};
 use ic_test_utilities_state::arb_stream;
 use ic_test_utilities_types::ids::subnet_test_id;
 use proptest::prelude::*;
@@ -68,46 +69,53 @@ prop_compose! {
     }
 }
 
-proptest! {
-    #[test]
-    fn size_limit_proptest(fixture in arb_fixture(10)) {
-        let Fixture{ state, end, slice_begin, size_limit, .. } = fixture;
+#[test_strategy::proptest]
+fn size_limit_proptest(#[strategy(arb_fixture(10))] fixture: Fixture) {
+    let Fixture {
+        state,
+        end,
+        slice_begin,
+        size_limit,
+        ..
+    } = fixture;
 
-        // Produce a size-limited slice starting from `slice_begin`.
-        let pattern = vec![
-            Label(b"streams".to_vec()),
-            Any,
-            Label(b"messages".to_vec()),
-            Any,
-        ];
-        let subtree_pattern = make_slice_pattern(slice_begin, end);
-        let visitor = SizeLimitVisitor::new(
-            pattern,
-            size_limit,
-            SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
+    // Produce a size-limited slice starting from `slice_begin`.
+    let pattern = vec![
+        Label(b"streams".to_vec()),
+        Any,
+        Label(b"messages".to_vec()),
+        Any,
+    ];
+    let subtree_pattern = make_slice_pattern(slice_begin, end);
+    let visitor = SizeLimitVisitor::new(
+        pattern,
+        size_limit,
+        SubtreeVisitor::new(&subtree_pattern, MessageSpyVisitor::default()),
+    );
+    let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
+
+    if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
+        // Non-empty slice.
+        assert_eq!(slice_begin, actual_begin);
+        assert!(actual_end <= end);
+
+        // Size is below the limit or the slice consists of a single message.
+        assert!(actual_size <= size_limit || actual_end - actual_begin == 1);
+        // And must match the computed slice size.
+        assert_eq!(
+            compute_message_sizes(&state, actual_begin, actual_end),
+            actual_size
         );
-        let (actual_size, actual_begin, actual_end) = traverse(&state, visitor);
 
-        if let (Some(actual_begin), Some(actual_end)) = (actual_begin, actual_end) {
-            // Non-empty slice.
-            assert_eq!(slice_begin, actual_begin);
-            assert!(actual_end <= end);
-
-            // Size is below the limit or the slice consists of a single message.
-            assert!(actual_size <= size_limit || actual_end - actual_begin == 1);
-            // And must match the computed slice size.
-            assert_eq!(compute_message_sizes(&state, actual_begin, actual_end), actual_size);
-
-            if actual_end < end {
-                // Including one more message should exceed `size_limit`.
-                assert!(compute_message_sizes(&state, actual_begin, actual_end + 1) > size_limit);
-            }
-        } else {
-            // Empty slice.
-            assert_eq!(0, actual_size);
-            // May only happen if `slice_begin == stream.messages.end`.
-            assert_eq!(slice_begin, end);
+        if actual_end < end {
+            // Including one more message should exceed `size_limit`.
+            assert!(compute_message_sizes(&state, actual_begin, actual_end + 1) > size_limit);
         }
+    } else {
+        // Empty slice.
+        assert_eq!(0, actual_size);
+        // May only happen if `slice_begin == stream.messages.end`.
+        assert_eq!(slice_begin, end);
     }
 }
 
@@ -122,13 +130,10 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
     // Sanity check MessageSpyVisitor.
     if let (Some(tbegin), Some(tend)) = (tbegin, tend) {
         assert_eq!((begin, end), (tbegin, tend));
-        // Messages should be at least 35 bytes.
+        // Messages should be at least 25 bytes.
         assert!(
-            size as u64 > (end - begin) * 35,
-            "size {}, begin {}, end {}",
-            size,
-            begin,
-            end
+            size as u64 > (end - begin) * 25,
+            "size {size}, begin {begin}, end {end}"
         );
     } else {
         assert_eq!(begin, end);

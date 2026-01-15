@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::{error, ReplicaLogger};
-use ic_replicated_state::{canister_state::NextExecution, CanisterState};
+use ic_logger::{ReplicaLogger, error};
+use ic_replicated_state::{CanisterState, canister_state::NextExecution};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
 use crate::{
@@ -410,11 +410,13 @@ impl RoundSchedule {
         // Reset the accumulated priorities periodically.
         // We want to reset the scheduler regularly to safely support changes in the set
         // of canisters and their compute allocations.
-        let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
+        let is_reset_round = current_round
+            .get()
+            .is_multiple_of(accumulated_priority_reset_interval.get());
 
         // Collect the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
-        let mut accumulated_priority_deviation = 0;
+        let mut accumulated_priority_deviation = 0.0;
         for (&canister_id, canister) in canister_states.iter_mut() {
             if is_reset_round {
                 // By default, each canister accumulated priority is set to its compute allocation.
@@ -440,7 +442,7 @@ impl RoundSchedule {
             total_compute_allocation_percent += compute_allocation.as_percent() as i64;
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
-                accumulated_priority.get() * accumulated_priority.get();
+                accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
             if !canister.has_input() {
                 canister
                     .system_state
@@ -465,7 +467,7 @@ impl RoundSchedule {
             .set(accumulated_priority_invariant.get());
         metrics
             .scheduler_accumulated_priority_deviation
-            .set((accumulated_priority_deviation as f64 / number_of_canisters as f64).sqrt());
+            .set((accumulated_priority_deviation / number_of_canisters as f64).sqrt());
 
         // Free capacity per canister in multiplied percent.
         // Note, to avoid division by zero when there are no canisters

@@ -10,17 +10,17 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_management_canister_types::{VetKdCurve, VetKdKeyId};
+use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-use rand::{distributions::Alphanumeric, seq::IteratorRandom, Rng};
+use rand::{Rng, distributions::Alphanumeric, seq::IteratorRandom};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -30,10 +30,10 @@ use strum::{EnumCount, IntoEnumIterator};
 // Alternatively we could implement Distribution for all of these types.
 // Deriving Rand may be enough for many.  See: https://stackoverflow.com/questions/48490049/how-do-i-choose-a-random-value-from-an-enum
 pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
-    Height::from(rng.gen::<u64>())
+    Height::from(rng.r#gen::<u64>())
 }
 pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
-    subnet_test_id(rng.gen::<u64>())
+    subnet_test_id(rng.r#gen::<u64>())
 }
 pub fn random_ni_dkg_master_public_key_id(rng: &mut ChaCha20Rng) -> NiDkgMasterPublicKeyId {
     assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
@@ -86,7 +86,7 @@ impl MockNode {
         rng: &mut ChaCha20Rng,
         csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
     ) -> Self {
-        let node_id = node_test_id(rng.gen::<u64>());
+        let node_id = node_test_id(rng.r#gen::<u64>());
         Self::from_node_id(node_id, csp_vault_factory)
     }
     pub fn from_node_id(
@@ -111,23 +111,53 @@ impl MockNode {
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         resharing_public_coefficients: Option<CspPublicCoefficients>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
-        let maybe_reshared_secret_id =
-            resharing_public_coefficients
-                .as_ref()
-                .map(|public_coefficients| {
-                    KeyId::try_from(public_coefficients)
-                        .expect("computing key id from public coefficients should not fail")
-                });
-        self.csp_vault
-            .create_dealing(
-                algorithm_id,
-                dealer_index,
-                threshold,
-                epoch,
-                receiver_keys,
-                maybe_reshared_secret_id,
-            )
-            .map_err(ni_dkg_errors::CspDkgCreateReshareDealingError::from)
+        match resharing_public_coefficients {
+            Some(public_coefficients) => {
+                let resharing_secret_id = KeyId::try_from(&public_coefficients)
+                    .expect("computing key id from public coefficients should not fail");
+                self.csp_vault.create_resharing_dealing(
+                    algorithm_id,
+                    dealer_index,
+                    threshold,
+                    epoch,
+                    receiver_keys,
+                    resharing_secret_id,
+                )
+            }
+            None => self
+                .csp_vault
+                .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
+                .map_err(|e| match e {
+                    ni_dkg_errors::CspDkgCreateDealingError::UnsupportedAlgorithmId(alg) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(alg)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::InvalidThresholdError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::InvalidThresholdError(err)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::MisnumberedReceiverError {
+                        receiver_index,
+                        number_of_receivers,
+                    } => ni_dkg_errors::CspDkgCreateReshareDealingError::MisnumberedReceiverError {
+                        receiver_index,
+                        number_of_receivers,
+                    },
+                    ni_dkg_errors::CspDkgCreateDealingError::MalformedFsPublicKeyError {
+                        receiver_index,
+                        error,
+                    } => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
+                            receiver_index,
+                            error,
+                        }
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::SizeError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::SizeError(err)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::TransientInternalError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::TransientInternalError(err)
+                    }
+                }),
+        }
     }
 }
 
@@ -156,15 +186,14 @@ impl MockNetwork {
         let forward_secure_keys: BTreeMap<NodeId, CspFsEncryptionPublicKey> = nodes_by_node_id
             .iter_mut()
             .map(|(node_id, node)| {
-                println!("Creating fs keys for {}", node_id);
+                println!("Creating fs keys for {node_id}");
                 let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp_vault
                         .gen_dealing_encryption_key_pair(*node_id)
                         .unwrap_or_else(|_| {
                             panic!(
-                                "Failed to create forward secure encryption key for NodeId {}",
-                                node_id
+                                "Failed to create forward secure encryption key for NodeId {node_id}"
                             )
                         }),
                 );
@@ -214,15 +243,11 @@ impl MockDkgConfig {
         let min_dealers = 1;
         assert!(
             min_receivers <= num_nodes,
-            "min_receivers({}) !<= num_nodes({})",
-            min_receivers,
-            num_nodes
+            "min_receivers({min_receivers}) !<= num_nodes({num_nodes})"
         );
         assert!(
             min_dealers <= num_nodes,
-            "min_dealers({}) !<= num_nodes({})",
-            min_dealers,
-            num_nodes
+            "min_dealers({min_dealers}) !<= num_nodes({num_nodes})"
         );
 
         // Node IDs
@@ -252,10 +277,14 @@ impl MockDkgConfig {
         let dkg_id = random_ni_dkg_id(rng);
         let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
+
         let max_corrupt_receivers =
-            rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
-                                                                                       // (max_corrupt_receivers < threshold)
-        let epoch = Epoch::from(rng.gen::<u32>());
+            rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold));
+
+        assert!(max_corrupt_receivers <= num_receivers - threshold);
+        assert!(max_corrupt_receivers < threshold);
+
+        let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
             .iter()

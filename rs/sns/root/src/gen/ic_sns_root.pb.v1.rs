@@ -2,7 +2,7 @@
 /// All essential state of an SNS root canister.
 ///
 /// When canister_init is called in the SNS root canister, it is expected that a
-/// serialized version of this was passed via ic_management_canister_types::InstallCodeArgs::args,
+/// serialized version of this was passed via ic_management_canister_types_private::InstallCodeArgs::args,
 /// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 #[derive(
     candid::CandidType,
@@ -28,6 +28,9 @@ pub struct SnsRootCanister {
     /// Dapp canister IDs.
     #[prost(message, repeated, tag = "3")]
     pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// Extension canister IDs.
+    #[prost(message, optional, tag = "11")]
+    pub extensions: ::core::option::Option<Extensions>,
     /// Required.
     ///
     /// The swap canister ID.
@@ -48,6 +51,111 @@ pub struct SnsRootCanister {
     /// Information about the timers that perform periodic tasks of this Root canister.
     #[prost(message, optional, tag = "10")]
     pub timers: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Timers>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RegisterExtensionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RegisterExtensionResponse {
+    #[prost(oneof = "register_extension_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<register_extension_response::Result>,
+}
+/// Nested message and enum types in `RegisterExtensionResponse`.
+pub mod register_extension_response {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CleanUpFailedRegisterExtensionRequest {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CleanUpFailedRegisterExtensionResponse {
+    #[prost(
+        oneof = "clean_up_failed_register_extension_response::Result",
+        tags = "1, 2"
+    )]
+    pub result: ::core::option::Option<clean_up_failed_register_extension_response::Result>,
+}
+/// Nested message and enum types in `CleanUpFailedRegisterExtensionResponse`.
+pub mod clean_up_failed_register_extension_response {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(super::CanisterCallError),
+    }
 }
 #[derive(
     candid::CandidType,
@@ -184,6 +292,18 @@ pub struct CanisterCallError {
     ::prost::Message,
 )]
 pub struct ListSnsCanistersRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Extensions {
+    #[prost(message, repeated, tag = "1")]
+    pub extension_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// Response struct for the ListSnsCanisters API on the
 /// SNS Root canister. ListSnsCanisters will return Principals
 /// of all the associated canisters in an SNS.
@@ -210,6 +330,8 @@ pub struct ListSnsCanistersResponse {
     pub archives: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, optional, tag = "7")]
     pub index: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "8")]
+    pub extensions: ::core::option::Option<Extensions>,
 }
 #[derive(
     candid::CandidType,
@@ -234,6 +356,8 @@ pub struct ManageDappCanisterSettingsRequest {
     pub log_visibility: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "7")]
     pub wasm_memory_limit: ::core::option::Option<u64>,
+    #[prost(uint64, optional, tag = "8")]
+    pub wasm_memory_threshold: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,

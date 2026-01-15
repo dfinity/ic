@@ -1,0 +1,29 @@
+[package]
+name = "ic-ledger-suite-in-memory-ledger"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-agent = { workspace = true }
+ic-base-types = { path = "../../../types/base_types" }
+ic-icrc1 = { path = "../../icrc1" }
+ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
+ic-icrc1-tokens-u256 = { path = "../../icrc1/tokens_u256", optional = true }
+ic-icrc1-tokens-u64 = { path = "../../icrc1/tokens_u64" }
+ic-ledger-core = { path = "../../common/ledger_core" }
+ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+icp-ledger = { path = "../../icp" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+
+[dev-dependencies]
+ic-types = { path = "../../../types/types" }
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]
+icp-tokens = []

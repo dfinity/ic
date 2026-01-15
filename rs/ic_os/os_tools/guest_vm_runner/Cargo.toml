@@ -1,0 +1,48 @@
+[package]
+name = "guest_vm_runner"
+edition.workspace = true
+
+[[bin]]
+name = "guest_vm_runner"
+path = "src/main.rs"
+
+[dependencies]
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
+ic_device = { path = "../../device" }
+grub = { path = "../../boot/grub" }
+ic-metrics-tool = { path = "../../metrics/metrics_tool" }
+ic_sev = { path = "../../sev" }
+
+anyhow = { workspace = true }
+askama = { workspace = true }
+clap = { workspace = true }
+devicemapper = { workspace = true }
+gpt = { workspace = true }
+macaddr = { workspace = true }
+memchr = { workspace = true }
+nix = { workspace = true }
+regex = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+sysinfo = { workspace = true }
+thiserror = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+uuid = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+systemd = { workspace = true }
+virt = { workspace = true }
+
+[features]
+dev = ["config_tool/dev"]
+skip_default_tests = []
+integration_tests = []
+upgrade_device_mapper_test = []
+
+[dev-dependencies]
+goldenfile = { workspace = true }
+url = { workspace = true }

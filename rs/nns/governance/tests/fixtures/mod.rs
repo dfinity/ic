@@ -12,7 +12,9 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -20,25 +22,26 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, Environment, Governance,
-        HeapGrowthPotential, RngError,
+        Environment, Governance, HeapGrowthPotential, RngError, governance_minting_account,
+        neuron_subaccount,
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
-        manage_neuron,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron, Motion,
+        NetworkEconomics, NeuronType, NnsFunction, Proposal, ProposalData, RewardEvent, Topic,
+        Vote, XdrConversionRate as XdrConversionRatePb, manage_neuron,
         manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
-        manage_neuron_response,
-        manage_neuron_response::MergeMaturityResponse,
-        neuron,
-        neuron::DissolveState,
-        proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronType, NnsFunction, Proposal,
-        ProposalData, RewardEvent, Topic, Vote, XdrConversionRate as XdrConversionRatePb,
+        proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
     storage::reset_stable_memory,
 };
+use ic_nns_governance_api::{
+    self as api, ManageNeuronResponse, Visibility, manage_neuron_response,
+};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use rand::{prelude::StdRng, RngCore, SeedableRng};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use rand::{RngCore, SeedableRng, prelude::StdRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
@@ -48,8 +51,12 @@ use std::{
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla,
 };
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_function;
+
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 
 pub mod environment_fixture;
@@ -61,7 +68,7 @@ type LedgerMap = BTreeMap<AccountIdentifier, u64>;
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a test neuron's account.
@@ -136,10 +143,6 @@ impl LedgerBuilder {
         self.ledger_fixture.accounts.entry(ident).or_insert(amount);
         self
     }
-
-    pub fn neuron_account_id(neuron: &Neuron) -> AccountIdentifier {
-        neuron_subaccount(Subaccount::try_from(neuron.account.as_slice()).unwrap())
-    }
 }
 
 impl Default for LedgerBuilder {
@@ -201,8 +204,8 @@ pub struct NeuronBuilder {
     maturity: u64,
     staked_maturity: u64,
     neuron_fees: u64,
-    dissolve_state: Option<neuron::DissolveState>,
-    followees: HashMap<i32, neuron::Followees>,
+    dissolve_state: Option<api::neuron::DissolveState>,
+    followees: HashMap<i32, api::neuron::Followees>,
     kyc_verified: bool,
     not_for_profit: bool,
     joined_community_fund: Option<u64>,
@@ -210,8 +213,8 @@ pub struct NeuronBuilder {
     neuron_type: Option<i32>,
 }
 
-impl From<Neuron> for NeuronBuilder {
-    fn from(neuron: Neuron) -> Self {
+impl From<api::Neuron> for NeuronBuilder {
+    fn from(neuron: api::Neuron) -> Self {
         NeuronBuilder {
             ident: 0,
             stake: neuron.cached_neuron_stake_e8s,
@@ -260,7 +263,7 @@ impl NeuronBuilder {
     }
 
     pub fn set_dissolve_delay(mut self, seconds: u64) -> Self {
-        self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(seconds));
+        self.dissolve_state = Some(api::neuron::DissolveState::DissolveDelaySeconds(seconds));
         self
     }
 
@@ -305,13 +308,15 @@ impl NeuronBuilder {
 
     #[allow(dead_code)]
     pub fn start_dissolving(mut self, now: u64) -> Self {
-        if let Some(DissolveState::DissolveDelaySeconds(secs)) = self.dissolve_state {
-            self.dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(now + secs));
+        if let Some(api::neuron::DissolveState::DissolveDelaySeconds(secs)) = self.dissolve_state {
+            self.dissolve_state = Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(
+                now + secs,
+            ));
         }
         self
     }
 
-    pub fn set_dissolve_state(mut self, state: Option<DissolveState>) -> Self {
+    pub fn set_dissolve_state(mut self, state: Option<api::neuron::DissolveState>) -> Self {
         self.dissolve_state = state;
         self
     }
@@ -331,13 +336,13 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn insert_managers(mut self, managers: neuron::Followees) -> Self {
+    pub fn insert_managers(mut self, managers: api::neuron::Followees) -> Self {
         self.followees
             .insert(Topic::NeuronManagement as i32, managers);
         self
     }
 
-    pub fn insert_followees(mut self, topic: Topic, followees: neuron::Followees) -> Self {
+    pub fn insert_followees(mut self, topic: Topic, followees: api::neuron::Followees) -> Self {
         self.followees.insert(topic as i32, followees);
         self
     }
@@ -355,12 +360,12 @@ impl NeuronBuilder {
         self
     }
 
-    pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
+    pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> api::Neuron {
         let subaccount = Self::subaccount(self.owner, self.ident);
         ledger.add_account(neuron_subaccount(subaccount), self.stake);
         subaccount.to_vec();
 
-        Neuron {
+        api::Neuron {
             id: Some(NeuronId { id: self.ident }),
             account: subaccount.to_vec(),
             controller: self.owner,
@@ -369,7 +374,7 @@ impl NeuronBuilder {
             neuron_fees_e8s: self.neuron_fees,
             created_timestamp_seconds: self.created_seconds.unwrap_or(now),
             aging_since_timestamp_seconds: match self.dissolve_state {
-                Some(DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
+                Some(api::neuron::DissolveState::WhenDissolvedTimestampSeconds(_)) => u64::MAX,
                 _ => match self.age_timestamp {
                     None => now,
                     Some(secs) => secs,
@@ -388,8 +393,8 @@ impl NeuronBuilder {
             joined_community_fund_timestamp_seconds: self.joined_community_fund,
             spawn_at_timestamp_seconds: self.spawn_at_timestamp_seconds,
             neuron_type: self.neuron_type,
-            recent_ballots_next_entry_index: Some(0),
-            ..Neuron::default()
+            visibility: Some(Visibility::Public as i32),
+            ..api::Neuron::default()
         }
     }
 
@@ -406,7 +411,7 @@ impl NeuronBuilder {
         })
     }
 
-    pub fn add_followees(mut self, index: i32, followees: neuron::Followees) -> Self {
+    pub fn add_followees(mut self, index: i32, followees: api::neuron::Followees) -> Self {
         self.followees.insert(index, followees);
         self
     }
@@ -432,6 +437,7 @@ impl NNSFixture {
 
 #[async_trait]
 impl IcpLedger for NNSFixture {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -446,7 +452,13 @@ impl IcpLedger for NNSFixture {
         let from_account = from_subaccount.map_or(governance_minting_account(), neuron_subaccount);
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
+            from_account,
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), ToString::to_string),
+            to_account,
+            amount_e8s,
+            fee_e8s
         );
         tla_log_request!(
             "WaitForTransfer",
@@ -507,14 +519,32 @@ impl IcpLedger for NNSFixture {
     fn canister_id(&self) -> CanisterId {
         LEDGER_CANISTER_ID
     }
-}
 
-#[async_trait]
-impl Environment for NNSFixture {
-    fn now(&self) -> u64 {
-        self.nns_state.try_lock().unwrap().environment.now()
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+}
+
+impl RandomnessGenerator for NNSFixture {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         self.nns_state.try_lock().unwrap().environment.random_u64()
     }
@@ -542,11 +572,18 @@ impl Environment for NNSFixture {
             .environment
             .get_rng_seed()
     }
+}
+
+#[async_trait]
+impl Environment for NNSFixture {
+    fn now(&self) -> u64 {
+        self.nns_state.try_lock().unwrap().environment.now()
+    }
 
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.nns_state
             .try_lock()
@@ -581,7 +618,7 @@ impl Environment for NNSFixture {
 
 #[async_trait]
 impl CMC for NNSFixture {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
@@ -628,7 +665,7 @@ impl ProposalNeuronBehavior {
         // Submit proposal
         let action = match self.proposal_topic {
             ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
+                motion_text: format!("summary: {summary}"),
             }),
             ProposalTopicBehaviour::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
@@ -734,7 +771,6 @@ impl From<&str> for ProposalNeuronBehavior {
 pub struct NNS {
     pub fixture: NNSFixture,
     pub governance: Governance,
-    pub(crate) initial_state: Option<NNSState>,
 }
 
 impl NNS {
@@ -747,30 +783,6 @@ impl NNS {
             .environment
             .advance_time_by(delta_seconds);
         self
-    }
-
-    pub fn capture_state(&mut self) -> &mut Self {
-        self.initial_state = Some(self.get_state());
-        self
-    }
-
-    // Must be mut because clone_proto must be mut, but should not affect state
-    pub(crate) fn get_state(&self) -> NNSState {
-        let accounts = self
-            .fixture
-            .nns_state
-            .try_lock()
-            .unwrap()
-            .ledger
-            .accounts
-            .clone();
-        let governance_proto = self.governance.__get_state_for_test();
-        NNSState {
-            now: self.now(),
-            accounts,
-            governance_proto,
-            latest_gc_num_proposals: self.governance.latest_gc_num_proposals,
-        }
     }
 
     pub fn run_periodic_tasks(&mut self) -> &mut Self {
@@ -858,36 +870,6 @@ impl NNS {
         behavior.into().propose_and_vote(self, summary)
     }
 
-    pub fn merge_maturity(
-        &mut self,
-        id: &NeuronId,
-        controller: &PrincipalId,
-        percentage_to_merge: u32,
-    ) -> Result<MergeMaturityResponse, GovernanceError> {
-        let result = self
-            .governance
-            .manage_neuron(
-                controller,
-                &ManageNeuron {
-                    id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*id)),
-                    command: Some(Command::MergeMaturity(MergeMaturity {
-                        percentage_to_merge,
-                    })),
-                },
-            )
-            .now_or_never()
-            .unwrap()
-            .command
-            .unwrap();
-
-        match result {
-            manage_neuron_response::Command::Error(e) => Err(e),
-            manage_neuron_response::Command::MergeMaturity(response) => Ok(response),
-            _ => panic!("Merge maturity command returned unexpected response"),
-        }
-    }
-
     pub fn merge_neurons(
         &mut self,
         target: &NeuronId,
@@ -923,32 +905,6 @@ impl NNS {
                 })),
             },
         )
-    }
-
-    pub fn get_neuron(&self, ident: &NeuronId) -> Neuron {
-        self.governance
-            .neuron_store
-            .with_neuron(ident, |n| {
-                n.clone()
-                    .into_proto(self.governance.voting_power_economics(), self.now())
-            })
-            .unwrap()
-    }
-
-    pub fn get_account_balance(&self, account: AccountIdentifier) -> u64 {
-        self.account_balance(account)
-            .now_or_never()
-            .unwrap()
-            .unwrap()
-            .get_e8s()
-    }
-
-    pub fn get_neuron_account_id(&self, id: u64) -> AccountIdentifier {
-        LedgerBuilder::neuron_account_id(&self.get_neuron(&NeuronId { id }))
-    }
-
-    pub fn get_neuron_stake(&self, neuron: &Neuron) -> u64 {
-        self.get_account_balance(LedgerBuilder::neuron_account_id(neuron))
     }
 
     pub fn push_mocked_canister_reply(&mut self, call: impl Into<CanisterCallReply>) {
@@ -990,14 +946,32 @@ impl IcpLedger for NNS {
     fn canister_id(&self) -> CanisterId {
         self.fixture.canister_id()
     }
-}
 
-#[async_trait]
-impl Environment for NNS {
-    fn now(&self) -> u64 {
-        self.fixture.now()
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+}
+
+impl RandomnessGenerator for NNS {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         self.fixture.random_u64()
     }
@@ -1013,11 +987,17 @@ impl Environment for NNS {
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
         unimplemented!()
     }
+}
+#[async_trait]
+impl Environment for NNS {
+    fn now(&self) -> u64 {
+        self.fixture.now()
+    }
 
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.fixture.execute_nns_function(proposal_id, update)
     }
@@ -1036,8 +1016,8 @@ impl Environment for NNS {
     }
 }
 
-pub type LedgerTransform = Box<dyn FnOnce(Box<dyn IcpLedger>) -> Box<dyn IcpLedger>>;
-pub type EnvironmentTransform = Box<dyn FnOnce(Box<dyn Environment>) -> Box<dyn Environment>>;
+pub type LedgerTransform = Box<dyn FnOnce(Arc<dyn IcpLedger>) -> Arc<dyn IcpLedger>>;
+pub type EnvironmentTransform = Box<dyn FnOnce(Arc<dyn Environment>) -> Arc<dyn Environment>>;
 
 /// The NNSBuilder permits the declarative construction of an NNS fixture. All
 /// of the methods concern setting or querying what this initial state will
@@ -1048,7 +1028,7 @@ pub type EnvironmentTransform = Box<dyn FnOnce(Box<dyn Environment>) -> Box<dyn 
 pub struct NNSBuilder {
     ledger_builder: LedgerBuilder,
     environment_builder: EnvironmentBuilder,
-    governance: GovernanceProto,
+    governance: api::Governance,
     ledger_transforms: Vec<LedgerTransform>,
     environment_transforms: Vec<EnvironmentTransform>,
 }
@@ -1078,22 +1058,20 @@ impl NNSBuilder {
             ledger: self.ledger_builder.create(),
             environment: self.environment_builder.create(),
         });
-        let cmc: Box<dyn CMC> = Box::new(fixture.clone());
-        let mut ledger: Box<dyn IcpLedger> = Box::new(fixture.clone());
+        let cmc: Arc<dyn CMC> = Arc::new(fixture.clone());
+        let mut ledger: Arc<dyn IcpLedger> = Arc::new(fixture.clone());
         for t in self.ledger_transforms {
             ledger = t(ledger);
         }
-        let mut environment: Box<dyn Environment> = Box::new(fixture.clone());
+        let mut environment: Arc<dyn Environment> = Arc::new(fixture.clone());
         for t in self.environment_transforms {
             environment = t(environment);
         }
-        let mut nns = NNS {
+        let randomness = Box::new(fixture.clone());
+        NNS {
             fixture: fixture.clone(),
-            governance: Governance::new(self.governance, environment, ledger, cmc),
-            initial_state: None,
-        };
-        nns.capture_state();
-        nns
+            governance: Governance::new(self.governance, environment, ledger, cmc, randomness),
+        }
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {
@@ -1107,7 +1085,7 @@ impl NNSBuilder {
         self
     }
 
-    pub fn set_economics(mut self, econ: NetworkEconomics) -> Self {
+    pub fn set_economics(mut self, econ: api::NetworkEconomics) -> Self {
         self.governance.economics = Some(econ);
         self
     }
@@ -1150,7 +1128,7 @@ impl NNSBuilder {
         self
     }
 
-    pub fn add_neurons(self, neurons: impl IntoIterator<Item = (Neuron, u64)>) -> Self {
+    pub fn add_neurons(self, neurons: impl IntoIterator<Item = (api::Neuron, u64)>) -> Self {
         neurons.into_iter().fold(self, |b, (neuron, id)| {
             b.add_neuron(
                 NeuronBuilder::from(neuron)
@@ -1161,7 +1139,7 @@ impl NNSBuilder {
     }
 
     #[allow(dead_code)]
-    pub fn get_neuron(&self, ident: u64) -> Option<&Neuron> {
+    pub fn get_neuron(&self, ident: u64) -> Option<&api::Neuron> {
         self.governance.neurons.get(&ident)
     }
 
@@ -1178,40 +1156,10 @@ impl NNSBuilder {
         self
     }
 
-    pub fn add_proposal(mut self, proposal_data: ProposalData) -> Self {
+    pub fn add_proposal(mut self, proposal_data: api::ProposalData) -> Self {
         self.governance
             .proposals
             .insert(proposal_data.id.unwrap().id, proposal_data);
         self
     }
-}
-
-#[macro_export]
-macro_rules! assert_changes {
-    ($nns:expr, $expected:expr) => {{
-        let new_state = $nns.get_state();
-        comparable::pretty_assert_changes!(
-            $nns.initial_state
-                .as_ref()
-                .expect("initial_state was never set"),
-            &new_state,
-            $expected,
-        );
-        $nns.initial_state = Some(new_state);
-    }};
-}
-
-#[macro_export]
-macro_rules! prop_assert_changes {
-    ($nns:expr, $expected:expr) => {{
-        let new_state = $nns.get_state();
-        comparable::prop_pretty_assert_changes!(
-            $nns.initial_state
-                .as_ref()
-                .expect("initial_state was never set"),
-            &new_state,
-            $expected,
-        );
-        $nns.initial_state = Some(new_state);
-    }};
 }

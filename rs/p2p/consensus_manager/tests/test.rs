@@ -1,19 +1,19 @@
 use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_p2p_test_utils::{
     consensus::{TestConsensus, U64Artifact},
     fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, wait_for,
-        wait_for_timeout, waiter_fut, PeerManagerAction,
+        PeerManagerAction, add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for,
+        wait_for, wait_for_timeout, waiter_fut,
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
-use ic_types_test_utils::ids::{node_test_id, NODE_1, NODE_2, NODE_3};
-use rand::{rngs::ThreadRng, Rng};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, node_test_id};
+use rand::{Rng, rngs::ThreadRng};
 use tokio::{sync::Notify, task::JoinSet};
 use tokio_util::time::DelayQueue;
 use turmoil::Builder;
@@ -345,17 +345,18 @@ fn load_test(
     for i in 0..num_peers {
         let node = node_test_id(i);
         let processor = TestConsensus::new(log.clone(), node, 256 * (i as usize + 1), i % 2 == 0);
-        let (jh, mut cm) =
+        let (jh, cm) =
             start_consensus_manager(no_op_logger(), rt.handle().clone(), processor.clone());
         jhs.push(jh);
-        nodes.push((node, cm.router()));
+        let r = cm.router();
+        nodes.push((node, r));
         cms.push((node, cm));
         node_advert_map.insert(node, processor);
     }
     let (nodes, topology_watcher) = fully_connected_localhost_subnet(rt.handle(), log, id, nodes);
     for ((node1, transport), (node2, cm)) in nodes.into_iter().zip(cms.into_iter()) {
         assert!(node1 == node2);
-        cm.run(transport, topology_watcher.clone());
+        cm.start(transport, topology_watcher.clone());
     }
 
     rt.block_on(async move {
@@ -402,7 +403,7 @@ fn test_small_load_test() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -422,7 +423,7 @@ fn test_large_load_test_many_nodes() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -442,7 +443,7 @@ fn test_load_test_many_ids() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -462,7 +463,7 @@ fn test_small_load_test_without_purging() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -482,7 +483,7 @@ fn test_small_load_test_with_non_overlap() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {

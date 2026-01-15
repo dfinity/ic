@@ -3,7 +3,7 @@ name = "ic-icrc-rosetta-client"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "ic-icrc-rosetta-client-bin"
@@ -18,15 +18,17 @@ candid = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
-ic-crypto-secp256k1 = { path = "../../../crypto/secp256k1" }
-ic-crypto-ed25519 = { path = "../../../crypto/ed25519" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-icrc-rosetta = { path = ".." }
 ic-rosetta-api = { path = "../../icp" }
+ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-bigint = { workspace = true }
+prometheus-parse = { workspace = true }
 reqwest = { workspace = true }
 rosetta-core = { path = "../../common/rosetta_core" }
 serde = { workspace = true }
+serde_json = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 

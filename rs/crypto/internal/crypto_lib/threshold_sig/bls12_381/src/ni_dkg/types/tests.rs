@@ -20,7 +20,7 @@ fn should_redact_csp_fs_encryption_secretkey_debug() {
 
     let csp_sk = CspFsEncryptionSecretKey::Groth20_Bls12_381(sk);
 
-    let full_str = format!("{:?}", csp_sk);
+    let full_str = format!("{csp_sk:?}");
 
     match &csp_sk {
         CspFsEncryptionSecretKey::Groth20_Bls12_381(sk) => {

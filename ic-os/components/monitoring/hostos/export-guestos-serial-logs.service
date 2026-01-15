@@ -1,0 +1,17 @@
+[Unit]
+Description=Export GuestOS serial logs to journald
+After=libvirtd.service
+Requires=libvirtd.service
+
+[Service]
+Type=simple
+ExecStart=/opt/ic/bin/export-guestos-serial-logs.sh
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+

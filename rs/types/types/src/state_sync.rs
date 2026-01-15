@@ -19,6 +19,10 @@ pub enum StateSyncVersion {
     /// File index-independent manifest hash: file index no longer included in file
     /// hash.
     V3 = 3,
+
+    /// Increased file grouping size limit from 8 KiB to 128 KiB to accommodate
+    /// growing `canister.pbuf` files while maintaining state sync efficiency.
+    V4 = 4,
 }
 
 impl std::convert::TryFrom<u32> for StateSyncVersion {
@@ -37,9 +41,9 @@ impl std::convert::TryFrom<u32> for StateSyncVersion {
 
 impl Display for StateSyncVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
 /// The version of StateSync protocol that should be used for all newly created manifests.
-pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
+pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V4;

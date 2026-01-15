@@ -164,7 +164,7 @@ impl From<hex::FromHexError> for Error {
     fn from(e: hex::FromHexError) -> Error {
         Error {
             code: 701,
-            message: format!("Hex could not be decoded {}", e),
+            message: format!("Hex could not be decoded {e}"),
             description: None,
             retriable: false,
             details: None,
@@ -172,12 +172,12 @@ impl From<hex::FromHexError> for Error {
     }
 }
 
-impl From<ic_crypto_secp256k1::KeyDecodingError> for Error {
-    fn from(e: ic_crypto_secp256k1::KeyDecodingError) -> Error {
+impl From<ic_secp256k1::KeyDecodingError> for Error {
+    fn from(e: ic_secp256k1::KeyDecodingError) -> Error {
         Error {
             code: 701,
             message: "ecdsa_secp256k1 key could not be decoded!".to_string(),
-            description: Some(format!("{:?}", e)),
+            description: Some(format!("{e:?}")),
             retriable: false,
             details: None,
         }

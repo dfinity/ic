@@ -136,7 +136,7 @@ fn eval(ops_bytes: OpsBytes) {
         ops_bytes = rest;
         let op = match Ops::try_from(*op_code) {
             Err(..) => {
-                api::trap_with(&format!("unknown op {}", op_code));
+                api::trap_with(&format!("unknown op {op_code}"));
             }
             Ok(op) => op,
         };
@@ -375,9 +375,10 @@ fn eval(ops_bytes: OpsBytes) {
                     api::trap_with_blob(&c)
                 }
             }
-            Ops::MintCycles => {
-                let amount = stack.pop_int64();
-                stack.push_int64(api::mint_cycles(amount));
+            Ops::MintCycles128 => {
+                let amount_low = stack.pop_int64();
+                let amount_high = stack.pop_int64();
+                stack.push_blob(api::mint_cycles128(amount_high, amount_low))
             }
             Ops::OneWayCallNew => {
                 // pop in reverse order!
@@ -418,8 +419,8 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::MemorySizeIsAtLeast => {
                 #[cfg(target_arch = "wasm32")]
                 let current_memory_size = || {
-                    let wasm_page_size = wee_alloc::PAGE_SIZE.0;
-                    core::arch::wasm32::memory_size::<0>() * wasm_page_size
+                    const WASM_PAGE_SIZE: usize = 64 * 1024;
+                    core::arch::wasm32::memory_size::<0>() * WASM_PAGE_SIZE
                 };
 
                 #[cfg(not(target_arch = "wasm32"))]
@@ -436,65 +437,145 @@ fn eval(ops_bytes: OpsBytes) {
                 }
                 std::hint::black_box(a);
             }
+            Ops::CostCall => {
+                let payload_size = stack.pop_int64();
+                let method_name_size = stack.pop_int64();
+                stack.push_blob(api::cost_call(method_name_size, payload_size));
+            }
+            Ops::CostCreateCanister => stack.push_blob(api::cost_create_canister()),
+            Ops::CostHttpRequest => {
+                let max_res_bytes = stack.pop_int64();
+                let request_size = stack.pop_int64();
+                stack.push_blob(api::cost_http_request(request_size, max_res_bytes));
+            }
+            Ops::CostHttpRequestV2 => {
+                let params = stack.pop_blob();
+                stack.push_blob(api::cost_http_request_v2(&params));
+            }
+            Ops::CostSignWithEcdsa => {
+                let ecdsa_curve = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_ecdsa(&key_name, ecdsa_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_ecdsa failed with error code {err_code}"
+                    )),
+                }
+            }
+            Ops::CostSignWithSchnorr => {
+                let algorithm = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_sign_with_schnorr(&key_name, algorithm) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_sign_with_schnorr failed with error code {err_code}"
+                    )),
+                }
+            }
+            Ops::CostVetkdDeriveKey => {
+                let vetkd_curve = stack.pop_int();
+                let key_name = stack.pop_blob();
+                match api::cost_vetkd_derive_key(&key_name, vetkd_curve) {
+                    Ok(bytes) => stack.push_blob(bytes),
+                    Err(err_code) => api::trap_with(&format!(
+                        "ic0.cost_vetkd_derive_key failed with error code {err_code}"
+                    )),
+                }
+            }
+            Ops::LiquidCyclesBalance128 => stack.push_blob(api::liquid_balance128()),
+            Ops::CallDataAppendCyclesAddMax => {
+                let method_name_size = stack.pop_int64();
+                let payload = stack.pop_blob();
+                api::call_data_append(&payload);
+                let payload_size = payload.len() as u64;
+                let cost_call = u128::from_le_bytes(
+                    api::cost_call(method_name_size, payload_size)
+                        .try_into()
+                        .unwrap(),
+                );
+                let liquid_balance =
+                    u128::from_le_bytes(api::liquid_balance128().try_into().unwrap());
+                let balance = liquid_balance.saturating_sub(cost_call);
+                let amount_low = (balance & 0xffff_ffff_ffff_ffff) as u64;
+                let amount_high = (balance >> 64) as u64;
+                api::call_cycles_add128(amount_high, amount_low)
+            }
+            Ops::RootKey => {
+                stack.push_blob(api::root_key());
+            }
+            Ops::SetOnLowWasmMemoryMethod => set_on_low_wasm_memory_method(stack.pop_blob()),
+            Ops::WasmMemoryGrow => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let pages = stack.pop_int();
+                    core::arch::wasm32::memory_grow(0, pages as usize);
+                }
+            }
         }
     }
 }
-#[export_name = "canister_update update"]
+#[unsafe(export_name = "canister_update update")]
 fn update() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_query query"]
+#[unsafe(export_name = "canister_query query")]
 fn query() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_composite_query composite_query"]
+#[unsafe(export_name = "canister_composite_query composite_query")]
 fn composite_query() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_query transform"]
+#[unsafe(export_name = "canister_query transform")]
 fn transform() {
     setup();
     eval(&get_transform());
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn init() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn pre_upgrade() {
     setup();
     eval(&get_pre_upgrade());
 }
 
 #[cfg(feature = "heartbeat")]
-#[export_name = "canister_heartbeat"]
+#[unsafe(export_name = "canister_heartbeat")]
 fn heartbeat() {
     setup();
     eval(&get_heartbeat());
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn global_timer() {
     setup();
     eval(&get_global_timer_method());
 }
 
-#[export_name = "canister_inspect_message"]
+#[unsafe(export_name = "canister_on_low_wasm_memory")]
+fn on_low_wasm_memory() {
+    setup();
+    eval(&get_on_low_wasm_memory_method());
+}
+
+#[unsafe(export_name = "canister_inspect_message")]
 fn inspect_message() {
     setup();
     eval(&get_inspect_message());
 }
 
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn post_upgrade() {
     setup();
     eval(&api::arg_data());
@@ -553,6 +634,17 @@ fn get_global_timer_method() -> Vec<u8> {
     GLOBAL_TIMER_METHOD.lock().unwrap().clone()
 }
 
+/* A variable to store what to execute in canister_on_low_wasm_memory */
+lazy_static! {
+    static ref ON_LOW_WASM_MEMORY: Mutex<Vec<u8>> = Mutex::new(Vec::new());
+}
+fn set_on_low_wasm_memory_method(data: Vec<u8>) {
+    *ON_LOW_WASM_MEMORY.lock().unwrap() = data;
+}
+fn get_on_low_wasm_memory_method() -> Vec<u8> {
+    ON_LOW_WASM_MEMORY.lock().unwrap().clone()
+}
+
 lazy_static! {
     static ref TRANSFORM: Mutex<Vec<u8>> = Mutex::new(Vec::new());
 }
@@ -596,10 +688,10 @@ fn get_callback(idx: u32) -> Vec<u8> {
         if let Some(code) = entry.take() {
             code
         } else {
-            panic!("get_callback: {} already taken", idx)
+            panic!("get_callback: {idx} already taken")
         }
     } else {
-        panic!("get_callback: {} out of bounds", idx)
+        panic!("get_callback: {idx} out of bounds")
     }
 }
 

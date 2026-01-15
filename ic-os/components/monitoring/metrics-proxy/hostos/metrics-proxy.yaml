@@ -89,7 +89,8 @@ proxies:
     # The expectation is that clients will scrape at a
     # maximum rate of 1 per 10 seconds (6 / min).
     cache_duration: 8s
-  # GuestOS version metrics proxying.
+  # GuestOS node exporter metrics proxying
+  # (currently GuestOS version and time synchronization).
   # This chainloads onto GuestOS metrics proxy instance.
   - listen_on:
       url: https://[::]:42372/metrics/guestos_node_exporter

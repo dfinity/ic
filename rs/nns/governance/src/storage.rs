@@ -1,35 +1,42 @@
-use crate::{governance::LOG_PREFIX, pb::v1::AuditEvent};
+use crate::{
+    governance::{LOG_PREFIX, voting_power_snapshots::VotingPowerSnapshots},
+    pb::v1::{ArchivedMonthlyNodeProviderRewards, AuditEvent},
+    reward::distribution::RewardsDistributionStateMachine,
+    voting::VotingStateMachines,
+    voting_history_store::VotingHistoryStore,
+};
 
-use crate::{pb::v1::ArchivedMonthlyNodeProviderRewards, voting::VotingStateMachines};
 use ic_cdk::println;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use std::cell::RefCell;
 
-/// Constants to define memory segments.  Must not change.
+/// Constants to define memory segments.  Must not change. Keep sorted.
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const AUDIT_EVENTS_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const AUDIT_EVENTS_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
-
 const MAIN_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const HOT_KEYS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(4);
 const FOLLOWEES_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(5);
 const RECENT_BALLOTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(6);
 const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
-
 const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
 const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
 const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
 const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
 const NEURON_ACCOUNT_ID_INDEX_MEMORY_ID: MemoryId = MemoryId::new(13);
-
 const NODE_PROVIDER_REWARDS_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(14);
 const NODE_PROVIDER_REWARDS_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(15);
-
 const VOTING_STATE_MACHINES_MEMORY_ID: MemoryId = MemoryId::new(16);
+const REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID: MemoryId = MemoryId::new(17);
+const MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(18);
+const NEURON_MATURITY_DISBURSEMENT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(19);
+const VOTING_POWER_MAPS_MEMORY_ID: MemoryId = MemoryId::new(20);
+const VOTING_POWER_TOTALS_MEMORY_ID: MemoryId = MemoryId::new(21);
+const VOTING_HISTORY_STORE_MEMORY_ID: MemoryId = MemoryId::new(22);
 
 pub mod neuron_indexes;
 pub mod neurons;
@@ -49,7 +56,29 @@ thread_local! {
             let memory = memory_manager.borrow().get(VOTING_STATE_MACHINES_MEMORY_ID);
             VotingStateMachines::new(memory)
         })
-    })
+    });
+
+    static REWARDS_DISTRIBUTION_STATE_MACHINE: RefCell<RewardsDistributionStateMachine<VM>> = RefCell::new({
+        MEMORY_MANAGER.with(|memory_manager| {
+            let memory = memory_manager.borrow().get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID);
+            RewardsDistributionStateMachine::new(memory)
+        })
+    });
+
+    pub(crate) static VOTING_POWER_SNAPSHOTS: RefCell<VotingPowerSnapshots> = RefCell::new({
+        MEMORY_MANAGER.with_borrow(|memory_manager| {
+            VotingPowerSnapshots::new(
+                memory_manager.get(VOTING_POWER_MAPS_MEMORY_ID),
+                memory_manager.get(VOTING_POWER_TOTALS_MEMORY_ID),
+            )
+        })
+    });
+
+    pub(crate) static VOTING_HISTORY_STORE: RefCell<VotingHistoryStore> = RefCell::new({
+        MEMORY_MANAGER.with_borrow(|memory_manager| {
+            VotingHistoryStore::new(memory_manager.get(VOTING_HISTORY_STORE_MEMORY_ID))
+        })
+    });
 }
 
 struct State {
@@ -89,6 +118,8 @@ impl State {
                 hot_keys: memory_manager.get(HOT_KEYS_NEURONS_MEMORY_ID),
                 followees: memory_manager.get(FOLLOWEES_NEURONS_MEMORY_ID),
                 recent_ballots: memory_manager.get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
+                maturity_disbursements: memory_manager
+                    .get(MATURITY_DISBURSEMENTS_NEURONS_MEMORY_ID),
 
                 // Singletons
                 known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
@@ -105,6 +136,8 @@ impl State {
                 following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
                 known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
                 account_id: memory_manager.get(NEURON_ACCOUNT_ID_INDEX_MEMORY_ID),
+                maturity_disbursement: memory_manager
+                    .get(NEURON_MATURITY_DISBURSEMENT_INDEX_MEMORY_ID),
             }
             .build()
         });
@@ -196,12 +229,31 @@ pub(crate) fn with_node_provider_rewards_log<R>(
     })
 }
 
+#[allow(dead_code)]
+pub(crate) fn with_voting_history_store<R>(f: impl FnOnce(&VotingHistoryStore) -> R) -> R {
+    VOTING_HISTORY_STORE.with_borrow(f)
+}
+
+pub(crate) fn with_voting_history_store_mut<R>(f: impl FnOnce(&mut VotingHistoryStore) -> R) -> R {
+    VOTING_HISTORY_STORE.with_borrow_mut(f)
+}
+
 pub(crate) fn with_voting_state_machines_mut<R>(
     f: impl FnOnce(&mut VotingStateMachines<VM>) -> R,
 ) -> R {
     VOTING_STATE_MACHINES.with(|voting_state_machines| {
         let voting_state_machines = &mut voting_state_machines.borrow_mut();
         f(voting_state_machines)
+    })
+}
+
+pub(crate) fn with_rewards_distribution_state_machine_mut<R>(
+    f: impl FnOnce(&mut RewardsDistributionStateMachine<VM>) -> R,
+) -> R {
+    REWARDS_DISTRIBUTION_STATE_MACHINE.with(|rewards_distribution_state_machine| {
+        let rewards_distribution_state_machine =
+            &mut rewards_distribution_state_machine.borrow_mut();
+        f(rewards_distribution_state_machine)
     })
 }
 
@@ -246,6 +298,28 @@ pub fn reset_stable_memory() {
                 VotingStateMachines::new(memory)
             })
         }
+    });
+    REWARDS_DISTRIBUTION_STATE_MACHINE.with_borrow_mut(|rewards_distribution_state_machine| {
+        *rewards_distribution_state_machine =
+            RewardsDistributionStateMachine::new(MEMORY_MANAGER.with(|mm| {
+                mm.borrow()
+                    .get(REWARDS_DISTRIBUTION_STATE_MACHINE_MEMORY_ID)
+            }));
+    });
+    VOTING_POWER_SNAPSHOTS.with_borrow_mut(|snapshots| {
+        let (voting_power_maps_memory, voting_power_totals_memory) = MEMORY_MANAGER.with(|mm| {
+            let memory_manager = mm.borrow();
+            (
+                memory_manager.get(VOTING_POWER_MAPS_MEMORY_ID),
+                memory_manager.get(VOTING_POWER_TOTALS_MEMORY_ID),
+            )
+        });
+        *snapshots = VotingPowerSnapshots::new(voting_power_maps_memory, voting_power_totals_memory)
+    });
+    VOTING_HISTORY_STORE.with_borrow_mut(|voting_history_store| {
+        *voting_history_store = VotingHistoryStore::new(
+            MEMORY_MANAGER.with_borrow(|mm| mm.get(VOTING_HISTORY_STORE_MEMORY_ID)),
+        );
     });
 }
 

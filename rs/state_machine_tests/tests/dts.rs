@@ -35,7 +35,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
                     local.set $j
                     ;; if $j is less than 200000 branch to loop
                     local.get $j
-                    i32.const {}
+                    i32.const {n}
                     i32.lt_s
                     br_if $my_inner_loop
                 )
@@ -46,7 +46,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
                 local.set $i
                 ;; if $i is less than 200000 branch to loop
                 local.get $i
-                i32.const {}
+                i32.const {n}
                 i32.lt_s
                 br_if $my_loop
             )
@@ -55,8 +55,7 @@ fn very_slow_wasm(n: u64) -> Vec<u8> {
         (export "canister_update run" (func $run))
         (export "canister_heartbeat" (func $inc))
     )
-"#,
-        n, n
+"#
     );
     wat::parse_str(wat).unwrap()
 }

@@ -1,10 +1,11 @@
+#![allow(deprecated)]
 use crate::address::ecdsa_public_key_to_address;
+use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::upgrade::UpgradeArg;
 use crate::logs::DEBUG;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
@@ -16,10 +17,10 @@ use crate::tx::GasFeeEstimate;
 use candid::Principal;
 use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
-use ic_crypto_secp256k1::PublicKey;
 use ic_ethereum_types::Address;
+use ic_secp256k1::PublicKey;
 use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
@@ -58,7 +59,7 @@ pub struct State {
     pub log_scrapings: LogScrapings,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
-    pub ethereum_block_height: BlockTag,
+    pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
@@ -93,7 +94,7 @@ pub struct State {
 
     /// Canister ID of the EVM RPC canister that
     /// handles communication with Ethereum
-    pub evm_rpc_id: Option<Principal>,
+    pub evm_rpc_id: Principal,
 
     /// ERC-20 tokens that the minter can mint:
     /// - primary key: ledger ID for the ckERC20 token
@@ -132,7 +133,7 @@ impl Display for InvalidEventReason {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             InvalidEventReason::InvalidDeposit(reason) => {
-                write!(f, "Invalid deposit: {}", reason)
+                write!(f, "Invalid deposit: {reason}")
             }
             InvalidEventReason::QuarantinedDeposit => {
                 write!(f, "Quarantined deposit")
@@ -175,7 +176,7 @@ impl State {
     pub fn minter_address(&self) -> Option<Address> {
         let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
             .unwrap_or_else(|e| {
-                ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+                ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
             });
         Some(ecdsa_public_key_to_address(&pubkey))
     }
@@ -391,9 +392,7 @@ impl State {
         let entry = self.skipped_blocks.entry(contract_address).or_default();
         assert!(
             entry.insert(block_number),
-            "BUG: block {} was already skipped for contract {}",
-            block_number,
-            contract_address,
+            "BUG: block {block_number} was already skipped for contract {contract_address}",
         );
     }
 
@@ -434,7 +433,7 @@ impl State {
                     .ckerc20_tokens
                     .get_alt(erc20_contract)
                     .unwrap_or_else(|| {
-                        panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
+                        panic!("BUG: missing symbol for ERC-20 contract {erc20_contract}")
                     });
                 (symbol, balance)
             })
@@ -445,8 +444,8 @@ impl State {
         self.ethereum_network
     }
 
-    pub const fn ethereum_block_height(&self) -> BlockTag {
-        self.ethereum_block_height
+    pub fn ethereum_block_height(&self) -> CandidBlockTag {
+        self.ethereum_block_height.clone()
     }
 
     fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
@@ -466,18 +465,18 @@ impl State {
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
-                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {}", e)))?;
+                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
             self.eth_transactions.update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
-                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
+                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {e}"))
             })?;
             self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(
@@ -485,12 +484,12 @@ impl State {
                     eth_helper_contract_address,
                 )
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(
@@ -498,47 +497,43 @@ impl State {
                     erc20_helper_contract_address,
                 )
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
                 LogScrapingId::Erc20DepositWithoutSubaccount,
                 BlockNumber::try_from(block_number).map_err(|e| {
-                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {e}"))
                 })?,
             );
         }
         if let Some(address) = deposit_with_subaccount_helper_contract_address {
             let address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address)
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
                 LogScrapingId::EthOrErc20DepositWithSubaccount,
                 BlockNumber::try_from(block_number).map_err(|e| {
-                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {e}"))
                 })?,
             );
         }
         if let Some(block_height) = ethereum_block_height {
-            self.ethereum_block_height = block_height.into();
+            self.ethereum_block_height = block_height;
         }
         if let Some(orchestrator_id) = ledger_suite_orchestrator_id {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
         }
         if let Some(evm_id) = evm_rpc_id {
-            if evm_id == Principal::management_canister() {
-                self.evm_rpc_id = None;
-            } else {
-                self.evm_rpc_id = Some(evm_id);
-            }
+            self.evm_rpc_id = evm_id;
         }
         self.validate_config()
     }
@@ -585,15 +580,13 @@ impl State {
     }
 
     pub fn max_block_spread_for_logs_scraping(&self) -> u16 {
-        if self.evm_rpc_id.is_some() {
-            // Limit set by the EVM-RPC canister itself, see
-            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
-            500_u16
-        } else {
-            // The maximum block spread is introduced by Cloudflare limits.
-            // https://developers.cloudflare.com/web3/ethereum-gateway/
-            799_u16
-        }
+        // Limit set by the EVM-RPC canister itself, see
+        // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
+        500_u16
+    }
+
+    pub const fn evm_rpc_id(&self) -> Principal {
+        self.evm_rpc_id
     }
 }
 
@@ -617,12 +610,12 @@ where
 
 pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     use ic_cdk::api::management_canister::ecdsa::{
-        ecdsa_public_key, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
+        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, ecdsa_public_key,
     };
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
         PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
-            ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+            ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
         })
     }
 
@@ -644,9 +637,8 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     })
     .await
     .unwrap_or_else(|(error_code, message)| {
-        ic_cdk::trap(&format!(
-            "failed to get minter's public key: {} (error code = {:?})",
-            message, error_code,
+        ic_cdk::trap(format!(
+            "failed to get minter's public key: {message} (error code = {error_code:?})",
         ))
     });
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
@@ -756,10 +748,7 @@ impl Erc20Balances {
         match self.balance_by_erc20_contract.get(&erc20_contract) {
             Some(previous_value) => {
                 let new_value = previous_value.checked_add(deposit).unwrap_or_else(|| {
-                    panic!(
-                        "BUG: overflow when adding {} to {}",
-                        deposit, previous_value
-                    )
+                    panic!("BUG: overflow when adding {deposit} to {previous_value}")
                 });
                 self.balance_by_erc20_contract
                     .insert(erc20_contract, new_value);
@@ -779,10 +768,7 @@ impl Erc20Balances {
         let new_value = previous_value
             .checked_sub(withdrawal_amount)
             .unwrap_or_else(|| {
-                panic!(
-                    "BUG: underflow when subtracting {} from {}",
-                    withdrawal_amount, previous_value
-                )
+                panic!("BUG: underflow when subtracting {withdrawal_amount} from {previous_value}")
             });
         self.balance_by_erc20_contract
             .insert(erc20_contract, new_value);

@@ -5,37 +5,66 @@ mod canister_http;
 mod execution_environment;
 mod ingress;
 mod self_validating;
+mod vetkd;
 mod xnet;
 
 pub use self::{
     canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     execution_environment::{
-        CanisterQueryStats, LocalQueryStats, QueryStats, QueryStatsPayload, RawQueryStats,
-        TotalQueryStats,
+        CanisterCyclesCostSchedule, CanisterQueryStats, LocalQueryStats, QueryStats,
+        QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
-    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
+    vetkd::{
+        VetKdAgreement, VetKdErrorCode, VetKdPayload, bytes_to_vetkd_payload,
+        vetkd_payload_to_bytes,
+    },
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
+    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
+    crypto::{
+        canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
+    },
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
-    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
-use ic_base_types::NodeId;
+use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
+use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    convert::TryInto,
-    hash::Hash,
-};
+use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum BatchContent {
+    /// The payload messages to be processed.
+    Data {
+        batch_messages: BatchMessages,
+        /// Responses to subnet calls that require consensus' involvement.
+        consensus_responses: Vec<ConsensusResponse>,
+        /// Data required by the chain key service
+        chain_key_data: ChainKeyData,
+        /// Whether the state obtained by executing this batch needs to be fully
+        /// hashed to be eligible for StateSync.
+        requires_full_state_hash: bool,
+    },
+    /// During subnet splitting we don't include any messages with the batch.
+    /// Subnet splitting rounds are always checkpoint ("full state hash") rounds.
+    Splitting {
+        /// The id of the subnet the replica is assigned to after subnet splitting.
+        new_subnet_id: SubnetId,
+        /// The id of the subnet which will have the other half of the state.
+        // Used for sanity checks
+        other_subnet_id: SubnetId,
+    },
+}
 
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -45,27 +74,34 @@ pub struct Batch {
     /// The batch summary is always set by the consensus, see `deliver_batches()`.
     /// The tests and the `PocketIC` might set it to `None`, i.e. "unknown".
     pub batch_summary: Option<BatchSummary>,
-    /// Whether the state obtained by executing this batch needs to be fully
-    /// hashed to be eligible for StateSync.
-    pub requires_full_state_hash: bool,
-    /// The payload messages to be processed.
-    pub messages: BatchMessages,
+    /// Content, such as ingress messages, to be processed by the Message Routing.
+    pub content: BatchContent,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
-    /// The Master public keys of the subnet.
-    pub chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    /// The pre-signature Ids available to be matched with signature requests.
-    pub idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
     /// The version of the registry to be referenced when processing the batch.
     pub registry_version: RegistryVersion,
     /// A clock time to be used for processing messages.
     pub time: Time,
-    /// Responses to subnet calls that require consensus' involvement.
-    pub consensus_responses: Vec<ConsensusResponse>,
     /// Information about block makers
     pub blockmaker_metrics: BlockmakerMetrics,
     /// The current replica version.
     pub replica_version: ReplicaVersion,
+}
+
+impl Batch {
+    /// Returns `true` if this is a checkpoint round.
+    pub fn requires_full_state_hash(&self) -> bool {
+        match &self.content {
+            // Regular data batches have an explicit flag.
+            BatchContent::Data {
+                requires_full_state_hash,
+                ..
+            } => *requires_full_state_hash,
+
+            // Subnet splitting always requires a checkpoint.
+            BatchContent::Splitting { .. } => true,
+        }
+    }
 }
 
 /// The context built by Consensus for deterministic processing. Captures all
@@ -101,6 +137,25 @@ impl ValidationContext {
     }
 }
 
+/// Available pre-signatures that can be delivered to execution
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct AvailablePreSignatures {
+    /// The key transcript corresponding to these pre-signatures
+    pub key_transcript: IDkgTranscript,
+    /// Newly available pre-signatures to be delivered to execution
+    pub pre_signatures: BTreeMap<PreSigId, PreSignature>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct ChainKeyData {
+    /// The Master public keys of the subnet.
+    pub master_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
+    /// The pre-signatures available to be matched with signature requests.
+    pub idkg_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
+    /// The NiDKG Ids corresponding to available transcripts to be used to answer vetkd requests
+    pub nidkg_ids: BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
+}
+
 /// The payload of a batch.
 ///
 /// Contains ingress messages, XNet messages and self-validating messages.
@@ -112,6 +167,7 @@ pub struct BatchPayload {
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
     pub query_stats: Vec<u8>,
+    pub vetkd: Vec<u8>,
 }
 
 /// Batch properties collected form the last DKG summary block.
@@ -165,10 +221,21 @@ impl BatchPayload {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ingress.is_empty()
-            && self.xnet.stream_slices.is_empty()
-            && self.self_validating.is_empty()
-            && self.canister_http.is_empty()
+        let BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+            canister_http,
+            query_stats,
+            vetkd,
+        } = &self;
+
+        ingress.is_empty()
+            && xnet.is_empty()
+            && self_validating.is_empty()
+            && canister_http.is_empty()
+            && query_stats.is_empty()
+            && vetkd.is_empty()
     }
 }
 
@@ -185,6 +252,44 @@ impl BlockmakerMetrics {
             failed_blockmakers: vec![],
         }
     }
+}
+
+/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// into a byte vector.
+///
+/// The function is given a `max_size` limit, and guarantees that the buffer will be
+/// smaller or equal than the byte limit.
+/// It may drop messages from the iterator, if they don't fit.
+pub fn iterator_to_bytes<I, M>(iter: I, max_size: NumBytes) -> Vec<u8>
+where
+    M: Message,
+    I: Iterator<Item = M>,
+{
+    let mut buffer = vec![].limit(max_size.get() as usize);
+
+    for val in iter {
+        // NOTE: This call may fail due to the encoding hitting the
+        // byte limit. We continue trying the rest of the messages
+        // nonetheless, to give smaller messages a chance as well
+        let _ = val.encode_length_delimited(&mut buffer);
+    }
+
+    buffer.into_inner()
+}
+
+/// Parse a slice filled with protobuf encoded [`Message`]s into a vector
+pub fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
+where
+    M: Message + Default,
+{
+    let mut msgs = vec![];
+
+    while !data.is_empty() {
+        let msg = M::decode_length_delimited(&mut data)?;
+        msgs.push(msg)
+    }
+
+    Ok(msgs)
 }
 
 /// Response to a subnet call that requires Consensus' involvement.
@@ -244,9 +349,45 @@ mod tests {
     /// This is a quick test to check the invariant, that the [`Default`] implementation
     /// of a payload section actually produces the empty payload,
     #[test]
+    fn default_batch_payload_is_zero_bytes() {
+        let BatchPayload {
+            ingress,
+            xnet: _, // No implementation of `CountBytes` for xnet.
+            self_validating,
+            canister_http,
+            query_stats,
+            vetkd,
+        } = BatchPayload::default();
+
+        assert_eq!(ingress.count_bytes(), 0);
+        assert_eq!(self_validating.count_bytes(), 0);
+        assert_eq!(canister_http.len(), 0);
+        assert_eq!(query_stats.len(), 0);
+        assert_eq!(vetkd.len(), 0);
+    }
+
+    /// This is a quick test to check the invariant, that the [`Default`] implementation
+    /// of a payload section actually produces the empty payload,
+    #[test]
     fn default_batch_payload_is_empty() {
-        assert_eq!(IngressPayload::default().count_bytes(), 0);
-        assert_eq!(SelfValidatingPayload::default().count_bytes(), 0);
+        let payload = BatchPayload::default();
+        assert!(payload.is_empty());
+
+        let BatchPayload {
+            ingress,
+            xnet,
+            self_validating,
+            canister_http,
+            query_stats,
+            vetkd,
+        } = &payload;
+
+        assert!(ingress.is_empty());
+        assert!(xnet.is_empty());
+        assert!(self_validating.is_empty());
+        assert!(canister_http.is_empty());
+        assert!(query_stats.is_empty());
+        assert!(vetkd.is_empty());
     }
 
     #[test]

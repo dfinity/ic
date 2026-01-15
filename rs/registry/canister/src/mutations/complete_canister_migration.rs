@@ -17,7 +17,7 @@ impl Registry {
         let canister_id_ranges = payload.canister_id_ranges;
         // Check if the canister ID ranges are well formed.
         let canister_id_ranges = CanisterIdRanges::try_from(canister_id_ranges)
-            .map_err(|e| format!("canister ID ranges are not well formed: {:?}", e))?;
+            .map_err(|e| format!("canister ID ranges are not well formed: {e:?}"))?;
 
         self.maybe_apply_mutation_internal(vec![self.remove_canister_migrations_mutation(
             self.latest_version(),

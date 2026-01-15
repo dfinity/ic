@@ -6,7 +6,7 @@ use std::thread::LocalKey;
 /// Declares a new canister log buffer.
 #[macro_export]
 macro_rules! declare_log_buffer {
-    (name = $name:ident, capacity = $cap:expr) => {
+    (name = $name:ident, capacity = $cap:expr_2021) => {
         thread_local! {
             pub static $name: std::cell::RefCell<$crate::LogBuffer> =
                 std::cell::RefCell::new($crate::LogBuffer::with_capacity($cap));
@@ -48,7 +48,7 @@ pub mod entry_counter {
 /// ```
 #[macro_export]
 macro_rules! log {
-    ($sink:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($sink:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         use $crate::Sink;
         let message = std::format!($message $(,$args)*);
         // Print the message for convenience for local development (e.g. integration tests)
@@ -163,7 +163,7 @@ impl Sink for &'static GlobalBuffer {
 mod private {
     #[cfg(target_arch = "wasm32")]
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn time() -> u64;
     }
 

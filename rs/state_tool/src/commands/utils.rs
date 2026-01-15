@@ -1,6 +1,6 @@
 //! Utility functions shared across commands.
 
-use ic_config::{config_parser::ConfigSource, ConfigOptional};
+use ic_config::{ConfigOptional, config_parser::ConfigSource};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::StateLayout;

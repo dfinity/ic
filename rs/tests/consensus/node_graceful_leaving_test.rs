@@ -31,7 +31,7 @@ use ic_system_test_driver::{
     },
     nns::remove_nodes_via_endpoint,
     util::{
-        assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, EndpointsStatus,
+        EndpointsStatus, assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on,
     },
 };
 use ic_types::Height;
@@ -112,7 +112,9 @@ fn test(env: TestEnv) {
     );
 
     info!(log, "Kill nodes after removal (last shot to the victims)");
-    nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
+    nns_nodes_to_remove
+        .iter()
+        .for_each(|node| block_on(async { node.vm().await.kill().await }));
     // Assert that `update` call can still be executed, this ensures that removed+killed nodes are not part of the consensus committee.
     let update_message = b"This beautiful prose should be persisted for future generations";
     block_on(async { assert_subnet_can_make_progress(update_message, nns_node).await });

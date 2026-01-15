@@ -1,20 +1,22 @@
 //! Module that deals with ingress messages
-pub mod call_v2;
-pub mod call_v3;
+pub mod call_async;
+pub mod call_sync;
 mod ingress_watcher;
 
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
+    common::{build_validator, certified_state_unavailable_error, validation_error_to_http_error},
 };
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
 use ic_error_types::UserError;
+use ic_interfaces::execution_environment::IngressFilterError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -22,19 +24,18 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
+    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
     },
-    time::current_time,
-    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{Sender, error::TrySendError};
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
@@ -42,11 +43,12 @@ pub struct IngressValidatorBuilder {
     node_id: NodeId,
     subnet_id: SubnetId,
     malicious_flags: Option<MaliciousFlags>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    time_source: Option<Arc<dyn TimeSource>>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidatorBuilder {
@@ -55,16 +57,17 @@ impl IngressValidatorBuilder {
         node_id: NodeId,
         subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_verifier: Arc<dyn IngressSigVerifier>,
         ingress_filter: Arc<Mutex<IngressFilterService>>,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-        ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+        ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ) -> Self {
         Self {
             log,
             node_id,
             subnet_id,
             malicious_flags: None,
+            time_source: None,
             ingress_verifier,
             registry_client,
             ingress_filter,
@@ -78,6 +81,11 @@ impl IngressValidatorBuilder {
         self
     }
 
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+        self.time_source = Some(time_source);
+        self
+    }
+
     pub fn build(self) -> IngressValidator {
         let log = self.log;
         IngressValidator {
@@ -85,6 +93,7 @@ impl IngressValidatorBuilder {
             node_id: self.node_id,
             subnet_id: self.subnet_id,
             registry_client: self.registry_client.clone(),
+            time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             ingress_filter: self.ingress_filter,
             ingress_throttler: self.ingress_throttler,
@@ -120,8 +129,7 @@ fn get_registry_data(
         Ok(Some(settings)) => settings,
         Ok(None) => {
             let message = format!(
-                "No subnet record found for registry_version={:?} and subnet_id={:?}",
-                registry_version, subnet_id
+                "No subnet record found for registry_version={registry_version:?} and subnet_id={subnet_id:?}"
             );
             warn!(log, "{}", message);
             return Err(HttpError {
@@ -131,8 +139,7 @@ fn get_registry_data(
         }
         Err(err) => {
             let message = format!(
-                "max_ingress_bytes_per_message not found for registry_version={:?} and subnet_id={:?}. {:?}",
-                registry_version, subnet_id, err
+                "max_ingress_bytes_per_message not found for registry_version={registry_version:?} and subnet_id={subnet_id:?}. {err:?}"
             );
             error!(log, "{}", message);
             return Err(HttpError {
@@ -145,13 +152,20 @@ fn get_registry_data(
     let provisional_whitelist = match registry_client.get_provisional_whitelist(registry_version) {
         Ok(Some(list)) => list,
         Ok(None) => {
-            error!(log, "At registry version {}, get_provisional_whitelist() returned Ok(None). Using empty list.",
-                       registry_version);
+            error!(
+                log,
+                "At registry version {}, get_provisional_whitelist() returned Ok(None). Using empty list.",
+                registry_version
+            );
             ProvisionalWhitelist::new_empty()
         }
         Err(err) => {
-            error!(log, "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list.",
-                       registry_version, err);
+            error!(
+                log,
+                "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list.",
+                registry_version,
+                err
+            );
             ProvisionalWhitelist::new_empty()
         }
     };
@@ -164,10 +178,11 @@ pub struct IngressValidator {
     node_id: NodeId,
     subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
+    time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     ingress_filter: Arc<Mutex<IngressFilterService>>,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
 }
 
 impl IngressValidator {
@@ -185,6 +200,7 @@ impl IngressValidator {
             node_id,
             subnet_id,
             registry_client,
+            time_source,
             validator,
             ingress_filter,
             ingress_throttler,
@@ -195,14 +211,22 @@ impl IngressValidator {
         let ingress_pool_is_full = ingress_throttler.read().unwrap().exceeds_threshold();
         if ingress_pool_is_full {
             Err(HttpError {
-                status: StatusCode::TOO_MANY_REQUESTS,
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "Service is overloaded, try again later.".to_string(),
+            })?;
+        }
+
+        // Load shed the request if the ingress channel is full.
+        if ingress_tx.capacity() == 0 {
+            Err(HttpError {
+                status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "Service is overloaded, try again later.".to_string(),
             })?;
         }
 
         let msg: SignedIngress = request.try_into().map_err(|e| HttpError {
             status: StatusCode::BAD_REQUEST,
-            message: format!("Could not parse body as call message: {}", e),
+            message: format!("Could not parse body as call message: {e}"),
         })?;
 
         // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.
@@ -229,11 +253,11 @@ impl IngressValidator {
             Err(HttpError {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 message: format!(
-                "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
-                message_id,
-                msg.count_bytes(),
-                ingress_registry_settings.max_ingress_bytes_per_message
-            ),
+                    "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
+                    message_id,
+                    msg.count_bytes(),
+                    ingress_registry_settings.max_ingress_bytes_per_message
+                ),
             })?;
         }
 
@@ -243,7 +267,11 @@ impl IngressValidator {
         let request_c = msg.as_ref().clone();
 
         tokio::task::spawn_blocking(move || {
-            validator.validate_request(&request_c, current_time(), &root_of_trust_provider)
+            validator.validate_request(
+                &request_c,
+                time_source.get_relative_time(),
+                &root_of_trust_provider,
+            )
         })
         .await
         .map_err(|_| HttpError {
@@ -251,16 +279,19 @@ impl IngressValidator {
             message: "".into(),
         })?
         .map_err(|validation_error| {
-            validation_error_to_http_error(message_id, validation_error, &log)
+            validation_error_to_http_error(msg.as_ref(), validation_error, &log)
         })?;
 
         let ingress_filter = ingress_filter.lock().unwrap().clone();
 
         match ingress_filter
-            .oneshot((provisional_whitelist, msg.content().clone()))
+            .oneshot((provisional_whitelist, msg.clone()))
             .await
+            .expect("Can't panic on Infallible")
         {
-            Err(_) => panic!("Can't panic on Infallible"),
+            Err(IngressFilterError::CertifiedStateUnavailable) => {
+                return Err(certified_state_unavailable_error().into());
+            }
             Ok(Err(user_error)) => {
                 Err(user_error)?;
             }
@@ -276,7 +307,7 @@ impl IngressValidator {
 }
 
 pub struct IngressMessageSubmitter {
-    ingress_tx: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     node_id: NodeId,
     message: SignedIngress,
 }
@@ -297,18 +328,19 @@ impl IngressMessageSubmitter {
         } = self;
 
         // Submission will fail if P2P is not running, meaning there is
-        // no receiver for the ingress message.
-        let send_ingress_to_p2p_failed = ingress_tx
-            .send(UnvalidatedArtifactMutation::Insert((message, node_id)))
-            .is_err();
-
-        if send_ingress_to_p2p_failed {
-            return Err(HttpError {
-                status: StatusCode::INTERNAL_SERVER_ERROR,
-                message: "P2P is not running on this node.".to_string(),
-            });
-        }
-        Ok(())
+        // no receiver for the ingress message, or if the channel is full.
+        ingress_tx
+            .try_send(UnvalidatedArtifactMutation::Insert((message, node_id)))
+            .map_err(|err| match err {
+                TrySendError::Full(_) => HttpError {
+                    status: StatusCode::SERVICE_UNAVAILABLE,
+                    message: "Service is overloaded, try again later.".to_string(),
+                },
+                TrySendError::Closed(_) => HttpError {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "P2P is not running on this node.".to_string(),
+                },
+            })
     }
 }
 

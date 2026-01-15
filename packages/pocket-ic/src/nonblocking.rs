@@ -1,42 +1,48 @@
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubmitIngressResult, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, RawWasmResult, SubnetId, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTickConfigs, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, Topology,
 };
-use crate::management_canister::{
-    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterInstallModeUpgradeInner,
-    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner, CanisterLogRecord, CanisterSettings,
-    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
-    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
-    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkResult,
+#[cfg(windows)]
+use crate::wsl_path;
+use crate::{
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams,
+    TickConfigs, Time, copy_dir, start_server,
 };
-pub use crate::DefaultEffectiveCanisterIdError;
-use crate::{CallError, PocketIcBuilder, UserError, WasmResult};
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
+use ic_management_canister_types::{
+    CanisterId, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord, CanisterSettings,
+    CanisterStatusResult, ChunkHash, DeleteCanisterSnapshotArgs, FetchCanisterLogsResult,
+    InstallChunkedCodeArgs, InstallCodeArgs, LoadCanisterSnapshotArgs,
+    ProvisionalCreateCanisterWithCyclesArgs, Snapshot, StoredChunksResult,
+    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UpgradeFlags, UploadChunkArgs, UploadChunkResult,
+    WasmMemoryPersistence,
+};
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::File;
+use std::fs::read_dir;
 use std::future::Future;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tracing::{debug, instrument, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
@@ -82,6 +88,7 @@ pub struct PocketIc {
     reqwest_client: reqwest::Client,
     // the instance should only be deleted when dropping this handle if this handle owns the instance
     owns_instance: bool,
+    state_dir: Option<PocketIcState>,
     _log_guard: Option<WorkerGuard>,
 }
 
@@ -117,38 +124,87 @@ impl PocketIc {
             server_url,
             reqwest_client,
             owns_instance: false,
+            state_dir: None,
             _log_guard: log_guard,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
-        server_url: Url,
+        server_url: Option<Url>,
+        server_binary: Option<PathBuf>,
         max_request_time_ms: Option<u64>,
-        state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        read_only_state_dir: Option<PathBuf>,
+        mut state_dir: Option<PocketIcState>,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
+        icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
-        let subnet_config_set = subnet_config_set.into();
-        if state_dir.is_none()
-            || File::open(state_dir.clone().unwrap().join("topology.json")).is_err()
-        {
-            subnet_config_set.validate().unwrap();
-        }
+        let server_url = if let Some(server_url) = server_url {
+            server_url
+        } else {
+            let (_, server_url) = start_server(StartServerParams {
+                server_binary,
+                reuse: true,
+                ttl: None,
+            })
+            .await;
+            server_url
+        };
+
+        let subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
+
+        // copy the read-only state dir to the state dir
+        // (creating an empty temp dir to serve as the state dir if no state dir is provided)
+        if let Some(read_only_state_dir) = read_only_state_dir {
+            if let Some(ref state_dir) = state_dir {
+                let mut state_dir_contents = read_dir(state_dir.state_dir()).unwrap();
+                if state_dir_contents.next().is_some() {
+                    panic!(
+                        "PocketIC instance state must be empty if a read-only state is mounted."
+                    );
+                }
+            } else {
+                state_dir = Some(PocketIcState::new());
+            };
+            copy_dir(
+                read_only_state_dir,
+                state_dir
+                    .as_ref()
+                    .map(|state_dir| state_dir.state_dir())
+                    .unwrap(),
+            )
+            .expect("Failed to copy state directory");
+        };
+
         let instance_config = InstanceConfig {
             subnet_config_set,
-            state_dir,
-            nonmainnet_features,
+            http_gateway_config,
+            #[cfg(not(windows))]
+            state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
+            #[cfg(windows)]
+            state_dir: state_dir
+                .as_ref()
+                .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
+            icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            dogecoind_addr,
+            icp_features: Some(icp_features),
+            incomplete_state: None,
+            initial_time,
         };
 
         let test_driver_pid = std::process::id();
         let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let instance_id = match reqwest_client
+        let (instance_id, http_gateway_info) = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&instance_config)
             .send()
@@ -158,7 +214,11 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+            CreateInstanceResponse::Created {
+                instance_id,
+                http_gateway_info,
+                ..
+            } => (instance_id, http_gateway_info),
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -166,12 +226,22 @@ impl PocketIc {
         Self {
             instance_id,
             max_request_time_ms,
-            http_gateway: None,
+            http_gateway: http_gateway_info,
             server_url,
             reqwest_client,
             owns_instance: true,
+            state_dir,
             _log_guard: log_guard,
         }
+    }
+
+    pub async fn drop_and_take_state(mut self) -> Option<PocketIcState> {
+        self.do_drop().await;
+        self.state_dir.take()
+    }
+
+    pub(crate) fn take_state_internal(&mut self) -> Option<PocketIcState> {
+        self.state_dir.take()
     }
 
     /// Returns the URL of the PocketIC server on which this PocketIC instance is running.
@@ -246,7 +316,12 @@ impl PocketIc {
     /// List all instances and their status.
     #[instrument(ret)]
     pub async fn list_instances() -> Vec<String> {
-        let url = crate::start_or_reuse_server().join("instances").unwrap();
+        let (_, server_url) = start_server(StartServerParams {
+            reuse: true,
+            ..Default::default()
+        })
+        .await;
+        let url = server_url.join("instances").unwrap();
         let instances: Vec<String> = reqwest::Client::new()
             .get(url)
             .send()
@@ -290,25 +365,37 @@ impl PocketIc {
     /// inter-canister calls or heartbeats.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn tick(&self) {
+        self.tick_with_configs(TickConfigs::default()).await;
+    }
+
+    /// Make the IC produce and progress by one block with custom
+    /// configs for the round.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn tick_with_configs(&self, configs: TickConfigs) {
         let endpoint = "update/tick";
-        self.post::<(), _>(endpoint, "").await;
+        self.post::<(), RawTickConfigs>(endpoint, configs.into())
+            .await;
     }
 
     /// Configures the IC to make progress automatically,
     /// i.e., periodically update the time of the IC
     /// to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn auto_progress(&self) -> Url {
-        let now = std::time::SystemTime::now();
-        self.set_time(now).await;
         let endpoint = "auto_progress";
         let auto_progress_config = AutoProgressConfig {
             artificial_delay_ms: None,
         };
         self.post::<(), _>(endpoint, auto_progress_config).await;
         self.instance_url()
+    }
+
+    /// Returns whether automatic progress is enabled on the PocketIC instance.
+    #[instrument(skip(self), fields(instance_id=self.instance_id))]
+    pub async fn auto_progress_enabled(&self) -> bool {
+        self.get("auto_progress").await
     }
 
     pub(crate) fn instance_url(&self) -> Url {
@@ -326,7 +413,7 @@ impl PocketIc {
         self.post::<(), _>(endpoint, "").await;
     }
 
-    /// Returns the URL at which `/api/v2` requests
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made if the HTTP
     /// gateway has been started.
     pub fn url(&self) -> Option<Url> {
@@ -335,28 +422,34 @@ impl PocketIc {
             .map(|res| Url::parse(&format!("http://{}:{}/", LOCALHOST, res.port)).unwrap())
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
+    /// Creates an HTTP gateway for this PocketIC instance binding to `127.0.0.1`
+    /// and an optionally specified port (defaults to choosing an arbitrary unassigned port);
+    /// listening on `localhost`;
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live(&mut self, listen_at: Option<u16>) -> Url {
-        self.make_live_with_params(listen_at, None, None).await
+        self.make_live_with_params(None, listen_at, None, None)
+            .await
     }
 
-    /// Creates an HTTP gateway for this PocketIC instance listening
-    /// on an optionally specified port (defaults to choosing an arbitrary unassigned port)
-    /// and optionally specified domains (default to `localhost`)
+    /// Creates an HTTP gateway for this PocketIC instance binding
+    /// to an optionally specified IP address (defaults to `127.0.0.1`)
+    /// and port (defaults to choosing an arbitrary unassigned port);
+    /// listening on optionally specified domains (default to `localhost`);
     /// and using an optionally specified TLS certificate (if provided, an HTTPS gateway is created)
     /// and configures the PocketIC instance to make progress automatically, i.e.,
-    /// periodically update the time of the PocketIC instance to the real time and execute rounds on the subnets.
-    /// Returns the URL at which `/api/v2` requests
+    /// periodically update the time of the PocketIC instance to the real time
+    /// and process messages on the PocketIC instance.
+    /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn make_live_with_params(
         &mut self,
+        ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
@@ -364,20 +457,28 @@ impl PocketIc {
         if let Some(url) = self.url() {
             return url;
         }
-        self.auto_progress().await;
-        self.start_http_gateway(listen_at, domains, https_config)
-            .await
+        if !self.auto_progress_enabled().await {
+            self.auto_progress().await;
+        }
+        self.start_http_gateway(
+            ip_addr.map(|ip_addr| ip_addr.to_string()),
+            listen_at,
+            domains,
+            https_config,
+        )
+        .await
     }
 
     async fn start_http_gateway(
         &mut self,
+        ip_addr: Option<String>,
         port: Option<u16>,
         domains: Option<Vec<String>>,
         https_config: Option<HttpsConfig>,
     ) -> Url {
         let endpoint = self.server_url.join("http_gateway").unwrap();
         let http_gateway_config = HttpGatewayConfig {
-            ip_addr: None,
+            ip_addr,
             port,
             forward_to: HttpGatewayBackend::PocketIcInstance(self.instance_id),
             domains: domains.clone(),
@@ -415,7 +516,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {}", message)
+                panic!("Failed to create http gateway: {message}")
             }
         }
     }
@@ -445,12 +546,6 @@ impl PocketIc {
         self.stop_progress().await;
     }
 
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub async fn make_deterministic(&mut self) {
-        self.stop_live().await;
-    }
-
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.instance_id))]
     pub async fn root_key(&self) -> Option<Vec<u8>> {
@@ -463,23 +558,33 @@ impl PocketIc {
 
     /// Get the current time of the IC.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
-    pub async fn get_time(&self) -> SystemTime {
+    pub async fn get_time(&self) -> Time {
         let endpoint = "read/get_time";
         let result: RawTime = self.get(endpoint).await;
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(result.nanos_since_epoch)
+        Time::from_nanos_since_unix_epoch(result.nanos_since_epoch)
     }
 
     /// Set the current time of the IC, on all subnets.
     #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
-    pub async fn set_time(&self, time: SystemTime) {
+    pub async fn set_time(&self, time: Time) {
         let endpoint = "update/set_time";
         self.post::<(), _>(
             endpoint,
             RawTime {
-                nanos_since_epoch: time
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .expect("Time went backwards")
-                    .as_nanos() as u64,
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
+            },
+        )
+        .await;
+    }
+
+    /// Set the current certified time of the IC, on all subnets.
+    #[instrument(skip(self), fields(instance_id=self.instance_id, time = ?time))]
+    pub async fn set_certified_time(&self, time: Time) {
+        let endpoint = "update/set_certified_time";
+        self.post::<(), _>(
+            endpoint,
+            RawTime {
+                nanos_since_epoch: time.as_nanos_since_unix_epoch(),
             },
         )
         .await;
@@ -546,7 +651,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         self.submit_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -565,7 +670,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<RawMessageId, UserError> {
+    ) -> Result<RawMessageId, RejectResponse> {
         let endpoint = "update/submit_ingress_message";
         let raw_canister_call = RawCanisterCall {
             sender: sender.as_slice().to_vec(),
@@ -574,51 +679,79 @@ impl PocketIc {
             payload,
             effective_principal,
         };
-        let res: RawSubmitIngressResult = self.post(endpoint, raw_canister_call).await;
-        match res {
-            RawSubmitIngressResult::Ok(message_id) => Ok(message_id),
-            RawSubmitIngressResult::Err(user_error) => Err(user_error),
-        }
+        self.post(endpoint, raw_canister_call).await
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    pub async fn await_call(&self, message_id: RawMessageId) -> Result<WasmResult, UserError> {
+    pub async fn await_call(&self, message_id: RawMessageId) -> Result<Vec<u8>, RejectResponse> {
         let endpoint = "update/await_ingress_message";
         let result: RawCanisterResult = self.post(endpoint, message_id).await;
-        match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
+        result.into()
+    }
+
+    /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    pub async fn ingress_status(
+        &self,
+        raw_message_id: RawMessageId,
+    ) -> Option<Result<Vec<u8>, RejectResponse>> {
+        let status = self.ingress_status_as_caller(raw_message_id, None).await;
+        match status {
+            IngressStatusResult::NotAvailable => None,
+            IngressStatusResult::Success(status) => Some(status),
+            IngressStatusResult::Forbidden(err) => {
+                panic!("Retrieving ingress status was forbidden: {err}. This is a bug!")
+            }
         }
     }
 
     /// Fetch the status of an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
     /// Note that the status of the update call can only change if the PocketIC instance is in live mode
-    /// or a round has been executed due to a separate PocketIC library call.
-    pub async fn ingress_status(
+    /// or a round has been executed due to a separate PocketIC library call, e.g., `PocketIc::tick()`.
+    /// If the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+    pub async fn ingress_status_as(
         &self,
-        message_id: RawMessageId,
-    ) -> Option<Result<WasmResult, UserError>> {
+        raw_message_id: RawMessageId,
+        caller: Principal,
+    ) -> IngressStatusResult {
+        self.ingress_status_as_caller(raw_message_id, Some(caller))
+            .await
+    }
+
+    async fn ingress_status_as_caller(
+        &self,
+        raw_message_id: RawMessageId,
+        caller: Option<Principal>,
+    ) -> IngressStatusResult {
         let endpoint = "read/ingress_status";
-        let result: Option<RawCanisterResult> = self.post(endpoint, message_id).await;
-        result.map(|result| match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        })
+        let raw_ingress_status_args = RawIngressStatusArgs {
+            raw_message_id,
+            raw_caller: caller.map(|caller| caller.into()),
+        };
+        let result: Result<Option<RawCanisterResult>, (StatusCode, String)> =
+            self.try_post(endpoint, raw_ingress_status_args).await;
+        match result {
+            Ok(None) => IngressStatusResult::NotAvailable,
+            Ok(Some(result)) => IngressStatusResult::Success(result.into()),
+            Err((status, message)) => {
+                assert_eq!(
+                    status,
+                    StatusCode::FORBIDDEN,
+                    "HTTP error code {status} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!"
+                );
+                IngressStatusResult::Forbidden(message)
+            }
+        }
     }
 
     /// Await an update call submitted previously by `submit_call` or `submit_call_with_effective_principal`.
-    /// This function does not execute rounds and thus should only be called on a "live" PocketIC instance
-    /// or if rounds are executed due to separate PocketIC library calls.
+    /// Note that the status of the update call can only change if the PocketIC instance is in live mode
+    /// or a round has been executed due to a separate PocketIC library call.
     pub async fn await_call_no_ticks(
         &self,
         message_id: RawMessageId,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let mut retry_policy: ExponentialBackoff = ExponentialBackoffBuilder::new()
             .with_initial_interval(Duration::from_millis(10))
             .with_max_interval(Duration::from_secs(1))
@@ -640,7 +773,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         self.update_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -659,7 +792,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         self.query_call_with_effective_principal(
             canister_id,
             RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec()),
@@ -681,7 +814,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let endpoint = "read/query";
         self.canister_call(
             endpoint,
@@ -699,7 +832,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Principal,
-    ) -> Result<Vec<CanisterLogRecord>, CallError> {
+    ) -> Result<Vec<CanisterLogRecord>, RejectResponse> {
         with_candid::<_, (FetchCanisterLogsResult,), _>(
             (CanisterIdRecord { canister_id },),
             |payload| async {
@@ -723,7 +856,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<CanisterStatusResult, CallError> {
+    ) -> Result<CanisterStatusResult, RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), (CanisterStatusResult,)>(
             self,
             Principal::management_canister(),
@@ -817,7 +950,7 @@ impl PocketIc {
             Ok(CanisterIdRecord {
                 canister_id: actual_canister_id,
             }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(e) => Err(format!("{e:?}")),
         }
     }
 
@@ -856,7 +989,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         chunk: Vec<u8>,
-    ) -> Result<Vec<u8>, CallError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         call_candid_as::<_, (UploadChunkResult,)>(
             self,
             Principal::management_canister(),
@@ -875,7 +1008,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Vec<u8>>, CallError> {
+    ) -> Result<Vec<Vec<u8>>, RejectResponse> {
         call_candid_as::<_, (StoredChunksResult,)>(
             self,
             Principal::management_canister(),
@@ -894,7 +1027,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -917,7 +1050,7 @@ impl PocketIc {
         chunk_hashes_list: Vec<Vec<u8>>,
         wasm_module_hash: Vec<u8>,
         arg: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -947,7 +1080,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         if wasm_module.len() + arg.len() < INSTALL_CHUNKED_CODE_THRESHOLD {
             call_candid_as::<(InstallCodeArgs,), ()>(
                 self,
@@ -1019,13 +1152,30 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
-            CanisterInstallMode::Upgrade(Some(CanisterInstallModeUpgradeInner {
-                wasm_memory_persistence: Some(
-                    CanisterInstallModeUpgradeInnerWasmMemoryPersistenceInner::Replace,
-                ),
-                skip_pre_upgrade: Some(false),
+            CanisterInstallMode::Upgrade(None),
+            canister_id,
+            wasm_module,
+            arg,
+            sender,
+        )
+        .await
+    }
+
+    /// Upgrade a Motoko EOP canister with a new WASM module.
+    #[instrument(skip(self, wasm_module, arg), fields(instance_id=self.instance_id, canister_id = %canister_id.to_string(), wasm_module_len = %wasm_module.len(), arg_len = %arg.len(), sender = %sender.unwrap_or(Principal::anonymous()).to_string()))]
+    pub async fn upgrade_eop_canister(
+        &self,
+        canister_id: CanisterId,
+        wasm_module: Vec<u8>,
+        arg: Vec<u8>,
+        sender: Option<Principal>,
+    ) -> Result<(), RejectResponse> {
+        self.install_canister_helper(
+            CanisterInstallMode::Upgrade(Some(UpgradeFlags {
+                wasm_memory_persistence: Some(WasmMemoryPersistence::Keep),
+                skip_pre_upgrade: None,
             })),
             canister_id,
             wasm_module,
@@ -1043,7 +1193,7 @@ impl PocketIc {
         wasm_module: Vec<u8>,
         arg: Vec<u8>,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         self.install_canister_helper(
             CanisterInstallMode::Reinstall,
             canister_id,
@@ -1060,7 +1210,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1079,7 +1229,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         replace_snapshot: Option<Vec<u8>>,
-    ) -> Result<Snapshot, CallError> {
+    ) -> Result<Snapshot, RejectResponse> {
         call_candid_as::<_, (Snapshot,)>(
             self,
             Principal::management_canister(),
@@ -1102,7 +1252,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -1124,7 +1274,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<Vec<Snapshot>, CallError> {
+    ) -> Result<Vec<Snapshot>, RejectResponse> {
         call_candid_as::<_, (Vec<Snapshot>,)>(
             self,
             Principal::management_canister(),
@@ -1144,7 +1294,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         snapshot_id: Vec<u8>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as(
             self,
             Principal::management_canister(),
@@ -1166,7 +1316,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         settings: CanisterSettings,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<_, ()>(
             self,
             Principal::management_canister(),
@@ -1189,7 +1339,7 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Option<Principal>,
         new_controllers: Vec<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         let settings = CanisterSettings {
             controllers: Some(new_controllers),
             ..CanisterSettings::default()
@@ -1215,7 +1365,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1233,7 +1383,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1251,7 +1401,7 @@ impl PocketIc {
         &self,
         canister_id: CanisterId,
         sender: Option<Principal>,
-    ) -> Result<(), CallError> {
+    ) -> Result<(), RejectResponse> {
         call_candid_as::<(CanisterIdRecord,), ()>(
             self,
             Principal::management_canister(),
@@ -1294,13 +1444,7 @@ impl PocketIc {
         ];
         let paths = vec![path.clone()];
         let content = ReadState {
-            ingress_expiry: self
-                .get_time()
-                .await
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64
-                + 240_000_000_000,
+            ingress_expiry: self.get_time().await.as_nanos_since_unix_epoch() + 240_000_000_000,
             sender: Principal::anonymous(),
             paths,
         };
@@ -1343,13 +1487,14 @@ impl PocketIc {
     }
 
     pub(crate) async fn do_drop(&mut self) {
-        self.stop_http_gateway().await;
         if self.owns_instance {
             self.reqwest_client
                 .delete(self.instance_url())
                 .send()
                 .await
                 .expect("Failed to send delete request");
+        } else {
+            self.stop_http_gateway().await;
         }
     }
 
@@ -1361,12 +1506,29 @@ impl PocketIc {
         self.request(HttpMethod::Post, endpoint, body).await
     }
 
+    async fn try_post<T: DeserializeOwned, B: Serialize>(
+        &self,
+        endpoint: &str,
+        body: B,
+    ) -> Result<T, (StatusCode, String)> {
+        self.try_request(HttpMethod::Post, endpoint, body).await
+    }
+
     async fn request<T: DeserializeOwned, B: Serialize>(
         &self,
         http_method: HttpMethod,
         endpoint: &str,
         body: B,
     ) -> T {
+        self.try_request(http_method, endpoint, body).await.unwrap()
+    }
+
+    async fn try_request<T: DeserializeOwned, B: Serialize>(
+        &self,
+        http_method: HttpMethod,
+        endpoint: &str,
+        body: B,
+    ) -> Result<T, (StatusCode, String)> {
         // we may have to try several times if the instance is busy
         let start = std::time::SystemTime::now();
         loop {
@@ -1377,9 +1539,10 @@ impl PocketIc {
                 HttpMethod::Post => reqwest_client.post(url).json(&body),
             };
             let result = builder.send().await.expect("HTTP failure");
+            let status = result.status();
             match ApiResponse::<_>::from_response(result).await {
-                ApiResponse::Success(t) => break t,
-                ApiResponse::Error { message } => panic!("{}", message),
+                ApiResponse::Success(t) => break Ok(t),
+                ApiResponse::Error { message } => break Err((status, message)),
                 ApiResponse::Busy { state_label, op_id } => {
                     debug!(
                         "instance_id={} Instance is busy (with a different computation): state_label: {}, op_id: {}",
@@ -1392,51 +1555,70 @@ impl PocketIc {
                         "instance_id={} Instance has Started: state_label: {}, op_id: {}",
                         self.instance_id, state_label, op_id
                     );
+                    let cleanup = || {
+                        tokio::spawn(
+                            reqwest_client
+                                .delete(
+                                    self.server_url
+                                        .join(&format!("/prune_graph/{state_label}/{op_id}"))
+                                        .unwrap(),
+                                )
+                                .send(),
+                        );
+                    };
                     loop {
                         std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
-                        let reqwest_client = &self.reqwest_client;
                         let result = reqwest_client
                             .get(
                                 self.server_url
-                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .join(&format!("/read_graph/{state_label}/{op_id}"))
                                     .unwrap(),
                             )
                             .send()
                             .await
                             .expect("HTTP failure");
-                        match ApiResponse::<_>::from_response(result).await {
-                            ApiResponse::Error { message } => {
-                                debug!("Polling has not succeeded yet: {}", message)
-                            }
-                            ApiResponse::Success(t) => {
-                                return t;
-                            }
-                            ApiResponse::Started { state_label, op_id } => {
-                                warn!(
-                                    "instance_id={} unexpected Started({} {})",
-                                    self.instance_id, state_label, op_id
-                                );
-                            }
-                            ApiResponse::Busy { state_label, op_id } => {
-                                warn!(
-                                    "instance_id={} unexpected Busy({} {})",
-                                    self.instance_id, state_label, op_id
-                                );
+                        if result.status() == reqwest::StatusCode::NOT_FOUND {
+                            let message =
+                                String::from_utf8(result.bytes().await.unwrap().to_vec()).unwrap();
+                            debug!("Polling has not succeeded yet: {}", message);
+                        } else {
+                            let status = result.status();
+                            match ApiResponse::<_>::from_response(result).await {
+                                ApiResponse::Error { message } => {
+                                    cleanup();
+                                    return Err((status, message));
+                                }
+                                ApiResponse::Success(t) => {
+                                    cleanup();
+                                    return Ok(t);
+                                }
+                                ApiResponse::Started { state_label, op_id } => {
+                                    warn!(
+                                        "instance_id={} unexpected Started({} {})",
+                                        self.instance_id, state_label, op_id
+                                    );
+                                }
+                                ApiResponse::Busy { state_label, op_id } => {
+                                    warn!(
+                                        "instance_id={} unexpected Busy({} {})",
+                                        self.instance_id, state_label, op_id
+                                    );
+                                }
                             }
                         }
-                        if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms)
-                            {
-                                panic!("request to PocketIC server timed out.");
-                            }
+                        if let Some(max_request_time_ms) = self.max_request_time_ms
+                            && start.elapsed().unwrap_or_default()
+                                > Duration::from_millis(max_request_time_ms)
+                        {
+                            panic!("request to PocketIC server timed out.");
                         }
                     }
                 }
             }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap() > Duration::from_millis(max_request_time_ms) {
-                    panic!("request to PocketIC server timed out.");
-                }
+            if let Some(max_request_time_ms) = self.max_request_time_ms
+                && start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+            {
+                panic!("request to PocketIC server timed out.");
             }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
@@ -1450,7 +1632,7 @@ impl PocketIc {
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let raw_canister_call = RawCanisterCall {
             sender: sender.as_slice().to_vec(),
             canister_id: canister_id.as_slice().to_vec(),
@@ -1460,23 +1642,17 @@ impl PocketIc {
         };
 
         let result: RawCanisterResult = self.post(endpoint, raw_canister_call).await;
-        match result {
-            RawCanisterResult::Ok(raw_wasm_result) => match raw_wasm_result {
-                RawWasmResult::Reply(data) => Ok(WasmResult::Reply(data)),
-                RawWasmResult::Reject(text) => Ok(WasmResult::Reject(text)),
-            },
-            RawCanisterResult::Err(user_error) => Err(user_error),
-        }
+        result.into()
     }
 
-    pub(crate) async fn update_call_with_effective_principal(
+    pub async fn update_call_with_effective_principal(
         &self,
         canister_id: CanisterId,
         effective_principal: RawEffectivePrincipal,
         sender: Principal,
         method: &str,
         payload: Vec<u8>,
-    ) -> Result<WasmResult, UserError> {
+    ) -> Result<Vec<u8>, RejectResponse> {
         let message_id = self
             .submit_call_with_effective_principal(
                 canister_id,
@@ -1518,6 +1694,60 @@ impl PocketIc {
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
     }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let endpoint = "update/canister_snapshot_download";
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_download = RawCanisterSnapshotDownload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            snapshot_id,
+            snapshot_dir,
+        };
+        self.post(endpoint, raw_canister_snapshot_download).await
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let endpoint = "update/canister_snapshot_upload";
+        let replace_snapshot =
+            replace_snapshot.map(|snapshot_id| RawCanisterSnapshotId { snapshot_id });
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_upload = RawCanisterSnapshotUpload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            replace_snapshot,
+            snapshot_dir,
+        };
+        self.post::<RawCanisterSnapshotId, _>(endpoint, raw_canister_snapshot_upload)
+            .await
+            .snapshot_id
+    }
 }
 
 /// Call a canister candid method, authenticated. The sender can be impersonated (i.e., the
@@ -1530,7 +1760,7 @@ pub async fn call_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1556,7 +1786,7 @@ pub async fn call_candid<Input, Output>(
     effective_principal: RawEffectivePrincipal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1578,7 +1808,7 @@ pub async fn query_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1594,7 +1824,7 @@ pub async fn query_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1611,7 +1841,7 @@ pub async fn update_candid<Input, Output>(
     canister_id: CanisterId,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1627,7 +1857,7 @@ pub async fn update_candid_as<Input, Output>(
     sender: Principal,
     method: &str,
     input: Input,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
@@ -1643,15 +1873,15 @@ where
 pub async fn with_candid<Input, Output, Fut>(
     input: Input,
     f: impl FnOnce(Vec<u8>) -> Fut,
-) -> Result<Output, CallError>
+) -> Result<Output, RejectResponse>
 where
     Input: ArgumentEncoder,
     Output: for<'a> ArgumentDecoder<'a>,
-    Fut: Future<Output = Result<WasmResult, UserError>>,
+    Fut: Future<Output = Result<Vec<u8>, RejectResponse>>,
 {
     let in_bytes = encode_args(input).expect("failed to encode args");
-    match f(in_bytes).await {
-        Ok(WasmResult::Reply(out_bytes)) => Ok(decode_args(&out_bytes).unwrap_or_else(|e| {
+    f(in_bytes).await.map(|out_bytes| {
+        decode_args(&out_bytes).unwrap_or_else(|e| {
             panic!(
                 "Failed to decode response as candid type {}:\nerror: {}\nbytes: {:?}\nutf8: {}",
                 std::any::type_name::<Output>(),
@@ -1659,10 +1889,8 @@ where
                 out_bytes,
                 String::from_utf8_lossy(&out_bytes),
             )
-        })),
-        Ok(WasmResult::Reject(message)) => Err(CallError::Reject(message)),
-        Err(user_error) => Err(CallError::UserError(user_error)),
-    }
+        })
+    })
 }
 
 fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
@@ -1678,12 +1906,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
                 tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
                     .unwrap_or_else(|_| "trace".parse().unwrap());
 
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
+            let layers = vec![
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking_appender)
+                    // disable color escape codes in files
+                    .with_ansi(false)
+                    .with_filter(log_dir_filter)
+                    .boxed(),
+            ];
             let _ = tracing_subscriber::registry().with(layers).try_init();
             Some(guard)
         }

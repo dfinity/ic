@@ -3,33 +3,21 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, bail};
+use derive_new::new;
 use nftables::schema::Nftables;
-
-const SUDO: &str = "/usr/bin/sudo";
-const NFT: &str = "/usr/sbin/nft";
 
 pub trait Execute: Send + Sync {
     fn execute_nftables(&self, payload: &Nftables) -> Result<Option<Nftables>, Error>;
     fn execute_raw(&self, stdin: String) -> Result<String, Error>;
 }
 
-// Runs nft binary optionally with sudo and (de-)serializes the stdin/out
-#[derive(Clone)]
+/// Runs nft binary optionally with sudo and (de-)serializes the stdin/out
+#[derive(Clone, new)]
 pub struct Executor {
     sudo: bool,
     sudo_path: String,
     nft_path: String,
-}
-
-impl Executor {
-    pub fn new(sudo: bool, sudo_path: Option<String>, nft_path: Option<String>) -> Self {
-        Self {
-            sudo,
-            sudo_path: sudo_path.unwrap_or(SUDO.into()),
-            nft_path: nft_path.unwrap_or(NFT.into()),
-        }
-    }
 }
 
 impl Execute for Executor {
@@ -71,10 +59,10 @@ impl Execute for Executor {
         // Wait for the process to finish
         let result = process.wait_with_output()?;
         if !result.status.success() {
-            return Err(anyhow!(
+            bail!(
                 "Command terminated with non-zero exit code: {}",
                 result.status
-            ));
+            );
         }
 
         let stdout = String::from_utf8(result.stdout)?;

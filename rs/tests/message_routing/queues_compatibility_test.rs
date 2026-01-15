@@ -8,7 +8,7 @@
 //! 2. We add a test that uses:
 //!
 //!    a. the binary from the commit that matches the latest mainnet versions, as
-//!    defined in mainnet_revisions.json, (the binary is downloaded from S3)
+//!    defined in mainnet-icos-revisions.json, (the binary is downloaded from S3)
 //!
 //!    b. the binary from the current commit
 //!
@@ -31,9 +31,7 @@
 //! neither fun nor profitable.
 
 use anyhow::Result;
-use serde::Deserialize;
-use slog::{info, Logger};
-use std::collections::HashMap;
+use slog::{Logger, info};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -81,7 +79,9 @@ fn run_unit_test(
     // We search the output for an indication that a test was actually executed.
     // Fragile, but better than nothing.
     assert!(
-        std::str::from_utf8(&output.stdout).unwrap().contains("1 passed"),
+        std::str::from_utf8(&output.stdout)
+            .unwrap()
+            .contains("1 passed"),
         "Trying to execute {} from {:?}, but no test with such name was found.\nCheck that you don't have a typo in the name of the target module or test, and that the test is availalable in the provided version?",
         test_name,
         binary.file_name().unwrap(),
@@ -91,7 +91,7 @@ fn run_unit_test(
 
 fn download_mainnet_binary(
     binary_name: &str,
-    version: &str,
+    version: &ReplicaVersion,
     target_dir: &Path,
     log: &Logger,
 ) -> PathBuf {
@@ -101,14 +101,9 @@ fn download_mainnet_binary(
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            download_binary(
-                log,
-                ReplicaVersion::try_from(version).unwrap(),
-                binary_name.into(),
-                target_dir,
-            )
-            .await
-            .map_err(|e| e.into())
+            download_binary(log, version, binary_name.into(), target_dir)
+                .await
+                .map_err(|e| e.into())
         }
     ))
     .expect("Failed to Download")
@@ -150,7 +145,7 @@ enum TestType {
     SelfTestOnly,
     Bidirectional {
         published_binary: String,
-        mainnet_version: String,
+        mainnet_version: ReplicaVersion,
     },
 }
 
@@ -203,7 +198,7 @@ impl TestCase {
 
     fn bidirectional_test(
         &self,
-        mainnet_version: &str,
+        mainnet_version: &ReplicaVersion,
         published_binary_name: &str,
         logger: &Logger,
     ) {
@@ -235,22 +230,20 @@ impl TestCase {
     }
 }
 
-#[derive(Deserialize)]
-struct Subnets {
-    subnets: HashMap<String, String>,
-}
-
 fn test(env: TestEnv) {
     let logger = env.logger();
 
-    let versions_json =
-        read_dependency_to_string("testnet/mainnet_revisions.json").expect("mainnet IC versions");
+    let mainnet_nns_version = get_mainnet_nns_revision().unwrap();
+    let mainnet_application_subnet_version = get_mainnet_application_subnet_revision().unwrap();
 
-    let parsed: Subnets =
-        serde_json::from_str(&versions_json).expect("Can't parse the mainnet revisions JSON");
-    let mainnet_versions: Vec<String> = parsed.subnets.values().cloned().collect();
+    info!(
+        logger,
+        "Mainnet versions: \nNNS version: {:?}\nApplication subnet version: {:?}",
+        mainnet_nns_version,
+        mainnet_application_subnet_version
+    );
 
-    info!(logger, "Mainnet versions: {:?}", mainnet_versions);
+    let mainnet_versions = [mainnet_nns_version, mainnet_application_subnet_version];
 
     let tests = mainnet_versions.iter().flat_map(|v| {
         [
@@ -268,7 +261,23 @@ fn test(env: TestEnv) {
                     mainnet_version: v.clone(),
                 },
                 "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
+            ),
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
+            ),
+            TestCase::new(
+                TestType::Bidirectional {
+                    published_binary: "replicated-state-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
+                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
         ]
     });

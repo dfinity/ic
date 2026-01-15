@@ -4,15 +4,14 @@ build-essential
 git
 git-lfs
 gnupg
-node-json5
 uuid-dev
 zsh
-fish
-clang
 iproute2
 shellcheck
 xxd
 vim
+retry
+zip
 
 # Bitcoin core (for bitcoin adapter integration test)
 libtool
@@ -21,15 +20,12 @@ libboost-dev
 
 # GitHub CI
 sudo
-gosu
 jq
 rclone
 time
-qemu-system-x86
-
-# Test
-rsync
-lcov
+podman # rosetta-release.yml
+rsync # container-base-images.yml
+lcov # used for bazel coverage
 
 # RUST
 gcc
@@ -40,31 +36,33 @@ libunwind-dev
 libusb-1.0-0-dev
 libsqlite3-dev
 zlib1g-dev
-libclang-10-dev
+libclang-18-dev
 protobuf-compiler
 llvm
 liblmdb-dev
 liblzma-dev
 
-# Haskell
-libtinfo5
-libtinfo-dev
-libffi-dev
-libgmp-dev
-
 # IC-OS
+clang
 cryptsetup-bin
-dosfstools
-fakeroot
+dosfstools # provides mkfs.vfat
 faketime
-grub-efi-amd64-bin
-iputils-ping
+fdisk
+iasl # to build OVMF
+ipmitool # to connect to baremetal test instances
+ # Linked in by IC-OS binaries for managing encrypted disks.
+libcryptsetup-dev
+ # Linked in by IC-OS binaries for creating mapped devices.
+libdevmapper-dev
 libselinux-dev
 libsystemd-dev
-lsb-release
-lvm2
-mtools
-python-is-python3
-python3
-python3-pip
+ # Linked in by IC-OS binaries for managing virtual machines programmatically.
+libvirt-dev
+mtools # used for mcopy and mmd
+nasm # to build OVMF
 zstd
+iputils-ping # for ping6 required by the bazel-test-bare-metal
+
+# Unknown
+containernetworking-plugins
+buildah

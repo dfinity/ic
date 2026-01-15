@@ -11,9 +11,9 @@ pub fn truncate_and_format(slice: &[u8], max_bytes_to_format: usize) -> String {
     let size_descriptor = match slice.len() {
         0 => "empty".to_string(),
         1..=3 => String::default(), // For small amount of bytes, it's easy to count
-        n => format!("{} bytes;", n),
+        n => format!("{n} bytes;"),
     };
-    format!("{}{}{}", size_descriptor, content_hex, ellipsis)
+    format!("{size_descriptor}{content_hex}{ellipsis}")
 }
 
 #[cfg(test)]

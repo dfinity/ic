@@ -5,6 +5,7 @@
 pub mod bouncer;
 mod ingress_handler;
 mod ingress_selector;
+mod metrics;
 
 #[cfg(test)]
 mod proptests;
@@ -17,24 +18,24 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     artifact::IngressMessageId,
     consensus::BlockPayload,
     crypto::CryptoHashOf,
     malicious_flags::MaliciousFlags,
     time::{Time, UNIX_EPOCH},
-    Height, RegistryVersion, SubnetId,
 };
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
-use prometheus::{Histogram, IntGauge};
+use metrics::IngressManagerMetrics;
 use std::collections::hash_map::{DefaultHasher, RandomState};
 use std::hash::BuildHasher;
 use std::{
@@ -49,40 +50,6 @@ use std::{
 ///    branching.
 type IngressPayloadCache =
     BTreeMap<(Height, CryptoHashOf<BlockPayload>), Arc<HashSet<IngressMessageId>>>;
-
-/// Keeps the metrics to be exported by the IngressManager
-struct IngressManagerMetrics {
-    ingress_handler_time: Histogram,
-    ingress_selector_get_payload_time: Histogram,
-    ingress_selector_validate_payload_time: Histogram,
-    ingress_payload_cache_size: IntGauge,
-}
-
-impl IngressManagerMetrics {
-    fn new(metrics_registry: MetricsRegistry) -> Self {
-        Self {
-            ingress_handler_time: metrics_registry.histogram(
-                "ingress_handler_execution_time",
-                "Ingress Handler execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_get_payload_time: metrics_registry.histogram(
-                "ingress_selector_get_payload_time",
-                "Ingress Selector get_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_selector_validate_payload_time: metrics_registry.histogram(
-                "ingress_selector_validate_payload_time",
-                "Ingress Selector validate_payload execution time in seconds",
-                decimal_buckets(-3, 1),
-            ),
-            ingress_payload_cache_size: metrics_registry.int_gauge(
-                "ingress_payload_cache_size",
-                "The number of HashSets in payload builder's ingress payload cache.",
-            ),
-        }
-    }
-}
 
 /// The kind of RandomState you want to generate.
 pub enum RandomStateKind {
@@ -158,7 +125,7 @@ impl IngressManager {
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_signature_crypto: Arc<dyn IngressSigVerifier>,
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
         log: ReplicaLogger,
@@ -193,7 +160,7 @@ impl IngressManager {
             ingress_pool,
             registry_client,
             request_validator,
-            metrics: IngressManagerMetrics::new(metrics_registry),
+            metrics: IngressManagerMetrics::new(&metrics_registry),
             subnet_id,
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),
@@ -256,6 +223,7 @@ impl IngressManager {
 pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
@@ -264,7 +232,6 @@ pub(crate) mod tests {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::{
         artifact_pool_config::with_test_pool_config,
-        crypto::temp_crypto_component_with_fake_registry,
         cycles_account_manager::CyclesAccountManagerBuilder,
     };
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -272,7 +239,7 @@ pub(crate) mod tests {
     use ic_test_utilities_state::{MockIngressHistory, ReplicatedStateBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
+    use ic_types::{Height, RegistryVersion, SubnetId, ingress::IngressStatus};
     use std::{ops::DerefMut, sync::Arc};
 
     pub(crate) fn setup_registry(

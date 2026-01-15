@@ -6,10 +6,10 @@ pub struct EcdsaSigningSubnetList {
     #[prost(message, repeated, tag = "2")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
-/// A list of subnets that can sign with a given chain key.
+/// A list of subnets on which a given chain-key is enabled.
 /// This allows replicas to route their signing requests to the right subnets.
 #[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct ChainKeySigningSubnetList {
+pub struct ChainKeyEnabledSubnetList {
     #[prost(message, repeated, tag = "1")]
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
@@ -70,6 +70,7 @@ pub enum AlgorithmId {
     ThresholdEcdsaSecp256r1 = 17,
     ThresholdSchnorrBip340 = 18,
     ThresholdEd25519 = 19,
+    Vetkd = 20,
 }
 impl AlgorithmId {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -98,6 +99,7 @@ impl AlgorithmId {
             Self::ThresholdEcdsaSecp256r1 => "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1",
             Self::ThresholdSchnorrBip340 => "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340",
             Self::ThresholdEd25519 => "ALGORITHM_ID_THRESHOLD_ED25519",
+            Self::Vetkd => "ALGORITHM_ID_VETKD",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -123,6 +125,7 @@ impl AlgorithmId {
             "ALGORITHM_ID_THRESHOLD_ECDSA_SECP_256R1" => Some(Self::ThresholdEcdsaSecp256r1),
             "ALGORITHM_ID_THRESHOLD_SCHNORR_BIP340" => Some(Self::ThresholdSchnorrBip340),
             "ALGORITHM_ID_THRESHOLD_ED25519" => Some(Self::ThresholdEd25519),
+            "ALGORITHM_ID_VETKD" => Some(Self::Vetkd),
             _ => None,
         }
     }

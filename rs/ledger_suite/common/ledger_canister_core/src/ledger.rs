@@ -1,24 +1,25 @@
-use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
+use crate::{
+    archive::ArchiveCanisterWasm,
+    blockchain::{BlockDataContainer, Blockchain},
+    range_utils,
+    runtime::Runtime,
+};
 use ic_base_types::CanisterId;
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{Sink, log};
 use ic_ledger_core::approvals::{
     AllowanceTable, AllowancesData, ApproveError, InsufficientAllowance,
 };
-use ic_ledger_core::tokens::Zero;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::time::Duration;
 
 use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchivingGuard};
-use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
+use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::tokens::{TokensType, Zero};
 use ic_ledger_hash_of::HashOf;
-
-/// The memo to use for balances burned and approvals reset to 0 during trimming
-const TRIMMED_MEMO: u64 = u64::MAX;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TransactionInfo<TransactionType> {
@@ -33,6 +34,7 @@ pub enum TxApplyError<Tokens> {
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
     SelfApproval,
+    BurnOrMintFee,
 }
 
 impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
@@ -138,13 +140,14 @@ pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
     type Block: BlockType<
-        Transaction = Self::Transaction,
-        AccountId = Self::AccountId,
-        Tokens = Self::Tokens,
-    >;
+            Transaction = Self::Transaction,
+            AccountId = Self::AccountId,
+            Tokens = Self::Tokens,
+        >;
     type Transaction: LedgerTransaction<AccountId = Self::AccountId, Tokens = Self::Tokens>
         + Ord
         + Clone;
+    type BlockDataContainer: BlockDataContainer + Default;
 
     // Purge configuration
 
@@ -158,13 +161,6 @@ pub trait LedgerData: LedgerContext {
     /// The maximum number of transactions that we attempt to purge in one go.
     fn max_transactions_to_purge(&self) -> usize;
 
-    /// The maximum size of the balances map.
-    fn max_number_of_accounts(&self) -> usize;
-
-    /// How many accounts with lowest balances to purge when the number of accounts exceeds
-    /// [LedgerData::max_number_of_accounts].
-    fn accounts_overflow_trim_quantity(&self) -> usize;
-
     // Token configuration
 
     /// Token name (e.g., Bitcoin).
@@ -175,8 +171,11 @@ pub trait LedgerData: LedgerContext {
 
     // Ledger data structures
 
-    fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
-    fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
+    fn blockchain(&self)
+    -> &Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
+    fn blockchain_mut(
+        &mut self,
+    ) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm, Self::BlockDataContainer>;
 
     fn transactions_by_hash(&self) -> &BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
     fn transactions_by_hash_mut(&mut self) -> &mut BTreeMap<HashOf<Self::Transaction>, BlockIndex>;
@@ -188,6 +187,10 @@ pub trait LedgerData: LedgerContext {
     fn on_purged_transaction(&mut self, height: BlockIndex);
 
     fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
+
+    fn increment_archiving_failure_metric(&mut self);
+
+    fn get_archiving_failure_metric(&self) -> u64;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -216,7 +219,6 @@ pub fn apply_transaction<L>(
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
 where
     L: LedgerData,
-    L::BalancesStore: InspectableBalancesStore,
 {
     let num_pruned = purge_old_transactions(ledger, now);
 
@@ -267,6 +269,9 @@ where
                 TransferError::AllowanceChanged { current_allowance }
             }
             TxApplyError::SelfApproval => TransferError::SelfApproval,
+            TxApplyError::BurnOrMintFee => TransferError::BadFee {
+                expected_fee: L::Tokens::zero(),
+            },
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();
@@ -283,10 +288,10 @@ where
         .blockchain_mut()
         .add_block(block)
         .expect("failed to add block");
-    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
-        if fee_collector.block_index.is_none() {
-            fee_collector.block_index = Some(height);
-        }
+    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut()
+        && fee_collector.block_index.is_none()
+    {
+        fee_collector.block_index = Some(height);
     }
 
     if let Some((_, tx_hash)) = maybe_time_and_hash {
@@ -300,82 +305,6 @@ where
                 block_timestamp,
                 transaction_hash: tx_hash,
             });
-    }
-    let effective_max_number_of_accounts =
-        ledger.max_number_of_accounts() + ledger.accounts_overflow_trim_quantity() - 1;
-
-    let to_trim = if ledger.balances().store.len() > effective_max_number_of_accounts {
-        select_accounts_to_trim(ledger)
-    } else {
-        vec![]
-    };
-
-    for (balance, account) in to_trim {
-        let burn_tx = L::Transaction::burn(account, None, balance, Some(now), Some(TRIMMED_MEMO));
-
-        burn_tx
-            .apply(ledger, now, L::Tokens::zero())
-            .expect("failed to burn funds that must have existed");
-
-        let parent_hash = ledger.blockchain().last_hash;
-        let fee_collector = ledger.fee_collector().cloned();
-
-        ledger
-            .blockchain_mut()
-            .add_block(L::Block::from_transaction(
-                parent_hash,
-                burn_tx,
-                now,
-                L::Tokens::zero(),
-                fee_collector,
-            ))
-            .unwrap();
-    }
-
-    // We estimate that an approval takes up twice as much space as a balance:
-    // balance = account + num_tokens
-    // approval = 2 * account + num_tokens + timestamp
-    let max_number_of_approvals =
-        (effective_max_number_of_accounts - ledger.balances().store.len()) / 2;
-
-    if ledger.approvals().len() > max_number_of_approvals {
-        let num_approvals_to_trim = ledger.approvals().len() - max_number_of_approvals;
-        // There might be some more expired approvals to prune.
-        ledger.approvals_mut().prune(now, num_approvals_to_trim);
-
-        if ledger.approvals().len() > max_number_of_approvals {
-            let approvals_to_trim = ledger
-                .approvals()
-                .select_approvals_to_trim(ledger.approvals().len() - max_number_of_approvals);
-
-            for approval in approvals_to_trim {
-                let approve_tx = L::Transaction::approve(
-                    approval.0,
-                    approval.1,
-                    L::Tokens::zero(),
-                    Some(now),
-                    Some(TRIMMED_MEMO),
-                );
-
-                approve_tx
-                    .apply(ledger, now, L::Tokens::zero())
-                    .expect("failed to reset approval to zero");
-
-                let parent_hash = ledger.blockchain().last_hash;
-                let fee_collector = ledger.fee_collector().cloned();
-
-                ledger
-                    .blockchain_mut()
-                    .add_block(L::Block::from_transaction(
-                        parent_hash,
-                        approve_tx,
-                        now,
-                        L::Tokens::zero(),
-                        fee_collector,
-                    ))
-                    .unwrap();
-            }
-        }
     }
 
     Ok((height, ledger.blockchain().last_hash.unwrap()))
@@ -474,45 +403,12 @@ pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> 
     num_tx_purged
 }
 
-// Find the specified number of accounts with lowest balances so that their
-// balances can be reclaimed.
-fn select_accounts_to_trim<L>(ledger: &L) -> Vec<(L::Tokens, L::AccountId)>
-where
-    L: LedgerData,
-    L::BalancesStore: InspectableBalancesStore<Tokens = L::Tokens>,
-    L::Tokens: TokensType,
-{
-    let mut to_trim: std::collections::BinaryHeap<(L::Tokens, L::AccountId)> =
-        std::collections::BinaryHeap::new();
-
-    let num_accounts = ledger.accounts_overflow_trim_quantity();
-    let mut iter = ledger.balances().store.iter();
-
-    // Accumulate up to `trim_quantity` accounts
-    for (account, balance) in iter.by_ref().take(num_accounts) {
-        to_trim.push((balance.clone(), account.clone()));
-    }
-
-    for (account, balance) in iter {
-        // If any account's balance is lower than the maximum in our set,
-        // include that account, and remove the current maximum
-        if let Some((greatest_balance, _)) = to_trim.peek() {
-            if balance < greatest_balance {
-                to_trim.push((balance.clone(), account.clone()));
-                to_trim.pop();
-            }
-        }
-    }
-
-    to_trim.into_vec()
-}
-
 /// Asynchronously archives a suffix of the locally available blockchain.
 ///
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
 pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: u64) {
-    use crate::archive::{send_blocks_to_archive, ArchivingGuardError};
+    use crate::archive::{ArchivingGuardError, send_blocks_to_archive};
 
     let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
 
@@ -541,8 +437,16 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     )
     .await;
 
+    if result.is_err() {
+        LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
+    }
+
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }
+
+// The maximum blocks to archive at once. Note that chunking may still split up the blocks that are
+// being archived into multiple messages to the archive canister.
+pub const MAX_BLOCKS_TO_ARCHIVE: usize = 18_000;
 
 pub fn blocks_to_archive<LA: LedgerAccess>(
     sink: &impl Sink,
@@ -553,9 +457,10 @@ pub fn blocks_to_archive<LA: LedgerAccess>(
     let blocks_to_archive = LA::with_ledger(|ledger| {
         let archive_guard = ledger.blockchain().archive.read().unwrap();
         let archive = archive_guard.as_ref().unwrap();
-        ledger
-            .blockchain()
-            .get_blocks_for_archiving(archive.trigger_threshold, archive.num_blocks_to_archive)
+        ledger.blockchain().get_blocks_for_archiving(
+            archive.trigger_threshold,
+            archive.num_blocks_to_archive.min(MAX_BLOCKS_TO_ARCHIVE),
+        )
     });
     if !blocks_to_archive.is_empty() {
         log!(
@@ -609,14 +514,52 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
 
     let archive = ledger.blockchain().archive.read().unwrap();
 
+    // Collect the ranges of blocks stored in the archive canisters. The archives are sorted, so
+    // that the oldest archive (with the lowest block IDs) is first, and the newest archive (with
+    // the highest block IDs) is last. Iterate over the archives in reverse order since we are
+    // removing overlapping suffixes from the ranges, starting from the latest blocks stored in the
+    // ledger.
+    let mut later_range = None;
     let archived_blocks: Vec<_> = archive
         .iter()
         .flat_map(|archive| archive.index().into_iter())
+        .rev()
         .filter_map(|((from, to), canister_id)| {
-            let slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
+            let mut slice = range_utils::intersect(&(from..to + 1), &requested_range).ok()?;
+            if !slice.is_empty() {
+                match &later_range {
+                    None => {
+                        // Remove the intersection of the local block range from the current range.
+                        range_utils::remove_suffix(&mut slice, &local_blocks);
+                    }
+                    Some(later_range) => {
+                        // Remove the intersection of the previous archive range from the current range.
+                        range_utils::remove_suffix(&mut slice, later_range);
+                    }
+                }
+                later_range = Some(slice.clone());
+            }
             (!slice.is_empty()).then_some((canister_id, slice))
         })
         .collect();
+    // Reverse the order of the archived blocks to return the oldest archive first.
+    let archived_blocks: Vec<_> = archived_blocks.into_iter().rev().collect();
+
+    debug_assert!(
+        !range_utils::contains_intersections(
+            [
+                [&local_blocks].as_slice(),
+                archived_blocks
+                    .iter()
+                    .map(|(_canister_id, archived_blocks_range)| archived_blocks_range)
+                    .collect::<Vec<_>>()
+                    .as_slice()
+            ]
+            .concat()
+            .as_slice()
+        ),
+        "overlapping block ranges - local_blocks: {local_blocks:?}, archived_blocks: {archived_blocks:?}"
+    );
 
     BlockLocations {
         local_blocks,

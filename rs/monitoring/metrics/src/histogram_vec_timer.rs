@@ -32,7 +32,7 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
         label_values: [&'a str; LABEL_COUNT],
     ) -> HistogramVecTimer<'a, LABEL_COUNT> {
         #[cfg(debug_assertions)]
-        let label_map = label_names
+        let label_map: std::collections::HashMap<&str, &str> = label_names
             .iter()
             .cloned()
             .zip(label_values.iter().cloned())
@@ -68,11 +68,11 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
                 return;
             }
         }
-        panic!("No such label: {}", k);
+        panic!("No such label: {k}");
     }
 }
 
-impl<'a, const LABEL_COUNT: usize> Drop for HistogramVecTimer<'a, LABEL_COUNT> {
+impl<const LABEL_COUNT: usize> Drop for HistogramVecTimer<'_, LABEL_COUNT> {
     fn drop(&mut self) {
         self.hist
             .with_label_values(self.label_values())
@@ -85,7 +85,7 @@ mod tests {
     use prometheus::core::Metric;
 
     use super::*;
-    use crate::{buckets::decimal_buckets, MetricsRegistry};
+    use crate::{MetricsRegistry, buckets::decimal_buckets};
 
     pub const LABEL_DETAIL: &str = "detail";
     pub const LABEL_OTHER: &str = "other";
@@ -179,6 +179,6 @@ mod tests {
         label_values: &[&str],
     ) -> prometheus::proto::Histogram {
         let metric = hist.with_label_values(label_values).metric();
-        metric.get_histogram().clone()
+        metric.get_histogram().get_or_default().clone()
     }
 }

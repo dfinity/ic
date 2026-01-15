@@ -1,48 +1,104 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
-
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/crypto/utils/threshold_sig_der",
-    "//rs/http_endpoints/metrics",
-    "//rs/interfaces/registry",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/protobuf",
-    "//rs/registry/client",
-    "//rs/registry/helpers",
-    "//rs/registry/keys",
-    "//rs/registry/local_store",
-    "//rs/registry/nns_data_provider",
-    "//rs/registry/routing_table",
-    "//rs/types/types",
-    "@crate_index//:clap",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:slog",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
-    "@crate_index//:url",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
 
 rust_library(
     name = "registry_replicator",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_registry_replicator",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/async_utils",
+        "//rs/http_endpoints/metrics",
+        "//rs/interfaces/registry",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/keys",
+        "//rs/registry/local_store",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/routing_table",
+        "//rs/types/types",
+        "@crate_index//:clap",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:slog",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
+    ],
 )
 
 rust_binary(
     name = "ic-registry-replicator",
     srcs = ["src/main.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":registry_replicator"],
+    deps = [
+        # Keep sorted.
+        ":registry_replicator",
+        "//rs/http_endpoints/async_utils",
+        "//rs/monitoring/logger",
+        "@crate_index//:clap",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+    ],
+)
+
+rust_test(
+    name = "registry_replicator_test",
+    crate = ":registry_replicator",
+    deps = [
+        # Keep sorted.
+        "//rs/certification/test-utils",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/logger",
+        "//rs/types/types_test_utils",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_test(
+    name = "registry_replicator_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    data = [
+        # Keep sorted.
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/registry/canister:registry-canister-test",
+    ],
+    env = {
+        # Keep sorted.
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+    },
+    deps = [
+        # Keep sorted.
+        ":registry_replicator",
+        "//packages/pocket-ic",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/interfaces/registry",
+        "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/local_store",
+        "//rs/registry/nns_data_provider",
+        "//rs/registry/transport",
+        "//rs/test_utilities/logger",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:rand",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
+    ],
 )

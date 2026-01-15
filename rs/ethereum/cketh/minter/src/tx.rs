@@ -1,18 +1,25 @@
 #[cfg(test)]
 mod tests;
 
-use crate::eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Hash, Quantity};
-use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
-use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
+use crate::{
+    eth_rpc::Hash,
+    eth_rpc_client::{
+        MIN_ATTACHED_CYCLES, MultiCallError, StrictMajorityByKey, ToReducedWithStrategy,
+        responses::{TransactionReceipt, TransactionStatus},
+        rpc_client,
+    },
+    guard::TimerGuard,
+    logs::{DEBUG, INFO},
+    numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas},
+    state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state},
+};
+use candid::Nat;
 use ethnum::u256;
+use evm_rpc_types::{BlockTag, FeeHistory};
 use ic_canister_log::log;
-use ic_crypto_secp256k1::RecoveryId;
 use ic_ethereum_types::Address;
-use ic_management_canister_types::DerivationPath;
+use ic_management_canister_types_private::DerivationPath;
+use ic_secp256k1::RecoveryId;
 use minicbor::{Decode, Encode};
 use rlp::RlpStream;
 
@@ -357,8 +364,12 @@ impl SignedEip1559TransactionRequest {
         }
     }
 
-    pub fn raw_transaction_hex(&self) -> String {
-        format!("0x{}", hex::encode(self.inner.raw_bytes()))
+    pub fn raw_transaction_hex(&self) -> Vec<u8> {
+        self.inner.raw_bytes()
+    }
+
+    pub fn raw_transaction_hex_string(&self) -> String {
+        format!("0x{}", hex::encode(self.raw_transaction_hex()))
     }
 
     /// If included in a block, this hash value is used as reference to this transaction.
@@ -456,7 +467,7 @@ impl Eip1559TransactionRequest {
             hash.0,
         )
         .await
-        .map_err(|e| format!("failed to sign tx: {}", e))?;
+        .map_err(|e| format!("failed to sign tx: {e}"))?;
         let recid = compute_recovery_id(&hash, &signature).await;
         if recid.is_x_reduced() {
             return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
@@ -647,13 +658,15 @@ pub async fn lazy_refresh_gas_fee_estimate() -> Option<GasFeeEstimate> {
     }
 
     async fn eth_fee_history() -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        read_state(EthRpcClient::from_state)
-            .eth_fee_history(FeeHistoryParams {
-                block_count: Quantity::from(5_u8),
-                highest_block: BlockSpec::Tag(BlockTag::Latest),
-                reward_percentiles: vec![20],
-            })
+        read_state(rpc_client)
+            .fee_history((5_u8, BlockTag::Latest))
+            .with_reward_percentiles(vec![20])
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .send()
             .await
+            .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
+                Nat::from(fee_history.oldest_block.clone())
+            }))
     }
 
     let now_ns = ic_cdk::api::time();
@@ -684,22 +697,29 @@ pub fn estimate_transaction_fee(
     // used by Metamask, see
     // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
     const MIN_MAX_PRIORITY_FEE_PER_GAS: WeiPerGas = WeiPerGas::new(1_500_000_000); //1.5 gwei
-    let base_fee_per_gas_next_block = *fee_history.base_fee_per_gas.last().ok_or(
-        TransactionFeeEstimationError::InvalidFeeHistory(
+    let base_fee_per_gas_next_block = fee_history
+        .base_fee_per_gas
+        .last()
+        .ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
             "base_fee_per_gas should not be empty to be able to evaluate transaction price"
                 .to_string(),
-        ),
-    )?;
+        ))?
+        .clone();
     let max_priority_fee_per_gas = {
-        let mut rewards: Vec<&WeiPerGas> = fee_history.reward.iter().flatten().collect();
+        let mut rewards: Vec<WeiPerGas> = fee_history
+            .reward
+            .iter()
+            .flatten()
+            .map(|nat| WeiPerGas::from(nat.clone()))
+            .collect();
         let historic_max_priority_fee_per_gas =
-            **median(&mut rewards).ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
+            *median(&mut rewards).ok_or(TransactionFeeEstimationError::InvalidFeeHistory(
                 "should be non-empty with rewards of the last 5 blocks".to_string(),
             ))?;
         historic_max_priority_fee_per_gas.max(MIN_MAX_PRIORITY_FEE_PER_GAS)
     };
     let gas_fee_estimate = GasFeeEstimate {
-        base_fee_per_gas: base_fee_per_gas_next_block,
+        base_fee_per_gas: base_fee_per_gas_next_block.into(),
         max_priority_fee_per_gas,
     };
     if gas_fee_estimate

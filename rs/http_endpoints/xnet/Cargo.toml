@@ -11,7 +11,7 @@ axum = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 crossbeam-channel = { workspace = true }
-ic-async-utils = { path = "../../async_utils" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-config = { path = "../../config" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-interfaces-certified-stream-store = { path = "../../interfaces/certified_stream_store" }

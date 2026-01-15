@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
@@ -25,7 +25,7 @@ pub enum State {
 impl std::fmt::Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into());
-        write!(f, "{}", string)
+        write!(f, "{string}")
     }
 }
 
@@ -34,9 +34,9 @@ impl From<ProcessError> for State {
         match e {
             ProcessError::AwaitingAcmeOrderCreation => State::PendingOrder,
             ProcessError::AwaitingDnsPropagation => State::PendingChallengeResponse,
-            ProcessError::AwaitingAcmeOrderReady => State::PendingAcmeApproval,
+            ProcessError::AwaitingAcmeOrderReady(_) => State::PendingAcmeApproval,
             ProcessError::FailedUserConfigurationCheck => State::PendingOrder,
-            ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
+            ProcessError::UnexpectedError(err) => State::Failed(err.to_string()),
         }
     }
 }

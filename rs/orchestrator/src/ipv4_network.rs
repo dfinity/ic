@@ -3,7 +3,7 @@ use crate::{
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::node::v1::IPv4InterfaceConfig;
 use ic_types::RegistryVersion;
 use std::{

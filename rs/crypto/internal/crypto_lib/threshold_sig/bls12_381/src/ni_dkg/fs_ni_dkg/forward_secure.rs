@@ -13,9 +13,9 @@ use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
     CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
 use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
-    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+    EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
 };
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
     CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
@@ -25,13 +25,13 @@ use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
 pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use lazy_static::lazy_static;
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
+use std::sync::LazyLock;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Constant which controls the upper limit of epochs
@@ -63,11 +63,7 @@ pub(crate) enum Bit {
 
 impl From<u8> for Bit {
     fn from(i: u8) -> Self {
-        if i == 0 {
-            Bit::Zero
-        } else {
-            Bit::One
-        }
+        if i == 0 { Bit::Zero } else { Bit::One }
     }
 }
 
@@ -342,13 +338,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
     let x = Scalar::random(rng);
     let rho = Scalar::random(rng);
     let a = G1Affine::from(g1 * &rho);
-    let b = G2Projective::mul2(
-        &G2Projective::from(g2),
-        &x,
-        &G2Projective::from(&sys.f0),
-        &rho,
-    )
-    .to_affine();
+    let b = G2Projective::mul2_affine(g2, &x, &sys.f0, &rho).to_affine();
     let mut d_t = LinkedList::new();
     for f in sys.f.iter() {
         d_t.push_back(G2Affine::from(f * &rho));
@@ -467,10 +457,10 @@ impl SecretKey {
     ///
     /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
     pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
-        if let Some(current_epoch) = self.current_epoch() {
-            if current_epoch > epoch {
-                return;
-            }
+        if let Some(current_epoch) = self.current_epoch()
+            && current_epoch > epoch
+        {
+            return;
         }
 
         // Drop nodes from the end of bte_nodes until we either run out of nodes
@@ -719,11 +709,8 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     let cc = {
         let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
-        let g1 = G1Projective::from(g1);
-
         for (pk, ptext) in recipient_and_message {
-            let pk = G1Projective::from(pk);
-            let pk_g1_tbl = G1Projective::compute_mul2_tbl(&pk, &g1);
+            let pk_g1_tbl = G1Projective::compute_mul2_affine_tbl(pk, g1);
 
             let chunks = ptext.chunks_as_scalars();
 
@@ -985,14 +972,12 @@ pub(crate) fn ftau_partial(tau: &Tau, sys: &SysParam) -> Option<G2Projective> {
     Some(id)
 }
 
-lazy_static! {
-    static ref SYSTEM_PARAMS: SysParam =
-        SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_");
-}
+static SYSTEM_PARAMS: LazyLock<SysParam> =
+    LazyLock::new(|| SysParam::create("DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"));
 
 impl SysParam {
     /// Create a set of system parameters
-    fn create(dst: &[u8]) -> Self {
+    fn create(dst: &'static str) -> Self {
         let f0 = G2Affine::hash_with_precomputation(dst, b"f0");
 
         let mut f = Vec::with_capacity(LAMBDA_T);
@@ -1002,7 +987,7 @@ impl SysParam {
         }
         let mut f_h = Vec::with_capacity(LAMBDA_H);
         for i in 0..LAMBDA_H {
-            let s = format!("f_h{}", i);
+            let s = format!("f_h{i}");
             f_h.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
 

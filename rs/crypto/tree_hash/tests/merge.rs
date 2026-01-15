@@ -2,27 +2,38 @@ use assert_matches::assert_matches;
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{Digest, Label, WitnessBuilder, WitnessGenerationError};
 use ic_crypto_tree_hash_test_utils::MAX_HASH_TREE_DEPTH;
-use proptest::prelude::*;
 
 mod mixed_hash_tree {
     use super::*;
+    use MixedHashTree::*;
     use ic_crypto_tree_hash::MixedHashTree;
     use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
-    use MixedHashTree::*;
 
-    proptest! {
-        #[test]
-        fn merge_of_big_tree_is_idempotent(t in arbitrary_mixed_hash_tree()) {
-            assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), t));
-        }
+    #[test_strategy::proptest]
+    fn merge_of_big_tree_is_idempotent(#[strategy(arbitrary_mixed_hash_tree())] t: MixedHashTree) {
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), t));
+    }
 
-        #[test]
-        fn merge_of_pruned_with_anything_else_is_idempotent(t in arbitrary_mixed_hash_tree()) {
-            assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), prune_leaves(&t)));
-            assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), prune_left_forks(&t)));
-            assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), prune_right_forks(&t)));
-            assert_eq!(Ok(t.clone()), MixedHashTree::merge_trees(t.clone(), prune_labels(&t)));
-        }
+    #[test_strategy::proptest]
+    fn merge_of_pruned_with_anything_else_is_idempotent(
+        #[strategy(arbitrary_mixed_hash_tree())] t: MixedHashTree,
+    ) {
+        assert_eq!(
+            Ok(t.clone()),
+            MixedHashTree::merge_trees(t.clone(), prune_leaves(&t))
+        );
+        assert_eq!(
+            Ok(t.clone()),
+            MixedHashTree::merge_trees(t.clone(), prune_left_forks(&t))
+        );
+        assert_eq!(
+            Ok(t.clone()),
+            MixedHashTree::merge_trees(t.clone(), prune_right_forks(&t))
+        );
+        assert_eq!(
+            Ok(t.clone()),
+            MixedHashTree::merge_trees(t.clone(), prune_labels(&t))
+        );
     }
 
     #[test]
@@ -230,8 +241,8 @@ mod mixed_hash_tree {
 
 mod witness {
     use super::*;
-    use ic_crypto_tree_hash::Witness;
     use Witness::*;
+    use ic_crypto_tree_hash::Witness;
 
     #[test]
     fn merge_of_pruned_is_idempotent() {

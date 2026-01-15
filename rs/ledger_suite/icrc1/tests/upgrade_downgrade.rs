@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{IndexArg, InitArg as IndexInitArg, UpgradeArg as IndexUpgradeArg};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_suite_state_machine_tests::{
+use ic_ledger_suite_state_machine_tests_constants::{
     BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, NAT_META_KEY,
     NAT_META_VALUE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
@@ -77,20 +77,11 @@ fn should_upgrade_and_downgrade_ledger_canister_suite() {
     )
     .unwrap();
 
-    match env.upgrade_canister(
+    env.upgrade_canister(
         ledger_id,
         ledger_mainnet_wasm(),
         Encode!(&ledger_upgrade_arg).unwrap(),
-    ) {
-        Ok(_) => {
-            panic!("Upgrade to mainnet should fail!")
-        }
-        Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
-        }
-    };
+    ).expect("Downgrading ledger to the mainnet version should succeed, since there are no breaking changes");
 }
 
 fn default_archive_options() -> ArchiveOptions {
@@ -101,7 +92,7 @@ fn default_archive_options() -> ArchiveOptions {
         max_message_size_bytes: None,
         controller_id: PrincipalId::new_user_test_id(100),
         more_controller_ids: None,
-        cycles_for_archive_creation: None,
+        cycles_for_archive_creation: Some(0),
         max_transactions_per_response: Some(MAX_BLOCKS_FROM_ARCHIVE),
     }
 }

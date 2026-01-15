@@ -66,6 +66,13 @@ where
     }
 }
 
+/// Whether the destination file may be overwritten.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Clobber {
+    Yes,
+    No,
+}
+
 /// Atomically writes to `dst` file, using `tmp` as a buffer.
 ///
 /// Creates `tmp` if necessary and removes it if write fails with an error.
@@ -74,13 +81,13 @@ where
 ///   * `dst` and `tmp` are not directories.
 ///   * `dst` and `tmp` are on the same file system.
 ///
-/// # Panics
-///
-///   Doesn't panic unless `action` panics.
+/// If clobber is set to Clobber::No, then `dst` will only be created if it doesn't exist, otherwise
+/// the function returns EEXIST. The check is done atomically.
 #[cfg(target_family = "unix")]
 pub fn write_atomically_using_tmp_file<PDst, PTmp, F>(
     dst: PDst,
     tmp: PTmp,
+    clobber: Clobber,
     action: F,
 ) -> io::Result<()>
 where
@@ -91,6 +98,13 @@ where
     let mut cleanup = OnScopeExit::new(|| {
         let _ = fs::remove_file(tmp.as_ref());
     });
+
+    if clobber == Clobber::No && dst.as_ref().exists() {
+        return Err(Error::new(
+            AlreadyExists,
+            format!("File {} already exists", dst.as_ref().display()),
+        ));
+    }
 
     let f = fs::OpenOptions::new()
         .write(true)
@@ -103,10 +117,20 @@ where
         w.flush()?;
     }
     f.sync_all()?;
-    fs::rename(tmp.as_ref(), dst.as_ref())?;
+    match clobber {
+        Clobber::Yes => {
+            // rename overwrites dst if it exists
+            fs::rename(tmp.as_ref(), dst.as_ref())?;
+            cleanup.deactivate();
+        }
+        Clobber::No => {
+            // hard_link returns EEXIST if dst already exists
+            fs::hard_link(tmp.as_ref(), dst.as_ref())?;
+        }
+    }
+
     sync_path(dst.as_ref().parent().unwrap_or_else(|| Path::new("/")))?;
 
-    cleanup.deactivate();
     Ok(())
 }
 
@@ -133,7 +157,7 @@ where
 /// in_kernel copy without the additional cost of transferring data
 /// from the kernel to user space and then back into the kernel. Also
 /// on certain file systems that support COW (btrfs/zfs), copy_file_range
-/// is a metadata operation and is extremely efficient   
+/// is a metadata operation and is extremely efficient.
 pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
     if *crate::IS_WSL {
         return copy_file_sparse_portable(from, to);
@@ -153,15 +177,17 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         len: libc::size_t,
         flags: libc::c_uint,
     ) -> libc::c_long {
-        libc::syscall(
-            libc::SYS_copy_file_range,
-            fd_in,
-            off_in,
-            fd_out,
-            off_out,
-            len,
-            flags,
-        )
+        unsafe {
+            libc::syscall(
+                libc::SYS_copy_file_range,
+                fd_in,
+                off_in,
+                fd_out,
+                off_out,
+                len,
+                flags,
+            )
+        }
     }
 
     let mut reader = std::fs::File::open(from)?;
@@ -200,11 +226,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 
     let (mut can_handle_sparse, mut next_beg) = {
         let ret = unsafe { lseek64(fd_in, srcpos, libc::SEEK_DATA) };
-        if ret == -1 {
-            (false, 0)
-        } else {
-            (true, ret)
-        }
+        if ret == -1 { (false, 0) } else { (true, ret) }
     };
 
     let mut next_end: libc::loff_t = bytes_to_copy;
@@ -327,7 +349,8 @@ fn copy_file_sparse_portable(from: &Path, to: &Path) -> io::Result<u64> {
 }
 
 /// Atomically write to `dst` file, using a random file in the parent directory
-/// of `dst` as the temporary file.
+/// of `dst` as the temporary file.  The `clobber` parameter controls whether `dst` may be
+/// overwritten if it already exists.
 ///
 /// # Pre-conditions
 ///   * `dst` is not a directory.
@@ -337,7 +360,7 @@ fn copy_file_sparse_portable(from: &Path, to: &Path) -> io::Result<u64> {
 ///
 ///   Doesn't panic unless `action` panics.
 #[cfg(target_family = "unix")]
-pub fn write_atomically<PDst, F>(dst: PDst, action: F) -> io::Result<()>
+pub fn write_atomically<PDst, F>(dst: PDst, clobber: Clobber, action: F) -> io::Result<()>
 where
     F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
     PDst: AsRef<Path>,
@@ -351,7 +374,7 @@ where
         .unwrap_or_else(|| Path::new("/"))
         .join(tmp_name());
 
-    write_atomically_using_tmp_file(dst, tmp_path.as_path(), action)
+    write_atomically_using_tmp_file(dst, tmp_path.as_path(), clobber, action)
 }
 
 /// Append .tmp to given file path
@@ -392,6 +415,21 @@ where
     P: AsRef<Path>,
 {
     write_using_tmp_file(dest, |writer| {
+        let encoded_message = message.encode_to_vec();
+        writer.write_all(&encoded_message)?;
+        Ok(())
+    })
+}
+
+#[cfg(target_family = "unix")]
+/// Serialize given protobuf message to file `dest` without a temp file or
+/// `fsync`. This is intended for batch writing multiple files with as little
+/// overhead as possible.
+pub fn write_protobuf_simple<P>(dest: P, message: &impl prost::Message) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    write_to_file_simple(dest, |writer| {
         let encoded_message = message.encode_to_vec();
         writer.write_all(&encoded_message)?;
         Ok(())
@@ -528,11 +566,32 @@ where
 }
 
 #[cfg(target_family = "unix")]
+/// Write to file `dest` using `action` without a temp file or `fsync`.
+/// This is intended for batch writing multiple files with as little
+/// overhead as possible.
+///
+/// If the file already exists, it will be deleted first. The file will
+/// be opened in exclusive mode and `action` executed with the BufWriter
+/// to that file.
+///
+/// The function will fail if `dest` exists but is a directory.
+pub fn write_to_file_simple<P, F>(dest: P, action: F) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    F: FnOnce(&mut io::BufWriter<&std::fs::File>) -> io::Result<()>,
+{
+    let file = create_file_exclusive_and_open(&dest)?;
+    let mut w = io::BufWriter::new(&file);
+    action(&mut w)?;
+    Ok(())
+}
+
+#[cfg(target_family = "unix")]
 fn tmp_name() -> String {
     /// The character length of the random string used for temporary file names.
     const TMP_NAME_LEN: usize = 7;
 
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{Rng, distributions::Alphanumeric};
 
     let mut rng = rand::thread_rng();
     std::iter::repeat(())
@@ -583,82 +642,6 @@ pub fn copy_file_range_all(
     Ok(())
 }
 
-/// Reads and then writes a chunk of size `size` starting at `offset` in the file at `path`.
-/// This defragments the file partially on some COW capable file systems
-#[cfg(target_family = "unix")]
-pub fn defrag_file_partially(path: &Path, offset: u64, size: usize) -> std::io::Result<()> {
-    use std::os::unix::prelude::FileExt;
-
-    let mut content = vec![0; size];
-    let f = std::fs::OpenOptions::new()
-        .write(true)
-        .read(true)
-        .create(false)
-        .open(path)?;
-    f.read_exact_at(&mut content[..], offset)?;
-    f.write_all_at(&content, offset)?;
-    Ok(())
-}
-
-/// Write a slice of slices to a file
-/// Replacement for std::io::Write::write_all_vectored as long as it's nightly rust only
-pub fn write_all_vectored(file: &mut fs::File, bufs: &[&[u8]]) -> std::io::Result<()> {
-    use io::ErrorKind;
-    use io::IoSlice;
-
-    let mut slices: Vec<IoSlice> = bufs.iter().map(|s| IoSlice::new(s)).collect();
-    let mut front = 0;
-    // Guarantee that bufs is empty if it contains no data,
-    // to avoid calling write_vectored if there is no data to be written.
-    while front < slices.len() && slices[front].is_empty() {
-        front += 1;
-    }
-    while front < slices.len() {
-        match file.write_vectored(&slices[front..]) {
-            Ok(0) => {
-                return Err(io::Error::new(
-                    ErrorKind::WriteZero,
-                    "failed to write whole buffer",
-                ));
-            }
-            Ok(n) => {
-                // drop n bytes from the front of the data
-                advance_slices(&mut slices, &mut front, n, bufs);
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(())
-}
-
-/// Advance a slice of IoSlices by `drop`. Will increment `front` to
-/// point past fully used slices, and modify slices if we point to the
-/// middle of a slice
-fn advance_slices<'a>(
-    slices: &mut [io::IoSlice<'a>],
-    front: &mut usize,
-    drop: usize,
-    bufs: &'a [&'a [u8]],
-) {
-    let mut written = drop;
-    while written > 0 && *front < slices.len() {
-        let first_len = slices[*front].len();
-        if written >= first_len {
-            // drop the first slice
-            written -= first_len;
-            *front += 1;
-        } else {
-            // drop only part of the first slice
-            let new_data_len = first_len - written;
-            let new_data: &[u8] = &bufs[*front][(bufs[*front].len() - new_data_len)..];
-            let new_slice = io::IoSlice::new(new_data);
-            slices[*front] = new_slice;
-            written = 0;
-        }
-    }
-}
-
 /// Error indicating that a call to clone_file has failed.
 #[derive(Debug)]
 pub enum FileCloneError {
@@ -676,7 +659,7 @@ impl std::fmt::Display for FileCloneError {
         match self {
             Self::OperationNotSupported => write!(f, "filesystem doesn't support reflinks"),
             Self::DifferentFileSystems => write!(f, "src and dst aren't on the same filesystem"),
-            Self::IoError(err) => write!(f, "IO error: {}", err),
+            Self::IoError(err) => write!(f, "IO error: {err}"),
         }
     }
 }
@@ -771,7 +754,7 @@ fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
-    extern "C" {
+    unsafe extern "C" {
         fn clonefile(src: *const c_char, dst: *const c_char, flags: c_int) -> c_int;
     }
 
@@ -795,9 +778,10 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::advance_slices;
-    use super::io::IoSlice;
-    use super::write_atomically_using_tmp_file;
+    use super::{Clobber, write_atomically_using_tmp_file};
+    use std::fs;
+    use std::io::{ErrorKind, Write};
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn test_write_success() {
@@ -805,9 +789,7 @@ mod tests {
         let dst = tmp_dir.path().join("target.txt");
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
-        write_atomically_using_tmp_file(&dst, &tmp, |buf| {
-            use std::io::Write;
-
+        write_atomically_using_tmp_file(&dst, &tmp, Clobber::Yes, |buf| {
             buf.write_all(b"test")?;
             Ok(())
         })
@@ -815,9 +797,83 @@ mod tests {
 
         assert!(!tmp.exists());
         assert_eq!(
-            std::fs::read(&dst).expect("failed to read destination file"),
+            fs::read(&dst).expect("failed to read destination file"),
             b"test".to_vec()
         );
+    }
+
+    #[test]
+    fn test_write_noclobber() {
+        let tmp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+        let dst = tmp_dir.path().join("target.txt");
+        let tmp = tmp_dir.path().join("target_tmp.txt");
+
+        write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |buf| {
+            buf.write_all(b"test")?;
+            Ok(())
+        })
+        .expect("failed to write atomically");
+
+        assert!(!tmp.exists());
+        assert_eq!(
+            fs::read(&dst).expect("failed to read destination file"),
+            b"test".to_vec()
+        );
+
+        // Attempt to write again, should fail because of noclobber
+        let result = write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |_buf| {
+            panic!("This should not be executed");
+        });
+
+        assert_eq!(
+            result.expect_err("Expected an error").kind(),
+            ErrorKind::AlreadyExists
+        );
+    }
+
+    #[test]
+    fn test_write_noclobber_concurrent() {
+        let tmp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
+        let dst = tmp_dir.path().join("target.txt");
+        let tmp = tmp_dir.path().join("target_tmp.txt");
+        // Poor man's no-dep semaphore
+        let foreground_done_writing_file = AtomicBool::new(false);
+        let background_action_started = AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            let background_write = scope.spawn(|| {
+                write_atomically_using_tmp_file(&dst, &tmp, Clobber::No, |buf| {
+                    background_action_started.store(true, Ordering::Release);
+                    // Wait until foreground thread is finished writing the file.
+                    while !foreground_done_writing_file.load(Ordering::Acquire) {
+                        std::thread::yield_now();
+                    }
+                    buf.write_all("background".as_bytes())?;
+                    Ok(())
+                })
+            });
+
+            // Wait until action has been invoked on background thread.
+            while !background_action_started.load(Ordering::Acquire) {
+                std::thread::yield_now();
+            }
+            fs::write(&dst, "foreground").expect("failed to write to destination file");
+            foreground_done_writing_file.store(true, Ordering::Release);
+
+            assert_eq!(
+                background_write
+                    .join()
+                    .unwrap()
+                    .expect_err("Expected slow write to fail")
+                    .kind(),
+                ErrorKind::AlreadyExists
+            );
+        });
+        assert_eq!(
+            fs::read(&dst).expect("failed to read destination file"),
+            b"foreground".to_vec()
+        );
+        assert!(!tmp.exists(), "Temporary file should not exist");
     }
 
     #[test]
@@ -826,66 +882,22 @@ mod tests {
         let dst = tmp_dir.path().join("target.txt");
         let tmp = tmp_dir.path().join("target_tmp.txt");
 
-        std::fs::write(&dst, b"original contents")
-            .expect("failed to write to the destination file");
+        fs::write(&dst, b"original contents").expect("failed to write to the destination file");
 
-        let result = write_atomically_using_tmp_file(&dst, &tmp, |buf| {
-            use std::io::Write;
-
+        let result = write_atomically_using_tmp_file(&dst, &tmp, Clobber::Yes, |buf| {
             buf.write_all(b"new shiny contents")?;
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "something went wrong",
-            ))
+            Err(std::io::Error::other("something went wrong"))
         });
 
         assert!(!tmp.exists());
         assert!(
             result.is_err(),
-            "expected action result to be an error, got {:?}",
-            result
+            "expected action result to be an error, got {result:?}"
         );
         assert_eq!(
-            std::fs::read(&dst).expect("failed to read destination file"),
+            fs::read(&dst).expect("failed to read destination file"),
             b"original contents".to_vec()
         );
-    }
-
-    #[test]
-    fn test_advance_slices() {
-        let slice_size = 4096;
-        let num_slices = 5;
-        let data = vec![vec![1u8; slice_size]; num_slices];
-        let bufs: &[&[u8]] = &data.iter().map(|v| v.as_slice()).collect::<Vec<&[u8]>>();
-        let mut slices: Vec<IoSlice> = bufs.iter().map(|s| IoSlice::new(s)).collect();
-        let mut front = 0;
-
-        // advance two full slices
-        advance_slices(&mut slices, &mut front, 2 * slice_size, bufs);
-        assert_eq!(2, front);
-        for i in front..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance 1.5 slices
-        advance_slices(&mut slices, &mut front, slice_size + slice_size / 2, bufs);
-        assert_eq!(3, front);
-        assert_eq!(*slices[front], bufs[front][slice_size / 2..]);
-        for i in (front + 1)..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance 1/4 slice
-        advance_slices(&mut slices, &mut front, slice_size / 4, bufs);
-        assert_eq!(3, front);
-        assert_eq!(*slices[front], bufs[front][3 * slice_size / 4..]);
-        for i in (front + 1)..num_slices {
-            assert_eq!(*slices[i], *bufs[i]);
-        }
-
-        // advance the remaining 1.25 slices
-        advance_slices(&mut slices, &mut front, slice_size + slice_size / 4, bufs);
-        assert_eq!(5, front);
     }
 
     #[cfg(target_family = "unix")]
@@ -1108,8 +1120,10 @@ mod tests {
             let test_sym_link = temp_dir.as_ref().join("test_sym_link");
             std::os::unix::fs::symlink(&test_file, &test_sym_link)
                 .expect("error creating symbolic link");
-            assert!(!is_regular_file(&test_sym_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_sym_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1124,8 +1138,10 @@ mod tests {
             let test_hard_link = temp_dir.as_ref().join("test_hard_link");
             create_hard_link_to_existing_file(&test_sym_link, &test_hard_link)
                 .expect("error creating hard link");
-            assert!(!is_regular_file(&test_hard_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_hard_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1144,8 +1160,8 @@ mod tests {
     mod open_existing_file_for_write {
         use crate::fs::{open_existing_file_for_write, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 
@@ -1177,7 +1193,7 @@ mod tests {
             create_dir(&test_file).expect("error creating directory");
             assert_matches!(
                 open_existing_file_for_write(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")  // ErrorKind::IsADirectory is unstable
+                Err(err) if format!("{err:?}").contains("Is a directory")  // ErrorKind::IsADirectory is unstable
             );
         }
 
@@ -1204,8 +1220,8 @@ mod tests {
     mod remove_file {
         use crate::fs::{remove_file, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 
@@ -1238,7 +1254,7 @@ mod tests {
             #[cfg(target_os = "linux")]
             assert_matches!(
                 remove_file(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")
+                Err(err) if format!("{err:?}").contains("Is a directory")
             );
             #[cfg(target_os = "macos")]
             assert_matches!(

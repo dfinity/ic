@@ -42,8 +42,7 @@ impl SimulateNetwork<ProductionSubnetTopology> for SubnetSnapshot {
                 // tc class id start at 1 and we already defined one above so we need to start from 2..
                 let tc_class_id = destination_node + 2;
                 tc_command.push_str(&format!(
-                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:{} htb rate 2000Mbps \n",
-                    tc_class_id,
+                    "sudo tc class add dev enp1s0 parent 1:1 classid 1:{tc_class_id} htb rate 2000Mbps \n",
                 ));
                 tc_command.push_str(&format!(
                         "sudo tc qdisc add dev enp1s0 handle {}: parent 1:{} netem limit 10000000 loss {:.3}% delay {}ms \n",
@@ -52,7 +51,7 @@ impl SimulateNetwork<ProductionSubnetTopology> for SubnetSnapshot {
                         packet_loss[(subnet_size-1) * source_node + destination_node].2 * 100.0,
                         (rtt[(subnet_size-1) * source_node + destination_node].2 * 1000.0 / 2.0) as u64
                     ));
-                tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {} u32 match ip6 dst {destination_ip} flowid 1:{} \n", tc_class_id, tc_class_id ));
+                tc_command.push_str(&format!("sudo tc filter add dev enp1s0 protocol ipv6 parent 1: pref {tc_class_id} u32 match ip6 dst {destination_ip} flowid 1:{tc_class_id} \n" ));
             }
             tc_command.push_str(
                 "sudo tc class add dev enp1s0 parent 1:1 classid 1:999 htb rate 2000Mbps \n",
@@ -94,7 +93,7 @@ impl SimulateNetwork<FixedNetworkSimulation> for SubnetSnapshot {
             "Packet loss must be between 0.0 and 1.0"
         );
 
-        let packet_loss_percentage = format!("{:.3}", packet_loss);
+        let packet_loss_percentage = format!("{packet_loss:.3}");
         let command = format!(
             r#"set -euo pipefail
 sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true
@@ -192,7 +191,7 @@ impl ProductionSubnetTopology {
 
 /// Query:
 /// https://victoria.ch1-obs1.dfinity.network/select/0/vmui/#/?g0.expr=sum+by+%28ic_node%2Cpeer%29+%28quic_transport_quinn_path_rtt_seconds%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%29&g0.range_input=21h24m51s870ms&g0.end_input=2024-08-20T08%3A22%3A07&g0.relative_time=none&g0.tenantID=0
-pub const UZR_34_RTT: [(u64, u64, f64); 756] = [
+pub static UZR_34_RTT: [(u64, u64, f64); 756] = [
     (1, 2, 0.15598),
     (1, 3, 0.37478),
     (1, 4, 0.13583),
@@ -952,7 +951,7 @@ pub const UZR_34_RTT: [(u64, u64, f64); 756] = [
 ];
 /// Query:
 /// https://victoria.ch1-obs1.dfinity.network/select/0/vmui/#/?g0.expr=sum+by+%28ic_node%2Cpeer%29+%28%0A++rate%28quic_transport_quinn_path_lost_packets%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%5B7d%5D%29+%2F%0A++rate%28quic_transport_quinn_path_sent_packets%7Bic_subnet%3D%22uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe%22%7D%5B7d%5D%29%0A%29&g0.range_input=13d14h36m59s549ms&g0.end_input=2024-06-23T20%3A59%3A19&g0.tab=1&g0.relative_time=none&g0.tenantID=0
-pub const UZR_34_PACKET_LOSS: [(u64, u64, f64); 756] = [
+pub static UZR_34_PACKET_LOSS: [(u64, u64, f64); 756] = [
     (1, 2, 0.0015710290841178466),
     (1, 3, 0.000604650481546998),
     (1, 4, 0.0014703598418393934),

@@ -12,10 +12,7 @@ on:
 jobs:
   check-queue:
     name: Check Workflow Wait Queue
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/minimal-runner-image:0.1
+    runs-on: ubuntu-latest
     steps:
 
       - name: Check for workflows in wait queue

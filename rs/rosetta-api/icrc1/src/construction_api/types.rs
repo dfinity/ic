@@ -19,8 +19,15 @@ impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
@@ -29,7 +36,7 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     type Error = String;
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
-            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {e}"))
     }
 }
 
@@ -40,19 +47,19 @@ pub struct SignedTransaction<'a> {
     pub envelopes: Vec<Envelope<'a>>,
 }
 
-impl<'a> std::fmt::Display for SignedTransaction<'a> {
+impl std::fmt::Display for SignedTransaction<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(serde_cbor::ser::to_vec(self).unwrap()))
     }
 }
 
-impl<'a> FromStr for SignedTransaction<'a> {
+impl FromStr for SignedTransaction<'_> {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_cbor::from_slice(hex::decode(s)?.as_slice()).map_err(|err| anyhow!("{:?}", err))
     }
 }
-impl<'a> SignedTransaction<'a> {
+impl SignedTransaction<'_> {
     pub fn get_lowest_ingress_expiry(&self) -> Option<u64> {
         self.envelopes
             .iter()
@@ -198,8 +205,14 @@ impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
     fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o),
-            Err(err) => bail!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err),
+            Ok(o) => bail!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",
+                o
+            ),
+            Err(err) => bail!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
@@ -216,6 +229,6 @@ impl TryFrom<Option<ObjectMap>> for ConstructionPayloadsRequestMetadata {
     type Error = String;
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
-            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {e}"))
     }
 }

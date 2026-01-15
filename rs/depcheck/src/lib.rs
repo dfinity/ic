@@ -14,7 +14,7 @@ impl fmt::Display for PackageSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Wildcard => write!(f, "*"),
-            Self::Name(name) => write!(f, "{}", name),
+            Self::Name(name) => write!(f, "{name}"),
         }
     }
 }

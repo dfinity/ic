@@ -1,4 +1,4 @@
-/// Common test function for a couple of catch up tests.
+//! Common test function for a couple of catch up tests.
 
 const DKG_INTERVAL: u64 = 150;
 const CATCH_UP_RETRIES: u64 = 40;
@@ -20,7 +20,7 @@ use ic_system_test_driver::{
             RETRY_BACKOFF,
         },
     },
-    util::{block_on, MetricsFetcher},
+    util::{MetricsFetcher, block_on},
 };
 use ic_types::Height;
 
@@ -78,7 +78,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
         Height::from(slow_node_shut_down_height),
         log.clone(),
     );
-    malicious_node.vm().kill();
+    block_on(async { malicious_node.vm().await.kill().await });
     info!(log, "Killed the slow node");
 
     info!(log, "Wait another DKG interval, then restart the slow node");
@@ -94,7 +94,7 @@ fn test(env: TestEnv, expect_catch_up: bool) {
                 log.clone(),
             )
         });
-    malicious_node.vm().start();
+    block_on(async { malicious_node.vm().await.start().await });
     info!(log, "Restarted slow node");
 
     // Wait until the node is available again

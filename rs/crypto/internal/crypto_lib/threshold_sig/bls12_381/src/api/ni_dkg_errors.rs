@@ -106,14 +106,14 @@ pub enum DecryptError {
         secret_key_epoch: Epoch,
     },
     /// One of the forward-secure-encryption chunks failed to decrypt.
-    InvalidChunk,
+    InvalidChunk(String),
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
 }
 
 /// Creation of a DKG dealing failed.
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CspDkgCreateDealingError {
     /// Precondition error: The AlgorithmId does not correspond to a NiDkg
     /// variant.
@@ -234,48 +234,6 @@ impl From<CspDkgCreateDealingError> for CspDkgCreateReshareDealingError {
             }
             CspDkgCreateDealingError::TransientInternalError(error) => {
                 CspDkgCreateReshareDealingError::TransientInternalError(error)
-            }
-        }
-    }
-}
-
-impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
-    fn from(error: CspDkgCreateReshareDealingError) -> Self {
-        match error {
-            CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(error) => {
-                CspDkgCreateDealingError::UnsupportedAlgorithmId(error)
-            }
-            CspDkgCreateReshareDealingError::InvalidThresholdError(error) => {
-                CspDkgCreateDealingError::InvalidThresholdError(error)
-            }
-            CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(_) => {
-                panic!("This error cannot be converted")
-            }
-            CspDkgCreateReshareDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            } => CspDkgCreateDealingError::MisnumberedReceiverError {
-                receiver_index,
-                number_of_receivers,
-            },
-            CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            } => CspDkgCreateDealingError::MalformedFsPublicKeyError {
-                receiver_index,
-                error,
-            },
-            CspDkgCreateReshareDealingError::SizeError(error) => {
-                CspDkgCreateDealingError::SizeError(error)
-            }
-            CspDkgCreateReshareDealingError::TransientInternalError(error) => {
-                CspDkgCreateDealingError::TransientInternalError(error)
-            }
-            CspDkgCreateReshareDealingError::ReshareKeyIdComputationError(_) => {
-                panic!("This error cannot be converted")
             }
         }
     }
@@ -545,12 +503,36 @@ pub mod dealing {
     impl From<InvalidDealingError> for InvalidArgumentError {
         fn from(error: InvalidDealingError) -> InvalidArgumentError {
             match error {
-          InvalidDealingError::UnexpectedShare { receiver_index, number_of_receivers } => InvalidArgumentError{ message: format!("Expected receiver indices 0..{} inclusive but found {}.", number_of_receivers.get()-1, receiver_index) },
-          InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError{ message: format!("Missing share for receiver {}", receiver_index) },
-          InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError{ message: format!("Malformed share for receiver {}", receiver_index) },
-          InvalidDealingError::ThresholdMismatch { threshold, public_coefficients_len } => InvalidArgumentError{ message: format!("The reshared public coefficients don't match the threshold\n  Threshold: {}\n  Public coefficients len: {}", threshold, public_coefficients_len) },
-          InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError{ message: format!("The reshared public key does not match the preexisting key.\n  Old: {:?}\n  New: {:?}", old, new) },
-        }
+                InvalidDealingError::UnexpectedShare {
+                    receiver_index,
+                    number_of_receivers,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "Expected receiver indices 0..{} inclusive but found {}.",
+                        number_of_receivers.get() - 1,
+                        receiver_index
+                    ),
+                },
+                InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Missing share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError {
+                    message: format!("Malformed share for receiver {receiver_index}"),
+                },
+                InvalidDealingError::ThresholdMismatch {
+                    threshold,
+                    public_coefficients_len,
+                } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public coefficients don't match the threshold\n  Threshold: {threshold}\n  Public coefficients len: {public_coefficients_len}"
+                    ),
+                },
+                InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError {
+                    message: format!(
+                        "The reshared public key does not match the preexisting key.\n  Old: {old:?}\n  New: {new:?}"
+                    ),
+                },
+            }
         }
     }
 }

@@ -1,9 +1,9 @@
 use std::{
-    collections::{hash_map::DefaultHasher, BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, MutexGuard,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -17,7 +17,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync};
 use ic_quic_transport::Shutdown;
 use ic_state_manager::state_sync::types::StateSyncMessage;
-use ic_types::{crypto::CryptoHash, Height, NodeId, PrincipalId};
+use ic_types::{Height, NodeId, PrincipalId, crypto::CryptoHash};
 use tokio::runtime::Handle;
 
 const META_MANIFEST_ID: u32 = u32::MAX - 1;
@@ -269,7 +269,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
                 break;
             }
         }
-        Box::new(to_download.into_iter().map(ChunkId::from))
+        Box::new(to_download.into_iter())
     }
 
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
@@ -280,7 +280,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
             if set.remove(&chunk_id) {
                 break;
             } else {
-                panic!("Downloaded chunk {} twice", chunk_id)
+                panic!("Downloaded chunk {chunk_id} twice")
             }
         }
 
@@ -418,10 +418,11 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
-    let (router, rx) = ic_state_sync_manager::build_axum_router(
-        state_sync.clone(),
-        log.clone(),
+    let (router, manager) = ic_state_sync_manager::build_state_sync_manager(
+        &log,
         &MetricsRegistry::default(),
+        rt,
+        state_sync.clone(),
     );
     let transport = transport_router.add_peer(
         NodeId::from(PrincipalId::new_node_test_id(node_num)),
@@ -429,14 +430,6 @@ pub fn create_node(
         link.0,
         link.1,
     );
-    let shutdown = ic_state_sync_manager::start_state_sync_manager(
-        &log,
-        &MetricsRegistry::default(),
-        rt,
-        Arc::new(transport),
-        state_sync.clone(),
-        rx,
-    );
-
+    let shutdown = manager.start(Arc::new(transport));
     (state_sync, shutdown)
 }

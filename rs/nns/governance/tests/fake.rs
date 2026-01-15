@@ -4,34 +4,36 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
-use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
-    types::UpdateIcpXdrConversionRatePayload,
-};
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,
-        NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal, Vote, manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount, proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
+use ic_nns_governance_api::Neuron;
+use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, hash_map::Entry},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -40,11 +42,17 @@ use std::{
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
+use ic_nns_governance::governance::RandomnessGenerator;
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla, tla_function,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
+use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsResponse, NodeProvidersRewards,
+};
 
 lazy_static! {
     pub(crate) static ref SNS_ROOT_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(213599);
@@ -105,14 +113,20 @@ impl Default for FakeState {
 /// advanced, and ledger accounts manipulated.
 pub struct FakeDriver {
     pub state: Arc<Mutex<FakeState>>,
+    pub error_on_next_ledger_call: Arc<Mutex<Option<NervousSystemError>>>,
 }
 
 /// Create a default mock driver.
 impl Default for FakeDriver {
     fn default() -> Self {
-        Self {
+        let ret = Self {
             state: Arc::new(Mutex::new(Default::default())),
-        }
+            error_on_next_ledger_call: Arc::new(Mutex::new(None)),
+        };
+        set_time_for_timers(std::time::Duration::from_secs(
+            ret.state.try_lock().unwrap().now,
+        ));
+        ret
     }
 }
 
@@ -126,6 +140,7 @@ impl FakeDriver {
 
     /// Constructs a mock driver that starts at the given timestamp.
     pub fn at(self, timestamp: u64) -> FakeDriver {
+        set_time_for_timers(std::time::Duration::from_secs(timestamp));
         self.state.lock().unwrap().now = timestamp;
         self
     }
@@ -174,26 +189,37 @@ impl FakeDriver {
 
     /// Increases the time by the given amount.
     pub fn advance_time_by(&mut self, delta_seconds: u64) {
+        advance_time_for_timers(std::time::Duration::from_secs(delta_seconds));
         self.state.lock().unwrap().now += delta_seconds;
     }
 
     /// Constructs an `Environment` that interacts with this driver.
-    pub fn get_fake_env(&self) -> Box<dyn Environment> {
-        Box::new(FakeDriver {
+    pub fn get_fake_env(&self) -> Arc<dyn Environment> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
     /// Constructs a `Ledger` that interacts with this driver.
-    pub fn get_fake_ledger(&self) -> Box<dyn IcpLedger> {
-        Box::new(FakeDriver {
+    pub fn get_fake_ledger(&self) -> Arc<dyn IcpLedger> {
+        Arc::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
-    pub fn get_fake_cmc(&self) -> Box<dyn CMC> {
+    pub fn get_fake_cmc(&self) -> Arc<dyn CMC> {
+        Arc::new(FakeDriver {
+            state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
+        })
+    }
+
+    pub fn get_fake_randomness_generator(&self) -> Box<dyn RandomnessGenerator> {
         Box::new(FakeDriver {
             state: Arc::clone(&self.state),
+            error_on_next_ledger_call: Arc::clone(&self.error_on_next_ledger_call),
         })
     }
 
@@ -241,10 +267,18 @@ impl FakeDriver {
             num_accounts
         );
     }
+
+    pub fn fail_next_ledger_call(&self) {
+        self.error_on_next_ledger_call
+            .lock()
+            .unwrap()
+            .replace(NervousSystemError::new());
+    }
 }
 
 #[async_trait]
 impl IcpLedger for FakeDriver {
+    #[cfg_attr(feature = "tla", tla_function(force_async_fn = true))]
     async fn transfer_funds(
         &self,
         amount_e8s: u64,
@@ -262,7 +296,13 @@ impl IcpLedger for FakeDriver {
         );
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
+            from_account,
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), ToString::to_string),
+            to_account,
+            amount_e8s,
+            fee_e8s
         );
         tla_log_request!(
             "WaitForTransfer",
@@ -276,6 +316,20 @@ impl IcpLedger for FakeDriver {
             ]))
         );
 
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            println!(
+                "Failing the ledger transfer because we were instructed to fail the next ledger call"
+            );
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                }
+            );
+            return Err(err);
+        }
+
         let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let from_e8s = accounts
@@ -286,6 +340,13 @@ impl IcpLedger for FakeDriver {
 
         if !is_minting_operation {
             if *from_e8s < requested_e8s {
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    tla::TlaValue::Variant {
+                        tag: "Fail".to_string(),
+                        value: Box::new(tla::TlaValue::Constant("UNIT".to_string()))
+                    }
+                );
                 return Err(NervousSystemError::new_with_message(format!(
                     "Insufficient funds. Available {} requested {}",
                     *from_e8s, requested_e8s
@@ -307,6 +368,10 @@ impl IcpLedger for FakeDriver {
     }
 
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            return Err(err);
+        }
+
         Ok(self.get_supply())
     }
 
@@ -314,8 +379,6 @@ impl IcpLedger for FakeDriver {
         &self,
         account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        let accounts = &mut self.state.try_lock().unwrap().accounts;
-
         tla_log_request!(
             "WaitForBalanceQuery",
             Destination::new("ledger"),
@@ -325,6 +388,19 @@ impl IcpLedger for FakeDriver {
                 account_to_tla(account)
             )]))
         );
+
+        if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
+            tla_log_response!(
+                Destination::new("ledger"),
+                tla::TlaValue::Variant {
+                    tag: "Fail".to_string(),
+                    value: Box::new(tla::TlaValue::Constant("UNIT".to_string())),
+                }
+            );
+            return Err(err);
+        }
+
+        let accounts = &mut self.state.try_lock().unwrap().accounts;
 
         let account_e8s = accounts.get(&account).unwrap_or(&0);
         tla_log_response!(
@@ -340,21 +416,39 @@ impl IcpLedger for FakeDriver {
     fn canister_id(&self) -> CanisterId {
         LEDGER_CANISTER_ID
     }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 #[async_trait]
 impl CMC for FakeDriver {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         Ok(100)
     }
 }
 
-#[async_trait]
-impl Environment for FakeDriver {
-    fn now(&self) -> u64 {
-        self.state.try_lock().unwrap().now
-    }
-
+impl RandomnessGenerator for FakeDriver {
     fn random_u64(&mut self) -> Result<u64, RngError> {
         Ok(self.state.try_lock().unwrap().rng.next_u64())
     }
@@ -365,18 +459,25 @@ impl Environment for FakeDriver {
         Ok(bytes)
     }
 
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
+    fn seed_rng(&mut self, seed: [u8; 32]) {
+        self.state.try_lock().unwrap().rng = ChaCha20Rng::from_seed(seed);
     }
 
     fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
+        Some(self.state.try_lock().unwrap().rng.get_seed())
+    }
+}
+
+#[async_trait]
+impl Environment for FakeDriver {
+    fn now(&self) -> u64 {
+        self.state.try_lock().unwrap().now
     }
 
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
         //panic!("unexpected call")
@@ -499,17 +600,33 @@ impl Environment for FakeDriver {
         }
 
         if method_name == "get_node_providers_monthly_xdr_rewards" {
-            assert_eq!(PrincipalId::from(target), REGISTRY_CANISTER_ID.get());
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
 
-            return Ok(Encode!(&Ok::<NodeProvidersMonthlyXdrRewards, String>(
-                NodeProvidersMonthlyXdrRewards {
-                    rewards: hashmap! {
-                        PrincipalId::new_user_test_id(1).to_string() => NODE_PROVIDER_REWARD,
-                    },
-                    registry_version: Some(5)
-                }
-            ))
+            return Ok(Encode!(&GetNodeProvidersMonthlyXdrRewardsResponse {
+                rewards: Some(
+                    ic_node_rewards_canister_api::monthly_rewards::NodeProvidersMonthlyXdrRewards {
+                        rewards: btreemap! {
+                            PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                        },
+                        registry_version: Some(5)
+                    }
+                ),
+                error: None
+            })
             .unwrap());
+        }
+
+        if method_name == "get_node_providers_rewards" {
+            assert_eq!(PrincipalId::from(target), NODE_REWARDS_CANISTER_ID.get());
+
+            let response: GetNodeProvidersRewardsResponse = Ok(NodeProvidersRewards {
+                rewards_xdr_permyriad: btreemap! {
+                    PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
+                },
+                algorithm_version: RewardsCalculationAlgorithmVersion::default(),
+            });
+
+            return Ok(Encode!(&response).unwrap());
         }
 
         if method_name == "get_average_icp_xdr_conversion_rate" {
@@ -529,6 +646,12 @@ impl Environment for FakeDriver {
             .unwrap());
         }
 
+        if method_name == "raw_rand" {
+            let mut bytes = [0u8; 32];
+            self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
+            return Ok(Encode!(&bytes).unwrap());
+        }
+
         println!(
             "WARNING: Unexpected canister call:\n\
              ..target = {}\n\
@@ -546,7 +669,7 @@ impl Environment for FakeDriver {
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Issues a manage_neuron command to register a vote
@@ -599,7 +722,6 @@ pub fn register_vote_assert_success(
 pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
-    ExchangeRate,
 }
 
 /// A struct to help setting up tests concisely thanks to a concise format to
@@ -624,23 +746,11 @@ impl ProposalNeuronBehavior {
         // Submit proposal
         let action = match self.proposal_topic {
             ProposalTopicBehavior::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
+                motion_text: format!("summary: {summary}"),
             }),
             ProposalTopicBehavior::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     ..Default::default()
-                })
-            }
-            ProposalTopicBehavior::ExchangeRate => {
-                proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 1000000,
-                        data_source: "".to_string(),
-                        timestamp_seconds: 0,
-                        reason: None,
-                    })
-                    .unwrap(),
                 })
             }
         };
@@ -688,11 +798,11 @@ impl From<&str> for ProposalNeuronBehavior {
     /// 'NetworkEconomics', or 'IcpXdrConversionRate'.
     ///
     /// Example:
-    /// "--yP-nyE" means:
+    /// "--yP-nyG" means:
     ///
     /// neuron 3 proposes, neurons 2 and 6 votes yes, neuron 5 votes
     /// no, neurons 0, 1, and 4 do not vote; the proposal topic is
-    /// ExchangeRate.
+    /// Governance.
     fn from(str: &str) -> ProposalNeuronBehavior {
         // Look at the last letter to figure out if it specifies a proposal type.
         let chr = if str.is_empty() {
@@ -700,14 +810,13 @@ impl From<&str> for ProposalNeuronBehavior {
         } else {
             str.chars().last().unwrap()
         };
-        let (str, proposal_topic) = match "NEG".find(chr) {
+        let (str, proposal_topic) = match "NG".find(chr) {
             None => (str, ProposalTopicBehavior::NetworkEconomics),
             Some(x) => (
                 &str[0..str.len() - 1],
                 match x {
                     0 => ProposalTopicBehavior::NetworkEconomics,
-                    1 => ProposalTopicBehavior::ExchangeRate,
-                    // Must be 2, but using _ for a complete match.
+                    // Must be 1, but using _ for a complete match.
                     _ => ProposalTopicBehavior::Governance,
                 },
             ),

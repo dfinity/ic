@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "setupos-image-config",
+    srcs = ["src/lib.rs"],
+    version = "0.1.0",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = [
+        "//rs/ic_os/config/tool:config_lib_dev",
+        "//rs/ic_os/config/types:config_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde_json",
+    ],
+)
+
+rust_binary(
+    name = "setupos-inject-config",
+    srcs = ["src/main.rs"],
+    version = "0.1.0",
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = [
+        ":setupos-image-config",
+        "//rs/ic_os/build_tools/partition_tools",
+        "//rs/ic_os/config/tool:config_lib_dev",
+        "//rs/ic_os/config/types:config_types",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:url",
+    ],
+)

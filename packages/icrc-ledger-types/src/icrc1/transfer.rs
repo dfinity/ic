@@ -7,6 +7,7 @@ use std::fmt;
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
 
+/// The arguments for the [ICRC-1 `transfer`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-) endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferArg {
     #[serde(default)]
@@ -21,6 +22,9 @@ pub struct TransferArg {
     pub amount: NumTokens,
 }
 
+/// The [`Memo`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-)
+/// is an arbitrary blob that has no meaning to the ledger. The ledger SHOULD allow memos of at
+/// least 32 bytes in length.
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
 )]
@@ -51,6 +55,9 @@ impl From<Memo> for ByteBuf {
     }
 }
 
+/// Errors defined for the
+/// [ICRC-1 `transfer`](https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md#icrc1_transfer-)
+/// endpoint.
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError {
     BadFee { expected_fee: NumTokens },
@@ -67,35 +74,31 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transfer fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {expected_fee}")
             }
             Self::InsufficientFunds { balance } => {
                 write!(
                     f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {balance}"
                 )
             }
             Self::TooOld {} => write!(f, "transaction's created_at_time is too far in the past"),
             Self::CreatedInFuture { ledger_time } => write!(
                 f,
-                "transaction's created_at_time is in future, current ledger time is {}",
-                ledger_time
+                "transaction's created_at_time is in future, current ledger time is {ledger_time}"
             ),
             Self::Duplicate { duplicate_of } => write!(
                 f,
-                "transaction is a duplicate of another transaction in block {}",
-                duplicate_of
+                "transaction is a duplicate of another transaction in block {duplicate_of}"
             ),
             Self::TemporarilyUnavailable {} => write!(f, "the ledger is temporarily unavailable"),
             Self::GenericError {
                 error_code,
                 message,
-            } => write!(f, "{} {}", error_code, message),
+            } => write!(f, "{error_code} {message}"),
             Self::BadBurn { min_burn_amount } => write!(
                 f,
-                "the minimum number of tokens to be burned is {}",
-                min_burn_amount
+                "the minimum number of tokens to be burned is {min_burn_amount}"
             ),
         }
     }

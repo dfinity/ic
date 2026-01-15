@@ -28,9 +28,8 @@ message NodeOperatorRecord {
   map<string, uint32> rewardable_nodes = 5;
 
   optional string ipv6 = 6;
-}
 
-// The payload of a request to remove Node Operator records from the Registry
-message RemoveNodeOperatorsPayload {
-  repeated bytes node_operators_to_remove = 1;
+  // A map from node type to the maximum number of nodes for which the associated Node
+  // Provider could be rewarded for each type of node.
+  map<string, uint32> max_rewardable_nodes = 7;
 }

@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package remote_attestation;
+
+import "attestation.proto";
+
+service RemoteAttestationService {
+  // Gets an SEV attestation package from the node
+  rpc Attest(AttestRequest) returns (AttestResponse) {};
+}
+
+message AttestRequest {
+  // 64-byte long custom data
+  optional bytes custom_data = 1;
+}
+
+message AttestResponse {
+  // The SEV attestation package provided by the node
+  optional attestation.SevAttestationPackage attestation_package = 1;
+}

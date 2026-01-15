@@ -28,6 +28,11 @@ pub struct SubnetTopology {
     #[prost(message, repeated, tag = "6")]
     pub chain_keys_held:
         ::prost::alloc::vec::Vec<super::super::super::types::v1::MasterPublicKeyId>,
+    #[prost(
+        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
+        tag = "7"
+    )]
+    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetsEntry {
@@ -91,6 +96,9 @@ pub struct EcdsaArguments {
     pub key_id: ::core::option::Option<super::super::super::types::v1::EcdsaKeyId>,
     #[prost(bytes = "vec", tag = "2")]
     pub message_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::EcdsaMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SchnorrArguments {
@@ -100,15 +108,18 @@ pub struct SchnorrArguments {
     pub message: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", optional, tag = "3")]
     pub taproot_tree_root: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "4")]
+    pub pre_signature:
+        ::core::option::Option<super::super::super::types::v1::SchnorrMatchedPreSignature>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct VetKdArguments {
     #[prost(message, optional, tag = "1")]
     pub key_id: ::core::option::Option<super::super::super::types::v1::VetKdKeyId>,
     #[prost(bytes = "vec", tag = "2")]
-    pub derivation_id: ::prost::alloc::vec::Vec<u8>,
+    pub input: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "3")]
-    pub encryption_public_key: ::prost::alloc::vec::Vec<u8>,
+    pub transport_public_key: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "4")]
     pub ni_dkg_id: ::core::option::Option<super::super::super::types::v1::NiDkgId>,
     #[prost(uint64, tag = "5")]
@@ -158,6 +169,23 @@ pub struct SignWithThresholdContextTree {
     pub context: ::core::option::Option<SignWithThresholdContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureStashTree {
+    #[prost(message, optional, tag = "1")]
+    pub key_id: ::core::option::Option<super::super::super::types::v1::MasterPublicKeyId>,
+    #[prost(message, optional, tag = "2")]
+    pub key_transcript:
+        ::core::option::Option<super::super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, repeated, tag = "3")]
+    pub pre_signatures: ::prost::alloc::vec::Vec<PreSignatureIdPair>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignatureIdPair {
+    #[prost(uint64, tag = "1")]
+    pub pre_sig_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub pre_signature: ::core::option::Option<super::super::super::types::v1::PreSignature>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HttpHeader {
     #[prost(string, tag = "1")]
     pub name: ::prost::alloc::string::String,
@@ -184,6 +212,40 @@ pub struct CanisterHttpRequestContext {
     pub max_response_bytes: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "10")]
     pub transform_context: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(message, optional, tag = "11")]
+    pub replication: ::core::option::Option<Replication>,
+    #[prost(message, optional, tag = "12")]
+    pub pricing_version: ::core::option::Option<PricingVersion>,
+}
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+pub struct PricingVersion {
+    #[prost(oneof = "pricing_version::Version", tags = "1, 2")]
+    pub version: ::core::option::Option<pricing_version::Version>,
+}
+/// Nested message and enum types in `PricingVersion`.
+pub mod pricing_version {
+    #[derive(Clone, Copy, PartialEq, ::prost::Oneof)]
+    pub enum Version {
+        #[prost(message, tag = "1")]
+        Legacy(()),
+        #[prost(message, tag = "2")]
+        PayAsYouGo(()),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Replication {
+    #[prost(oneof = "replication::ReplicationType", tags = "1, 2")]
+    pub replication_type: ::core::option::Option<replication::ReplicationType>,
+}
+/// Nested message and enum types in `Replication`.
+pub mod replication {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ReplicationType {
+        #[prost(message, tag = "1")]
+        FullyReplicated(()),
+        #[prost(message, tag = "2")]
+        NonReplicated(super::super::super::super::types::v1::NodeId),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpRequestContextTree {
@@ -193,7 +255,7 @@ pub struct CanisterHttpRequestContextTree {
     pub context: ::core::option::Option<CanisterHttpRequestContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContext {
+pub struct ReshareChainKeyContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
@@ -204,13 +266,15 @@ pub struct IDkgDealingsContext {
     pub registry_version: u64,
     #[prost(message, optional, tag = "5")]
     pub time: ::core::option::Option<Time>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub target_id: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IDkgDealingsContextTree {
+pub struct ReshareChainKeyContextTree {
     #[prost(uint64, tag = "1")]
     pub callback_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<IDkgDealingsContext>,
+    pub context: ::core::option::Option<ReshareChainKeyContext>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BitcoinGetSuccessorsContext {
@@ -351,9 +415,11 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "16")]
     pub raw_rand_contexts: ::prost::alloc::vec::Vec<RawRandContext>,
     #[prost(message, repeated, tag = "17")]
-    pub idkg_dealings_contexts: ::prost::alloc::vec::Vec<IDkgDealingsContextTree>,
+    pub reshare_chain_key_contexts: ::prost::alloc::vec::Vec<ReshareChainKeyContextTree>,
     #[prost(message, repeated, tag = "18")]
     pub sign_with_threshold_contexts: ::prost::alloc::vec::Vec<SignWithThresholdContextTree>,
+    #[prost(message, repeated, tag = "19")]
+    pub pre_signature_stashes: ::prost::alloc::vec::Vec<PreSignatureStashTree>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetMetrics {
@@ -449,6 +515,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "8")]
     pub subnet_call_context_manager: ::core::option::Option<SubnetCallContextManager>,
+    #[prost(message, optional, tag = "23")]
+    pub subnet_split_from: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     /// Canister ID ranges allocated (exclusively) to this subnet, to generate
     /// canister IDs from.
     #[prost(message, optional, tag = "16")]

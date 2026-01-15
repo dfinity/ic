@@ -2,15 +2,85 @@
 //   openssl ecparam -name prime256v1 -genkey -noout -out private.ec.key
 //   openssl ec -in private.ec.key -pubout -outform DER -out ecpubkey.der
 //   hexdump -ve '1/1 "%.2x"' ecpubkey.der
-const ECDSA_P256_PK_1_DER_HEX : &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
+const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
 
-const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX : &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
+const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX: &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
 
 // A DER-encoded Ed25519 public key, to test that parsing non-ECDSA keys
 // gracefully fails.
 const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
 
+mod test_utils {
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types;
+    use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+
+    /// Create a new secp256r1 keypair. This function should only be used for
+    /// testing.
+    ///
+    /// # Errors
+    /// * `AlgorithmNotSupported` if an error occurs while generating the key
+    /// * `MalformedPublicKey` if the public key could not be parsed
+    /// * `MalformedSecretKey` if the secret key does not correspond with the public
+    ///   key
+    /// # Returns
+    /// A tuple of the secret key bytes and public key bytes
+    pub(crate) fn new_keypair(
+        rng: &mut (impl rand::RngCore + rand::CryptoRng),
+    ) -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
+        let (sk, pk) = {
+            let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+            let encoded_pk = sk.public_key().serialize_sec1(false);
+            let serialized_pk: [u8; 65] = encoded_pk
+                .try_into()
+                .expect("public key with incorrect length");
+            (sk.serialize_sec1(), serialized_pk)
+        };
+
+        let pk_bytes = types::PublicKeyBytes::from(pk.to_vec());
+        let sk_bytes = secret_key_from_components(&sk, &pk_bytes)?;
+
+        Ok((sk_bytes, pk_bytes))
+    }
+
+    /// Create a secp256r1 secret key from raw bytes
+    ///
+    /// # Arguments
+    /// * `sk_raw_bytes` is the big-endian encoding of unsigned integer
+    /// * `pk` is the public key associated with this secret key
+    /// # Errors
+    /// * `MalformedPublicKey` if the public key could not be parsed
+    /// * `MalformedSecretKey` if the secret key does not correspond with the public
+    ///   key
+    fn secret_key_from_components(
+        sk_raw_bytes: &[u8],
+        pk: &types::PublicKeyBytes,
+    ) -> CryptoResult<types::SecretKeyBytes> {
+        use ic_crypto_secrets_containers::SecretVec;
+
+        let sk = ic_secp256r1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
+            CryptoError::MalformedSecretKey {
+                algorithm: AlgorithmId::EcdsaP256,
+                internal_error: format!("{e:?}"),
+            }
+        })?;
+
+        if pk.0 != sk.public_key().serialize_sec1(false) {
+            return Err(CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::EcdsaP256,
+                key_bytes: Some(pk.0.to_vec()),
+                internal_error: "Public key does not match secret key".to_string(),
+            });
+        }
+
+        let mut sk_rfc5915 = sk.serialize_rfc5915_der();
+
+        Ok(types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(
+            &mut sk_rfc5915,
+        )))
+    }
+}
 mod keygen {
+    use crate::test_utils;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -51,7 +121,7 @@ mod keygen {
     //     -conv_form compressed
     #[test]
     fn rejects_compressed_points() {
-        const COMPRESSED : &str = "3039301306072a8648ce3d020106082a8648ce3d030107032200029b18562f6d49c62626023683c31923b5b99825a05761cad69a856ee174bd879b";
+        const COMPRESSED: &str = "3039301306072a8648ce3d020106082a8648ce3d030107032200029b18562f6d49c62626023683c31923b5b99825a05761cad69a856ee174bd879b";
 
         let pk_der = hex::decode(COMPRESSED).unwrap();
         let pk_result = public_key_from_der(&pk_der);
@@ -65,6 +135,7 @@ mod keygen {
 }
 
 mod sign {
+    use crate::test_utils;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
@@ -118,6 +189,7 @@ mod sign {
 }
 
 mod verify {
+    use crate::test_utils;
     use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -200,9 +272,11 @@ mod sig_conv_tests {
         let bytes = vec![0; SignatureBytes::SIZE + 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 
     #[test]
@@ -210,8 +284,10 @@ mod sig_conv_tests {
         let bytes = vec![0; SignatureBytes::SIZE - 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 }

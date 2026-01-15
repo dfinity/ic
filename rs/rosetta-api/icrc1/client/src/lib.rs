@@ -1,5 +1,5 @@
-use anyhow::bail;
 use anyhow::Context;
+use anyhow::bail;
 use candid::Nat;
 use ic_icrc_rosetta::common::types::ApproveMetadata;
 use ic_icrc_rosetta::common::types::Error;
@@ -9,6 +9,7 @@ use ic_rosetta_api::models::Amount;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::account::Subaccount;
 use num_bigint::BigInt;
+use prometheus_parse::Scrape;
 use reqwest::{Client, Url};
 use rosetta_core::identifiers::*;
 use rosetta_core::models::CurveType;
@@ -20,11 +21,14 @@ use rosetta_core::objects::Signature;
 use rosetta_core::request_types::*;
 use rosetta_core::response_types::*;
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 use url::ParseError;
 
+#[derive(Clone)]
 pub struct RosettaClient {
     pub url: Url,
     pub http_client: Client,
+    pub timeout: Option<Duration>,
 }
 
 impl RosettaClient {
@@ -32,12 +36,20 @@ impl RosettaClient {
         Self {
             url,
             http_client: Client::new(),
+            timeout: None,
         }
     }
 
     pub fn from_str_url(url: &str) -> Result<Self, ParseError> {
         let url = Url::parse(url)?;
         Ok(Self::from_url(url))
+    }
+
+    pub fn from_str_url_and_timeout(url: &str, timeout: Duration) -> Result<Self, ParseError> {
+        let url = Url::parse(url)?;
+        let mut client = Self::from_url(url);
+        client.timeout = Some(timeout);
+        Ok(client)
     }
 
     pub fn url(&self, path: &str) -> Url {
@@ -72,7 +84,7 @@ impl RosettaClient {
             // Verify that the signature is correct
             match signer_keypair.get_curve_type() {
                 CurveType::Edwards25519 => {
-                    let verification_key = ic_crypto_ed25519::PublicKey::deserialize_raw(
+                    let verification_key = ic_ed25519::PublicKey::deserialize_raw(
                         signer_keypair.get_pb_key().as_slice(),
                     )
                     .with_context(|| {
@@ -89,15 +101,14 @@ impl RosettaClient {
                     };
                 }
                 CurveType::Secp256K1 => {
-                    let verification_key = ic_crypto_secp256k1::PublicKey::deserialize_sec1(
-                        &signer_keypair.get_pb_key(),
-                    )
-                    .with_context(|| {
-                        format!(
-                            "Failed to convert public key to verification key: {:?}",
-                            signer_keypair.get_pb_key()
-                        )
-                    })?;
+                    let verification_key =
+                        ic_secp256k1::PublicKey::deserialize_sec1(&signer_keypair.get_pb_key())
+                            .with_context(|| {
+                                format!(
+                                    "Failed to convert public key to verification key: {:?}",
+                                    signer_keypair.get_pb_key()
+                                )
+                            })?;
                     if !verification_key
                         .verify_signature(signable_bytes.as_slice(), signed_bytes.as_slice())
                     {
@@ -133,6 +144,18 @@ impl RosettaClient {
             .await
             .unwrap()
             .status()
+    }
+
+    pub async fn metrics(&self) -> Result<Scrape, Error> {
+        let body = self
+            .http_client
+            .get(self.url("/metrics"))
+            .send()
+            .await?
+            .text()
+            .await?;
+        let lines: Vec<_> = body.lines().map(|s| Ok(s.to_string())).collect();
+        Scrape::parse(lines.into_iter()).map_err(|err| Error::parsing_unsuccessful(&err))
     }
 
     pub async fn make_submit_and_wait_for_transaction<T: RosettaSupportedKeyPair>(
@@ -176,22 +199,27 @@ impl RosettaClient {
             .await?;
 
         // We need to wait for the transaction to be added to the blockchain
-        let mut tries = 0;
         let request = SearchTransactionsRequest::builder(network_identifier.clone())
             .with_transaction_identifier(submit_response.transaction_identifier.clone())
             .build();
-        while tries < 10 {
+        let start = Instant::now();
+        const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
+        let timeout = self.timeout.unwrap_or(DEFAULT_TIMEOUT);
+        while start.elapsed() < timeout {
             let transaction = self.search_transactions(&request).await?;
             if !transaction.transactions.is_empty() {
                 return Ok(submit_response);
             }
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            tries += 1;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Err(Error::unable_to_find_block(
-            &"Transaction was not added to the blockchain after 10 seconds".to_owned(),
+            &format!(
+                "Transaction was not added to the blockchain after {} seconds",
+                timeout.as_secs()
+            )
+            .to_owned(),
         ))
     }
 
@@ -588,6 +616,70 @@ impl RosettaClient {
                 account_identifier,
                 network_identifier,
                 metadata: None,
+            },
+        )
+        .await
+    }
+
+    /// Get the aggregated balance of all subaccounts for a principal.
+    ///
+    /// This method gets the sum of balances across all subaccounts for the given principal.
+    /// The account_identifier must not specify a subaccount (must be None), otherwise
+    /// the request will fail with an error.
+    ///
+    /// # Arguments
+    /// * `block_index` - The block index at which to query the balance
+    /// * `account_identifier` - The account identifier (must have no subaccount)
+    /// * `network_identifier` - The network identifier
+    ///
+    /// # Returns
+    /// Returns the aggregated balance across all subaccounts for the principal
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use ic_icrc_rosetta_client::RosettaClient;
+    /// # use rosetta_core::identifiers::{AccountIdentifier, NetworkIdentifier};
+    /// # use icrc_ledger_types::icrc1::account::Account;
+    /// # use candid::Principal;
+    /// # #[tokio::main]
+    /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let client = RosettaClient::from_str_url("http://localhost:8080")?;
+    /// let principal = Principal::from_text("rdmx6-jaaaa-aaaah-qcaiq-cai")?;
+    /// let account = Account { owner: principal, subaccount: None };
+    /// let account_identifier = AccountIdentifier::from(account);
+    /// let network_identifier = NetworkIdentifier::new("ICRC-1".to_string(), "ledger_id".to_string());
+    ///
+    /// let response = client.account_balance_aggregated(
+    ///     0, // block index
+    ///     account_identifier,
+    ///     network_identifier
+    /// ).await?;
+    ///
+    /// println!("Aggregated balance: {}", response.balances[0].value);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn account_balance_aggregated(
+        &self,
+        block_index: u64,
+        account_identifier: AccountIdentifier,
+        network_identifier: NetworkIdentifier,
+    ) -> Result<AccountBalanceResponse, Error> {
+        use serde_json::{Map, Value};
+
+        let mut metadata_map = Map::new();
+        metadata_map.insert("aggregate_all_subaccounts".to_string(), Value::Bool(true));
+
+        self.call_endpoint(
+            "/account/balance",
+            &AccountBalanceRequest {
+                block_identifier: Some(PartialBlockIdentifier {
+                    index: Some(block_index),
+                    hash: None,
+                }),
+                account_identifier,
+                network_identifier,
+                metadata: Some(metadata_map),
             },
         )
         .await

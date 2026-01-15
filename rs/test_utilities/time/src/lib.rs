@@ -137,9 +137,10 @@ mod tests {
 
         // Changing only monontonic time must leave relative clock unaffected
         assert_eq!(t.get_relative_time(), UNIX_EPOCH);
-        assert!(t
-            .set_time_monotonic(Time::from_nanos_since_unix_epoch(100))
-            .is_ok());
+        assert!(
+            t.set_time_monotonic(Time::from_nanos_since_unix_epoch(100))
+                .is_ok()
+        );
         assert_eq!(t.get_relative_time(), UNIX_EPOCH);
 
         // Monotonic time should have advanced by 100ns
@@ -151,9 +152,10 @@ mod tests {
 
         // Setting time to UNIX_EPOCH + 10ns should fail, because it would
         // require moving the monotonic clock backwards.
-        assert!(t
-            .set_time_monotonic(Time::from_nanos_since_unix_epoch(10))
-            .is_err());
+        assert!(
+            t.set_time_monotonic(Time::from_nanos_since_unix_epoch(10))
+                .is_err()
+        );
         assert_eq!(t.get_relative_time(), UNIX_EPOCH);
     }
 }

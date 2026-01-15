@@ -1,23 +1,19 @@
 //! Module that deals with requests to /api/v2/status
 use crate::common::{self, Cbor};
 
-use axum::{extract::State, Router};
+use axum::{Router, extract::State};
 use crossbeam::atomic::AtomicCell;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    ReplicaVersion, SubnetId,
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
-    ReplicaVersion, SubnetId,
 };
 use std::sync::Arc;
-
-// TODO(NET-776)
-// The IC API version reported on status requests.
-const IC_API_VERSION: &str = "0.18.0";
 
 #[derive(Clone)]
 pub(crate) struct StatusService {
@@ -72,7 +68,6 @@ pub(crate) async fn status(State(state): State<StatusService>) -> Cbor<HttpStatu
     });
 
     let response = HttpStatusResponse {
-        ic_api_version: IC_API_VERSION.to_string(),
         // For test networks, and networks that we still reset
         // rather often, let them indicate the root public key
         // in /api/v2/status, so that agents can fetch them.

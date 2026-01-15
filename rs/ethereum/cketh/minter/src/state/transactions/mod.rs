@@ -281,7 +281,7 @@ struct DisplayOption<'a, T>(&'a Option<T>);
 impl<T: fmt::Display> fmt::Display for DisplayOption<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self.0 {
-            Some(t) => write!(f, "Some({})", t),
+            Some(t) => write!(f, "Some({t})"),
             None => write!(f, "None"),
         }
     }
@@ -301,7 +301,7 @@ impl fmt::Debug for EthWithdrawalRequest {
             .field("withdrawal_amount", withdrawal_amount)
             .field("destination", destination)
             .field("ledger_burn_index", ledger_burn_index)
-            .field("from", &format_args!("{}", from))
+            .field("from", &format_args!("{from}"))
             .field(
                 "from_subaccount",
                 &format_args!("{}", DisplayOption(from_subaccount)),
@@ -331,9 +331,9 @@ impl fmt::Debug for Erc20WithdrawalRequest {
             .field("erc20_contract_address", erc20_contract_address)
             .field("destination", destination)
             .field("cketh_ledger_burn_index", cketh_ledger_burn_index)
-            .field("ckerc20_ledger_id", &format_args!("{}", ckerc20_ledger_id))
+            .field("ckerc20_ledger_id", &format_args!("{ckerc20_ledger_id}"))
             .field("ckerc20_ledger_burn_index", ckerc20_ledger_burn_index)
-            .field("from", &format_args!("{}", from))
+            .field("from", &format_args!("{from}"))
             .field(
                 "from_subaccount",
                 &format_args!("{}", DisplayOption(from_subaccount)),
@@ -638,8 +638,10 @@ impl EthTransactions {
         let nonce = new_tx.nonce;
         let (ledger_burn_index, last_sent_tx) =
             Self::expect_last_sent_tx_entry(&self.sent_tx, &nonce);
-        assert!(equal_ignoring_fee_and_amount(last_sent_tx.as_ref().transaction(), &new_tx),
-                "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {new_tx:?}");
+        assert!(
+            equal_ignoring_fee_and_amount(last_sent_tx.as_ref().transaction(), &new_tx),
+            "BUG: mismatch between last sent transaction {last_sent_tx:?} and the transaction to resubmit {new_tx:?}"
+        );
         Self::cleanup_failed_resubmitted_transactions(&mut self.created_tx, &nonce);
         let new_tx = last_sent_tx.clone_resubmission_strategy(new_tx);
         assert_eq!(
@@ -663,8 +665,12 @@ impl EthTransactions {
         {
             for sent_tx in sent_txs {
                 if let Some(prev_index) = transactions.insert(sent_tx.as_ref().hash(), *index) {
-                    assert_eq!(prev_index, *index,
-                               "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}", sent_tx.as_ref().hash());
+                    assert_eq!(
+                        prev_index,
+                        *index,
+                        "BUG: duplicate transaction hash {} for burn indices {prev_index} and {index}",
+                        sent_tx.as_ref().hash()
+                    );
                 }
             }
         }
@@ -827,7 +833,7 @@ impl EthTransactions {
                         (request, WithdrawalStatus::TxFinalized(status), Some(tx))
                     }
                     _ => {
-                        panic!("Status of processed request is not found {:?}", request)
+                        panic!("Status of processed request is not found {request:?}")
                     }
                 }
             });
@@ -1052,7 +1058,10 @@ impl EthTransactions {
         use ic_canister_log::log;
 
         if let Some((_nonce, _index, prev_resubmitted_tx)) = created_tx.remove_entry(nonce) {
-            log!(INFO, "[cleanup_failed_resubmitted_transactions]: removing previously resubmitted transaction {prev_resubmitted_tx:?} that failed to progress");
+            log!(
+                INFO,
+                "[cleanup_failed_resubmitted_transactions]: removing previously resubmitted transaction {prev_resubmitted_tx:?} that failed to progress"
+            );
         }
     }
 

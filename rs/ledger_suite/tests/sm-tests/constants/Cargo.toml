@@ -1,0 +1,11 @@
+[package]
+name = "ic-ledger-suite-state-machine-tests-constants"
+description = "Constants for StateMachines based tests for ledger suite canisters"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+
+[dependencies]
+
+[features]

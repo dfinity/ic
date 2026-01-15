@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-humantime = "2.1.0"
+humantime = { workspace = true }
 ic-nervous-system-proto = { path = "../proto" }
 lazy_static = { workspace = true }
 regex = { workspace = true }

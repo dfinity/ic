@@ -1,7 +1,7 @@
 use super::super::test_fixtures::*;
 use super::*;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_gauge_vec, fetch_int_counter, metric_vec, MetricVec};
+use ic_test_utilities_metrics::{MetricVec, fetch_gauge_vec, fetch_int_counter, metric_vec};
 
 /// Asserts that `proximity_map.pick_node()` will pick `expected_node` for all
 /// `gen_range()` values in the `[low + numerator_low * (high - low) /

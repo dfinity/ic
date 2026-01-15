@@ -21,6 +21,7 @@
 //! written bytes is written to "canister state size" in stable memory, so that in post-upgrade
 //! SNS-WASM can use "WASMs-end offset" and "canister state size" to read canister state from
 //! stable memory.
+#![allow(deprecated)]
 
 use crate::pb::v1::{SnsWasm, StableCanisterState};
 use ic_cdk::api::stable::{StableMemory, StableMemoryError, StableReader, StableWriter};

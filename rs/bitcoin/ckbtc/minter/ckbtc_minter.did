@@ -1,8 +1,15 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
+type environment_variable = record { 
+    name: text; 
+    value: text;
+};
+
 type CanisterStatusResponse = record {
   status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
@@ -10,6 +17,7 @@ type CanisterStatusResponse = record {
   module_hash : opt vec nat8;
   query_stats : QueryStats;
   reserved_cycles : nat;
+  memory_metrics : MemoryMetrics;
 };
 
 type QueryStats = record {
@@ -17,6 +25,17 @@ type QueryStats = record {
   num_instructions_total : nat;
   num_calls_total : nat;
   request_payload_bytes_total : nat;
+};
+
+type MemoryMetrics = record {
+    wasm_memory_size : nat;
+    stable_memory_size : nat;
+    global_memory_size : nat;
+    wasm_binary_size : nat;
+    custom_sections_size : nat;
+    canister_history_size : nat;
+    wasm_chunk_store_size : nat;
+    snapshots_size : nat;
 };
 
 type CanisterStatusType = variant { stopped; stopping; running };
@@ -29,11 +48,14 @@ type DefiniteCanisterSettings = record {
   reserved_cycles_limit : nat;
   log_visibility: LogVisibility;
   wasm_memory_limit : nat;
+  wasm_memory_threshold : nat;
+  environment_variables : vec environment_variable;
 };
 
 type LogVisibility = variant {
     controllers;
     public;
+    allowed_viewers : vec principal;
 };
 
 type RetrieveBtcArgs = record {
@@ -207,6 +229,15 @@ type InitArgs = record {
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 // The upgrade parameters of the minter canister.
@@ -236,6 +267,15 @@ type UpgradeArgs = record {
 
     /// The canister id of the KYT canister (deprecated, use btc_checker_principal instead).
     kyt_principal: opt principal;
+
+    /// The expiration duration (in seconds) for cached entries in the get_utxos cache.
+    get_utxos_cache_expiration_seconds: opt nat64;
+
+    /// The minimum number of available UTXOs to trigger a consolidation.
+    utxo_consolidation_threshold: opt nat64;
+
+    /// The maximum number of input UTXOs allowed in a transaction.
+    max_num_inputs_in_transaction: opt nat64;
 };
 
 type RetrieveBtcStatus = variant {
@@ -342,6 +382,24 @@ type ReimbursementReason = variant {
     };
 };
 
+type ReplacedReason = variant {
+  to_retry;
+  to_cancel : record {
+    reason : WithdrawalReimbursementReason;
+  };
+};
+
+type WithdrawalReimbursementReason = variant {
+    invalid_transaction : InvalidTransactionError;
+};
+
+type InvalidTransactionError = variant {
+  too_many_inputs : record {
+        num_inputs : nat64;
+        max_num_inputs : nat64;
+  };
+};
+
 type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
@@ -350,7 +408,17 @@ type SuspendedReason = variant {
     Quarantined;
 };
 
-type Event = variant {
+type WithdrawalFee = record {
+    minter_fee : nat64;
+    bitcoin_fee : nat64;
+};
+
+type Event = record {
+    timestamp : opt nat64;
+    payload : EventType;
+};
+
+type EventType = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; mint_txid : opt nat64; utxos : vec Utxo };
@@ -361,6 +429,12 @@ type Event = variant {
         received_at : nat64;
         kyt_provider : opt principal;
         reimbursement_account : opt Account;
+    };
+    created_consolidate_utxos_request : record {
+        amount : nat64;
+        address : BitcoinAddress;
+        block_index : nat64;
+        received_at : nat64;
     };
     distributed_kyt_fee : record {
         kyt_provider : principal;
@@ -375,13 +449,18 @@ type Event = variant {
         change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
         fee: opt nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        signed_tx: opt blob;
     };
     replaced_transaction : record {
         new_txid : blob;
         old_txid : blob;
         change_output : record { vout : nat32; value : nat64 };
         submitted_at : nat64;
-        fee: nat64;
+        fee : nat64;
+        withdrawal_fee : opt WithdrawalFee;
+        reason : opt ReplacedReason;
+        new_utxos : opt vec Utxo;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {
@@ -391,6 +470,10 @@ type Event = variant {
         kyt_provider : opt principal;
     };
     checked_utxo_v2 : record {
+        utxo : Utxo;
+        account : Account;
+    };
+    checked_utxo_mint_unknown : record {
         utxo : Utxo;
         account : Account;
     };
@@ -411,12 +494,113 @@ type Event = variant {
         reason : ReimbursementReason;
     };
     reimbursed_failed_deposit : record { burn_block_index : nat64; mint_block_index : nat64 };
+    schedule_withdrawal_reimbursement : record {
+        account : Account;
+        burn_block_index : nat64;
+        amount : nat64;
+        reason : WithdrawalReimbursementReason;
+    };
+    quarantined_withdrawal_reimbursement : record {
+        burn_block_index : nat64;
+    };
+    reimbursed_withdrawal : record {
+        burn_block_index : nat64;
+        mint_block_index : nat64;
+    };
 };
 
 type MinterArg = variant {
     Init : InitArgs;
     Upgrade : opt UpgradeArgs;
 };
+
+type MemoType = variant {
+    Burn;
+    Mint;
+};
+
+type DecodeLedgerMemoArgs = record {
+    // The encoded memo type
+    memo_type : MemoType;
+    // The encoded memo from a minter transaction on the ledger
+    encoded_memo : blob;
+};
+
+type Status = variant {
+    // The minter accepted a retrieve_btc request.
+    Accepted;
+    // The minter rejected a retrieve_btc due to a failed Bitcoin check.
+    Rejected;
+    CallFailed;
+};
+
+type MintMemo = variant {
+    // The minter converted a single UTXO to ckBTC.
+    Convert : record {
+        // The transaction ID of the accepted UTXO.
+        txid : opt blob;
+        // UTXO's output index within the BTC transaction.
+        vout : opt nat32;
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+    };
+    // [deprecated] The minter minted accumulated check fees to the KYT provider.
+    Kyt;
+    // [deprecated] The minter failed to check retrieve btc destination address
+    // or the destination address is tainted.
+    KytFail : record {
+        // The Bitcoin check fee.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+        associated_burn_index : opt nat64;
+    };
+    ReimburseWithdrawal : record {
+        // The id corresponding to the withdrawal request,
+        // which corresponds to the ledger burn index.
+        withdrawal_id : nat64;
+    };
+};
+
+type BurnMemo = variant {
+    // The minter processed a retrieve_btc request.
+    Convert : record {
+        // The destination of the retrieve BTC request.
+        address : opt text;
+        // The check fee for the burn.
+        kyt_fee : opt nat64;
+        // The status of the Bitcoin check.
+        status : opt Status;
+    };
+    // The minter consolidated UTXOs.
+    Consolidate : record {
+        // The total value of the consolidated UTXOs.
+        value : nat64;
+        // The number of input UTXOs that were consolidated.
+        inputs : nat64;
+    };
+};
+
+type DecodedMemo = variant {
+    // The decoded MintMemo - `opt` since other variants of `MintMemo` could be added in the future.
+    Mint : opt MintMemo;
+    // The decoded BurnMemo - `opt` since other variants of `BurnMemo` could be added in the future.
+    Burn : opt BurnMemo;
+};
+
+type DecodeLedgerMemoError = variant {
+    // The provided memo could not be decoded.
+    InvalidMemo : text;
+};
+
+type DecodeLedgerMemoResult = variant {
+    // The decoded memo, if the minter was able to decode it. This field is `opt`, so that other memo types can be
+    // added in the future.
+    Ok : opt DecodedMemo;
+    // An error in case the minter was not able to decode the provided memo. This field is `opt`, so that other error
+    // types can be added in the future.
+    Err : opt DecodeLedgerMemoError;
+}
 
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
@@ -426,6 +610,7 @@ service : (minter_arg : MinterArg) -> {
     // endpoint.
     //
     // If the owner is not set, it defaults to the caller's principal.
+    // The resolved owner must be a non-anonymous principal.
     get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
     // Returns UTXOs of the given account known by the minter (with no
@@ -527,4 +712,9 @@ service : (minter_arg : MinterArg) -> {
     // The ckBTC minter authors do not guarantee backward compatibility for this method.
     get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
     // }}} Section "Event log"
+
+    // Section "Transaction Information" {{{
+    // Returns information related to minter transactions.
+    decode_ledger_memo : (DecodeLedgerMemoArgs) -> (DecodeLedgerMemoResult) query;
+    // }}}
 }

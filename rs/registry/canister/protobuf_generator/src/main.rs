@@ -1,4 +1,4 @@
-use registry_canister_protobuf_generator::{generate_prost_files, ProtoPaths};
+use registry_canister_protobuf_generator::{ProtoPaths, generate_prost_files};
 use std::path::PathBuf;
 
 fn main() {
@@ -11,7 +11,6 @@ fn main() {
     let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
     let protobuf_proto = manifest_dir.join("../../../protobuf/def");
     let nns_common_proto = manifest_dir.join("../../../nns/common/proto");
-    let transport_proto = manifest_dir.join("../../../registry/transport/proto");
 
     match std::fs::remove_dir_all(&out) {
         Ok(_) => (),
@@ -26,7 +25,6 @@ fn main() {
         ProtoPaths {
             registry_canister: &registry_canister_proto,
             base_types: &base_types_proto,
-            transport: &transport_proto,
             protobuf: &protobuf_proto,
             nns_common: &nns_common_proto,
         },

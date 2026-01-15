@@ -1,5 +1,5 @@
-use ic_sns_init_protobuf_generator::{generate_prost_files, ProtoPaths};
-use ic_test_utilities_compare_dirs::{compare, CompareError};
+use ic_sns_init_protobuf_generator::{ProtoPaths, generate_prost_files};
+use ic_test_utilities_compare_dirs::{CompareError, compare};
 use std::path::PathBuf;
 
 #[test]
@@ -26,12 +26,12 @@ fn check_generated_files() {
         out.path(),
     );
 
-    let gen = manifest_dir.join("src/gen");
+    let r#gen = manifest_dir.join("src/gen");
 
-    match compare(&gen, out.path()) {
+    match compare(&r#gen, out.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
-            panic!("Directory {} is outdated, run {}", gen.display(), cmd)
+            panic!("Directory {} is outdated, run {}", r#gen.display(), cmd)
         }
         Err(CompareError::ContentDiffers { path }) => {
             panic!("Source file {} is outdated, run {}", path.display(), cmd)

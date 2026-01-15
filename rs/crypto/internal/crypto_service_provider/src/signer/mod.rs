@@ -1,6 +1,6 @@
+use super::Csp;
 use super::api::CspSigner;
 use super::types::{CspPop, CspPublicKey, CspSignature};
-use super::Csp;
 use crate::key_id::KeyId;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};
@@ -27,7 +27,7 @@ impl CspSigner for Csp {
             AlgorithmId::Ed25519 => {
                 let result = self
                     .csp_vault
-                    .sign(algorithm_id, message, key_id)
+                    .sign(message)
                     .map_err(CspBasicSignatureError::into);
                 self.metrics.observe_parameter_size(
                     MetricsDomain::BasicSignature,
@@ -53,7 +53,7 @@ impl CspSigner for Csp {
                 result
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Cannot sign with unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Cannot sign with unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }

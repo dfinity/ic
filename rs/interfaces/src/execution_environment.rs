@@ -4,24 +4,26 @@ mod errors;
 pub use errors::{CanisterBacktrace, CanisterOutOfCyclesError, HypervisorError, TrapCode};
 use ic_base_types::NumBytes;
 use ic_error_types::UserError;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_sys::{PageBytes, PageIndex};
 use ic_types::{
-    consensus::idkg::PreSigId,
-    crypto::canister_threshold_sig::MasterPublicKey,
-    ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
-    CanisterLog, Cycles, ExecutionRound, Height, NumInstructions, NumOsPages, Randomness,
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
+    ingress::{IngressStatus, WasmResult},
+    messages::{
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query, SignedIngress,
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{Infallible, TryFrom},
-    fmt, ops,
-    sync::Arc,
+    fmt,
+    ops::{AddAssign, SubAssign},
+    sync::{Arc, atomic::AtomicU64},
+    time::Duration,
 };
 use strum_macros::EnumIter;
 use thiserror::Error;
@@ -35,11 +37,19 @@ pub struct InstanceStats {
     /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
     pub wasm_accessed_pages: usize,
+    /// Non-deterministic number of accessed OS (4 KiB) pages (read + write).
+    pub wasm_accessed_os_pages_count: usize,
+    /// Non-deterministic number of accessed Wasm (64 KiB) pages (read + write).
+    pub wasm_accessed_wasm_pages_count: usize,
 
     /// Total number of (host) OS pages (4KiB) modified by the instance.
     /// By definition a page that has been dirtied has also been accessed,
     /// hence this dirtied_pages <= accessed_pages
     pub wasm_dirty_pages: usize,
+    /// Non-deterministic number of dirty OS (4 KiB) pages (write).
+    pub wasm_dirty_os_pages_count: usize,
+    /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
+    pub wasm_dirty_wasm_pages_count: usize,
 
     /// Number of times a write access is handled when the page has already been
     /// read.
@@ -60,6 +70,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data.
     pub wasm_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for heap.
+    pub wasm_sigsegv_handler_duration: Duration,
 
     /// Number of accessed OS pages (4KiB) in stable memory.
     pub stable_accessed_pages: usize,
@@ -86,6 +99,9 @@ pub struct InstanceStats {
 
     /// Number of pages loaded by copying the data in stable memory.
     pub stable_copy_page_count: usize,
+
+    /// Total time spent in SIGSEGV handler for stable memory.
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 impl InstanceStats {
@@ -105,10 +121,10 @@ impl InstanceStats {
 pub enum SubnetAvailableMemoryError {
     InsufficientMemory {
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
         available_execution: i64,
-        available_messages: i64,
+        available_guaranteed_response_messages: i64,
         available_wasm_custom_sections: i64,
     },
 }
@@ -147,6 +163,8 @@ pub enum SystemApiCallId {
     CanisterCycleBalance,
     /// Tracker for `ic0.canister_cycle_balance128()`
     CanisterCycleBalance128,
+    /// Tracker for `ic0.canister_liquid_cycle_balance128()`
+    CanisterLiquidCycleBalance128,
     /// Tracker for `ic0.canister_self_copy()`
     CanisterSelfCopy,
     /// Tracker for `ic0.canister_self_size()`
@@ -155,8 +173,26 @@ pub enum SystemApiCallId {
     CanisterStatus,
     /// Tracker for `ic0.canister_version()`
     CanisterVersion,
+    /// Tracker for `ic0.root_key_size()`
+    RootKeySize,
+    /// Tracker for `ic0.root_key_copy()`
+    RootKeyCopy,
     /// Tracker for `ic0.certified_data_set()`
     CertifiedDataSet,
+    /// Tracker for `ic0.cost_call()`
+    CostCall,
+    /// Tracker for `ic0.cost_create_canister()`
+    CostCreateCanister,
+    /// Tracker for `ic0.cost_http_request()`
+    CostHttpRequest,
+    /// Tracker for `ic0.cost_http_request_v2()`
+    CostHttpRequestV2,
+    /// Tracker for `ic0.cost_sign_with_ecdsa()`
+    CostSignWithEcdsa,
+    /// Tracker for `ic0.cost_sign_with_schnorr()`
+    CostSignWithSchnorr,
+    /// Tracker for `ic0.cost_vetkd_derive_key()`
+    CostVetkdDeriveKey,
     /// Tracker for `ic0.cycles_burn128()`
     CyclesBurn128,
     /// Tracker for `ic0.data_certificate_copy()`
@@ -173,8 +209,8 @@ pub enum SystemApiCallId {
     InReplicatedExecution,
     /// Tracker for `ic0.is_controller()`
     IsController,
-    /// Tracker for `ic0.mint_cycles()`
-    MintCycles,
+    /// Tracker for `ic0.mint_cycles128()`
+    MintCycles128,
     /// Tracker for `ic0.msg_arg_data_copy()`
     MsgArgDataCopy,
     /// Tracker for `ic0.msg_arg_data_size()`
@@ -217,6 +253,10 @@ pub enum SystemApiCallId {
     OutOfInstructions,
     /// Tracker for `ic0.performance_counter()`
     PerformanceCounter,
+    /// Tracker for `ic0.subnet_self_size()`
+    SubnetSelfSize,
+    /// Tracker for `ic0.subnet_self_copy()`
+    SubnetSelfCopy,
     /// Tracker for `ic0.stable64_grow()`
     Stable64Grow,
     /// Tracker for `ic0.stable64_read()`
@@ -239,6 +279,18 @@ pub enum SystemApiCallId {
     Trap,
     /// Tracker for `__.try_grow_wasm_memory()`
     TryGrowWasmMemory,
+    /// Tracker for `ic0.env_var_count()`
+    EnvVarCount,
+    /// Tracker for `ic0.env_var_name_size()`
+    EnvVarNameSize,
+    /// Tracker for `ic0.env_var_name_copy()`
+    EnvVarNameCopy,
+    /// Tracker for `ic0.env_var_name_exists()`
+    EnvVarNameExists,
+    /// Tracker for `ic0.env_var_value_size()`
+    EnvVarValueSize,
+    /// Tracker for `ic0.env_var_value_copy()`
+    EnvVarValueCopy,
 }
 
 /// System API call counters, i.e. how many times each tracked System API call
@@ -251,6 +303,8 @@ pub struct SystemApiCallCounters {
     pub canister_cycle_balance: usize,
     /// Counter for `ic0.canister_cycle_balance128()`
     pub canister_cycle_balance128: usize,
+    /// Counter for `ic0.canister_liquid_cycle_balance128()`
+    pub canister_liquid_cycle_balance128: usize,
     /// Counter for `ic0.time()`
     pub time: usize,
 }
@@ -266,6 +320,9 @@ impl SystemApiCallCounters {
         self.canister_cycle_balance128 = self
             .canister_cycle_balance128
             .saturating_add(rhs.canister_cycle_balance128);
+        self.canister_liquid_cycle_balance128 = self
+            .canister_liquid_cycle_balance128
+            .saturating_add(rhs.canister_liquid_cycle_balance128);
         self.time = self.time.saturating_add(rhs.time);
     }
 }
@@ -284,29 +341,44 @@ pub struct SubnetAvailableMemory {
     /// The execution memory available on the subnet, i.e. the canister memory
     /// (Wasm binary, Wasm memory, stable memory) without message memory.
     execution_memory: i64,
-    /// The memory available for messages.
-    message_memory: i64,
+    /// The memory available for guaranteed response messages.
+    ///
+    /// As opposed to best-effort message memory (which can be reclaimed by shedding
+    /// messages) guaranteed response message memory must be reserved ahead of time
+    /// and is thus subject to availability.
+    guaranteed_response_message_memory: i64,
     /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
-    /// Specifies the factor by which the subnet available memory was scaled
-    /// using the division operator. It is useful for approximating the global
-    /// available memory from the per-thread available memory.
-    scaling_factor: i64,
 }
 
 impl SubnetAvailableMemory {
-    pub fn new(
+    /// This function should only be used in tests.
+    #[doc(hidden)]
+    pub fn new_for_testing(
         execution_memory: i64,
-        message_memory: i64,
+        guaranteed_response_message_memory: i64,
         wasm_custom_sections_memory: i64,
     ) -> Self {
-        SubnetAvailableMemory {
+        // We do not apply scaling in tests that create `SubnetAvailableMemory` manually.
+        let scaling_factor = 1;
+        SubnetAvailableMemory::new_scaled(
             execution_memory,
-            message_memory,
+            guaranteed_response_message_memory,
             wasm_custom_sections_memory,
-            // The newly created value is not scaled (divided), which
-            // corresponds to the scaling factor of 1.
-            scaling_factor: 1,
+            scaling_factor,
+        )
+    }
+
+    pub fn new_scaled(
+        execution_memory: i64,
+        guaranteed_response_message_memory: i64,
+        wasm_custom_sections_memory: i64,
+        scaling_factor: i64,
+    ) -> Self {
+        SubnetAvailableMemory {
+            execution_memory: execution_memory / scaling_factor,
+            guaranteed_response_message_memory: guaranteed_response_message_memory / scaling_factor,
+            wasm_custom_sections_memory: wasm_custom_sections_memory / scaling_factor,
         }
     }
 
@@ -315,26 +387,15 @@ impl SubnetAvailableMemory {
         self.execution_memory
     }
 
-    /// Returns the memory available for messages.
-    pub fn get_message_memory(&self) -> i64 {
-        self.message_memory
+    /// Returns the memory available for guaranteed response messages.
+    pub fn get_guaranteed_response_message_memory(&self) -> i64 {
+        self.guaranteed_response_message_memory
     }
 
     /// Returns the memory available for Wasm custom sections, ignoring the
     /// execution available memory.
     pub fn get_wasm_custom_sections_memory(&self) -> i64 {
         self.wasm_custom_sections_memory
-    }
-
-    /// Returns the scaling factor that specifies by how much the initial
-    /// available memory was scaled using the division operator.
-    ///
-    /// It is useful for approximating the global available memory from the
-    /// per-thread available memory. Note that the approximation may be off in
-    /// both directions because there is no way to deterministically know how
-    /// much other threads have allocated.
-    pub fn get_scaling_factor(&self) -> i64 {
-        self.scaling_factor
     }
 
     /// Returns `Ok(())` if the subnet has enough available room for allocating
@@ -346,7 +407,7 @@ impl SubnetAvailableMemory {
     pub fn check_available_memory(
         &self,
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         let is_available =
@@ -356,7 +417,10 @@ impl SubnetAvailableMemory {
             };
 
         if is_available(execution_requested, self.execution_memory)
-            && is_available(message_requested, self.message_memory)
+            && is_available(
+                guaranteed_response_message_requested,
+                self.guaranteed_response_message_memory,
+            )
             && is_available(
                 wasm_custom_sections_requested,
                 self.wasm_custom_sections_memory,
@@ -366,10 +430,10 @@ impl SubnetAvailableMemory {
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
                 execution_requested,
-                message_requested,
+                guaranteed_response_message_requested,
                 wasm_custom_sections_requested,
                 available_execution: self.execution_memory,
-                available_messages: self.message_memory,
+                available_guaranteed_response_messages: self.guaranteed_response_message_memory,
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
             })
         }
@@ -377,34 +441,57 @@ impl SubnetAvailableMemory {
 
     /// Try to use some memory capacity and fail if not enough is available.
     ///
-    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
+    /// `self.execution_memory`, `self.guaranteed_response_message_memory` and `self.wasm_custom_sections_memory`
     /// are independent of each other. However, this function will not allocate anything if
     /// there is not enough of either one of them (and return an error instead).
     pub fn try_decrement(
         &mut self,
         execution_requested: NumBytes,
-        message_requested: NumBytes,
+        guaranteed_response_message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
         self.check_available_memory(
             execution_requested,
-            message_requested,
+            guaranteed_response_message_requested,
             wasm_custom_sections_requested,
         )?;
         self.execution_memory -= execution_requested.get() as i64;
-        self.message_memory -= message_requested.get() as i64;
+        self.guaranteed_response_message_memory -=
+            guaranteed_response_message_requested.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
         Ok(())
+    }
+
+    /// Updates (increments/decrements) the available execution memory
+    /// by the given number of bytes.
+    /// This function should only be used to account for canister history
+    /// in the available execution memory.
+    /// This is because we do not want an operation tracked in canister history
+    /// to fail due to insufficient available execution memory
+    /// to update canister history.
+    /// Note that the available memory can become negative after this change.
+    pub fn update_execution_memory_unchecked(
+        &mut self,
+        execution_memory_change: SubnetAvailableExecutionMemoryChange,
+    ) {
+        match execution_memory_change {
+            SubnetAvailableExecutionMemoryChange::Allocated(allocated_bytes) => {
+                self.execution_memory -= allocated_bytes.get() as i64;
+            }
+            SubnetAvailableExecutionMemoryChange::Deallocated(deallocated_bytes) => {
+                self.execution_memory += deallocated_bytes.get() as i64;
+            }
+        }
     }
 
     pub fn increment(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory += execution_amount.get() as i64;
-        self.message_memory += message_amount.get() as i64;
+        self.guaranteed_response_message_memory += guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
 
@@ -412,11 +499,11 @@ impl SubnetAvailableMemory {
     pub fn apply_reservation(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory += execution_amount.get() as i64;
-        self.message_memory += message_amount.get() as i64;
+        self.guaranteed_response_message_memory += guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
 
@@ -426,26 +513,26 @@ impl SubnetAvailableMemory {
     pub fn revert_reservation(
         &mut self,
         execution_amount: NumBytes,
-        message_amount: NumBytes,
+        guaranteed_response_message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
         self.execution_memory -= execution_amount.get() as i64;
-        self.message_memory -= message_amount.get() as i64;
+        self.guaranteed_response_message_memory -= guaranteed_response_message_amount.get() as i64;
         self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
     }
 }
 
-impl ops::Div<i64> for SubnetAvailableMemory {
-    type Output = Self;
-
-    fn div(self, rhs: i64) -> Self::Output {
-        Self {
-            execution_memory: self.execution_memory / rhs,
-            message_memory: self.message_memory / rhs,
-            wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
-            scaling_factor: self.scaling_factor * rhs,
-        }
-    }
+/// Represents an update (allocation/deallocation)
+/// of the subnet available execution memory
+/// by the given number of bytes.
+/// This enum should only be used to account for canister history
+/// in the subnet available execution memory.
+/// This is because we do not want an operation tracked in canister history
+/// to fail due to insufficient available execution memory
+/// to update canister history.
+pub enum SubnetAvailableExecutionMemoryChange {
+    Allocated(NumBytes),
+    Deallocated(NumBytes),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -456,13 +543,24 @@ pub enum ExecutionMode {
 
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
+/// Errors that can occur when filtering out ingress messages that
+/// the canister is not willing to accept.
+#[derive(Debug, Error)]
+pub enum IngressFilterError {
+    #[error("Certified state is not available yet")]
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterResponse = Result<Result<(), UserError>, IngressFilterError>;
+
+/// The input type to a `call()` request in [`IngressFilterService`].
+pub type IngressFilterInput = (ProvisionalWhitelist, SignedIngress);
+
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
-pub type IngressFilterService = BoxCloneService<
-    (ProvisionalWhitelist, SignedIngressContent),
-    Result<(), UserError>,
-    Infallible,
->;
+pub type IngressFilterService =
+    BoxCloneService<IngressFilterInput, IngressFilterResponse, Infallible>;
 
 /// Errors that can occur when handling a query execution request.
 #[derive(Debug, Error)]
@@ -476,9 +574,28 @@ pub enum QueryExecutionError {
 pub type QueryExecutionResponse =
     Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
+/// The input type to a `call()` request in [`QueryExecutionService`].
+#[derive(Debug)]
+pub struct QueryExecutionInput {
+    pub query: Query,
+    pub certificate_delegation_with_metadata:
+        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+}
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
+
+/// The input type to a `call()` request in [`TransformExecutionService`].
+#[derive(Debug)]
+pub struct TransformExecutionInput {
+    pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
+}
+
+/// Interface for the component to execute canister http transform.
+pub type TransformExecutionService =
+    BoxCloneService<TransformExecutionInput, QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -537,7 +654,7 @@ pub trait OutOfInstructionsHandler {
 
     // Invoked only when a long execution dirties many memory pages to yield control
     // and start the copy only in a new slice. This is a performance improvement.
-    fn yield_for_dirty_memory_copy(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&self) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -584,12 +701,6 @@ pub trait SystemApi {
     /// Returns the amount of instructions needed to copy `num_bytes`.
     fn get_num_instructions_from_bytes(&self, num_bytes: NumBytes) -> NumInstructions;
 
-    /// Returns the indexes of all dirty pages in stable memory.
-    fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)>;
-
-    /// Returns the current size of the stable memory in wasm pages.
-    fn stable_memory_size(&self) -> usize;
-
     /// Returns the subnet type the replica runs on.
     fn subnet_type(&self) -> SubnetType;
 
@@ -613,6 +724,80 @@ pub trait SystemApi {
 
     /// Canister id of the executing canister.
     fn canister_id(&self) -> ic_types::CanisterId;
+
+    /// Returns the number of environment variables.
+    fn ic0_env_var_count(&self) -> HypervisorResult<usize>;
+
+    /// Returns the size of the environment variable name at the given index.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
+    fn ic0_env_var_name_size(&self, index: usize) -> HypervisorResult<usize>;
+
+    /// Copies the environment variable name at the given index into memory.
+    ///
+    /// # Panics
+    ///
+    /// This traps if the index is out of bounds.
+    fn ic0_env_var_name_copy(
+        &self,
+        index: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// Checks if an environment variable with the given name exists.
+    /// Returns 1 if the environment variable with the given name exists, 0 otherwise.
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    fn ic0_env_var_name_exists(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<i32>;
+
+    /// Returns the size of the value for the environment variable with the given name.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found
+    fn ic0_env_var_value_size(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        heap: &[u8],
+    ) -> HypervisorResult<usize>;
+
+    /// Copies the value of the environment variable with the given name into memory.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This traps if:
+    ///     - the name is too long
+    ///     - the name is not a valid UTF-8 string.
+    ///     - the environment variable with the given name is not found.
+    fn ic0_env_var_value_copy(
+        &self,
+        name_src: usize,
+        name_size: usize,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Copies `size` bytes starting from `offset` inside the opaque caller blob
     /// and copies them to heap[dst..dst+size]. The caller is the canister
@@ -819,15 +1004,6 @@ pub trait SystemApi {
     /// `ic0.call_*` calls trap.
     fn ic0_call_perform(&mut self) -> HypervisorResult<i32>;
 
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    fn ic0_stable_size(&self) -> HypervisorResult<u32>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32>;
-
     /// Same implementation as `ic0_stable_read`, but doesn't do any bounds
     /// checks on the stable memory size. This is part of the hidden API and
     /// should only be called from instrumented code that has already done the
@@ -840,85 +1016,6 @@ pub trait SystemApi {
         size: u64,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by offset/size out of the stable memory and
-    /// replaces the corresponding bytes starting at dst in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    fn ic0_stable_read(
-        &self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data referred to by src/size out of the canister and replaces
-    /// the corresponding segment starting at offset in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable_write(
-        &mut self,
-        offset: u32,
-        src: u32,
-        size: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Returns the current size of the stable memory in WebAssembly pages.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_size(&self) -> HypervisorResult<u64>;
-
-    /// Tries to grow the stable memory by additional_pages many pages
-    /// containing zeros.
-    /// If successful, returns the previous size of the memory (in pages).
-    /// Otherwise, returns -1
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64>;
-
-    /// Copies the data from location [offset, offset+size) of the stable memory
-    /// to the location [dst, dst+size) in the canister memory.
-    ///
-    /// This system call traps if dst+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    fn ic0_stable64_read(
-        &self,
-        dst: u64,
-        offset: u64,
-        size: u64,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
-    /// Copies the data from location [src, src+size) of the canister memory to
-    /// location [offset, offset+size) in the stable memory.
-    ///
-    /// This system call traps if src+size exceeds the size of the WebAssembly
-    /// memory or offset+size exceeds the size of the stable memory.
-    ///
-    /// It supports bigger stable memory sizes indexed by 64 bit pointers.
-    /// Returns the number of **new** dirty pages created by the write.
-    fn ic0_stable64_write(
-        &mut self,
-        offset: u64,
-        src: u64,
-        size: u64,
-        heap: &[u8],
-    ) -> HypervisorResult<()>;
-
-    /// Determines the number of dirty pages that a stable write would create
-    /// and the cost for those dirty pages (without actually doing the write).
-    fn dirty_pages_from_stable_write(
-        &self,
-        offset: u64,
-        size: u64,
-    ) -> HypervisorResult<(NumOsPages, NumInstructions)>;
 
     /// The canister can query the IC for the current time.
     fn ic0_time(&mut self) -> HypervisorResult<Time>;
@@ -961,7 +1058,7 @@ pub trait SystemApi {
     /// This system call is not part of the public spec and it is invoked when
     /// Wasm execution has a large number of dirty pages that, for performance reasons,
     /// should be copied in a new execution slice.
-    fn yield_for_dirty_memory_copy(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn yield_for_dirty_memory_copy(&mut self) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
     /// native `memory.grow` has been executed to check whether there's enough
@@ -982,6 +1079,7 @@ pub trait SystemApi {
         &mut self,
         current_size: u64,
         additional_pages: u64,
+        max_size: u64,
         stable_memory_api: StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome>;
 
@@ -1000,6 +1098,18 @@ pub trait SystemApi {
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
     fn ic0_canister_cycle_balance128(
+        &mut self,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the current liquid cycle balance
+    /// of the canister that the canister can spend without getting frozen.
+    ///
+    /// The amount of cycles is represented by a 128-bit value
+    /// and is copied in the canister memory starting
+    /// starting at the location `dst`.
+    fn ic0_canister_liquid_cycle_balance128(
         &mut self,
         dst: usize,
         heap: &mut [u8],
@@ -1085,6 +1195,19 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
+    /// Used to look up the size of the root key.
+    fn ic0_root_key_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the root key (starting at `offset` and copying `size` bytes)
+    /// to the calling canister's heap at the location specified by `dst`.
+    fn ic0_root_key_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Sets the certified data for the canister.
     /// See: <https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data>
     fn ic0_certified_data_set(
@@ -1123,14 +1246,18 @@ pub trait SystemApi {
     /// Mints the `amount` cycles
     /// Adds cycles to the canister's balance.
     ///
-    /// Adds no more cycles than `amount`.
+    /// Adds no more cycles than `amount`. The balance afterwards cannot
+    /// exceed u128::MAX, so the amount added may be less than `amount`.
     ///
-    /// The canister balance afterwards does not exceed
-    /// maximum amount of cycles it can hold.
-    /// However, canisters on system subnets have no balance limit.
-    ///
-    /// Returns the amount of cycles added to the canister's balance.
-    fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
+    /// The amount of cycles added to the canister's balance is
+    /// represented by a 128-bit value and is copied in the canister
+    /// memory starting at the location `dst`.
+    fn ic0_mint_cycles128(
+        &mut self,
+        amount: Cycles,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
 
     /// Checks whether the principal identified by src/size is one of the
     /// controllers of the canister. If yes, then a value of 1 is returned,
@@ -1156,6 +1283,142 @@ pub trait SystemApi {
         &mut self,
         amount: Cycles,
         dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call returns the amount of cycles that a canister needs to
+    /// be above the freezing threshold in order to successfully make an
+    /// inter-canister call. This includes the base cost for an inter-canister
+    /// call, the cost for each byte transmitted in the request, the cost for
+    /// the transmission of the largest possible response, and the cost for
+    /// executing the largest possible response callback.
+    ///
+    /// The cost is determined by the byte length of the method name and the
+    /// length of the encoded payload.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_call(
+        &self,
+        method_name_size: u64,
+        payload_size: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of creating a canister on
+    /// the same subnet, i.e., the management canister's `create_canister`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_create_canister(&self, dst: usize, heap: &mut [u8]) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of making an http outcall,
+    /// i.e., the management canister's `http_request`.
+    ///
+    /// `request_size` is the sum of the lengths of the variable request parts, as
+    /// documented in the interface specification.
+    /// `max_res_bytes` is the maximum number of response bytes the caller wishes to
+    /// accept.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst`.
+    fn ic0_cost_http_request(
+        &self,
+        request_size: u64,
+        max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    /// This system call indicates the cycle cost of signing with ecdsa,
+    /// i.e., the management canister's `sign_with_ecdsa`, for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`+`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_ecdsa(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of signing with schnorr,
+    /// i.e., the management canister's `sign_with_schnorr` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided algorithm.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown algorithm variant was provided.
+    /// Returns 2 if the given algorithm variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_sign_with_schnorr(
+        &self,
+        src: usize,
+        size: usize,
+        algorithm: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// This system call indicates the cycle cost of vetkd key derivation,
+    /// i.e., the management canister's `vetkd_derive_key` for the key
+    /// (whose name is given by textual representation at heap location `src`
+    /// with byte length `size`) and the provided curve.
+    ///
+    /// Traps if `src`/`size` exceeds the size of the WebAssembly memory.
+    /// Returns 0 on success.
+    /// Returns 1 if an unknown curve variant was provided.
+    /// Returns 2 if the given curve variant does not have a key with the
+    /// name provided via `src`/`size`.
+    ///
+    /// The amount of cycles is represented by a 128-bit value and is copied
+    /// to the canister memory starting at the location `dst` if the return
+    /// value is 0.
+    fn ic0_cost_vetkd_derive_key(
+        &self,
+        src: usize,
+        size: usize,
+        curve: u32,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<u32>;
+
+    /// Used to look up the size of the subnet Id of the calling canister.
+    fn ic0_subnet_self_size(&self) -> HypervisorResult<usize>;
+
+    /// Used to copy the subnet Id of the calling canister to its heap
+    /// at the location specified by `dst` and `offset`.
+    fn ic0_subnet_self_copy(
+        &self,
+        dst: usize,
+        offset: usize,
+        size: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 }
@@ -1191,13 +1454,16 @@ pub struct RegistryExecutionSettings {
     pub provisional_whitelist: ProvisionalWhitelist,
     pub chain_key_settings: BTreeMap<MasterPublicKeyId, ChainKeySettings>,
     pub subnet_size: usize,
+    pub node_ids: BTreeSet<NodeId>,
+    pub registry_version: RegistryVersion,
+    pub canister_cycles_cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Chain key configuration of execution that comes from the registry.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {
@@ -1254,14 +1520,88 @@ pub trait Scheduler: Send {
         &self,
         state: Self::State,
         randomness: Randomness,
-        chain_key_subnet_public_keys: BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-        idkg_pre_signature_ids: BTreeMap<MasterPublicKeyId, BTreeSet<PreSigId>>,
+        chain_key_data: ChainKeyData,
         replica_version: &ReplicaVersion,
         current_round: ExecutionRound,
         round_summary: Option<ExecutionRoundSummary>,
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Code to be executed in a checkpoint round, iff `execute_round()` was not
+    /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
+}
+
+/// Combination of memory used by and reserved for guaranteed response messages
+/// and memory used by best-effort messages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub struct MessageMemoryUsage {
+    /// Memory used by and reserved for guaranteed response canister messages, in
+    /// bytes.
+    pub guaranteed_response: NumBytes,
+
+    /// Memory used by best-effort canister messages, in bytes.
+    pub best_effort: NumBytes,
+}
+
+impl MessageMemoryUsage {
+    pub const ZERO: MessageMemoryUsage = MessageMemoryUsage {
+        guaranteed_response: NumBytes::new(0),
+        best_effort: NumBytes::new(0),
+    };
+
+    /// Returns the total memory used by all canister messages (guaranteed response
+    /// or best-effort).
+    pub fn total(&self) -> NumBytes {
+        self.guaranteed_response + self.best_effort
+    }
+
+    /// Calculates `self` + `rhs`.
+    ///
+    /// Returns a tuple of the addition along with a boolean indicating whether an
+    /// arithmetic overflow would occur on either field. If an overflow would have
+    /// occurred then the wrapped value is returned.
+    pub fn overflowing_add(&self, rhs: &Self) -> (Self, bool) {
+        let (guaranteed_response, overflow1) = self
+            .guaranteed_response
+            .get()
+            .overflowing_add(rhs.guaranteed_response.get());
+        let (best_effort, overflow2) = self
+            .best_effort
+            .get()
+            .overflowing_add(rhs.best_effort.get());
+        (
+            Self {
+                guaranteed_response: guaranteed_response.into(),
+                best_effort: best_effort.into(),
+            },
+            overflow1 || overflow2,
+        )
+    }
+
+    /// Returns `true` iff both fields of `self` are greater than or equal to the
+    /// corresponding fields of `rhs`.
+    pub fn ge(&self, rhs: Self) -> bool {
+        self.guaranteed_response >= rhs.guaranteed_response && self.best_effort >= rhs.best_effort
+    }
+}
+
+impl AddAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn add_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response += rhs.guaranteed_response;
+        self.best_effort += rhs.best_effort;
+    }
+}
+
+impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
+    fn sub_assign(&mut self, rhs: MessageMemoryUsage) {
+        self.guaranteed_response -= rhs.guaranteed_response;
+        self.best_effort -= rhs.best_effort;
+    }
 }
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -1269,11 +1609,12 @@ pub struct WasmExecutionOutput {
     pub wasm_result: Result<Option<WasmResult>, HypervisorError>,
     pub num_instructions_left: NumInstructions,
     pub allocated_bytes: NumBytes,
-    pub allocated_message_bytes: NumBytes,
+    pub allocated_guaranteed_response_message_bytes: NumBytes,
+    pub new_memory_usage: Option<NumBytes>,
+    pub new_message_memory_usage: Option<MessageMemoryUsage>,
     pub instance_stats: InstanceStats,
     /// How many times each tracked System API call was invoked.
     pub system_api_call_counters: SystemApiCallCounters,
-    pub canister_log: CanisterLog,
 }
 
 impl fmt::Display for WasmExecutionOutput {
@@ -1281,15 +1622,17 @@ impl fmt::Display for WasmExecutionOutput {
         let wasm_result_str = match &self.wasm_result {
             Ok(result) => match result {
                 None => "None".to_string(),
-                Some(wasm_result) => format!("{}", wasm_result),
+                Some(wasm_result) => format!("{wasm_result}"),
             },
-            Err(err) => format!("{}", err),
+            Err(err) => format!("{err}"),
         };
-        write!(f, "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
-               wasm_result_str,
-               self.num_instructions_left,
-               self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
-               self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
+        write!(
+            f,
+            "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
+            wasm_result_str,
+            self.num_instructions_left,
+            self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
+            self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
         )
     }
 }
@@ -1300,111 +1643,144 @@ mod tests {
 
     #[test]
     fn test_available_memory() {
-        let available = SubnetAvailableMemory::new(20, 10, 4);
+        let available = SubnetAvailableMemory::new_for_testing(20, 10, 4);
         assert_eq!(available.get_execution_memory(), 20);
-        assert_eq!(available.get_message_memory(), 10);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
 
-        let available = available / 2;
+        let available = SubnetAvailableMemory::new_scaled(20, 10, 4, 2);
         assert_eq!(available.get_execution_memory(), 10);
-        assert_eq!(available.get_message_memory(), 5);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
     }
 
     #[test]
     fn test_subnet_available_memory() {
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from(0),
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_err());
+            SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from(0),
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_err()
+        );
 
         let mut available: SubnetAvailableMemory =
-            SubnetAvailableMemory::new(1 << 30, (1 << 30) - 5, 1 << 20);
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 20) - 5),
-                NumBytes::from(0),
-                NumBytes::from((1 << 20) - 5),
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_ok());
+            SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 20) - 5),
+                    NumBytes::from(0),
+                    NumBytes::from((1 << 20) - 5),
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_ok()
+        );
 
-        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(1 << 30, -1, -1);
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(0), NumBytes::from(0))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_err());
+        let mut available: SubnetAvailableMemory =
+            SubnetAvailableMemory::new_for_testing(1 << 30, -1, -1);
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(0), NumBytes::from(0))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_err()
+        );
 
-        assert!(available
-            .try_decrement(
-                NumBytes::from(u64::MAX),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(u64::MAX),
-                NumBytes::from(u64::MAX),
-                NumBytes::from(u64::MAX)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(i64::MAX as u64 + 1),
-            )
-            .is_err());
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(u64::MAX)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(i64::MAX as u64 + 1),
+                )
+                .is_err()
+        );
 
-        let mut available = SubnetAvailableMemory::new(44, 45, 30);
+        let mut available = SubnetAvailableMemory::new_for_testing(44, 45, 30);
         assert_eq!(available.get_execution_memory(), 44);
-        assert_eq!(available.get_message_memory(), 45);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 45);
         assert_eq!(available.get_wasm_custom_sections_memory(), 30);
         available.increment(NumBytes::from(1), NumBytes::from(2), NumBytes::from(3));
         assert_eq!(available.get_execution_memory(), 45);
-        assert_eq!(available.get_message_memory(), 47);
+        assert_eq!(available.get_guaranteed_response_message_memory(), 47);
         assert_eq!(available.get_wasm_custom_sections_memory(), 33);
     }
 }

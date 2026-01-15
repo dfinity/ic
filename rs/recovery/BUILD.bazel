@@ -12,10 +12,8 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
-    "//rs/registry/client",
     "//rs/registry/helpers",
     "//rs/registry/keys",
-    "//rs/registry/local_store",
     "//rs/registry/nns_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
@@ -60,8 +58,8 @@ rust_library(
     name = "recovery",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    compile_data = ["ic_public_key.pem"],
     crate_name = "ic_recovery",
-    data = ["ic_public_key.pem"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     visibility = [
@@ -88,7 +86,7 @@ rust_binary(
 
 rust_test(
     name = "recovery_test",
+    compile_data = ["ic_public_key.pem"],
     crate = ":recovery",
-    data = ["ic_public_key.pem"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -1,17 +1,17 @@
+use ic_agent::Agent;
 /// Common test function for a couple of system tests;
 use ic_agent::export::Principal;
-use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
-    util::{assert_malicious_from_topo, UniversalCanister},
+    util::{UniversalCanister, assert_malicious_from_topo},
 };
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 
 const MSG_LEN: usize = 8;
 // Seed for a random generator
@@ -20,13 +20,25 @@ const RND_SEED: u64 = 42;
 pub fn test(env: TestEnv) {
     let log = env.logger();
     let topology = env.topology_snapshot();
-    info!(log, "Checking readiness of all nodes after the IC setup...");
-    topology.subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    info!(log, "All nodes are ready, IC setup succeeded.");
+
+    info!(
+        log,
+        "Checking readiness of all honest nodes after the IC setup..."
+    );
+    for subnet in topology.subnets() {
+        for node in subnet.nodes() {
+            // Note that we don't check that malicious nodes are healthy, because it could happen
+            // that malicious nodes crash themselves by, for example, adding invalid artifacts to
+            // their own artifact pools and breaking some invariants resulting in a crash.
+            // TODO(CON-1455): investigate if we can prevent malicious nodes from crashing.
+            if !node.is_malicious() {
+                node.await_status_is_healthy()
+                    .expect("Honest node should become healthy eventually")
+            }
+        }
+    }
+    info!(log, "All honest nodes are ready, IC setup succeeded.");
+
     let mut honest_nodes = topology.root_subnet().nodes().filter(|n| !n.is_malicious());
     let node_1 = honest_nodes.next().unwrap();
     let node_2 = honest_nodes.next().unwrap();
@@ -34,8 +46,8 @@ pub fn test(env: TestEnv) {
         log,
         "Two selected honest nodes are: id={} and id={}", node_1.node_id, node_2.node_id
     );
-    let agent_1 = node_1.with_default_agent(|agent| async move { agent });
-    let agent_2 = node_2.with_default_agent(|agent| async move { agent });
+    let agent_1 = node_1.build_default_agent();
+    let agent_2 = node_2.build_default_agent();
     assert_ne!(node_1.node_id, node_2.node_id);
     let malicious_node = topology
         .root_subnet()
@@ -69,7 +81,7 @@ pub fn test(env: TestEnv) {
     assert_eq!(last_pulled_msg, last_pushed_msg);
 
     info!(log, "Checking for malicious logs...");
-    assert_malicious_from_topo(&topology, vec!["allow_malicious_behaviour: true"]);
+    assert_malicious_from_topo(&topology, vec!["allow_malicious_behavior: true"]);
     info!(log, "Malicious log check succeeded.");
 }
 

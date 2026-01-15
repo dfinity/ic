@@ -4,33 +4,40 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use bitcoin::network::{
-    constants::ServiceFlags,
+use bitcoin::p2p::ServiceFlags;
+
+use bitcoin::p2p::{
+    Address, Magic,
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, trace, warn};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    sync::mpsc::{unbounded_channel, Receiver},
+    sync::mpsc::{Receiver, unbounded_channel},
+    sync::mpsc::{Sender, channel},
     task::JoinHandle,
 };
 
 use crate::{
+    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
+    ProcessNetworkMessageError,
     addressbook::{
-        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        AddressBook, AddressBookError, AddressEntry, AddressTimestamp, validate_services,
     },
-    common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
+    common::{BlockHeight, BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessBitcoinNetworkMessage,
-    ProcessBitcoinNetworkMessageError, ProcessEvent,
 };
+
+type StreamConfigOf<Network> =
+    StreamConfig<<Network as BlockchainNetwork>::Header, <Network as BlockchainNetwork>::Block>;
+
+type NetworkMessageOf<Network> =
+    NetworkMessage<<Network as BlockchainNetwork>::Header, <Network as BlockchainNetwork>::Block>;
 
 /// How the adapter identifies itself to other Bitcoin nodes.
 const USER_AGENT: &str = "ic-btc-adapter";
@@ -64,6 +71,9 @@ pub enum ConnectionManagerError {
     /// This can happen from recycling the DNS seed queue addresses.
     #[error("Address {0} is already connected")]
     AlreadyConnected(SocketAddr),
+    /// async error thrown by tokio runtime
+    #[error("JoinError")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 /// This type is a simple wrapper for results created by a connection manager.
@@ -71,7 +81,9 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 
 /// This struct manages the connection connections that the adapter uses to communicate
 /// with Bitcoin nodes.
-pub struct ConnectionManager {
+pub struct ConnectionManager<Network: BlockchainNetwork> {
+    /// p2p protocol version used in `VersionMessage`.
+    p2p_protocol_version: u32,
     /// This field contains the address book.
     address_book: AddressBook,
     /// This field is used to indicate whether or not the connection manager needs to populate the
@@ -81,7 +93,7 @@ pub struct ConnectionManager {
     logger: ReplicaLogger,
     /// This field is used to provide the magic value to the raw network message.
     /// The magic number is used to identity the type of Bitcoin network being accessed.
-    magic: u32,
+    magic: Magic,
     /// This field contains the number of connections the connection manager can manage at one time.
     max_connections: usize,
     /// This field contains the number of connections the connection manager must have in order to send messages.
@@ -90,7 +102,7 @@ pub struct ConnectionManager {
     /// connection.
     current_height: BlockHeight,
     /// This field contains connections that have connected are being managed.
-    connections: HashMap<SocketAddr, Connection>,
+    connections: HashMap<SocketAddr, Connection<NetworkMessageOf<Network>>>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
     socks_proxy: Option<String>,
@@ -98,18 +110,19 @@ pub struct ConnectionManager {
     stream_event_receiver: Receiver<StreamEvent>,
     /// This field is used to allow new streams to send events back to the connection manager.
     stream_event_sender: Sender<StreamEvent>,
-    network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
+    network_message_sender: Sender<(SocketAddr, NetworkMessageOf<Network>)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
     metrics: RouterMetrics,
+    request_timeout: Duration,
 }
 
-impl ConnectionManager {
+impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     /// This function is used to create a new connection manager with a provided config.
     pub fn new(
-        config: &Config,
+        config: &Config<Network>,
         logger: ReplicaLogger,
-        network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
+        network_message_sender: Sender<(SocketAddr, NetworkMessageOf<Network>)>,
         metrics: RouterMetrics,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
@@ -119,6 +132,7 @@ impl ConnectionManager {
         let (min_connections, max_connections) = connection_limits(&address_book);
 
         Self {
+            p2p_protocol_version: Network::P2P_PROTOCOL_VERSION,
             initial_address_discovery: !address_book.has_enough_addresses(),
             address_book,
             logger,
@@ -133,6 +147,7 @@ impl ConnectionManager {
             network_message_sender,
             stream_event_receiver,
             metrics,
+            request_timeout: config.request_timeout(),
         }
     }
 
@@ -155,14 +170,15 @@ impl ConnectionManager {
 
     /// This function contains the actions the must occur every time the connection
     /// manager must execute actions.
-    pub fn tick(
+    pub async fn tick(
         &mut self,
         current_height: BlockHeight,
-        handle: fn(StreamConfig) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
-        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
+        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle).await
+        {
             error!(self.logger, "{}", err);
         }
     }
@@ -178,9 +194,9 @@ impl ConnectionManager {
     }
 
     /// This function will remove disconnects and establish new connections.
-    fn manage_connections(
+    async fn manage_connections(
         &mut self,
-        handle: fn(StreamConfig) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.manage_ping_states();
         self.flag_version_handshake_timeouts();
@@ -193,7 +209,7 @@ impl ConnectionManager {
             .known_peer_addresses
             .set(self.address_book.size() as i64);
         while self.connections.len() < self.get_max_number_of_connections() {
-            self.make_connection(handle)?;
+            self.make_connection(handle).await?;
         }
         Ok(())
     }
@@ -248,13 +264,12 @@ impl ConnectionManager {
     fn flag_seed_addr_retrieval_timeouts(&mut self) {
         let now = SystemTime::now();
         for conn in self.connections.values_mut() {
-            if let AddressEntry::Seed(_) = *conn.address_entry() {
-                if let ConnectionState::AwaitingAddresses { timestamp } = *conn.state() {
-                    let expires_at =
-                        timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
-                    if expires_at <= now {
-                        conn.discard();
-                    }
+            if let AddressEntry::Seed(_) = *conn.address_entry()
+                && let ConnectionState::AwaitingAddresses { timestamp } = *conn.state()
+            {
+                let expires_at = timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+                if expires_at <= now {
+                    conn.discard();
                 }
             }
         }
@@ -265,10 +280,10 @@ impl ConnectionManager {
         let mut disconnects = vec![];
         for (addr, conn) in self.connections.iter() {
             match conn.state() {
-                ConnectionState::AdapterDiscarded { .. } => {
+                ConnectionState::AdapterDiscarded => {
                     self.address_book.discard(conn.address_entry());
                 }
-                ConnectionState::NodeDisconnected { .. } => {
+                ConnectionState::NodeDisconnected => {
                     self.address_book.remove_from_active(conn.address_entry());
                 }
                 _ => {}
@@ -285,13 +300,13 @@ impl ConnectionManager {
     }
 
     /// This function creates a new connection with a stream to a BTC node.
-    fn make_connection(
+    async fn make_connection(
         &mut self,
-        handle: fn(StreamConfig) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
-            self.address_book.pop_seed()
+            self.address_book.resolve_next_seed().await
         } else {
             self.address_book.pop()
         };
@@ -305,7 +320,7 @@ impl ConnectionManager {
         let stream_event_sender = self.stream_event_sender.clone();
         let network_message_sender = self.network_message_sender.clone();
 
-        let stream_config = StreamConfig {
+        let stream_config = crate::stream::StreamConfig {
             address,
             logger: self.logger.clone(),
             magic: self.magic,
@@ -319,13 +334,17 @@ impl ConnectionManager {
             address_entry,
             handle: join_handle,
             writer,
+            ping_timeout: self.request_timeout,
         });
         self.connections.insert(address, conn);
         Ok(())
     }
 
     /// This function retrieves a connection from the connections pool with a given socket address.
-    fn get_connection(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<&mut Connection> {
+    fn get_connection(
+        &mut self,
+        addr: &SocketAddr,
+    ) -> ConnectionManagerResult<&mut Connection<NetworkMessageOf<Network>>> {
         match self.connections.get_mut(addr) {
             Some(connection) => Ok(connection),
             None => Err(ConnectionManagerError::ConnectionNotFound),
@@ -347,9 +366,10 @@ impl ConnectionManager {
 
         // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        let nonce: u64 = self.rng.gen();
+        let nonce: u64 = self.rng.r#gen();
         let user_agent = String::from(USER_AGENT);
-        let message = NetworkMessage::Version(VersionMessage::new(
+        let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
+            self.p2p_protocol_version,
             services,
             timestamp as i64,
             receiver,
@@ -375,7 +395,7 @@ impl ConnectionManager {
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        let nonce = self.rng.gen();
+        let nonce = self.rng.r#gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
         self.send_to(addr, NetworkMessage::Ping(nonce))
@@ -391,8 +411,12 @@ impl ConnectionManager {
     fn send_to(
         &mut self,
         addr: &SocketAddr,
-        network_message: NetworkMessage,
+        network_message: NetworkMessageOf<Network>,
     ) -> ConnectionManagerResult<()> {
+        self.metrics
+            .bitcoin_messages_sent
+            .with_label_values(&[network_message.cmd()])
+            .inc();
         let conn = self.get_connection(addr)?;
         if conn.send(network_message).is_err() {
             conn.disconnect();
@@ -407,7 +431,7 @@ impl ConnectionManager {
     }
 
     /// This function is used to send a message to all of the connected connections.
-    fn send_to_all(&mut self, network_message: NetworkMessage) {
+    fn send_to_all(&mut self, network_message: NetworkMessageOf<Network>) {
         if !self.has_enough_active_connections() {
             return;
         }
@@ -422,11 +446,11 @@ impl ConnectionManager {
         &mut self,
         address: &SocketAddr,
         message: &VersionMessage,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         trace!(self.logger, "Received version from {}", address);
         let conn = self
             .get_connection(address)
-            .map_err(|_| ProcessBitcoinNetworkMessageError::InvalidMessage)?;
+            .map_err(|_| ProcessNetworkMessageError::InvalidMessage)?;
         if !conn.is_seed() && !self.validate_received_version(message) {
             warn!(
                 self.logger,
@@ -437,7 +461,7 @@ impl ConnectionManager {
                 message.services,
                 self.current_height,
             );
-            return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+            return Err(ProcessNetworkMessageError::InvalidMessage);
         }
         self.send_verack(address).ok();
 
@@ -451,7 +475,7 @@ impl ConnectionManager {
     fn process_verack_message(
         &mut self,
         address: &SocketAddr,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         trace!(self.logger, "Received verack from {}", address);
         if let Ok(conn) = self.get_connection(address) {
             match conn.address_entry() {
@@ -462,8 +486,7 @@ impl ConnectionManager {
 
         trace!(
             self.logger,
-            "Completed the version handshake with {}",
-            address
+            "Completed the version handshake with {}", address
         );
         Ok(())
     }
@@ -473,7 +496,7 @@ impl ConnectionManager {
         &mut self,
         address: &SocketAddr,
         nonce: u64,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
         trace!(self.logger, "Received ping from {}", address);
@@ -486,7 +509,7 @@ impl ConnectionManager {
         &mut self,
         address: &SocketAddr,
         nonce: u64,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we cannot find the connection, the connection has been cleaned up before the
         // message has been received. It can be skipped.
         trace!(self.logger, "Received pong from {}", address);
@@ -517,7 +540,7 @@ impl ConnectionManager {
         &mut self,
         address: &SocketAddr,
         addresses: &[(AddressTimestamp, Address)],
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         let result = self.address_book.add_many(address, addresses);
         if let Err(AddressBookError::TooManyAddresses {
             received,
@@ -528,13 +551,13 @@ impl ConnectionManager {
                 self.logger,
                 "Received {} addresses from {} (max: {})", received, address, max_amount
             );
-            return Err(ProcessBitcoinNetworkMessageError::InvalidMessage);
+            return Err(ProcessNetworkMessageError::InvalidMessage);
         }
 
-        if let Ok(conn) = self.get_connection(address) {
-            if let AddressEntry::Seed(_) = conn.address_entry() {
-                conn.disconnect();
-            }
+        if let Ok(conn) = self.get_connection(address)
+            && let AddressEntry::Seed(_) = conn.address_entry()
+        {
+            conn.disconnect();
         }
 
         if self.address_book.has_enough_addresses() {
@@ -556,7 +579,7 @@ impl ConnectionManager {
         address: &SocketAddr,
         command: &CommandString,
         payload: &[u8],
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+    ) -> Result<(), ProcessNetworkMessageError> {
         // If we receive an unknown message from a BTC node, the adapter should log
         // the message for further analysis.
         warn!(
@@ -583,12 +606,13 @@ impl ConnectionManager {
     }
 }
 
-impl Channel for ConnectionManager {
-    fn send(&mut self, command: Command) -> Result<(), ChannelError> {
-        self.metrics
-            .bitcoin_messages_sent
-            .with_label_values(&[command.message.cmd()])
-            .inc();
+impl<Network: BlockchainNetwork> Channel<Network::Header, Network::Block>
+    for ConnectionManager<Network>
+{
+    fn send(
+        &mut self,
+        command: Command<Network::Header, Network::Block>,
+    ) -> Result<(), ChannelError> {
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -621,11 +645,8 @@ impl Channel for ConnectionManager {
     }
 }
 
-impl ProcessEvent for ConnectionManager {
-    fn process_event(
-        &mut self,
-        event: &StreamEvent,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+impl<Network: BlockchainNetwork> ProcessEvent for ConnectionManager<Network> {
+    fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError> {
         match &event.kind {
             StreamEventKind::Connected => {
                 let result = self.send_version(&event.address);
@@ -657,12 +678,12 @@ impl ProcessEvent for ConnectionManager {
     }
 }
 
-impl ProcessBitcoinNetworkMessage for ConnectionManager {
+impl<Network: BlockchainNetwork> ProcessNetworkMessage<Network> for ConnectionManager<Network> {
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
-        message: &NetworkMessage,
-    ) -> Result<(), ProcessBitcoinNetworkMessageError> {
+        message: &NetworkMessageOf<Network>,
+    ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Version(version_message) => {
                 self.process_version_message(&address, version_message)
@@ -693,7 +714,8 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::{network::constants::ServiceFlags, Network};
+    use bitcoin::p2p::ServiceFlags;
+    use bitcoin::{Block, Network, block::Header};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -707,10 +729,11 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -721,7 +744,7 @@ mod test {
         );
         version_message.version = MINIMUM_VERSION_NUMBER - 1;
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let manager = ConnectionManager::new(
             &config,
@@ -740,6 +763,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -749,11 +773,11 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -774,6 +798,7 @@ mod test {
         let receiver = Address::new(&socket_1, ServiceFlags::NONE);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -783,11 +808,11 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let manager = ConnectionManager::new(
             &config,
@@ -799,7 +824,7 @@ mod test {
         assert!(!manager.validate_received_version(&version_message));
     }
 
-    fn simple_handle(config: StreamConfig) -> JoinHandle<()> {
+    fn simple_handle(config: StreamConfig<Header, Block>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             let _ = &config;
             let StreamConfig {
@@ -847,6 +872,7 @@ mod test {
                             .send((
                                 address,
                                 NetworkMessage::Version(VersionMessage::new(
+                                    bitcoin::p2p::PROTOCOL_VERSION,
                                     services,
                                     since_epoch as i64,
                                     Address::new(&adapter_address, services),
@@ -875,12 +901,11 @@ mod test {
     /// This test is used to walk through the initial address discovery process.
     #[tokio::test]
     async fn test_initial_address_discovery_lifecycle() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Signet)
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, mut network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
             no_op_logger(),
@@ -894,7 +919,7 @@ mod test {
             manager.get_max_number_of_connections(),
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
-        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         for i in 0..4u8 {
             tokio::select! {
                 event = manager
@@ -914,7 +939,7 @@ mod test {
                 // has been disconnected.
                 continue;
             }
-            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         }
         assert_eq!(manager.current_height, 1);
         assert_eq!(
@@ -937,11 +962,11 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -958,6 +983,7 @@ mod test {
                     address_entry: AddressEntry::Discovered(addr),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.request_timeout,
                 },
                 ConnectionState::Connected { timestamp },
                 timestamp,
@@ -967,10 +993,7 @@ mod test {
             let conn = manager
                 .get_connection(&addr)
                 .expect("The connection should be there");
-            assert!(matches!(
-                conn.state(),
-                ConnectionState::AdapterDiscarded { .. }
-            ));
+            assert!(matches!(conn.state(), ConnectionState::AdapterDiscarded));
         });
     }
 
@@ -984,11 +1007,11 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
             no_op_logger(),
@@ -1005,6 +1028,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr),
                     handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
+                    ping_timeout: manager.request_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
@@ -1017,6 +1041,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr2),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.request_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp2,
@@ -1029,10 +1054,7 @@ mod test {
             let conn = manager
                 .get_connection(&addr)
                 .expect("The connection should be there");
-            assert!(matches!(
-                conn.state(),
-                ConnectionState::AdapterDiscarded { .. }
-            ));
+            assert!(matches!(conn.state(), ConnectionState::AdapterDiscarded));
 
             let conn = manager
                 .get_connection(&addr2)
@@ -1056,11 +1078,11 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -1078,6 +1100,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr),
                     handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
+                    ping_timeout: manager.request_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
@@ -1090,6 +1113,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr2),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.request_timeout,
                 },
                 ConnectionState::HandshakeComplete,
                 timestamp2,
@@ -1110,6 +1134,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -1119,11 +1144,11 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -1139,6 +1164,7 @@ mod test {
                 address_entry: AddressEntry::Discovered(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
+                ping_timeout: manager.request_timeout,
             },
             ConnectionState::Connected { timestamp },
             timestamp,
@@ -1157,6 +1183,7 @@ mod test {
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
         let version_message = VersionMessage::new(
+            bitcoin::p2p::PROTOCOL_VERSION,
             services,
             0,
             receiver,
@@ -1166,11 +1193,11 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -1186,6 +1213,7 @@ mod test {
                 address_entry: AddressEntry::Seed(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
+                ping_timeout: manager.request_timeout,
             },
             ConnectionState::Connected { timestamp },
             timestamp,

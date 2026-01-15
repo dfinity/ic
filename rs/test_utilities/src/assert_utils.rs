@@ -6,9 +6,6 @@ pub fn assert_balance_equals(expected: Cycles, actual: Cycles, epsilon: Cycles) 
     // Tolerate both positive and negative difference. Assumes no overflows.
     assert!(
         expected < actual + epsilon && actual < expected + epsilon,
-        "assert_balance_equals: expected {} actual {} epsilon {}",
-        expected,
-        actual,
-        epsilon
+        "assert_balance_equals: expected {expected} actual {actual} epsilon {epsilon}"
     );
 }

@@ -1,19 +1,20 @@
-use candid::{candid_method, Principal};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use candid::Principal;
+use ic_cdk::{init, post_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_icrc1::{Block, blocks::encoded_block_to_generic_block};
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, RestrictedMemory, Storable,
+    DefaultMemoryImpl, RestrictedMemory, Storable, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResult};
 use icrc_ledger_types::icrc3::blocks::{
     GenericBlock as IcrcBlock, ICRC3DataCertificate, SupportedBlockType,
 };
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use icrc_ledger_types::{icrc::generic_value::ICRC3Value, icrc3::blocks::BlockWithId};
 
 use icrc_ledger_types::icrc3::transactions::Transaction;
@@ -75,7 +76,7 @@ thread_local! {
 }
 
 /// Configuration of the archive node.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
     max_memory_size_bytes: u64,
@@ -86,6 +87,17 @@ struct ArchiveConfig {
     ledger_id: Principal,
     /// The maximum number of transactions returned by [get_transactions].
     max_transactions_per_response: u64,
+    /// The type of tokens this archive supports (U64 or U256).
+    #[serde(default = "undefined_token_type")]
+    pub token_type: String,
+}
+
+pub fn wasm_token_type() -> String {
+    Tokens::TYPE.to_string()
+}
+
+pub fn undefined_token_type() -> String {
+    "UNDEFINED".to_string()
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -97,12 +109,13 @@ impl Default for ArchiveConfig {
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
             max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
+            token_type: wasm_token_type(),
         }
     }
 }
 
 impl Storable for ArchiveConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode archive config");
         Cow::Owned(buf)
@@ -132,7 +145,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {txid}: {e}")))
         .into()
 }
 
@@ -142,7 +155,6 @@ fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> IcrcBlock {
 }
 
 #[init]
-#[candid_method(init)]
 fn init(
     ledger_id: Principal,
     block_index_offset: u64,
@@ -161,6 +173,7 @@ fn init(
                 block_index_offset,
                 ledger_id,
                 max_transactions_per_response,
+                token_type: wasm_token_type(),
             })
             .expect("failed to set archive config");
     });
@@ -177,6 +190,24 @@ fn init(
     })
 }
 
+/// Verifies that the `token_type` stored in the archive state is the same as to
+/// `token_type` of the current wasm. If the archive state's `token_type` is undefined
+/// it is set to the current wasm's `token_type`.
+fn verify_token_type() {
+    CONFIG.with(|cell| {
+        let curr_conf = cell.borrow().get().clone();
+        if curr_conf.token_type == undefined_token_type() {
+            let new_conf = ArchiveConfig {
+                token_type: wasm_token_type(),
+                ..curr_conf
+            };
+            assert!(cell.borrow_mut().set(new_conf).is_ok());
+        } else if curr_conf.token_type != wasm_token_type() {
+            panic!("Incompatible token type, the upgraded archive token type is {}, current wasm token type is {}", curr_conf.token_type, wasm_token_type());
+        }
+    });
+}
+
 #[post_upgrade]
 fn post_upgrade() {
     // NB. we do not need to do anything to decode the values from the stable
@@ -186,14 +217,19 @@ fn post_upgrade() {
     // the upgrade if the initialization traps.
     let max_memory_size_bytes = with_archive_opts(|opts| opts.max_memory_size_bytes);
     with_blocks(|blocks| assert!(blocks.log_size_bytes() <= max_memory_size_bytes));
+
+    // Ensure that the archive is upgraded with the correct wasm (U64 or U256).
+    // The check does not work if the archive is older and does not have
+    // the `token_type` set in its config. In that case, `token_type`
+    // is set to the current wasm's token type.
+    verify_token_type();
 }
 
 #[update]
-#[candid_method(update)]
 fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     let max_memory_size_bytes = with_archive_opts(|opts| {
-        if ic_cdk::api::caller() != opts.ledger_id {
-            ic_cdk::api::trap(&format!(
+        if ic_cdk::api::msg_caller() != opts.ledger_id {
+            ic_cdk::api::trap(format!(
                 "only {} can append blocks to this archive",
                 opts.ledger_id
             ));
@@ -215,7 +251,6 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 }
 
 #[query]
-#[candid_method(query)]
 fn remaining_capacity() -> u64 {
     let total_block_size = with_blocks(|blocks| blocks.log_size_bytes());
     with_archive_opts(|opts| {
@@ -226,7 +261,6 @@ fn remaining_capacity() -> u64 {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
     let relative_idx = (idx_offset <= index).then_some(index - idx_offset)?;
@@ -238,7 +272,7 @@ fn get_transaction(index: BlockIndex) -> Option<Transaction> {
 fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
     let offset = with_archive_opts(|opts| {
         if start < opts.block_index_offset {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "requested index {} is less than the minimal index {} this archive serves",
                 start, opts.block_index_offset
             ));
@@ -256,7 +290,6 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
     let (start, length) = req
         .as_start_and_length()
@@ -268,7 +301,6 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
 
 /// Get length Blocks starting at start BlockIndex.
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
     let (start, length) = req
         .as_start_and_length()
@@ -279,20 +311,17 @@ fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(_arg: GetArchivesArgs) -> GetArchivesResult {
     vec![]
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     // Only the Ledger certifies the tip of the chain.
     None
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
     vec![
         SupportedBlockType {
@@ -306,6 +335,11 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
                 .to_string(),
         },
         SupportedBlockType {
+            block_type: "1xfer".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
             block_type: "2approve".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
@@ -315,11 +349,14 @@ fn icrc3_supported_block_types() -> Vec<SupportedBlockType> {
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-2/README.md"
                 .to_string(),
         },
+        SupportedBlockType {
+            block_type: BTYPE_107.to_string(),
+            url: "https://github.com/dfinity/ICRC/pull/117".to_string(),
+        },
     ]
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(reqs: Vec<GetBlocksRequest>) -> GetBlocksResult {
     const MAX_BLOCKS_PER_RESPONSE: u64 = 100;
 
@@ -360,12 +397,12 @@ fn __get_candid_interface_tmp_hack() -> &'static str {
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "archive_stable_memory_pages",
-        ic_cdk::api::stable::stable_size() as f64,
+        ic_cdk::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "stable_memory_bytes",
-        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        ic_cdk::stable::stable_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister measured in bytes.",
     )?;
     w.encode_gauge(
@@ -374,7 +411,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Size of the heap memory allocated by this canister measured in bytes.",
     )?;
 
-    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    let cycle_balance = ic_cdk::api::canister_cycle_balance() as f64;
 
     w.encode_gauge(
         "archive_cycle_balance",
@@ -394,7 +431,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -403,10 +443,11 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -419,7 +460,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use std::path::PathBuf;
 
     candid::export_service!();
@@ -435,4 +476,32 @@ fn check_candid_interface() {
         CandidSource::File(old_interface.as_path()),
     )
     .expect("the ledger interface is not compatible with archive.did");
+}
+
+#[test]
+fn check_archive_and_ledger_block_equality() {
+    // check that ledger.did and archive.did agree on the block format
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../ledger/ledger.did");
+    let archive_did_file = manifest_dir.join("archive.did");
+    let mut ledger_env = candid_parser::utils::CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let archive_env = candid_parser::utils::CandidSource::File(archive_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let ledger_block_type = ledger_env.find_type("Block").unwrap().to_owned();
+    let archive_block_type = archive_env.find_type("Block").unwrap().to_owned();
+
+    let mut gamma = std::collections::HashSet::new();
+    let archive_block_type = ledger_env.merge_type(archive_env, archive_block_type.clone());
+    candid::types::subtype::equal(
+        &mut gamma,
+        &ledger_env,
+        &ledger_block_type,
+        &archive_block_type,
+    )
+    .expect("Ledger and Archive block types are different");
 }

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -10,9 +10,13 @@ DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/runtime",
     "//rs/nns/constants",
+    "//rs/registry/canister/api",
+    "//rs/registry/transport",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
     "@crate_index//:candid",
+    "@crate_index//:mockall",
+    "@crate_index//:prost",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -21,6 +25,34 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:rust_decimal_macros",
 ]
 
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//packages/pocket-ic",
+    "//rs/crypto/sha2",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/chunks",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nns/test_utils",
+    "//rs/registry/fetch_large_record_test_canister",
+    "//rs/rust_canisters/canister_test",
+    "@crate_index//:serde",
+    "@crate_index//:tokio",
+]
+
+DEV_DATA = [
+    # Keep sorted.
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/registry/canister:registry-canister-test",
+    "//rs/registry/fetch_large_record_test_canister:canister",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "FETCH_LARGE_RECORD_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/registry/fetch_large_record_test_canister:canister )",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+}
+
 rust_library(
     name = "canisters",
     srcs = glob(["src/**/*.rs"]),
@@ -28,4 +60,13 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "registry_integration_test",
+    srcs = ["tests/registry.rs"],
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canisters"],
 )

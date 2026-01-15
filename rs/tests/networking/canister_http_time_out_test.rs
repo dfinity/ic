@@ -15,20 +15,20 @@ Success::
 2. Http request to invalid http endpoint returns a transient timeout error.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
-};
+use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
+use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 
@@ -50,11 +50,11 @@ pub fn test(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
-        let url_to_succeed = format!("https://[{webserver_ipv6}]:20443");
+        let url_to_succeed = format!("https://[{webserver_ipv6}]");
         let mut request = RemoteHttpRequest {
-            request: CanisterHttpRequestArgs {
+            request: UnvalidatedCanisterHttpRequestArgs {
                 url: url_to_succeed.clone(),
-                headers: BoundedHttpHeaders::new(vec![]),
+                headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
                 transform: Some(TransformContext {
@@ -65,6 +65,8 @@ pub fn test(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
+                pricing_version: None,
             },
             cycles: 500_000_000_000,
         };

@@ -150,7 +150,7 @@ pub mod bls12_381 {
     impl fmt::Debug for G2Bytes {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             let hex_sig = hex::encode(&self.0[..]);
-            write!(f, "G2(0x{})", hex_sig)
+            write!(f, "G2(0x{hex_sig})")
         }
     }
     impl AsRef<[u8]> for G2Bytes {

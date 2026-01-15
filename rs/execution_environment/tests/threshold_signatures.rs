@@ -1,14 +1,15 @@
 use candid::Decode;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterInstallMode, DerivationPath, ECDSAPublicKeyResponse, EcdsaCurve,
     EcdsaKeyId, MasterPublicKeyId, Method, Payload as Ic00Payload, SchnorrAlgorithm, SchnorrKeyId,
-    SchnorrPublicKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
+    SchnorrPublicKeyResponse, SignWithBip341Aux, SignWithECDSAReply, SignWithSchnorrAux,
+    SignWithSchnorrReply, VetKdCurve, VetKdDeriveKeyResult, VetKdKeyId, VetKdPublicKeyResult,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, RegistryVersion, SubnetId};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use ic_types::{CanisterId, Cycles, RegistryVersion, SubnetId, ingress::WasmResult};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use itertools::Itertools;
 use serde::Deserialize;
@@ -33,9 +34,23 @@ fn make_ecdsa_key(name: &str) -> MasterPublicKeyId {
     })
 }
 
-fn make_schnorr_key(name: &str) -> MasterPublicKeyId {
+fn make_ed25519_key(name: &str) -> MasterPublicKeyId {
     MasterPublicKeyId::Schnorr(SchnorrKeyId {
         algorithm: SchnorrAlgorithm::Ed25519,
+        name: name.to_string(),
+    })
+}
+
+fn make_bip340_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::Schnorr(SchnorrKeyId {
+        algorithm: SchnorrAlgorithm::Bip340Secp256k1,
+        name: name.to_string(),
+    })
+}
+
+fn make_vetkd_key(name: &str) -> MasterPublicKeyId {
+    MasterPublicKeyId::VetKd(VetKdKeyId {
+        curve: VetKdCurve::Bls12_381_G2,
         name: name.to_string(),
     })
 }
@@ -54,7 +69,14 @@ fn into_inner_schnorr(key_id: MasterPublicKeyId) -> SchnorrKeyId {
     }
 }
 
-fn compute_initial_threshold_key_dealings_payload(
+fn into_inner_vetkd(key_id: MasterPublicKeyId) -> VetKdKeyId {
+    match key_id {
+        MasterPublicKeyId::VetKd(key) => key,
+        _ => panic!("unexpected key_id type"),
+    }
+}
+
+fn reshare_chain_key_payload(
     method: Method,
     key_id: MasterPublicKeyId,
     subnet_id: SubnetId,
@@ -62,9 +84,8 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialIDkgDealings => {
-            ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
-                .encode()
+        Method::ReshareChainKey => {
+            ic00::ReshareChainKeyArgs::new(key_id, subnet_id, nodes, registry_version).encode()
         }
         _ => panic!("unexpected method"),
     }
@@ -78,11 +99,36 @@ fn sign_with_threshold_key_payload(method: Method, key_id: MasterPublicKeyId) ->
             key_id: into_inner_ecdsa(key_id),
         }
         .encode(),
-        Method::SignWithSchnorr => ic00::SignWithSchnorrArgs {
-            message: vec![],
-            derivation_path: DerivationPath::new(vec![]),
-            key_id: into_inner_schnorr(key_id),
-            aux: None,
+        Method::SignWithSchnorr => {
+            let key_id = into_inner_schnorr(key_id);
+
+            let aux = match key_id.algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => {
+                    let aux = SignWithBip341Aux {
+                        merkle_root_hash: vec![0; 32].into(),
+                    };
+                    Some(SignWithSchnorrAux::Bip341(aux))
+                }
+                _ => None,
+            };
+
+            ic00::SignWithSchnorrArgs {
+                message: vec![],
+                derivation_path: DerivationPath::new(vec![]),
+                key_id,
+                aux,
+            }
+        }
+        .encode(),
+        Method::VetKdDeriveKey => {
+            let key_id = into_inner_vetkd(key_id);
+
+            ic00::VetKdDeriveKeyArgs {
+                context: vec![],
+                input: vec![],
+                key_id,
+                transport_public_key: ic_crypto_test_utils_vetkd::dummy_transport_public_key(),
+            }
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -101,6 +147,12 @@ fn threshold_public_key_payload(method: Method, key_id: MasterPublicKeyId) -> Ve
             canister_id: None,
             derivation_path: DerivationPath::new(vec![]),
             key_id: into_inner_schnorr(key_id),
+        }
+        .encode(),
+        Method::VetKdPublicKey => ic00::VetKdPublicKeyArgs {
+            canister_id: None,
+            context: vec![],
+            key_id: into_inner_vetkd(key_id),
         }
         .encode(),
         _ => panic!("unexpected method"),
@@ -158,24 +210,24 @@ where
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => Decode!(&bytes, T).unwrap(),
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
 pub fn get_reject_message(result: Result<WasmResult, UserError>) -> String {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+            WasmResult::Reply(bytes) => panic!("Unexpected reply: {bytes:?}"),
             WasmResult::Reject(msg) => msg,
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
 macro_rules! expect_contains {
-    ($message:expr, $expected:expr) => {
+    ($message:expr_2021, $expected:expr_2021) => {
         assert!(
             $message.contains($expected),
             "Expected: {}\nActual: {}",
@@ -185,16 +237,12 @@ macro_rules! expect_contains {
     };
 }
 
-fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
+fn reshare_chain_key_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
-        (
-            Method::ComputeInitialIDkgDealings,
-            make_ecdsa_key("some_key"),
-        ),
-        (
-            Method::ComputeInitialIDkgDealings,
-            make_schnorr_key("some_key"),
-        ),
+        (Method::ReshareChainKey, make_ecdsa_key("some_key")),
+        (Method::ReshareChainKey, make_ed25519_key("some_key")),
+        (Method::ReshareChainKey, make_bip340_key("some_key")),
+        (Method::ReshareChainKey, make_vetkd_key("some_key")),
     ]
 }
 
@@ -207,8 +255,8 @@ fn format_keys(keys: Vec<MasterPublicKeyId>) -> String {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_sender_on_nns() {
-    for (method, key_id) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_keys_sender_on_nns() {
+    for (method, key_id) in reshare_chain_key_test_cases() {
         let nns_subnet = subnet_test_id(1);
         let env = StateMachineBuilder::new()
             .with_checkpoints_enabled(false)
@@ -223,7 +271,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             0
         );
@@ -238,7 +286,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
+                        .other_side(reshare_chain_key_payload(
                             method,
                             key_id.clone(),
                             nns_subnet,
@@ -254,7 +302,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
             env.get_latest_state()
                 .metadata
                 .subnet_call_context_manager
-                .idkg_dealings_contexts
+                .reshare_chain_key_contexts
                 .len(),
             1
         );
@@ -262,8 +310,8 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
-    for (method, key_id) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_keys_sender_not_on_nns() {
+    for (method, key_id) in reshare_chain_key_test_cases() {
         let own_subnet = subnet_test_id(1);
         let nns_subnet = subnet_test_id(2);
         let env = StateMachineBuilder::new()
@@ -282,9 +330,7 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
-                            method, key_id, own_subnet,
-                        ))
+                        .other_side(reshare_chain_key_payload(method, key_id, own_subnet))
                         .on_reject(wasm().reject_message().reject()),
                 )
                 .build(),
@@ -300,8 +346,8 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_with_unknown_key() {
-    for (method, unknown_key) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_key_with_unknown_key() {
+    for (method, unknown_key) in reshare_chain_key_test_cases() {
         let nns_subnet = subnet_test_id(2);
         let env = StateMachineBuilder::new()
             .with_checkpoints_enabled(false)
@@ -318,7 +364,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
+                        .other_side(reshare_chain_key_payload(
                             method,
                             unknown_key.clone(),
                             nns_subnet,
@@ -331,8 +377,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
-                method, unknown_key, nns_subnet,
+                "Unable to route management canister request {method}: ChainKeyError(\"Requested unknown threshold key {unknown_key} on subnet {nns_subnet}, subnet has keys: []\")",
             ))),
         );
     }
@@ -349,7 +394,19 @@ fn test_sign_with_threshold_key_fee_charged() {
         ),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("some_key"),
+            make_ed25519_key("some_key"),
+            1_000_000,
+            2_000_000,
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("some_key"),
+            1_000_000,
+            2_000_000,
+        ),
+        (
+            Method::VetKdDeriveKey,
+            make_vetkd_key("some_key"),
             1_000_000,
             2_000_000,
         ),
@@ -363,6 +420,7 @@ fn test_sign_with_threshold_key_fee_charged() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 
@@ -384,12 +442,14 @@ fn test_sign_with_threshold_key_fee_charged() {
         // Disable automatic signing to be able to read the request payment value.
         env.set_ecdsa_signing_enabled(false);
         env.set_schnorr_signing_enabled(false);
+        env.set_vetkd_enabled(false);
         env.tick();
 
         // Assert that the request payment is equal to the payment minus the fee.
         let contexts = match method {
             Method::SignWithECDSA => env.sign_with_ecdsa_contexts(),
             Method::SignWithSchnorr => env.sign_with_schnorr_contexts(),
+            Method::VetKdDeriveKey => env.vetkd_derive_key_contexts(),
             _ => panic!("Unexpected method"),
         };
         let (_, context) = contexts.iter().next().unwrap();
@@ -398,11 +458,13 @@ fn test_sign_with_threshold_key_fee_charged() {
         // Enable automatic signing to complete the request.
         env.set_ecdsa_signing_enabled(true);
         env.set_schnorr_signing_enabled(true);
+        env.set_vetkd_enabled(true);
         let max_ticks = 100;
         let result = env.await_ingress(msg_id, max_ticks);
         let signature = match method {
             Method::SignWithECDSA => expect_reply::<SignWithECDSAReply>(result).signature,
             Method::SignWithSchnorr => expect_reply::<SignWithSchnorrReply>(result).signature,
+            Method::VetKdDeriveKey => expect_reply::<VetKdDeriveKeyResult>(result).encrypted_key,
             _ => panic!("Unexpected method"),
         };
         // Expect non-empty signature.
@@ -416,7 +478,17 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
         (Method::SignWithECDSA, make_ecdsa_key("some_key"), 2_000_000),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("some_key"),
+            make_ed25519_key("some_key"),
+            2_000_000,
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("some_key"),
+            2_000_000,
+        ),
+        (
+            Method::VetKdDeriveKey,
+            make_vetkd_key("some_key"),
             2_000_000,
         ),
     ];
@@ -429,6 +501,7 @@ fn test_sign_with_threshold_key_rejected_without_fee() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 
@@ -467,8 +540,18 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
         ),
         (
             Method::SignWithSchnorr,
-            make_schnorr_key("correct_key"),
-            make_schnorr_key("wrong_key"),
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("wrong_key"),
+        ),
+        (
+            Method::SignWithSchnorr,
+            make_bip340_key("correct_key"),
+            make_bip340_key("wrong_key"),
+        ),
+        (
+            Method::VetKdDeriveKey,
+            make_vetkd_key("correct_key"),
+            make_vetkd_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -497,6 +580,69 @@ fn test_sign_with_threshold_key_unknown_key_rejected() {
 }
 
 #[test]
+fn test_schnorr_sign_with_invalid_aux_field_rejected() {
+    let test_cases = vec![
+        (make_bip340_key("bip340_key"), 8),
+        (make_bip340_key("bip340_key"), 100),
+        (make_ed25519_key("ed25519_key"), 0),
+        (make_ed25519_key("ed25519_key"), 32),
+    ];
+
+    let method = Method::SignWithSchnorr;
+
+    for (key, aux_len) in test_cases {
+        let own_subnet = subnet_test_id(1);
+        let nns_subnet = subnet_test_id(2);
+        let env = StateMachineBuilder::new()
+            .with_checkpoints_enabled(false)
+            .with_subnet_id(own_subnet)
+            .with_nns_subnet_id(nns_subnet)
+            .with_chain_key(key.clone())
+            .build();
+
+        let canister_id = create_universal_canister(&env);
+
+        let sign_with_schnorr_args = {
+            let aux = SignWithSchnorrAux::Bip341(SignWithBip341Aux {
+                merkle_root_hash: vec![0; aux_len].into(),
+            });
+
+            ic00::SignWithSchnorrArgs {
+                message: vec![],
+                derivation_path: DerivationPath::new(vec![]),
+                key_id: into_inner_schnorr(key.clone()),
+                aux: Some(aux),
+            }
+        };
+
+        let result = env.execute_ingress(
+            canister_id,
+            "update",
+            wasm()
+                .call_with_cycles(
+                    ic00::IC_00,
+                    method,
+                    call_args()
+                        .other_side(sign_with_schnorr_args.encode())
+                        .on_reject(wasm().reject_message().reject()),
+                    Cycles::from(100_000_000_000u128),
+                )
+                .build(),
+        );
+
+        let expected_reason = match key {
+            MasterPublicKeyId::Schnorr(kid) => match kid.algorithm {
+                SchnorrAlgorithm::Bip340Secp256k1 => "Invalid aux field for Bip340Secp256k1",
+                SchnorrAlgorithm::Ed25519 => "Schnorr algorithm Ed25519 does not support aux input",
+            },
+            _ => panic!("Unexpected master key type for this test"),
+        };
+
+        assert_eq!(result, Ok(WasmResult::Reject(expected_reason.to_string())));
+    }
+}
+
+#[test]
 fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
     // Test the disabled key succeeds for public key request but fails for signing,
     // and the unknown key fails for both.
@@ -510,8 +656,20 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
         (
             Method::SchnorrPublicKey,
             Method::SignWithSchnorr,
-            make_schnorr_key("signing_disabled_key"),
-            make_schnorr_key("unknown_key"),
+            make_ed25519_key("signing_disabled_key"),
+            make_ed25519_key("unknown_key"),
+        ),
+        (
+            Method::SchnorrPublicKey,
+            Method::SignWithSchnorr,
+            make_bip340_key("signing_disabled_key"),
+            make_bip340_key("unknown_key"),
+        ),
+        (
+            Method::VetKdPublicKey,
+            Method::VetKdDeriveKey,
+            make_vetkd_key("signing_disabled_key"),
+            make_vetkd_key("unknown_key"),
         ),
     ];
     for (public_key_method, sign_with_method, signing_disabled_key, unknown_key) in test_cases {
@@ -542,6 +700,10 @@ fn test_signing_disabled_vs_unknown_key_on_public_key_and_signing_requests() {
             Method::SchnorrPublicKey => {
                 let response = expect_reply::<SchnorrPublicKeyResponse>(result);
                 assert!(!response.public_key.is_empty() && !response.chain_code.is_empty());
+            }
+            Method::VetKdPublicKey => {
+                let response = expect_reply::<VetKdPublicKeyResult>(result);
+                assert!(!response.public_key.is_empty());
             }
             _ => panic!("Unexpected method"),
         }
@@ -591,8 +753,18 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
         ),
         (
             Method::SchnorrPublicKey,
-            make_schnorr_key("correct_key"),
-            make_schnorr_key("wrong_key"),
+            make_ed25519_key("correct_key"),
+            make_ed25519_key("wrong_key"),
+        ),
+        (
+            Method::SchnorrPublicKey,
+            make_bip340_key("correct_key"),
+            make_bip340_key("wrong_key"),
+        ),
+        (
+            Method::VetKdPublicKey,
+            make_vetkd_key("correct_key"),
+            make_vetkd_key("wrong_key"),
         ),
     ];
     for (method, correct_key, wrong_key) in test_cases {
@@ -624,7 +796,9 @@ fn test_threshold_key_public_key_req_with_unknown_key_rejected() {
 fn test_sign_with_threshold_key_fee_ignored_for_nns() {
     let test_cases = vec![
         (Method::SignWithECDSA, make_ecdsa_key("some_key")),
-        (Method::SignWithSchnorr, make_schnorr_key("some_key")),
+        (Method::SignWithSchnorr, make_ed25519_key("some_key")),
+        (Method::SignWithSchnorr, make_bip340_key("some_key")),
+        (Method::VetKdDeriveKey, make_vetkd_key("some_key")),
     ];
     for (method, key_id) in test_cases {
         let fee = 1_000_000;
@@ -636,6 +810,7 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             .build();
 
@@ -661,6 +836,7 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
         let contexts = match method {
             Method::SignWithECDSA => env.sign_with_ecdsa_contexts(),
             Method::SignWithSchnorr => env.sign_with_schnorr_contexts(),
+            Method::VetKdDeriveKey => env.vetkd_derive_key_contexts(),
             _ => panic!("Unexpected method"),
         };
         let (_, context) = contexts.iter().next().unwrap();
@@ -672,7 +848,9 @@ fn test_sign_with_threshold_key_fee_ignored_for_nns() {
 fn test_sign_with_threshold_key_queue_fills_up() {
     let test_cases = vec![
         (Method::SignWithECDSA, make_ecdsa_key("some_key"), 20),
-        (Method::SignWithSchnorr, make_schnorr_key("some_key"), 20),
+        (Method::SignWithSchnorr, make_ed25519_key("some_key"), 20),
+        (Method::SignWithSchnorr, make_bip340_key("some_key"), 20),
+        (Method::VetKdDeriveKey, make_vetkd_key("some_key"), 20),
     ];
     for (method, key_id, max_queue_size) in test_cases {
         let fee = 1_000_000;
@@ -686,11 +864,14 @@ fn test_sign_with_threshold_key_queue_fills_up() {
             .with_nns_subnet_id(nns_subnet)
             .with_ecdsa_signature_fee(fee)
             .with_schnorr_signature_fee(fee)
+            .with_vetkd_derive_key_fee(fee)
             .with_chain_key(key_id.clone())
             // Turn off automatic ECDSA signatures to fill up the queue.
             .with_ecdsa_signing_enabled(false)
             // Turn off automatic Schnorr signatures to fill up the queue.
             .with_schnorr_signing_enabled(false)
+            // Turn off automatic VetKey derivation to fill up the queue.
+            .with_vetkd_enabled(false)
             .build();
 
         let canister_id = create_universal_canister(&env);
@@ -717,8 +898,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "{} request failed: signature queue for key {} is full.",
-                method, key_id,
+                "{method} request failed: request queue for key {key_id} is full.",
             )))
         );
     }

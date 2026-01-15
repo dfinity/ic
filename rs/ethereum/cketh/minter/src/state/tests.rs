@@ -1,10 +1,10 @@
+#![allow(deprecated)]
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
+use crate::lifecycle::EthereumNetwork;
 use crate::lifecycle::init::InitArg;
 use crate::lifecycle::upgrade::UpgradeArg;
-use crate::lifecycle::EthereumNetwork;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
     BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
@@ -284,13 +284,12 @@ fn received_erc20_event() -> ReceivedErc20Event {
 }
 
 mod upgrade {
-    use crate::eth_rpc::BlockTag;
-    use crate::lifecycle::upgrade::UpgradeArg;
     use crate::lifecycle::EthereumNetwork;
+    use crate::lifecycle::upgrade::UpgradeArg;
     use crate::numeric::{TransactionNonce, Wei};
+    use crate::state::InvalidStateError;
     use crate::state::eth_logs_scraping::LogScrapingId;
     use crate::state::tests::initial_state;
-    use crate::state::InvalidStateError;
     use assert_matches::assert_matches;
     use candid::Nat;
     use ic_ethereum_types::Address;
@@ -390,7 +389,7 @@ mod upgrade {
                 .contract_address(LogScrapingId::EthDepositWithoutSubaccount),
             Some(&Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap())
         );
-        assert_eq!(state.ethereum_block_height, BlockTag::Safe);
+        assert_eq!(state.ethereum_block_height, CandidBlockTag::Safe);
     }
 }
 
@@ -576,6 +575,7 @@ prop_compose! {
         ledger_id in arb_principal(),
         ecdsa_key_name in "[a-z_]*",
         last_scraped_block_number in arb_nat(),
+        evm_rpc_id in proptest::option::of(arb_principal()),
     ) -> InitArg {
         InitArg {
             ethereum_network: EthereumNetwork::Sepolia,
@@ -586,6 +586,7 @@ prop_compose! {
             minimum_withdrawal_amount,
             next_transaction_nonce,
             last_scraped_block_number,
+            evm_rpc_id,
         }
     }
 }
@@ -796,6 +797,7 @@ proptest! {
 
 #[test]
 fn state_equivalence() {
+    use crate::EVM_RPC_ID_PRODUCTION;
     use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
     use crate::map::MultiKeyMap;
     use crate::state::transactions::{
@@ -997,7 +999,7 @@ fn state_equivalence() {
             chain_code: vec![2; 32],
         }),
         cketh_minimum_withdrawal_amount: Wei::new(1_000_000_000_000_000),
-        ethereum_block_height: BlockTag::Finalized,
+        ethereum_block_height: CandidBlockTag::Finalized,
         first_scraped_block_number: BlockNumber::new(1_000_001),
         last_observed_block_number: Some(BlockNumber::new(2_000_000)),
         events_to_mint: btreemap! {
@@ -1039,7 +1041,7 @@ fn state_equivalence() {
         skipped_blocks: Default::default(),
         last_transaction_price_estimate: None,
         ledger_suite_orchestrator_id: Some("2s5qh-7aaaa-aaaar-qadya-cai".parse().unwrap()),
-        evm_rpc_id: Some("7hfb6-caaaa-aaaar-qadga-cai".parse().unwrap()),
+        evm_rpc_id: EVM_RPC_ID_PRODUCTION,
         ckerc20_tokens,
     };
 
@@ -1100,7 +1102,7 @@ fn state_equivalence() {
     assert_ne!(
         Ok(()),
         state.is_equivalent_to(&State {
-            ethereum_block_height: BlockTag::Latest,
+            ethereum_block_height: CandidBlockTag::Latest,
             ..state.clone()
         }),
         "changing essential fields should break equivalence",
@@ -1287,10 +1289,10 @@ mod eth_balance {
     use crate::numeric::{
         BlockNumber, GasAmount, LedgerBurnIndex, TransactionNonce, Wei, WeiPerGas,
     };
-    use crate::state::audit::{apply_state_transition, EventType};
+    use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::checked_sub;
     use crate::state::tests::{initial_state, received_eth_event};
-    use crate::state::transactions::{create_transaction, EthWithdrawalRequest, WithdrawalRequest};
+    use crate::state::transactions::{EthWithdrawalRequest, WithdrawalRequest, create_transaction};
     use crate::state::{EthBalance, State};
     use crate::tx::{Eip1559Signature, SignedEip1559TransactionRequest};
     use maplit::btreemap;
@@ -1662,7 +1664,7 @@ mod eth_balance {
 mod erc20_balance {
     use crate::eth_logs::{ReceivedErc20Event, ReceivedEvent};
     use crate::state::audit::EventType::AcceptedErc20WithdrawalRequest;
-    use crate::state::audit::{apply_state_transition, EventType};
+    use crate::state::audit::{EventType, apply_state_transition};
     use crate::state::tests::{
         checked_sub, erc20_withdrawal_request, initial_erc20_state, received_erc20_event,
         received_eth_event,
@@ -1678,9 +1680,11 @@ mod erc20_balance {
         let unsupported_erc20_address: Address = "0x6b175474e89094c44da98b954eedeac495271d0f"
             .parse()
             .unwrap();
-        assert!(!state
-            .ckerc20_tokens
-            .contains_alt(&unsupported_erc20_address));
+        assert!(
+            !state
+                .ckerc20_tokens
+                .contains_alt(&unsupported_erc20_address)
+        );
 
         let deposit_event = ReceivedErc20Event {
             erc20_contract_address: unsupported_erc20_address,
@@ -1703,9 +1707,11 @@ mod erc20_balance {
         let unsupported_erc20_address: Address = "0x6b175474e89094c44da98b954eedeac495271d0f"
             .parse()
             .unwrap();
-        assert!(!state
-            .ckerc20_tokens
-            .contains_alt(&unsupported_erc20_address));
+        assert!(
+            !state
+                .ckerc20_tokens
+                .contains_alt(&unsupported_erc20_address)
+        );
         apply_state_transition(
             &mut state,
             &EventType::AcceptedErc20Deposit(received_erc20_event()),
@@ -1811,13 +1817,15 @@ fn erc20_withdrawal_request() -> Erc20WithdrawalRequest {
 }
 
 fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc20Value> {
-    assert!(rhs
-                .balance_by_erc20_contract
-                .keys()
-                .all(|rhs_erc20_contract| {
-                    lhs.balance_by_erc20_contract
-                        .contains_key(rhs_erc20_contract)
-                }), "BUG: Cannot subtract rhs {:?} to lhs {:?} since some ERC-20 contracts are missing in the lhs", rhs, lhs);
+    assert!(
+        rhs.balance_by_erc20_contract
+            .keys()
+            .all(|rhs_erc20_contract| {
+                lhs.balance_by_erc20_contract
+                    .contains_key(rhs_erc20_contract)
+            }),
+        "BUG: Cannot subtract rhs {rhs:?} to lhs {lhs:?} since some ERC-20 contracts are missing in the lhs"
+    );
     let mut result = lhs.balance_by_erc20_contract.clone();
     for (erc20_contract, rhs_value) in rhs.balance_by_erc20_contract.into_iter() {
         match lhs.balance_by_erc20_contract.get(&erc20_contract).unwrap() {
@@ -1828,8 +1836,7 @@ fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc2
                 result.insert(erc20_contract, lhs_value.checked_sub(rhs_value).unwrap());
             }
             lhs_value => panic!(
-                "BUG: Cannot subtract rhs {:?} to lhs {:?} since it would underflow",
-                rhs_value, lhs_value
+                "BUG: Cannot subtract rhs {rhs_value:?} to lhs {lhs_value:?} since it would underflow"
             ),
         }
     }

@@ -19,7 +19,6 @@ use crate::{
     ingress::*,
     player::{Player, ReplayResult},
 };
-use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::{registry::subnet::v1::InitialNiDkgTranscriptRecord, types::v1 as pb};
@@ -61,6 +60,7 @@ mod validator;
 ///             .to_string(),
 ///         start_height: 0,
 ///     })),
+///     skip_prompts: true,
 /// };
 /// // Once the arguments are set well, the local store and spool directories are populated;
 /// // replay function could be called as follows:
@@ -78,7 +78,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             std::process::exit(1);
         }));
         let mut cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {
-            println!("Failed to load config:\n  {}", err);
+            println!("Failed to load config:\n  {err}");
             std::process::exit(1);
         });
 
@@ -100,10 +100,10 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 
         let target_height = args.replay_until_height;
         if let Some(h) = target_height {
-            let question = format!("The checkpoint created at height {} ", h)
+            let question = format!("The checkpoint created at height {h} ")
                 + "cannot be used for deterministic state computation if it is not a CUP height.\n"
                 + "Continue?";
-            if !consent_given(&question) {
+            if !args.skip_prompts && !consent_given(&question) {
                 return;
             }
         }
@@ -121,22 +121,13 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 cmd.start_height,
             )
             .with_replay_target_height(target_height);
-            *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
+            *res_clone.borrow_mut() = player.restore_from_backup(cmd.start_height + 1);
             return;
         }
 
         {
             let _enter_guard = rt.enter();
-            let player = match (subcmd.as_ref(), target_height) {
-                (Some(_), Some(_)) => {
-                    panic!(
-                    "Target height cannot be used with any sub-command in subnet-recovery mode."
-                );
-                }
-                (_, target_height) => {
-                    Player::new(cfg, subnet_id).with_replay_target_height(target_height)
-                }
-            };
+            let player = Player::new(cfg, subnet_id).with_replay_target_height(target_height);
 
             if let Some(SubCommand::GetRecoveryCup(cmd)) = subcmd {
                 cmd_get_recovery_cup(&player, cmd).unwrap();
@@ -144,15 +135,10 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
 
             let extra = move |player: &Player, time| -> Vec<IngressWithPrinter> {
-                // Use a dummy URL here because we don't send any outgoing ingress.
-                // The agent is only used to construct ingress messages.
-                let agent = &Agent::new(
-                    url::Url::parse("http://localhost").unwrap(),
-                    Sender::PrincipalId(canister_caller_id.into()),
-                );
+                let agent = &agent_with_principal_as_sender(&canister_caller_id.get()).unwrap();
                 match subcmd {
-                    Some(SubCommand::AddAndBlessReplicaVersion(cmd)) => {
-                        cmd_add_and_bless_replica_version(agent, player, cmd, time)
+                    Some(SubCommand::UpgradeSubnetToReplicaVersion(cmd)) => {
+                        cmd_upgrade_subnet_to_replica_version(agent, player, cmd, time)
                             .unwrap()
                             .into_iter()
                             .map(|ingress| ingress.into())
@@ -207,15 +193,15 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
     });
-    let ret = result.borrow().clone();
-    ret
+
+    result.borrow().clone()
 }
 
 /// Prints a question to the user and returns `true`
 /// if the user replied with a yes.
 pub fn consent_given(question: &str) -> bool {
-    use std::io::{stdin, stdout, Write};
-    println!("{} [Y/n] ", question);
+    use std::io::{Write, stdin, stdout};
+    println!("{question} [Y/n] ");
     let _ = stdout().flush();
     let mut s = String::new();
     stdin().read_line(&mut s).expect("Couldn't read user input");
@@ -223,27 +209,29 @@ pub fn consent_given(question: &str) -> bool {
 }
 
 // Creates a recovery CUP by using the latest CUP and overriding the height and
-// the state hash.
+// the state hash, intended to be used in NNS recovery on same nodes.
 fn cmd_get_recovery_cup(
     player: &crate::player::Player,
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
-    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
+    use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_types::{consensus::HasHeight, crypto::threshold_sig::ni_dkg::NiDkgTag};
 
     let context_time = ic_types::time::current_time();
     let time = context_time + std::time::Duration::from_secs(60);
-    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{}", err))?;
+    let state_hash = hex::decode(&cmd.state_hash).map_err(|err| format!("{err}"))?;
     let cup = player.get_highest_catch_up_package();
     let payload = cup.content.block.as_ref().payload.as_ref();
     let summary = payload.as_summary();
     let low_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::LowThreshold)
+        .expect("No current low threshold transcript available")
         .clone();
     let high_threshold_transcript = summary
         .dkg
         .current_transcript(&NiDkgTag::HighThreshold)
+        .expect("No current high threshold transcript available")
         .clone();
     let initial_ni_dkg_transcript_low_threshold =
         Some(InitialNiDkgTranscriptRecord::from(low_threshold_transcript));
@@ -257,16 +245,12 @@ fn cmd_get_recovery_cup(
         height: cmd.height,
         time: time.as_nanos_since_unix_epoch(),
         state_hash,
-        registry_store_uri: Some(RegistryStoreUri {
-            uri: cmd.registry_store_uri.clone().unwrap_or_default(),
-            hash: cmd.registry_store_sha256.clone().unwrap_or_default(),
-            registry_version: registry_version.get(),
-        }),
+        registry_store_uri: None,
         ecdsa_initializations: vec![],
         chain_key_initializations: vec![],
     };
 
-    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup = ic_consensus_cup_utils::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,

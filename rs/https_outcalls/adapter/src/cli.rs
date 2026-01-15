@@ -2,10 +2,8 @@
 // Here we can crash as we cannot proceed with an invalid config.
 #![allow(clippy::expect_used)]
 
-use crate::config::Config;
 use clap::Parser;
-use http::Uri;
-use slog::Level;
+use ic_https_outcalls_adapter::Config;
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -15,8 +13,6 @@ pub enum CliError {
     Io(io::Error),
     #[error("An error occurred while deserialized the provided configuration: {0}")]
     Deserialize(String),
-    #[error("An error occurred while validating the provided configuration: {0}")]
-    Validation(String),
 }
 
 /// This struct is use to provide a command line interface to the adapter.
@@ -25,43 +21,15 @@ pub enum CliError {
 pub struct Cli {
     /// This field contains the path to the config file.
     pub config: PathBuf,
-
-    #[clap(short, long)]
-    /// This field represents if the adapter should run in verbose.
-    pub verbose: bool,
 }
 
 impl Cli {
-    /// Gets the log filter level by checking the verbose field.
-    pub fn get_logging_level(&self) -> Level {
-        if self.verbose {
-            Level::Debug
-        } else {
-            Level::Info
-        }
-    }
-
     /// Loads the config from the provided `config` argument.
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        let config: Config =
-            serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
-        // Validate proxy URL.
-        // Check for general validation errors.
-        let uri = &config
-            .socks_proxy
-            .parse::<Uri>()
-            .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
-        // scheme, host, port should be present. 'socks5://someproxy.com:80'
-        if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
-            return Err(CliError::Validation(
-                "Make sure socks proxy url contains (scheme,host,port)".to_string(),
-            ));
-        }
-
-        Ok(config)
+        serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))
     }
 }
 
@@ -74,30 +42,11 @@ pub mod test {
     use std::str::FromStr;
     use tempfile::NamedTempFile;
 
-    /// This function tests the `Cli::get_logging_level()` function.
-    #[test]
-    fn test_cli_get_logging_level() {
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: false,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Info);
-
-        let cli = Cli {
-            config: PathBuf::new(),
-            verbose: true,
-        };
-
-        assert_eq!(cli.get_logging_level(), Level::Debug);
-    }
-
     // This function tests opening a config file that does not exist.
     #[test]
     fn test_cli_get_config_error_opening_file() {
         let cli = Cli {
             config: PathBuf::from_str("/tmp/http-adapter-test.json").expect("Bad file path string"),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -111,12 +60,11 @@ pub mod test {
         let json = r#"{asdf"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         assert!(result.is_err());
@@ -128,96 +76,17 @@ pub mod test {
         assert!(matches);
     }
 
-    // This function test a bad proxy URL. Proxy is missing socks5:// scheme and is therefore an invalid URL
-    #[test]
-    fn test_cli_get_config_bad_socks() {
-        let json = r#"{   
-            "socks_proxy": "socks5.testnet.dfinity.network:1080"
-        }
-        "#;
-
-        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
-
-        // should use the default values
-        let cli = Cli {
-            config: tmpfile.path().to_owned(),
-            verbose: true,
-        };
-        let result = cli.get_config();
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let matches = match error {
-            CliError::Validation(message) => message.contains("Make sure socks proxy url contains"),
-            _ => false,
-        };
-        assert!(matches);
-    }
-
-    // This function test a bad proxy URL. Proxy is missing port and is therefore an invalid socks URL
-    #[test]
-    fn test_cli_get_config_bad_socks2() {
-        let json = r#"{   
-            "socks_proxy": "socks5://socks5.testnet.dfinity.network"
-        }
-        "#;
-
-        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
-
-        // should use the default values
-        let cli = Cli {
-            config: tmpfile.path().to_owned(),
-            verbose: true,
-        };
-        let result = cli.get_config();
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let matches = match error {
-            CliError::Validation(message) => message.contains("Make sure socks proxy url contains"),
-            _ => false,
-        };
-        assert!(matches);
-    }
-
-    // This function test a bad proxy URL. Proxy has badly formed scheme and is an invalid socks URL
-    #[test]
-    fn test_cli_get_config_bad_socks3() {
-        let json = r#"{   
-            "socks_proxy": "socks5:/socks5.testnet.dfinity.network"
-        }
-        "#;
-
-        let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
-
-        // should use the default values
-        let cli = Cli {
-            config: tmpfile.path().to_owned(),
-            verbose: true,
-        };
-        let result = cli.get_config();
-        assert!(result.is_err());
-        let error = result.unwrap_err();
-        let matches = match error {
-            CliError::Validation(message) => message.contains("Failed to parse socks_proxy url"),
-            _ => false,
-        };
-        assert!(matches);
-    }
-
     // This function tests an empty json file. In this case there should be fallback to the default values.
     #[test]
     fn test_cli_get_config_empty_json() {
         let json = r#"{}"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -233,11 +102,10 @@ pub mod test {
         }"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -259,12 +127,11 @@ pub mod test {
         "#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -294,17 +161,15 @@ pub mod test {
             "logger": {
                 "level": "info",
                 "format": "json"
-            },
-            "socks_proxy": "socks5://notaproxy.com:1080" 
+            }
         }       
         "#;
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
             config: tmpfile.path().to_owned(),
-            verbose: true,
         };
         let result = cli.get_config();
         let config = result.unwrap();
@@ -317,7 +182,6 @@ pub mod test {
                 format: ic_config::logger::LogFormat::Json,
                 ..Default::default()
             },
-            socks_proxy: "socks5://notaproxy.com:1080".to_string(),
         };
         assert_eq!(config, expected_config);
     }

@@ -16,7 +16,6 @@ ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../../../sha2" }
 ic-types = { path = "../../../../../types/types" }
-lazy_static = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }

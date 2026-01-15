@@ -152,3 +152,28 @@ def test_update_with():
     assert events[6] in [da1, da2, dr1]
     assert events[4] != events[5] and events[5] != events[6] and events[4] != events[6]
     assert events[7] == dr2
+
+
+def test_update_with_vuln_unchanged():
+    v = Vulnerability("vid", "vname", "vdesc", 8)
+    sf1 = SlackFinding("repo", "scanner", "did", "dvers", ["proj1", "proj2"])
+    info_by_project = {
+        "proj1": SlackProjectInfo("proj1", {"c1"}, {}),
+        "proj2": SlackProjectInfo("proj1", {"c2"}, {}),
+    }
+    svi = SlackVulnerabilityInfo(
+        v,
+        {sf1.id(): sf1},
+        {
+            "c1": SlackVulnerabilityMessageInfo("c1", "msgid1", {"low-risk-psec"}),
+            "c2": SlackVulnerabilityMessageInfo("c2", "msgid2", {"high-risk-psec"}),
+        },
+    )
+    f1 = Finding("repo", "scanner", Dependency("did", "dname", "dvers"), [v], [], ["proj1", "proj2"], [])
+    vi = VulnerabilityInfo(v, {f1.id(): f1})
+
+    events = svi.update_with(vi, info_by_project, "repo", "scanner")
+
+    assert len(events) == 2
+    assert events[0] == SlackVulnerabilityEvent.vuln_unchanged("vid", "c1")
+    assert events[1] == SlackVulnerabilityEvent.vuln_unchanged("vid", "c2")

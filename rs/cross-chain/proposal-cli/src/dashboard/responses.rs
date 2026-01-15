@@ -42,3 +42,15 @@ impl CanisterUpgradeInfo {
             .expect("Failed to parse proposal id into a u64")
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct ProposalInfo {
+    pub proposal_id: u64,
+    pub payload: ProposalPayloadInfo,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub struct ProposalPayloadInfo {
+    pub canister_id: String,
+    pub install_mode_name: String,
+}

@@ -1,4 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:defs.bzl", "rust_ic_test")
 load("ledger_canisters.bzl", "LEDGER_CANISTER_DATA", "LEDGER_CANISTER_RUSTC_ENV", "rust_ledger_canister")
 
@@ -8,7 +10,6 @@ package(default_visibility = ["//visibility:public"])
     rust_library(
         name = "ledger" + name_suffix,
         srcs = [
-            "src/dfn_runtime.rs",
             "src/lib.rs",
             "src/tests.rs",
         ],
@@ -19,7 +20,6 @@ package(default_visibility = ["//visibility:public"])
         crate_name = "ledger_canister",
         proc_macro_deps = [
             # Keep sorted.
-            "@crate_index//:async-trait",
         ],
         rustc_env = {
             "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
@@ -35,13 +35,14 @@ package(default_visibility = ["//visibility:public"])
             "//rs/ledger_suite/icp:icp_ledger",
             "//rs/ledger_suite/icrc1",
             "//rs/limits",
-            "//rs/rust_canisters/dfn_candid",
-            "//rs/rust_canisters/dfn_core",
             "//rs/types/base_types",
             "@crate_index//:candid",
+            "@crate_index//:hex",
+            "@crate_index//:ic-cdk",
             "@crate_index//:ic-stable-structures",
             "@crate_index//:intmap",
             "@crate_index//:lazy_static",
+            "@crate_index//:minicbor",
             "@crate_index//:num-traits",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
@@ -53,6 +54,10 @@ package(default_visibility = ["//visibility:public"])
         (
             "_next_version",
             ["next-ledger-version"],
+        ),
+        (
+            "_prev_version",
+            ["prev-ledger-version"],
         ),
     ]
 ]
@@ -69,6 +74,7 @@ rust_test(
     rustc_env = {
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(execpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm.wasm.gz)",
     },
+    deps = ["@crate_index//:proptest"],
 )
 
 rust_ledger_canister(name = "ledger-canister-wasm")
@@ -79,13 +85,13 @@ rust_ledger_canister(
 )
 
 rust_ledger_canister(
-    name = "ledger-canister-wasm-notify-method",
-    crate_features = ["notify-method"],
+    name = "ledger-canister-wasm-next-version",
+    extra_deps = [":ledger_next_version"],
 )
 
 rust_ledger_canister(
-    name = "ledger-canister-wasm-next-version",
-    extra_deps = [":ledger_next_version"],
+    name = "ledger-canister-wasm-prev-version",
+    extra_deps = [":ledger_prev_version"],
 )
 
 rust_test(
@@ -102,40 +108,42 @@ rust_test(
 
 rust_ic_test(
     name = "ledger_canister_test",
-    timeout = "long",
+    timeout = "eternal",
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
         ":ledger-canister-wasm-next-version",
-        "@mainnet_icp_ledger_canister//file",
+        ":ledger-canister-wasm-prev-version",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
-        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
+        "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
     },
-    flaky = True,
     tags = ["cpu:4"],
     deps = [
         # Keep sorted.
         ":ledger",
+        "//packages/ic-error-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-        "//rs/rust_canisters/dfn_candid",
+        "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
-        "//rs/types/error_types",
         "@crate_index//:candid",
         "@crate_index//:hex",
         "@crate_index//:ic-agent",
@@ -154,4 +162,38 @@ sh_binary(
         "//rs/ledger_suite/icp:ledger.did",
     ],
     visibility = ["//visibility:public"],
+)
+
+rust_canbench(
+    name = "ledger_canbench",
+    srcs = glob(["src/**/*.rs"]),
+    add_test = True,
+    crate_features = ["canbench-rs"],
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    results_file = "canbench_results/canbench.yml",
+    deps = [
+        # Keep sorted.
+        ":ledger",
+        "//packages/ic-http-types",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ledger_suite/common/ledger_canister_core",
+        "//rs/ledger_suite/common/ledger_core",
+        "//rs/ledger_suite/icp:icp_ledger",
+        "//rs/ledger_suite/icrc1",
+        "//rs/rust_canisters/canister_log",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
+        "//rs/types/base_types",
+        "@crate_index//:canbench-rs",
+        "@crate_index//:candid",
+        "@crate_index//:ciborium",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde_bytes",
+    ],
 )

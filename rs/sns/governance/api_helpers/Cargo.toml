@@ -1,0 +1,17 @@
+[package]
+name = "ic-sns-governance-api-helpers"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+ic-nervous-system-common = { path = "../../../nervous_system/common" }
+ic-sns-governance-api = { path = "../api" }
+maplit = "1.0.2"

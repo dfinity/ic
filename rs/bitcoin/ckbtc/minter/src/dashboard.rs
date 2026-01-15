@@ -1,7 +1,8 @@
+use crate::Network;
 use crate::address;
 use crate::state;
 use crate::tx::DisplayAmount;
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Txid;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
 use std::io::Write;
@@ -128,6 +129,20 @@ pub fn build_dashboard(account_to_utxos_start: u64) -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
+                <h3>Mint status unknown utxos</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Height</th>
+                            <th>Value (BTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
                 <h3>Quarantined utxos</h3>
                 <table>
                     <thead>
@@ -182,6 +197,7 @@ pub fn build_dashboard(account_to_utxos_start: u64) -> Vec<u8> {
         build_submitted_transactions(s),
         build_finalized_requests(s),
         build_unconfirmed_change(s),
+        build_mint_unknown_utxos(s),
         build_quarantined_utxos(s),
         build_ignored_utxos(s),
         build_account_to_utxos_table(s, account_to_utxos_start, DEFAULT_PAGE_SIZE),
@@ -210,13 +226,12 @@ pub fn build_account_to_utxos_table(s: &CkBtcMinterState, start: u64, page_size:
                     page_count += 1;
                     if start <= line_count && line_count < start + page_size {
                         // Current page, do not show href link, only show page number.
-                        write!(pagination, "{}&nbsp;", page_count).unwrap();
+                        write!(pagination, "{page_count}&nbsp;").unwrap();
                     } else {
                         // Otherwise, show href link and page number.
                         write!(
                             pagination,
-                            "<a href='?account_to_utxos_start={}#account_to_utxos'>{}</a>&nbsp;",
-                            next_page_start, page_count
+                            "<a href='?account_to_utxos_start={next_page_start}#account_to_utxos'>{page_count}</a>&nbsp;"
                         )
                         .unwrap();
                     }
@@ -261,7 +276,7 @@ pub fn build_account_to_utxos_table(s: &CkBtcMinterState, start: u64, page_size:
 
 pub fn build_metadata(s: &CkBtcMinterState) -> String {
     let main_account = Account {
-        owner: ic_cdk::id(),
+        owner: ic_cdk::api::canister_self(),
         subaccount: None,
     };
     format!(
@@ -342,7 +357,7 @@ pub fn build_pending_request_tx(s: &CkBtcMinterState) -> String {
 pub fn build_requests_in_flight_tx(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
         for (id, status) in &s.requests_in_flight {
-            write!(buf, "<tr><td>{}</td>", id).unwrap();
+            write!(buf, "<tr><td>{id}</td>").unwrap();
             match status {
                 state::InFlightStatus::Signing => {
                     write!(buf, "<td>Signing...</td>").unwrap();
@@ -376,8 +391,8 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     )
                     .unwrap();
 
-                    write!(buf, "<td rowspan='{}'>", rowspan).unwrap();
-                    for req in &tx.requests {
+                    write!(buf, "<td rowspan='{rowspan}'>").unwrap();
+                    for req in tx.requests.clone().into_tx_request_iter() {
                         write!(
                             buf,
                             "<table>
@@ -386,10 +401,10 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                             <tr><th>Address</th><td><code>{}</code></td></tr>
                             <tr><th>Received at</th><td>{}</td></tr>
                             </table>",
-                            req.block_index,
-                            DisplayAmount(req.amount),
-                            req.address.display(s.btc_network),
-                            req.received_at,
+                            req.block_index(),
+                            DisplayAmount(req.amount()),
+                            req.address().display(s.btc_network),
+                            req.received_at(),
                         )
                         .unwrap();
                     }
@@ -418,9 +433,9 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
                         <td>{}</td>
                         <td><code>{}</code></td>
                         <td>{}</td>",
-                req.request.block_index,
-                req.request.address.display(s.btc_network),
-                DisplayAmount(req.request.amount),
+                req.request.block_index(),
+                req.request.address().display(s.btc_network),
+                DisplayAmount(req.request.amount()),
             )
             .unwrap();
             match &req.state {
@@ -435,6 +450,27 @@ pub fn build_finalized_requests(s: &CkBtcMinterState) -> String {
                 .unwrap(),
             }
             writeln!(buf, "</tr>").unwrap();
+        }
+    })
+}
+
+pub fn build_mint_unknown_utxos(s: &CkBtcMinterState) -> String {
+    with_utf8_buffer(|buf| {
+        for utxo in s.mint_status_unknown_utxos() {
+            writeln!(
+                buf,
+                "<tr>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                </tr>",
+                txid_link(s, &utxo.outpoint.txid),
+                utxo.outpoint.vout,
+                utxo.height,
+                DisplayAmount(utxo.value)
+            )
+            .unwrap()
         }
     })
 }
@@ -508,16 +544,16 @@ pub fn build_unconfirmed_change(s: &CkBtcMinterState) -> String {
 
 pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.update_balance_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.update_balance_accounts {
+            writeln!(buf, "<li>{account}</li>").unwrap();
         }
     })
 }
 
 pub fn build_retrieve_btc_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
-        for p in &s.retrieve_btc_principals {
-            writeln!(buf, "<li>{}</li>", p).unwrap();
+        for account in &s.retrieve_btc_accounts {
+            writeln!(buf, "<li>{account}</li>").unwrap();
         }
     })
 }
@@ -530,11 +566,10 @@ fn txid_link_on(txid: &Txid, btc_network: Network) -> String {
     let net_prefix = if btc_network == Network::Mainnet {
         ""
     } else {
-        "testnet/"
+        "testnet4/"
     };
     format!(
-        "<a target='_blank' href='https://blockstream.info/{0}tx/{1}'><code>{1}</code></a>",
-        net_prefix, txid,
+        "<a target='_blank' href='https://mempool.space/{net_prefix}tx/{txid}'><code>{txid}</code></a>",
     )
 }
 
@@ -542,17 +577,25 @@ fn txid_link_on(txid: &Txid, btc_network: Network) -> String {
 fn test_txid_link() {
     assert_eq!(
         txid_link_on(
-            &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
+            &[
+                242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
+                165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
+            ]
+            .into(),
             Network::Mainnet
         ),
-        "<a target='_blank' href='https://blockstream.info/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
+        "<a target='_blank' href='https://mempool.space/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );
 
     assert_eq!(
         txid_link_on(
-            &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
+            &[
+                242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
+                165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
+            ]
+            .into(),
             Network::Testnet
         ),
-        "<a target='_blank' href='https://blockstream.info/testnet/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
+        "<a target='_blank' href='https://mempool.space/testnet4/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );
 }

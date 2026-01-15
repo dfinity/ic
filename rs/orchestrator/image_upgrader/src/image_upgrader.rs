@@ -1,22 +1,21 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{error, info, warn, ReplicaLogger};
-use std::future::Future;
+use ic_logger::{ReplicaLogger, error, info, warn};
 use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
-    process::exit,
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::sync::watch::Receiver;
-use tokio::time::error::Elapsed;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
+
+/// Used to signal that the system is rebooting.
+pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -84,9 +83,9 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send>:
-    Send + Sync
-{
+pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
+    type UpgradeType;
+
     /// Return the currently prepared version, if there is one. Default is None.
     /// A version `v` is considered to be prepared if its release package was successfully
     /// downloaded and unpacked after a call to `prepare_upgrade(v)`.
@@ -112,6 +111,9 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         &self,
         version: &V,
     ) -> UpgradeResult<(Vec<String>, Option<String>)>;
+
+    /// Runs the disk encryption key exchange process if SEV is active. NOOP otherwise.
+    async fn maybe_exchange_disk_encryption_key(&mut self) -> UpgradeResult<()>;
 
     /// Calls a corresponding script to "confirm" that the base OS could boot
     /// successfully. Without a confirmation the image will be reverted on the next
@@ -141,8 +143,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         let url_count = release_package_urls.len();
         if url_count == 0 {
             return Err(UpgradeError::GenericError(format!(
-                "No download URLs are provided for version {:?}",
-                version
+                "No download URLs are provided for version {version:?}"
             )));
         }
 
@@ -155,10 +156,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
         // We will always either set `error`, or return `Ok` from this loop.
         let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
-            let req = format!(
-                "Request to download image {:?} from {}",
-                version, release_package_url
-            );
+            let req = format!("Request to download image {version:?} from {release_package_url}");
             let file_downloader =
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();
@@ -207,20 +205,22 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             .output()
             .await
             .map_err(|e| UpgradeError::file_command_error(e, &c))?;
-        if out.status.success() {
-            self.set_prepared_version(Some(version.clone()));
-            Ok(())
-        } else {
+
+        if !out.status.success() {
             warn!(self.log(), "upgrade-install has failed");
-            Err(UpgradeError::GenericError(
+            return Err(UpgradeError::GenericError(
                 "upgrade-install failed".to_string(),
-            ))
+            ));
         }
+
+        self.maybe_exchange_disk_encryption_key().await?;
+        self.set_prepared_version(Some(version.clone()));
+        Ok(())
     }
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -261,7 +261,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            exit(42);
+            Ok(Rebooting)
         }
     }
 
@@ -308,29 +308,5 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<R>;
-
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
-    /// For every execution of `check_for_upgrade()` the given handler is called with
-    /// the result returned by the check.
-    async fn upgrade_loop<F, Fut>(
-        &mut self,
-        mut exit_signal: Receiver<bool>,
-        interval: Duration,
-        timeout: Duration,
-        handler: F,
-    ) where
-        F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
-        Fut: Future<Output = ()> + Send,
-    {
-        while !*exit_signal.borrow() {
-            let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-            handler(r).await;
-            tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
-                _ = exit_signal.changed() => {}
-            };
-        }
-    }
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }

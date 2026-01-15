@@ -7,11 +7,11 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER5_KEYPAIR,
 };
 use ic_sns_governance::pb::v1::{
-    proposal::Action, Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
-    Proposal,
+    Motion, NervousSystemParameters, NeuronPermissionList, NeuronPermissionType, Proposal,
+    proposal::Action,
 };
 use ic_sns_test_utils::{
-    itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder},
+    itest_helpers::{SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet},
     now_seconds,
 };
 

@@ -1,9 +1,12 @@
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
+use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
+use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{
     governance::{Environment, HeapGrowthPotential, RngError},
-    pb::v1::{ExecuteNnsFunction, GovernanceError},
+    pb::v1::GovernanceError,
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_sns_root::GetSnsCanistersSummaryRequest;
 use ic_sns_swap::pb::v1::GetStateRequest;
@@ -11,6 +14,7 @@ use ic_sns_wasm::pb::v1::{DeployNewSnsRequest, ListDeployedSnsesRequest};
 use proptest::prelude::RngCore;
 use rand::rngs::StdRng;
 use rand_chacha::ChaCha20Rng;
+use std::time::Duration;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -60,12 +64,18 @@ pub struct EnvironmentFixture {
 
 impl EnvironmentFixture {
     pub fn new(state: EnvironmentFixtureState) -> Self {
-        EnvironmentFixture {
+        let ret = EnvironmentFixture {
             environment_fixture_state: Arc::new(Mutex::new(state)),
-        }
+        };
+        set_time_for_timers(Duration::from_secs(
+            ret.environment_fixture_state.try_lock().unwrap().now,
+        ));
+
+        ret
     }
 
-    pub fn advance_time_by(&mut self, delta_seconds: u64) {
+    pub fn advance_time_by(&self, delta_seconds: u64) {
+        advance_time_for_timers(Duration::from_secs(delta_seconds));
         self.environment_fixture_state.try_lock().unwrap().now += delta_seconds
     }
 
@@ -146,54 +156,10 @@ impl Environment for EnvironmentFixture {
         self.environment_fixture_state.try_lock().unwrap().now
     }
 
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        match self
-            .environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .as_mut()
-        {
-            Some(rand) => Ok(rand.next_u64()),
-            None => Err(RngError::RngNotInitialized),
-        }
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        match self
-            .environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .as_mut()
-        {
-            Some(rand) => {
-                let mut bytes = [0u8; 32];
-                rand.fill_bytes(&mut bytes);
-                Ok(bytes)
-            }
-            // Kick the thing
-            None => Err(RngError::RngNotInitialized),
-        }
-    }
-
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        unimplemented!()
-    }
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .as_ref()
-            .map(|r| r.get_seed())
-    }
-
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
@@ -238,5 +204,51 @@ impl Environment for EnvironmentFixture {
             Ok(encoded_canister_reply) => encoded_canister_reply,
             Err(candid_error) => panic!("call_canister failed due encoding. Err: {candid_error:?}"),
         }
+    }
+}
+
+impl RandomnessGenerator for EnvironmentFixture {
+    fn random_u64(&mut self) -> Result<u64, RngError> {
+        match self
+            .environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_mut()
+        {
+            Some(rand) => Ok(rand.next_u64()),
+            None => Err(RngError::RngNotInitialized),
+        }
+    }
+
+    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
+        match self
+            .environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_mut()
+        {
+            Some(rand) => {
+                let mut bytes = [0u8; 32];
+                rand.fill_bytes(&mut bytes);
+                Ok(bytes)
+            }
+
+            None => Err(RngError::RngNotInitialized),
+        }
+    }
+
+    fn seed_rng(&mut self, _seed: [u8; 32]) {
+        unimplemented!()
+    }
+
+    fn get_rng_seed(&self) -> Option<[u8; 32]> {
+        self.environment_fixture_state
+            .try_lock()
+            .unwrap()
+            .rng
+            .as_ref()
+            .map(|r| r.get_seed())
     }
 }

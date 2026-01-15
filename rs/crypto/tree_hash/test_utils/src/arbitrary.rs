@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, MixedHashTree as T};
+use ic_crypto_tree_hash::{Digest, FlatMap, Label, LabeledTree, MixedHashTree as T, flatmap};
 use proptest::collection::btree_map;
 use proptest::prelude::*;
 
@@ -18,11 +18,11 @@ fn fix_labels(mut t: T) -> T {
     fn relabel(t: &mut T, id: &mut u64) {
         match t {
             T::Empty | T::Leaf(_) | T::Pruned(_) => (),
-            T::Fork(ref mut lr) => {
+            T::Fork(lr) => {
                 relabel(&mut lr.0, id);
                 relabel(&mut lr.1, id);
             }
-            T::Labeled(ref mut l, ref mut t) => {
+            T::Labeled(l, t) => {
                 prepend(l, *id);
                 *id += 1;
                 relabel(t, id);
@@ -63,7 +63,7 @@ pub fn arbitrary_well_formed_mixed_hash_tree() -> impl Strategy<Value = T> {
 pub fn arbitrary_well_formed_mixed_hash_tree_with_params(
     max_depth: u32,
     expected_size: u32,
-    expected_iterms_per_collection: u32,
+    expected_items_per_collection: u32,
 ) -> impl Strategy<Value = T> {
     let labeled_leaf = (
         ".*",
@@ -73,7 +73,7 @@ pub fn arbitrary_well_formed_mixed_hash_tree_with_params(
     let tree = labeled_leaf.prop_recursive(
         max_depth,
         expected_size,
-        expected_iterms_per_collection,
+        expected_items_per_collection,
         |inner| {
             prop_oneof![
                 3 => (inner.clone(), inner.clone()).prop_map(|(l, r)| T::Fork(Box::new((l, r)))),

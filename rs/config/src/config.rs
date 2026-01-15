@@ -24,7 +24,7 @@ use crate::{
     tracing::Config as TracingConfig,
     transport::TransportConfig,
 };
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::PathBuf};
 
@@ -49,7 +49,7 @@ pub struct Config {
     // defaults to the value specified for `logger`.
     pub csp_vault_logger: LoggerConfig,
     pub message_routing: MessageRoutingConfig,
-    pub malicious_behaviour: MaliciousBehaviour,
+    pub malicious_behavior: MaliciousBehavior,
     pub firewall: ReplicaFirewallConfig,
     pub boundary_node_firewall: BoundaryNodeFirewallConfig,
     pub registration: RegistrationConfig,
@@ -77,7 +77,7 @@ pub struct ConfigOptional {
     pub orchestrator_logger: Option<LoggerConfig>,
     pub csp_vault_logger: Option<LoggerConfig>,
     pub message_routing: Option<MessageRoutingConfig>,
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
     pub firewall: Option<ReplicaFirewallConfig>,
     pub boundary_node_firewall: Option<BoundaryNodeFirewallConfig>,
     pub registration: Option<RegistrationConfig>,
@@ -110,7 +110,7 @@ impl Config {
             orchestrator_logger: logger.clone(),
             csp_vault_logger: logger,
             message_routing: MessageRoutingConfig::default(),
-            malicious_behaviour: MaliciousBehaviour::default(),
+            malicious_behavior: MaliciousBehavior::default(),
             firewall: ReplicaFirewallConfig::default(),
             boundary_node_firewall: BoundaryNodeFirewallConfig::default(),
             registration: RegistrationConfig::default(),
@@ -163,9 +163,7 @@ impl Config {
             orchestrator_logger,
             csp_vault_logger,
             message_routing: cfg.message_routing.unwrap_or(default.message_routing),
-            malicious_behaviour: cfg
-                .malicious_behaviour
-                .unwrap_or(default.malicious_behaviour),
+            malicious_behavior: cfg.malicious_behavior.unwrap_or(default.malicious_behavior),
             firewall: cfg.firewall.unwrap_or(default.firewall),
             boundary_node_firewall: cfg
                 .boundary_node_firewall
@@ -190,7 +188,7 @@ impl Config {
         let default_config = Config::new(tmpdir);
 
         Config::load_with_default(&config_source, default_config).unwrap_or_else(|err| {
-            eprintln!("Failed to load config:\n  {}", err);
+            eprintln!("Failed to load config:\n  {err}");
             std::process::exit(1);
         })
     }
@@ -234,8 +232,7 @@ mod tests {
         let result = json5::from_str::<Config>(&sample_config_without_csp_vault_type);
         assert!(
             result.is_ok(),
-            "JSON5 parsing failed with error: {:?}",
-            result
+            "JSON5 parsing failed with error: {result:?}"
         );
 
         let temp_dir = tempdir_deleted_at_end_of_scope().expect("Failed creating a temp file.");
@@ -247,8 +244,7 @@ mod tests {
         let result = Config::load_with_default(&source, default_config);
         assert!(
             result.is_ok(),
-            "load_with_default failed with error: {:?}",
-            result
+            "load_with_default failed with error: {result:?}"
         );
         // Check that `crypto_root` is from `SAMPLE_CONFIG`, not from `CryptoConfig::default()`.
         assert_eq!(

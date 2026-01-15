@@ -1,0 +1,122 @@
+name: Governance Unreleased Changelog Reminder
+
+on:
+  pull_request_target:
+    types:
+      - review_requested
+
+# This helps avoid duplicate reviews from this bot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  mainJob:
+    runs-on: ubuntu-latest
+    steps:
+      # IMPORTANT: we use `pull_request_target` so this can run on external PRs and have write permissions (to post a comment)
+      # However this means that no checkout step can be introduced, as that would expose a security vulnerability.
+      - uses: actions/github-script@v6
+        id: mainStep
+        # If the PR requires governance-team to approve, GitHub will force governance-team to
+        # be in requested_teams. Therefore, the following condition is always
+        # met when governance-team must approve. (Further filtering takes place in the
+        # script itself.)
+        if: contains(github.event.pull_request.requested_teams.*.name, 'governance-team')
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          retries: 3
+          script: |
+            const pullRequestNumber = context.payload.number;
+
+            // Skip reminder if we already reminded (to avoid spam).
+            const reviews = await github.rest.pulls.listReviews({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+            });
+            const alreadyRemindedGovernanceChecklist = reviews
+              .data
+              .some(review => review
+                .body
+                .includes("GOVERNANCE_CHECKLIST_REMINDER_DEDUP")
+              );
+            console.log("alreadyRemindedGovernanceChecklist = " + alreadyRemindedGovernanceChecklist);
+            if (alreadyRemindedGovernanceChecklist) {
+              return;
+            }
+
+            // Post a review to remind the author to update unreleased_changelog.md.
+            // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
+            console.log("Adding reminder to update unreleased_changelog.md...");
+            const reminderText = `
+
+              This pull request changes code owned by the Governance team. Therefore, make sure that
+              you have considered the following (for Governance-owned code):
+
+              1. Update \`unreleased_changelog.md\` (if there are behavior changes, even if they are
+                 non-breaking).
+
+              2. Are there BREAKING changes?
+
+              3. Is a data migration needed?
+
+              4. Security review?
+
+
+              # How to Satisfy This Automatic Review
+
+              1. Go to the bottom of the pull request page.
+
+              2. Look for where it says this bot is requesting changes.
+
+              3. Click the three dots to the right.
+
+              4. Select "Dismiss review".
+
+              5. In the text entry box, respond to each of the numbered items in the previous
+                 section, declare one of the following:
+
+                * Done.
+
+                * $REASON_WHY_NO_NEED. E.g. for \`unreleased_changelog.md\`, "No
+                canister behavior changes.", or for item 2, "Existing APIs
+                behave as before.".
+
+
+              # Brief Guide to "Externally Visible" Changes
+
+              "Externally visible behavior change" is very often due to some NEW canister API.
+
+              Changes to EXISTING APIs are more likely to be "breaking".
+
+              If these changes are breaking, make sure that clients know how to migrate, how to
+              maintain their continuity of operations.
+
+              If your changes are behind a feature flag, then, do NOT add entrie(s) to
+              \`unreleased_changelog.md\` in this PR! But rather, add entrie(s) later, in the PR
+              that enables these changes in production.
+
+
+              # Reference(s)
+
+              For a more comprehensive checklist, [see here][checklist].
+
+              [checklist]: https://docs.google.com/document/d/1YeeCzVDB3PmvCGvV0OqZpV-R5F0fMGahoTlmXaIjj_U/edit?tab=t.0#heading=h.thlqmyi5yk1
+
+              GOVERNANCE_CHECKLIST_REMINDER_DEDUP
+            `
+            .replace(/^ +/gm, '')
+            .trim();
+            await github.rest.pulls.createReview({
+              owner: "dfinity",
+              repo: "ic",
+              pull_number: pullRequestNumber,
+              body: reminderText,
+              // This is what forces the author to explicitly acknowledge.
+              event: "REQUEST_CHANGES",
+            });
+            console.log("Reminder was added successfully.");

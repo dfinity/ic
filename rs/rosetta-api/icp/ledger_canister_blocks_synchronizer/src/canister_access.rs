@@ -1,6 +1,5 @@
 #![allow(clippy::disallowed_types)]
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_agent::agent::http_transport::reqwest_transport::ReqwestTransport;
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{Agent, AgentError, NonceGenerator};
 use ic_ledger_core::block::EncodedBlock;
@@ -11,7 +10,8 @@ use on_wire::{FromWire, IntoWire};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tokio::task::{spawn, JoinHandle};
+use std::time::Duration;
+use tokio::task::{JoinHandle, spawn};
 use tracing::{debug, trace, warn};
 use url::Url;
 
@@ -43,16 +43,40 @@ pub struct CanisterAccess {
     >,
 }
 
-fn make_agent(url: Url) -> Result<Agent, AgentError> {
+pub async fn make_agent(
+    url: Url,
+    timeout: Option<Duration>,
+    root_key: Option<Vec<u8>>,
+) -> Result<Agent, AgentError> {
     let is_exchanges_testnet = url.host_str() == Some("exchanges.testnet.dfinity.network");
-    Agent::builder()
+
+    let http_client = match timeout {
+        Some(timeout) => reqwest::Client::builder()
+            .timeout(timeout)
+            .build()
+            .expect("failed to build http client"),
+        None => reqwest::Client::new(),
+    };
+
+    let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(ReqwestTransport::create(url)?)
+        .with_url(url)
+        .with_http_client(http_client)
         .with_nonce_generator(TimestampBlob::default())
         // The testnet has an old replica version and the query
         // verification wouldn't work so we disable it
         .with_verify_query_signatures(!is_exchanges_testnet)
-        .build()
+        .build()?;
+
+    match root_key {
+        Some(root_key) => agent.set_root_key(root_key),
+        None => {
+            warn!("Fetching the root key from the replica because it was not set");
+            agent.fetch_root_key().await?
+        }
+    };
+
+    Ok(agent)
 }
 
 impl CanisterAccess {
@@ -64,15 +88,7 @@ impl CanisterAccess {
         canister_id: CanisterId,
         root_key: Option<Vec<u8>>,
     ) -> Result<Self, AgentError> {
-        let agent = make_agent(url)?;
-
-        match root_key {
-            Some(root_key) => agent.set_root_key(root_key),
-            None => {
-                warn!("Fetching the root key from the replica because it was not set");
-                agent.fetch_root_key().await?
-            }
-        };
+        let agent = make_agent(url, Some(Duration::from_secs(10u64)), root_key).await?;
 
         Ok(Self {
             agent,
@@ -103,14 +119,14 @@ impl CanisterAccess {
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| format!("{}", e))?;
+            .map_err(|e| format!("{e}"))?;
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
     pub async fn query_tip(&self) -> Result<TipOfChainRes, String> {
         self.query("tip_of_chain_pb", TipOfChainRequest {})
             .await
-            .map_err(|e| format!("In tip: {}", e))
+            .map_err(|e| format!("In tip: {e}"))
     }
 
     pub async fn query_raw_block(
@@ -120,7 +136,7 @@ impl CanisterAccess {
         let BlockRes(b) = self
             .query("block_pb", BlockArg(height))
             .await
-            .map_err(|e| format!("In block: {}", e))?;
+            .map_err(|e| format!("In block: {e}"))?;
         match b {
             // block not found
             None => Ok(None),
@@ -131,7 +147,7 @@ impl CanisterAccess {
                 let BlockRes(b) = self
                     .query_canister(canister_id, "get_block_pb", BlockArg(height))
                     .await
-                    .map_err(|e| format!("In block: {}", e))?;
+                    .map_err(|e| format!("In block: {e}"))?;
                 // get_block() on archive node will never return Ok(Err(canister_id))
                 Ok(b.map(|x| x.unwrap()))
             }
@@ -150,13 +166,13 @@ impl CanisterAccess {
                 "get_blocks_pb",
                 GetBlocksArgs {
                     start,
-                    length: (end - start) as usize,
+                    length: (end - start),
                 },
             )
             .await
-            .map_err(|e| format!("In blocks: {}", e))?;
+            .map_err(|e| format!("In blocks: {e}"))?;
 
-        blocks.0.map_err(|e| format!("In blocks response: {}", e))
+        blocks.0.map_err(|e| format!("In blocks response: {e}"))
     }
 
     pub async fn clear_outstanding_queries(&self) {
@@ -177,13 +193,13 @@ impl CanisterAccess {
         let mut ongoing = self.ongoing_block_queries.lock().await;
         // clean up stale queries
         let a = ongoing.front().map(|(a, _, _)| *a);
-        if let Some(a) = a {
-            if a != start {
-                warn!("Requested for {} ignoring queries at {}.", start, a);
-                drop(ongoing);
-                self.clear_outstanding_queries().await;
-                return Err("Removed stale block queries".to_string());
-            }
+        if let Some(a) = a
+            && a != start
+        {
+            warn!("Requested for {} ignoring queries at {}.", start, a);
+            drop(ongoing);
+            self.clear_outstanding_queries().await;
+            return Err("Removed stale block queries".to_string());
         }
 
         let (a, b, jh) = {
@@ -204,7 +220,7 @@ impl CanisterAccess {
             ongoing.pop_front().unwrap()
         };
 
-        let res = jh.await.map_err(|e| format!("{}", e))??;
+        let res = jh.await.map_err(|e| format!("{e}"))??;
         let res_end = a + res.len() as u64;
         if res_end < b {
             let slf = self.clone();
@@ -257,7 +273,7 @@ impl CanisterAccess {
                 let al: ArchiveIndexResponse = self
                     .query("get_archive_index_pb", ())
                     .await
-                    .map_err(|e| format!("In get archive index: {}", e))?;
+                    .map_err(|e| format!("In get archive index: {e}"))?;
                 trace!("updating archive list to: {:?}", al);
                 *alist = Some(al);
                 archive_entry = locate_archive(&alist, start);

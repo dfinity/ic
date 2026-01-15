@@ -1,8 +1,10 @@
 use ic_base_types::PrincipalId;
+use ic_cdk::println;
 use std::fmt::Write;
 
 pub type RegionNodeTypeCategory = (String, String);
 
+#[derive(Debug, PartialEq)]
 pub enum LogEntry {
     RateNotFoundInRewardTable {
         region: String,
@@ -35,8 +37,7 @@ impl std::fmt::Display for LogEntry {
                 write!(
                     f,
                     "The Node Rewards Table does not have an entry for \
-                    node type '{}' within region '{}' or parent region, defaulting to 1 xdr per month per node, for Node Operator '{}'",
-                    region, node_type, node_operator_id
+                    node type '{region}' within region '{node_type}' or parent region, defaulting to 1 xdr per month per node, for Node Operator '{node_operator_id}'"
                 )
             }
             LogEntry::NodeRewards {
@@ -47,8 +48,7 @@ impl std::fmt::Display for LogEntry {
                 rewards_xdr_permyriad,
             } => write!(
                 f,
-                "{}/{} {} node in {} DC: rewarded {}",
-                node_idx, rewardable_count, node_type, dc_id, rewards_xdr_permyriad
+                "{node_idx}/{rewardable_count} {node_type} node in {dc_id} DC: rewarded {rewards_xdr_permyriad}"
             ),
             LogEntry::DCRewards {
                 dc_id,
@@ -57,16 +57,16 @@ impl std::fmt::Display for LogEntry {
                 rewards_xdr_permyriad,
             } => write!(
                 f,
-                "Rewards for all {} {} nodes in {} DC: reward {}",
-                rewardable_count, node_type, dc_id, rewards_xdr_permyriad
+                "Rewards for all {rewardable_count} {node_type} nodes in {dc_id} DC: reward {rewards_xdr_permyriad}"
             ),
         }
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct RewardsPerNodeProviderLog {
-    node_provider_id: PrincipalId,
-    entries: Vec<LogEntry>,
+    pub node_provider_id: PrincipalId,
+    pub entries: Vec<LogEntry>,
 }
 
 impl RewardsPerNodeProviderLog {

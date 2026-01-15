@@ -2,7 +2,7 @@ mod processable_utxos_for_account {
     use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
     use crate::test_fixtures::{
-        ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo, DAY, NOW,
+        DAY, NOW, ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo,
     };
     use crate::updates::update_balance::SuspendedUtxo;
     use candid::Principal;
@@ -183,7 +183,7 @@ mod processable_utxos_for_account {
 
 mod suspended_utxos {
     use crate::state::{SuspendedReason, SuspendedUtxos};
-    use crate::test_fixtures::{ledger_account, utxo, DAY, NOW};
+    use crate::test_fixtures::{DAY, NOW, ledger_account, utxo};
     use maplit::btreemap;
     use std::collections::BTreeMap;
 
@@ -301,5 +301,292 @@ mod suspended_utxos {
 
     fn all_suspended_reasons() -> Vec<SuspendedReason> {
         vec![SuspendedReason::Quarantined, SuspendedReason::ValueTooSmall]
+    }
+}
+
+mod withdrawal_reimbursement {
+    use crate::reimbursement::{
+        InvalidTransactionError, ReimburseWithdrawalTask, WithdrawalReimbursementReason,
+    };
+    use crate::state::{
+        CkBtcMinterState, InFlightStatus, RetrieveBtcStatus, RetrieveBtcStatusV2,
+        SubmittedBtcTransaction,
+    };
+    use crate::test_fixtures::{expect_panic_with_message, init_args, ledger_account};
+    use assert_matches::assert_matches;
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn should_fail_to_schedule_reimbursement_when_transaction_pending() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.push_in_flight_request(1, InFlightStatus::Signing);
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+
+        let dummy_tx = SubmittedBtcTransaction {
+            requests: vec![].into(),
+            txid: "688f1309fe62ae66ea71959ef6d747bb63ec7c5ab3d8b1e25d8233616c3ec71a"
+                .parse()
+                .unwrap(),
+            used_utxos: vec![],
+            submitted_at: 0,
+            change_output: None,
+            fee_per_vbyte: None,
+            withdrawal_fee: None,
+            signed_tx: None,
+        };
+        state.push_submitted_transaction(dummy_tx.clone());
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+
+        let replaced_tx = SubmittedBtcTransaction {
+            txid: "c9535f049c9423e974ac8daddcd0353579d779cb386fd212357e199e83f4ec5f"
+                .parse()
+                .unwrap(),
+            ..dummy_tx.clone()
+        };
+        state.replace_transaction(&dummy_tx.txid, replaced_tx);
+
+        expect_panic_with_message(
+            || {
+                state.schedule_withdrawal_reimbursement(
+                    ledger_burn_index,
+                    reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+                )
+            },
+            "BUG: Cannot reimburse",
+        );
+    }
+
+    #[test]
+    fn should_quarantine_withdrawal_reimbursement() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.schedule_withdrawal_reimbursement(
+            ledger_burn_index,
+            reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+        );
+
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::WillReimburse(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+
+        state.quarantine_withdrawal_reimbursement(ledger_burn_index);
+
+        assert_eq!(state.pending_withdrawal_reimbursements, BTreeMap::default());
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_eq!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::Unknown
+        );
+    }
+
+    #[test]
+    fn should_complete_withdrawal_reimbursement() {
+        let mut state = CkBtcMinterState::from(init_args());
+        let ledger_burn_index = 1;
+        let amount_to_reimburse = 1_000;
+        let ledger_account = ledger_account();
+        state.schedule_withdrawal_reimbursement(
+            ledger_burn_index,
+            reimburse_withdrawal_task(ledger_account, amount_to_reimburse),
+        );
+
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::WillReimburse(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+
+        let ledger_mint_index = 3;
+        state.reimburse_withdrawal_completed(ledger_burn_index, ledger_mint_index);
+
+        assert_eq!(state.pending_withdrawal_reimbursements, BTreeMap::default());
+        assert_status_v1_unknown(&state, ledger_burn_index);
+        assert_matches!(
+            state.retrieve_btc_status_v2(ledger_burn_index),
+            RetrieveBtcStatusV2::Reimbursed(reimbursement) if
+            reimbursement.account == ledger_account &&
+            reimbursement.amount == amount_to_reimburse
+        );
+    }
+
+    fn assert_status_v1_unknown(state: &CkBtcMinterState, ledger_burn_index: u64) {
+        assert_eq!(
+            state.retrieve_btc_status(ledger_burn_index),
+            RetrieveBtcStatus::Unknown
+        );
+    }
+
+    fn reimburse_withdrawal_task(account: Account, amount: u64) -> ReimburseWithdrawalTask {
+        ReimburseWithdrawalTask {
+            account,
+            amount,
+            reason: WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 2000,
+                    max_num_inputs: 1000,
+                },
+            ),
+        }
+    }
+}
+
+mod utxo_set {
+    use crate::state::utxos::UtxoSet;
+    use crate::test_fixtures::{arbitrary, utxo};
+    use ic_btc_interface::Utxo;
+    use proptest::{collection::vec as pvec, prop_assert, prop_assert_eq, proptest};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn should_insert_different_utxos_with_same_value() {
+        let first = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 1;
+            utxo
+        };
+        let second = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo
+        };
+        assert_eq!(first.value, second.value);
+        assert_ne!(first, second);
+
+        let mut utxos = UtxoSet::default();
+
+        assert!(utxos.insert(first));
+        assert!(utxos.insert(second));
+        assert_eq!(utxos.len(), 2);
+    }
+
+    #[test]
+    fn should_find_lower_bound() {
+        let mut utxos = UtxoSet::default();
+        let (small_utxo, medium_utxo, large_utxo) = three_utxos();
+        assert!(utxos.insert(medium_utxo.clone()));
+        assert!(utxos.insert(large_utxo.clone()));
+        assert!(utxos.insert(small_utxo.clone()));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+
+        assert_eq!(utxos.find_lower_bound(11), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
+
+        assert_eq!(utxos.find_lower_bound(101), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_000), Some(&large_utxo));
+        assert_eq!(utxos.find_lower_bound(1_001), None);
+
+        assert_eq!(utxos.remove(&large_utxo), Some(large_utxo));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(11), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(100), Some(&medium_utxo));
+        assert_eq!(utxos.find_lower_bound(101), None);
+
+        assert_eq!(utxos.remove(&medium_utxo), Some(medium_utxo));
+
+        assert_eq!(utxos.find_lower_bound(0), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(10), Some(&small_utxo));
+        assert_eq!(utxos.find_lower_bound(11), None);
+
+        assert_eq!(utxos.remove(&small_utxo), Some(small_utxo));
+        assert_eq!(utxos.find_lower_bound(0), None);
+    }
+
+    fn three_utxos() -> (Utxo, Utxo, Utxo) {
+        let small_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 42;
+            utxo.value = 10;
+            utxo
+        };
+        let medium_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2;
+            utxo.value = 100;
+            utxo
+        };
+        let large_utxo = {
+            let mut utxo = utxo();
+            utxo.outpoint.vout = 2_000;
+            utxo.value = 1_000;
+            utxo
+        };
+        (small_utxo, medium_utxo, large_utxo)
+    }
+
+    proptest! {
+        #[test]
+        fn should_behave_like_a_btree_set(utxos in pvec(arbitrary::utxo(0_u64..10_000), 0..1_000) ) {
+            let mut utxo_set = UtxoSet::default();
+            let mut utxo_btree_set = BTreeSet::default();
+
+            for utxo in utxos {
+                prop_assert_eq!(utxo_set.insert(utxo.clone()), utxo_btree_set.insert(utxo.clone()));
+                prop_assert_eq!(utxo_set.contains(&utxo), utxo_btree_set.contains(&utxo));
+                prop_assert_eq!(utxo_set.len(), utxo_btree_set.len());
+                prop_assert_eq!(utxo_set.is_empty(), utxo_btree_set.is_empty());
+
+                let actual = utxo_set.iter().cloned().collect::<BTreeSet<_>>();
+                prop_assert_eq!(&actual, &utxo_btree_set);
+            }
+        }
+
+        #[test]
+        fn should_be_sorted_by_value_desc(mut utxos in arbitrary::utxo_set(0_u64..10_000, 0..1_000)) {
+            let mut last: Option<Utxo> = None;
+            while !utxos.is_empty() {
+                let current_last = utxos.last().cloned().unwrap();
+                if let Some(prev_last) = last {
+                    prop_assert!(current_last.value <= prev_last.value);
+                }
+                last = Some(utxos.remove(&current_last).unwrap());
+            }
+        }
+
+        #[test]
+        fn should_be_sorted_by_value_asc(mut utxos in arbitrary::utxo_set(0_u64..10_000, 0..1_000)) {
+            let mut first: Option<Utxo> = None;
+            while !utxos.is_empty() {
+                let current_first = utxos.pop_first().unwrap();
+                if let Some(prev_first) = first {
+                    prop_assert!(prev_first.value <= current_first.value);
+                }
+                first = Some(current_first);
+            }
+        }
+
     }
 }

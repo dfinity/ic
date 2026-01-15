@@ -1,7 +1,9 @@
 use super::*;
+use crate::canister_state::queues::pb_queues;
 use assert_matches::assert_matches;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, Payload};
 use ic_types::time::UNIX_EPOCH;
 use maplit::btreeset;
 use std::collections::BTreeSet;
@@ -70,6 +72,9 @@ fn test_insert() {
             (time(50 + REQUEST_LIFETIME.as_secs() as u32), id5)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
 
     // All best-effort messages should be in the load shedding queue.
@@ -102,7 +107,7 @@ fn test_insert_outbound_request_deadline_rounding() {
 
     pool.insert_outbound_request(request(NO_DEADLINE).into(), current_time);
 
-    assert_eq!(expected_deadline, pool.deadline_queue.first().unwrap().0);
+    assert_eq!(expected_deadline, pool.deadline_queue.min_key().unwrap().0);
 }
 
 #[test]
@@ -233,6 +238,9 @@ fn test_expiration() {
             (time(40 + REQUEST_LIFETIME.as_secs() as u32), id4)
         },
         pool.deadline_queue
+            .iter()
+            .map(|((t, id), _)| (*t, *id))
+            .collect()
     );
     // There are expiring messages.
     assert!(pool.has_expired_deadlines(t_max));
@@ -318,9 +326,10 @@ fn test_expiration_of_non_expiring_messages() {
 
     // No messages are expiring.
     assert!(!pool.has_expired_deadlines(Time::from_nanos_since_unix_epoch(u64::MAX)));
-    assert!(pool
-        .expire_messages(Time::from_nanos_since_unix_epoch(u64::MAX))
-        .is_empty());
+    assert!(
+        pool.expire_messages(Time::from_nanos_since_unix_epoch(u64::MAX))
+            .is_empty()
+    );
 
     // Sanity check.
     assert_eq!(4, pool.len());
@@ -721,8 +730,10 @@ fn test_message_stats_best_effort() {
     //
     let request = request(time(10));
     let request_size_bytes = request.count_bytes();
+    let request_cycles = request.payment;
     let response = response(time(20));
     let response_size_bytes = response.count_bytes();
+    let response_cycles = response.refund;
 
     let _ = pool.insert_inbound(request.clone().into());
     stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
@@ -745,7 +756,8 @@ fn test_message_stats_best_effort() {
             inbound_response_count: 1,
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
-            outbound_message_count: 2
+            outbound_message_count: 2,
+            cycles: request_cycles * 2u64 + response_cycles * 2u64,
         },
         pool.message_stats
     );
@@ -800,8 +812,10 @@ fn test_message_stats_guaranteed_response() {
     //
     let request = request(NO_DEADLINE);
     let request_size_bytes = request.count_bytes();
+    let request_cycles = request.payment;
     let response = response(NO_DEADLINE);
     let response_size_bytes = response.count_bytes();
+    let response_cycles = response.refund;
 
     let inbound_request_id = pool.insert_inbound(request.clone().into());
     stats.adjust_and_check(&pool, Push, Inbound, request.clone().into());
@@ -824,7 +838,8 @@ fn test_message_stats_guaranteed_response() {
             inbound_response_count: 1,
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 1,
-            outbound_message_count: 2
+            outbound_message_count: 2,
+            cycles: request_cycles * 2u64 + response_cycles * 2u64,
         },
         pool.message_stats
     );
@@ -887,6 +902,7 @@ fn test_message_stats_oversized_requests() {
         time(10),
     );
     let best_effort_size_bytes = best_effort.count_bytes();
+    let best_effort_cycles = best_effort.payment;
     let guaranteed = request_with_payload(
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize + 2000,
         NO_DEADLINE,
@@ -896,6 +912,7 @@ fn test_message_stats_oversized_requests() {
     // `RequestBuilder`; plus any difference in size between the `Request` and
     // `Response` structs, so better to compute it
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
+    let guaranteed_cycles = guaranteed.payment;
 
     let _ = pool.insert_inbound(best_effort.clone().into());
     stats.adjust_and_check(&pool, Push, Inbound, best_effort.clone().into());
@@ -919,7 +936,8 @@ fn test_message_stats_oversized_requests() {
             inbound_response_count: 0,
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 0,
-            outbound_message_count: 2
+            outbound_message_count: 2,
+            cycles: best_effort_cycles * 2u64 + guaranteed_cycles * 2u64,
         },
         pool.message_stats
     );
@@ -1003,17 +1021,24 @@ fn encode_roundtrip_empty() {
 //
 
 fn request(deadline: CoarseTime) -> Request {
-    RequestBuilder::new().deadline(deadline).build()
+    RequestBuilder::new()
+        .deadline(deadline)
+        .payment(Cycles::new(1))
+        .build()
 }
 
 fn response(deadline: CoarseTime) -> Response {
-    ResponseBuilder::new().deadline(deadline).build()
+    ResponseBuilder::new()
+        .deadline(deadline)
+        .refund(Cycles::new(2))
+        .build()
 }
 
 fn request_with_payload(payload_size: usize, deadline: CoarseTime) -> Request {
     RequestBuilder::new()
         .method_payload(vec![13; payload_size])
         .deadline(deadline)
+        .payment(Cycles::new(4))
         .build()
 }
 
@@ -1021,6 +1046,7 @@ fn response_with_payload(payload_size: usize, deadline: CoarseTime) -> Response 
     ResponseBuilder::new()
         .response_payload(Payload::Data(vec![13; payload_size]))
         .deadline(deadline)
+        .refund(Cycles::new(8))
         .build()
 }
 
@@ -1028,9 +1054,12 @@ fn time(seconds_since_unix_epoch: u32) -> CoarseTime {
     CoarseTime::from_secs_since_unix_epoch(seconds_since_unix_epoch)
 }
 
-fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &BTreeSet<(T, Id)>) {
+fn assert_exact_messages_in_queue<T>(messages: BTreeSet<Id>, queue: &MutableIntMap<(T, Id), ()>)
+where
+    (T, Id): AsInt,
+{
     assert_eq!(messages.len(), queue.len());
-    assert_eq!(messages, queue.iter().map(|(_, id)| *id).collect())
+    assert_eq!(messages, queue.iter().map(|((_, id), ())| *id).collect())
 }
 
 /// Generates an `InboundReference` for a request of the given class.
@@ -1112,6 +1141,7 @@ fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
     } else {
         0
     };
+    let cycles = req.payment;
     // Response stats are unaffected.
     let guaranteed_responses_size_bytes = 0;
     let inbound_response_count = 0;
@@ -1128,6 +1158,7 @@ fn request_stats_delta2(req: &Request, context: Context) -> MessageStats {
         inbound_guaranteed_request_count,
         inbound_guaranteed_response_count,
         outbound_message_count,
+        cycles,
     }
 }
 
@@ -1159,6 +1190,7 @@ fn response_stats_delta2(rep: &Response, context: Context) -> MessageStats {
     } else {
         0
     };
+    let cycles = rep.refund;
 
     // Request stats are unaffected.
     let oversized_guaranteed_requests_extra_bytes = 0;
@@ -1175,5 +1207,6 @@ fn response_stats_delta2(rep: &Response, context: Context) -> MessageStats {
         inbound_guaranteed_request_count,
         inbound_guaranteed_response_count,
         outbound_message_count,
+        cycles,
     }
 }

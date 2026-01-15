@@ -15,7 +15,7 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-config = { path = "../../../config" }
 ic-limits = { path = "../../../limits" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance-api = { path = "../../../nns/governance/api" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
@@ -51,6 +51,10 @@ path = "tschnorr_message_sizes_test.rs"
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"
 path = "tecdsa_key_rotation_test.rs"
+
+[[bin]]
+name = "ic-systest-pre-signature-stash-management"
+path = "pre_signature_stash_management_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-remove-nodes"

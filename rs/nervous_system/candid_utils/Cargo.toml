@@ -1,0 +1,17 @@
+[package]
+name = "candid-utils"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+candid = { workspace = true }
+candid_parser = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

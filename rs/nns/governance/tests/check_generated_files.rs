@@ -1,5 +1,5 @@
-use ic_nns_governance_protobuf_generator::{generate_prost_files, ProtoPaths};
-use ic_test_utilities_compare_dirs::{compare, CompareError};
+use ic_nns_governance_protobuf_generator::{ProtoPaths, generate_prost_files};
+use ic_test_utilities_compare_dirs::{CompareError, compare};
 use std::path::PathBuf;
 
 #[test]
@@ -12,9 +12,11 @@ fn check_generated_files() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
     let governance_proto = manifest_dir.join("proto");
 
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
+    let ic_protobuf_proto = manifest_dir.join("../../protobuf/def");
     let ledger_proto = manifest_dir.join("../../ledger_suite/icp/proto");
     let nervous_system_proto = manifest_dir.join("../../nervous_system/proto/proto");
     let nns_common_proto = manifest_dir.join("../common/proto");
@@ -26,6 +28,7 @@ fn check_generated_files() {
             governance: &governance_proto,
 
             base_types: &base_types_proto,
+            ic_protobuf: &ic_protobuf_proto,
             ledger: &ledger_proto,
             nervous_system: &nervous_system_proto,
             nns_common: &nns_common_proto,
@@ -35,14 +38,14 @@ fn check_generated_files() {
         out_dir.path(),
     );
 
-    let gen = manifest_dir.join("src/gen");
+    let r#gen = manifest_dir.join("src/gen");
 
-    match compare(out_dir.path(), &gen) {
+    match compare(out_dir.path(), &r#gen) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
             panic!(
                 "Directory {} is outdated, run {}",
-                gen.display(),
+                r#gen.display(),
                 command_to_regenerate
             )
         }

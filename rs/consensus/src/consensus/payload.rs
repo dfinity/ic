@@ -1,5 +1,5 @@
 use crate::consensus::metrics::{
-    PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
+    CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED, PayloadBuilderMetrics,
 };
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
@@ -9,12 +9,12 @@ use ic_interfaces::{
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
+    CountBytes, Height, NumBytes, Time,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
-    CountBytes, Height, NumBytes, Time,
 };
 use std::sync::Arc;
 
@@ -30,9 +30,9 @@ use std::sync::Arc;
 /// and that the following constraints are satisfied:
 ///
 /// - Payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
-///     `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 /// - Payload size returned by [`validate_payload`](BatchPayloadSectionBuilder::validate_payload)
-///     `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 ///
 /// It is advised to call the validation function after building the payload to be 100% sure.
 // [build_payload]: (BatchPayloadSectionBuilder::build_payload)
@@ -43,6 +43,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
     CanisterHttp(Arc<dyn BatchPayloadBuilder>),
     QueryStats(Arc<dyn BatchPayloadBuilder>),
+    VetKd(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -92,6 +93,7 @@ impl BatchPayloadSectionBuilder {
             Self::SelfValidating(_) => "self_validating",
             Self::CanisterHttp(_) => "canister_http",
             Self::QueryStats(_) => "query_stats",
+            Self::VetKd(_) => "vetkd",
         }
     }
 
@@ -320,6 +322,44 @@ impl BatchPayloadSectionBuilder {
                     }
                 }
             }
+            Self::VetKd(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.vetkd)
+                        }
+                    });
+
+                let vetkd = builder.build_payload(
+                    height,
+                    max_size,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                );
+                let size = NumBytes::new(vetkd.len() as u64);
+
+                // Check validation as safety measure
+                match builder.validate_payload(height, proposal_context, &vetkd, &past_payloads) {
+                    Ok(()) => {
+                        payload.vetkd = vetkd;
+                        size
+                    }
+                    Err(err) => {
+                        error!(
+                            logger,
+                            "VetKd payload did not pass validation, this is a bug, {:?} @{}",
+                            err,
+                            CRITICAL_ERROR_VALIDATION_NOT_PASSED
+                        );
+
+                        metrics.critical_error_validation_not_passed.inc();
+                        payload.vetkd = vec![];
+                        NumBytes::new(0)
+                    }
+                }
+            }
         }
     }
 
@@ -405,6 +445,25 @@ impl BatchPayloadSectionBuilder {
 
                 Ok(NumBytes::new(payload.query_stats.len() as u64))
             }
+            Self::VetKd(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.vetkd)
+                        }
+                    });
+
+                builder.validate_payload(
+                    height,
+                    proposal_context,
+                    &payload.vetkd,
+                    &past_payloads,
+                )?;
+
+                Ok(NumBytes::new(payload.vetkd.len() as u64))
+            }
         }
     }
 }
@@ -416,7 +475,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, RegistryVersion};
+    use ic_types::{RegistryVersion, batch::ValidationContext, time::UNIX_EPOCH};
 
     struct TestXNetPayloadBuilder {
         return_size: u64,

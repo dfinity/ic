@@ -1,6 +1,4 @@
-#[rustfmt::skip]
-
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -9,19 +7,19 @@ use ic_system_test_driver::{
         farm::HostFeature,
         group::SystemTestGroup,
         ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-        prometheus_vm::{HasPrometheus, PrometheusVm},
+        prometheus_vm::HasPrometheus,
         simulate_network::{ProductionSubnetTopology, SimulateNetwork},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
     util::{agent_observes_canister_module, block_on, spawn_round_robin_workload_engine},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{
     net::{IpAddr, SocketAddr},
     time::Duration,
@@ -60,10 +58,6 @@ pub fn setup(
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     let logger = env.logger();
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
-        .start(&env)
-        .expect("failed to start prometheus VM");
 
     let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
 
@@ -107,7 +101,6 @@ pub fn setup(
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
-    env.sync_with_prometheus();
     info!(logger, "Step 1: Installing NNS canisters ...");
     let nns_node = env
         .topology_snapshot()

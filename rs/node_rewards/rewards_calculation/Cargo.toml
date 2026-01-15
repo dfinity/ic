@@ -1,0 +1,21 @@
+[package]
+name = "rewards-calculation"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+itertools = { workspace = true }
+ic-protobuf = { path = "../../protobuf" }
+lazy_static = { workspace = true }
+maplit = "1.0"
+rust_decimal = "1.37.1"
+rust_decimal_macros = "1.37.1"
+chrono = { workspace = true }
+serde = { workspace = true }

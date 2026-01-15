@@ -1,19 +1,16 @@
 use crate::{
     gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+    subnet_rental::SubnetRentalCanisterInitPayloadBuilder,
 };
 use canister_test::{Project, Wasm};
-use core::{
-    option::Option::{None, Some},
-    time::Duration,
-};
+use core::option::Option::{None, Some};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, CYCLES_LEDGER_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    ROOT_CANISTER_ID,
 };
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
@@ -22,9 +19,8 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use icp_ledger::{
-    self as ledger,
+    self as ledger, LedgerCanisterInitPayload, LedgerCanisterInitPayloadBuilder, Tokens,
     account_identifier::{AccountIdentifier, Subaccount},
-    LedgerCanisterInitPayload, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
@@ -41,6 +37,12 @@ pub struct NnsInitPayloads {
     pub lifeline: LifelineCanisterInitPayload,
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
+    pub index: ic_icp_index::InitArg,
+
+    // Optional canister(s). Unlike others above, these are of type
+    // Option<${CANISTER}InitPayload>. When an optional canister is enabled,
+    // these fields contain Some (otherwise, they contain None).
+    pub subnet_rental: Option<()>,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -53,6 +55,8 @@ pub struct NnsInitPayloadsBuilder {
     pub lifeline: LifelineCanisterInitPayloadBuilder,
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
+    pub index: ic_icp_index::InitArg,
+    pub subnet_rental: SubnetRentalCanisterInitPayloadBuilder,
 }
 
 #[allow(clippy::new_without_default)]
@@ -61,25 +65,8 @@ impl NnsInitPayloadsBuilder {
         NnsInitPayloadsBuilder {
             registry: RegistryCanisterInitPayloadBuilder::new(),
             governance: GovernanceCanisterInitPayloadBuilder::new(),
-            ledger: LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .archive_options(ledger::ArchiveOptions {
-                    trigger_threshold: 2000,
-                    num_blocks_to_archive: 1000,
-                    // 1 GB, which gives us 3 GB space when upgrading
-                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                    // 128kb
-                    max_message_size_bytes: Some(128 * 1024),
-                    controller_id: ROOT_CANISTER_ID.into(),
-                    more_controller_ids: None,
-                    cycles_for_archive_creation: Some(0),
-                    max_transactions_per_response: None,
-                })
-                .max_message_size_bytes(128 * 1024)
-                // 24 hour transaction window
-                .transaction_window(Duration::from_secs(24 * 60 * 60))
+            ledger: LedgerCanisterInitPayloadBuilder::new_with_mainnet_settings()
                 .send_whitelist(ALL_NNS_CANISTER_IDS.iter().map(|&x| *x).collect())
-                .transfer_fee(DEFAULT_TRANSFER_FEE)
                 .build()
                 .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
@@ -88,12 +75,16 @@ impl NnsInitPayloadsBuilder {
                 governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
-                last_purged_notification: Some(1),
+                last_purged_notification: None,
                 cycles_ledger_canister_id: Some(CYCLES_LEDGER_CANISTER_ID),
             }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
             sns_wasms: SnsWasmCanisterInitPayloadBuilder::new(),
+            index: ic_icp_index::InitArg {
+                ledger_id: LEDGER_CANISTER_ID.get().into(),
+            },
+            subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
         }
     }
 
@@ -220,14 +211,6 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
-    pub fn with_sns_wasm_allowed_principals(
-        &mut self,
-        allowed_principals: Vec<PrincipalId>,
-    ) -> &mut Self {
-        self.sns_wasms.with_allowed_principals(allowed_principals);
-        self
-    }
-
     pub fn with_exchange_rate_canister(
         &mut self,
         exchange_rate_canister_id: CanisterId,
@@ -246,20 +229,27 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(&mut self) -> &mut Self {
+        self.subnet_rental.enable();
+        self
+    }
+
     pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(!self
-            .ledger
-            .init_args()
-            .unwrap()
-            .initial_values
-            .contains_key(&GOVERNANCE_CANISTER_ID.get().into()));
+        assert!(
+            !self
+                .ledger
+                .init_args()
+                .unwrap()
+                .initial_values
+                .contains_key(&GOVERNANCE_CANISTER_ID.get().into())
+        );
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(
                     "Subaccounts should be exactly 32 bytes in length. Got {} for neuron {}. {}",
                     truncate_and_format(n.account.as_slice(), 80),
                     n.id.as_ref()
-                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {:?}", n))
+                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {n:?}"))
                         .id,
                     e
                 )
@@ -283,6 +273,8 @@ impl NnsInitPayloadsBuilder {
             lifeline: self.lifeline.build(),
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
+            index: self.index.clone(),
+            subnet_rental: self.subnet_rental.build(),
         }
     }
 }
@@ -304,46 +296,98 @@ pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: u32) -> Vec<u8> {
     new_wasm_bytes
 }
 
+// NOTE, keep the functions for building wasms in the same order as the constants in
+// rs/nns/constants/src/lib.rs.  Only the first ledger archive is represented in the ordering.
+
+// REGISTRY
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("registry-canister", features)
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&[])
+}
+
+/// Build Wasm for NNS Registry canister
+pub fn build_test_registry_wasm() -> Wasm {
+    build_registry_wasm_with_features(&["test"])
+}
+
+/// Build mainnet Wasm for NNS Registry canister
+pub fn build_mainnet_registry_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
+}
+
+// GOVERNANCE
+
+/// Build Wasm for NNS Governance canister
+pub fn build_governance_wasm_with_features(features: &[&str]) -> Wasm {
+    Project::cargo_bin_maybe_from_env("governance-canister", features)
+}
+
 /// Build Wasm for NNS Governance canister
 pub fn build_test_governance_wasm() -> Wasm {
     let features = ["test"];
     build_governance_wasm_with_features(&features)
 }
+
 /// Build Wasm for NNS Governance canister with no features
 pub fn build_governance_wasm() -> Wasm {
     let features = [];
     build_governance_wasm_with_features(&features)
 }
 
-/// Build Wasm for NNS Governance canister
-pub fn build_governance_wasm_with_features(features: &[&str]) -> Wasm {
-    Project::cargo_bin_maybe_from_env("governance-canister", features)
+/// Build mainnet Wasm for NNS Governance Canister
+pub fn build_mainnet_governance_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
 }
+
+// LEDGER
+
+/// Build Wasm for NNS Ledger canister
+pub fn build_ledger_wasm() -> Wasm {
+    Project::cargo_bin_maybe_from_env("ledger-canister", &[])
+}
+
+/// Build mainnet Wasm for NNS Ledger Canister
+pub fn build_mainnet_ledger_wasm() -> Wasm {
+    Project::cargo_bin_maybe_from_env("mainnet-icp-ledger-canister", &[])
+}
+
+// ROOT
+
 /// Build Wasm for NNS Root canister
 pub fn build_root_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("root-canister", &features)
 }
-/// Build Wasm for NNS Registry canister
-pub fn build_registry_wasm() -> Wasm {
+
+/// Build mainnet Wasm for NNS Root Canister
+pub fn build_mainnet_root_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("registry-canister", &features)
+    Project::cargo_bin_maybe_from_env("mainnet-root-canister", &features)
 }
-/// Build mainnet Wasm for NNS Registry canister
-pub fn build_mainnet_registry_wasm() -> Wasm {
-    let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-registry-canister", &features)
-}
-/// Build Wasm for NNS Ledger canister
-pub fn build_ledger_wasm() -> Wasm {
-    let features = ["notify-method"];
-    Project::cargo_bin_maybe_from_env("ledger-canister", &features)
-}
+
+// CYCLES-MINTING
+
 /// Build Wasm for NNS CMC
 pub fn build_cmc_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("cycles-minting-canister", &features)
 }
+/// Build mainnet Wasm for NNS CMC
+pub fn build_mainnet_cmc_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-cycles-minting-canister", &features)
+}
+
+// LIFELINE
+
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {
     Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
@@ -356,11 +400,22 @@ pub fn build_mainnet_lifeline_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("mainnet-lifeline-canister", &features)
 }
 
+// GENESIS TOKEN
+
 /// Build Wasm for NNS Genesis Token canister
 pub fn build_genesis_token_wasm() -> Wasm {
     let features = [];
     Project::cargo_bin_maybe_from_env("genesis-token-canister", &features)
 }
+
+// IDENTITY (not used in tests yet)
+
+// NNS UI (not used in tests yet)
+
+// LEDGER ARCHIVE (not used in tests yet)
+
+// SNS WASM
+
 /// Build Wasm for NNS SnsWasm canister
 pub fn build_sns_wasms_wasm() -> Wasm {
     let features = [];
@@ -373,19 +428,42 @@ pub fn build_mainnet_sns_wasms_wasm() -> Wasm {
     Project::cargo_bin_maybe_from_env("mainnet-sns-wasm-canister", &features)
 }
 
-/// Build mainnet Wasm for NNS Root Canister
-pub fn build_mainnet_root_wasm() -> Wasm {
+// LEDGER INDEX
+
+/// Build Wasm for Index canister for the ICP Ledger
+pub fn build_index_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-root-canister", &features)
+    Project::cargo_bin_maybe_from_env("ic-icp-index", &features)
 }
 
-/// Build mainnet Wasm for NNS Ledger Canister
-pub fn build_mainnet_ledger_wasm() -> Wasm {
-    Project::cargo_bin_maybe_from_env("mainnet-icp-ledger-canister", &[])
+/// Build mainnet Wasm for Index canister for the ICP Ledger
+pub fn build_mainnet_index_wasm() -> Wasm {
+    let features = [];
+    Project::cargo_bin_maybe_from_env("mainnet-ic-icp-index-canister", &features)
 }
 
-/// Build mainnet Wasm for NNS Governance Canister
-pub fn build_mainnet_governance_wasm() -> Wasm {
+// SUBNET RENTAL (not used in tests yet)
+
+// NODE REWARDS CANISTER
+
+/// Build Wasm for NNS Node Rewards canister
+pub fn build_node_rewards_wasm() -> Wasm {
     let features = [];
-    Project::cargo_bin_maybe_from_env("mainnet-governance-canister", &features)
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+pub fn build_node_rewards_test_wasm() -> Wasm {
+    let features = ["test"];
+    Project::cargo_bin_maybe_from_env("node-rewards-canister", &features)
+}
+
+/// Build mainnet Wasm for NNS Node Rewards canister
+pub fn build_mainnet_node_rewards_wasm() -> Wasm {
+    panic!(
+        "NRC has not yet been released to mainnet.  Please update this function when it is.\
+        Additionally, tests using NNS canisters will need to build this canister when testing \
+        node provider rewards.  See sync-with-released-nervous-system-wasms/src/main.rs"
+    );
+    // let features = [];
+    // Project::cargo_bin_maybe_from_env("mainnet-node-rewards-canister", &features)
 }

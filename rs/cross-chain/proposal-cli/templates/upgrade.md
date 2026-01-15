@@ -12,28 +12,29 @@ Target canister: `{{canister_id}}`
 
 Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 
+{% if !canister.forum_discussion().is_empty() -%}
+Forum discussion: {{canister.forum_discussion()}}
+
+{% endif -%}
 ---
 
 ## Motivation
 TODO: THIS MUST BE FILLED OUT
 
 
-## Upgrade args
-
-```
-git fetch
-git checkout {{to}}
-{% if let Some(dir) = canister.repo_dir() -%}
-cd {{dir.as_path().display()}}
-{% endif -%}
-{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
-```
-
 ## Release Notes
 
 ```
 {{release_notes}}
  ```
+
+## Upgrade args
+
+```
+git fetch
+git checkout {{to}}
+{{upgrade_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
+```
 
 ## Wasm Verification
 

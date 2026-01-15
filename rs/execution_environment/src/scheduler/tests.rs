@@ -1,50 +1,54 @@
 use super::{
-    test_utilities::{ingress, instructions, SchedulerTest, SchedulerTestBuilder, TestInstallCode},
+    test_utilities::{SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions},
     *,
 };
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic00::{
-    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
-};
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_error_types::RejectCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpResponsePayload, CanisterIdRecord,
-    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, Method, Payload as _, SchnorrKeyId,
-    SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
+    CanisterStatusType, DerivationPath, EcdsaKeyId, EmptyBlob, MasterPublicKeyId, Method,
+    Payload as _, SchnorrKeyId, SignWithSchnorrArgs, TakeCanisterSnapshotArgs, UninstallCodeArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::{CyclesUseCase, PausedExecutionId};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
+use ic_replicated_state::{
+    canister_state::system_state::{CyclesUseCase, PausedExecutionId},
+    metadata_state::subnet_call_context_manager::EcdsaMatchedPreSignature,
+};
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
+use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_int_gauge,
-    fetch_int_gauge_vec, metric_vec, HistogramStats,
+    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
-    batch::ConsensusResponse,
+    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
+    batch::{AvailablePreSignatures, ConsensusResponse},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::IngressStatus,
     messages::{
-        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
-        StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId, CanisterMessageOrTask, CanisterTask, MAX_RESPONSE_COUNT_BYTES, Payload,
+        RejectContext, StopCanisterCallId, StopCanisterContext,
     },
     methods::SystemMethod,
-    time::{expiry_time_from_now, UNIX_EPOCH},
-    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
+    time::{CoarseTime, UNIX_EPOCH, expiry_time_from_now},
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
+use ic00::{
+    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
+};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -52,6 +56,8 @@ use std::{convert::TryFrom, time::Duration};
 
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;
+
+const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
     if val0 > val1 {
@@ -68,8 +74,9 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -526,8 +533,9 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -572,8 +580,9 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -620,8 +629,9 @@ fn basic_induct_messages_on_same_subnet_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(55),
-            max_instructions_per_message_without_dts: NumInstructions::from(55),
+            max_instructions_per_query_message: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -669,8 +679,9 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -710,8 +721,9 @@ fn induct_messages_to_self_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(55),
-            max_instructions_per_message_without_dts: NumInstructions::from(55),
+            max_instructions_per_query_message: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -748,56 +760,67 @@ fn induct_messages_to_self_works() {
     assert_eq!(test.state().metadata.subnet_metrics.num_canisters, 1);
 }
 
-/// Creates state with two canisters. Source canister has two requests for
-/// itself and two requests for destination canister in its output queues.
-/// Subnet only has enough message memory for two requests.
+/// Creates state with two canisters. Source canister has two guaranteed response
+/// requests for itself and two requests for destination canister in its output
+/// queues (as well as a couple of best-effort requests). Subnet only has enough
+/// guaranteed response message memory for two requests.
 ///
-/// Ensures that `induct_messages_on_same_subnet()` respects memory limits
-/// on application subnets and ignores them on system subnets.
+/// Ensures that `induct_messages_on_same_subnet()` respects guaranteed response
+/// memory limits on application subnets and ignores them on system subnets.
 #[test]
 fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
     // requests plus epsilon). Checks that the limit is enforced on application
     // subnets and ignored on system subnets.
-    let run_test = |subnet_available_memory: SubnetAvailableMemory, subnet_type| {
+    let run_test = |guaranteed_response_message_memory, subnet_type| {
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores: 2,
                 max_instructions_per_round: NumInstructions::new(1),
                 max_instructions_per_message: NumInstructions::new(1),
-                max_instructions_per_message_without_dts: NumInstructions::from(1),
+                max_instructions_per_query_message: NumInstructions::from(1),
                 max_instructions_per_slice: NumInstructions::new(1),
+                max_instructions_per_install_code_slice: NumInstructions::new(1),
                 instruction_overhead_per_execution: NumInstructions::from(0),
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
-            .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
+            .with_subnet_guaranteed_response_message_memory(
+                guaranteed_response_message_memory as u64,
+            )
             .with_subnet_type(subnet_type)
             .build();
 
         let source = test.create_canister();
         let dest = test.create_canister();
+        let request_to = |canister: CanisterId, deadline: CoarseTime| {
+            RequestBuilder::default()
+                .sender(source)
+                .receiver(canister)
+                .deadline(deadline)
+                .build()
+        };
 
         let source_canister = test.canister_state_mut(source);
-        let self_request = RequestBuilder::default()
-            .sender(source)
-            .receiver(source)
-            .build();
+        // First, best-effort messages to `source` and `dest`.
         source_canister
-            .push_output_request(self_request.clone().into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, SOME_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(self_request.into(), UNIX_EPOCH)
+            .push_output_request(request_to(dest, SOME_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
-        let other_request = RequestBuilder::default()
-            .sender(source)
-            .receiver(dest)
-            .build();
+        // Then a couple of guaranteed response messages to each of `source` and `dest`.
         source_canister
-            .push_output_request(other_request.clone().into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         source_canister
-            .push_output_request(other_request.into(), UNIX_EPOCH)
+            .push_output_request(request_to(source, NO_DEADLINE).into(), UNIX_EPOCH)
+            .unwrap();
+        source_canister
+            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
+            .unwrap();
+        source_canister
+            .push_output_request(request_to(dest, NO_DEADLINE).into(), UNIX_EPOCH)
             .unwrap();
         test.induct_messages_on_same_subnet();
 
@@ -806,30 +829,31 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         let source_canister_queues = source_canister.system_state.queues();
         let dest_canister_queues = dest_canister.system_state.queues();
         if subnet_type == SubnetType::Application {
-            // Only two messages should have been inducted. After two self-inductions on the
-            // source canister, the subnet message memory is exhausted.
-            assert_eq!(1, source_canister_queues.output_queues_message_count());
-            assert_eq!(2, source_canister_queues.input_queues_message_count());
+            // Only the two best-effort messages and the first two guaranteed response
+            // messages should have been inducted. After two self-inductions on the source
+            // canister, the subnet message memory is exhausted.
+            assert_eq!(2, source_canister_queues.output_queues_message_count());
+            assert_eq!(3, source_canister_queues.input_queues_message_count());
             assert_eq!(1, dest_canister_queues.input_queues_message_count());
         } else {
             // On a system subnet, with no message memory limits, all messages should have
             // been inducted.
             assert_eq!(0, source_canister_queues.output_queues_message_count());
-            assert_eq!(2, source_canister_queues.input_queues_message_count());
-            assert_eq!(2, dest_canister_queues.input_queues_message_count());
+            assert_eq!(3, source_canister_queues.input_queues_message_count());
+            assert_eq!(3, dest_canister_queues.input_queues_message_count());
         }
     };
 
-    // Subnet has memory for 4 initial requests and 2 additional requests (plus
+    // Subnet has memory for 4 outbound requests and 2 inbound requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 75 / 10, 0),
+        MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10,
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
+    run_test(0, SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_execution`] puts
@@ -842,8 +866,9 @@ fn test_message_limit_from_message_overhead() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
-        max_instructions_per_message_without_dts: NumInstructions::from(5_000_000_000),
+        max_instructions_per_query_message: NumInstructions::from(5_000_000_000),
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
+        max_instructions_per_install_code_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
         instruction_overhead_per_execution: NumInstructions::from(2_000_000),
         instruction_overhead_per_canister: NumInstructions::from(0),
@@ -910,8 +935,9 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::new(50),
+            max_instructions_per_query_message: NumInstructions::new(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -962,8 +988,9 @@ fn canister_can_run_for_multiple_iterations() {
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -1008,8 +1035,9 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -1073,7 +1101,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
+        MemoryAllocation::from(NumBytes::from(bytes_per_cycle)),
         None,
         Some(initial_time),
         None,
@@ -1104,8 +1132,9 @@ fn charging_for_message_memory_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::from(1),
+            max_instructions_per_query_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             max_instructions_per_round: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -1123,7 +1152,7 @@ fn charging_for_message_memory_works() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         Some(initial_time),
         None,
@@ -1154,7 +1183,7 @@ fn charging_for_message_memory_works() {
         test.canister_state(canister).system_state.balance(),
         balance_before
             - test.memory_cost(
-                test.canister_state(canister).message_memory_usage(),
+                test.canister_state(canister).message_memory_usage().total(),
                 charge_duration,
             ),
     );
@@ -1232,8 +1261,9 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             scheduler_cores: 2,
             max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
             max_instructions_per_message: instructions_per_message,
-            max_instructions_per_message_without_dts: instructions_per_message,
+            max_instructions_per_query_message: instructions_per_message,
             max_instructions_per_slice: instructions_per_message,
+            max_instructions_per_install_code_slice: instructions_per_message,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1279,7 +1309,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         test.create_canister_with(
             Cycles::new(100),
             ComputeAllocation::zero(),
-            MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+            MemoryAllocation::from(NumBytes::from(1 << 30)),
             None,
             Some(initial_time),
             None,
@@ -1303,7 +1333,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         );
         assert_eq!(
             canister.system_state.memory_allocation,
-            MemoryAllocation::BestEffort
+            MemoryAllocation::default()
         );
         assert_eq!(canister.system_state.canister_version, 1);
     }
@@ -1324,7 +1354,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1354,7 +1384,8 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         args.encode(),
@@ -1381,12 +1412,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister due to `out_of_cycles`.
     test.set_time(
@@ -1412,12 +1444,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -1428,7 +1461,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1442,12 +1475,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
@@ -1464,7 +1498,8 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         .add_cycles(expected_charge, CyclesUseCase::NonConsumed);
 
     // Take a snapshot of the canister.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
+    let args: TakeCanisterSnapshotArgs =
+        TakeCanisterSnapshotArgs::new(canister_id, None, None, None);
     test.inject_call_to_ic00(
         Method::TakeCanisterSnapshot,
         args.encode(),
@@ -1491,12 +1526,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister.
     let args: UninstallCodeArgs = UninstallCodeArgs::new(canister_id, None);
@@ -1508,12 +1544,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         InputQueueType::LocalSubnet,
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 
     // Trigger canister `out_of_cycles`.
     test.set_time(
@@ -1539,12 +1576,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -1556,7 +1594,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1564,7 +1602,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let paused_canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1614,8 +1652,9 @@ fn can_execute_messages_with_just_enough_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(50 * 3),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1673,8 +1712,9 @@ fn execute_idle_and_canisters_with_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1795,8 +1835,9 @@ fn max_canisters_per_round() {
                 scheduler_cores: 2,
                 max_instructions_per_round: 100.into(),
                 max_instructions_per_message: 10.into(),
-                max_instructions_per_message_without_dts: 10.into(),
+                max_instructions_per_query_message: 10.into(),
                 max_instructions_per_slice: 10.into(),
+                max_instructions_per_install_code_slice: 10.into(),
                 instruction_overhead_per_execution: 0.into(),
                 instruction_overhead_per_canister: 10.into(),
                 ..SchedulerConfig::application_subnet()
@@ -1810,7 +1851,7 @@ fn max_canisters_per_round() {
             let canister_id = test.create_canister_with(
                 Cycles::new(0),
                 ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
+                MemoryAllocation::default(),
                 None,
                 None,
                 None,
@@ -1865,8 +1906,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
             scheduler_cores,
             max_instructions_per_round: slice_instructions.into(),
             max_instructions_per_message: message_instructions.into(),
-            max_instructions_per_message_without_dts: slice_instructions.into(),
+            max_instructions_per_query_message: slice_instructions.into(),
             max_instructions_per_slice: slice_instructions.into(),
+            max_instructions_per_install_code_slice: slice_instructions.into(),
             instruction_overhead_per_execution: 0.into(),
             instruction_overhead_per_canister: 0.into(),
             ..SchedulerConfig::application_subnet()
@@ -1964,8 +2006,9 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2028,8 +2071,9 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2092,7 +2136,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(400),
             max_instructions_per_message: NumInstructions::new(10),
-            max_instructions_per_message_without_dts: NumInstructions::new(10),
+            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
@@ -2145,7 +2189,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -2165,7 +2209,7 @@ fn execute_global_timer_once_per_round_in_system_subnet() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2186,7 +2230,7 @@ fn global_timer_is_not_scheduled_if_not_expired() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2206,7 +2250,7 @@ fn global_timer_is_not_scheduled_if_global_timer_method_is_not_exported() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -2226,7 +2270,7 @@ fn heartbeat_is_not_scheduled_if_the_canister_is_stopped() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         Some(CanisterStatusType::Stopped),
@@ -2244,7 +2288,7 @@ fn global_timer_is_not_scheduled_if_the_canister_is_stopped() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         Some(CanisterStatusType::Stopped),
@@ -2268,8 +2312,9 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2278,7 +2323,7 @@ fn execute_heartbeat_before_messages() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -2300,8 +2345,9 @@ fn execute_global_timer_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2310,7 +2356,7 @@ fn execute_global_timer_before_messages() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2336,8 +2382,9 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2428,8 +2475,9 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2441,7 +2489,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             let local_canister = test.create_canister_with(
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
+                MemoryAllocation::default(),
                 None,
                 None,
                 None,
@@ -2472,8 +2520,9 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2514,8 +2563,9 @@ fn scheduler_executes_postponed_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2590,8 +2640,9 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2604,7 +2655,7 @@ fn execute_multiple_heartbeats() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000),
             ComputeAllocation::zero(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             Some(SystemMethod::CanisterHeartbeat),
             None,
             None,
@@ -2651,8 +2702,9 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::new(5),
+            max_instructions_per_query_message: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2685,13 +2737,17 @@ fn can_record_metrics_single_scheduler_thread() {
 
 #[test]
 fn can_record_metrics_for_a_round() {
+    let num_canisters = 3;
+    let scheduler_cores = num_canisters as usize - 1;
+    let instructions = 5;
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            max_instructions_per_round: NumInstructions::from(25),
-            max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::new(5),
-            max_instructions_per_slice: NumInstructions::from(5),
+            scheduler_cores,
+            max_instructions_per_round: NumInstructions::from(instructions * 2),
+            max_instructions_per_message: NumInstructions::from(instructions),
+            max_instructions_per_query_message: NumInstructions::new(instructions),
+            max_instructions_per_slice: NumInstructions::from(instructions),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -2699,7 +2755,6 @@ fn can_record_metrics_for_a_round() {
         })
         .build();
 
-    let num_canisters = 3;
     // The first two canisters have an `Allocation` of 45% and the last 9%. We'll be
     // forced to execute the first two and then run out of instructions (based on
     // the limits) which will result in a violation of third canister's
@@ -2709,18 +2764,15 @@ fn can_record_metrics_for_a_round() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
         );
         for _ in 0..5 {
-            test.send_ingress(canister, ingress(5));
+            test.send_ingress(canister, ingress(instructions));
         }
     }
-
-    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
-    test.advance_to_round(ExecutionRound::from(12));
 
     for canister in test.state_mut().canister_states.values_mut() {
         canister.scheduler_state.time_of_last_allocation_charge =
@@ -2744,10 +2796,11 @@ fn can_record_metrics_for_a_round() {
 
     let metrics = &test.scheduler().metrics;
     assert_eq!(
-        metrics.executable_canisters_per_round.get_sample_sum() as i64,
-        3
+        metrics.executable_canisters_per_round.get_sample_sum() as u64,
+        num_canisters
     );
-    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
+    // The canister age metric is not observed for newly created canisters.
+    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 0);
     assert_eq!(metrics.round_preparation_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
@@ -2762,10 +2815,11 @@ fn can_record_metrics_for_a_round() {
     );
     assert_eq!(metrics.round_finalization_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_charge.get_sample_count(), 1);
-    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
+    // Compute allocation violation is not observed for newly created canisters.
+    assert_eq!(metrics.canister_compute_allocation_violation.get(), 0);
     assert_eq!(
         metrics.canister_messages_where_cycles_were_charged.get(),
-        10
+        scheduler_cores as u64 * 2
     );
 
     assert_eq!(
@@ -2773,12 +2827,26 @@ fn can_record_metrics_for_a_round() {
             .metadata
             .subnet_metrics
             .update_transactions_total,
-        10
+        scheduler_cores as u64 * 2
     );
     assert_eq!(
         test.state().metadata.subnet_metrics.num_canisters,
         num_canisters
     );
+
+    // Bump up the round number.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // For allocation violation to happen, the canister age should be more than `100/9 = 11 rounds`
+    // plus 2 rounds already executed.
+    test.advance_to_round(ExecutionRound::from(11 + 2));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    let metrics = &test.scheduler().metrics;
+    // The canister age metric should be observed now.
+    assert_eq!(metrics.canister_age.get_sample_sum() as i64, 12);
+    // Compute allocation violation should also be observed now.
+    assert_eq!(metrics.canister_compute_allocation_violation.get(), 1);
 }
 
 /// Check that when a canister is scheduled and can't prepay for execution, the
@@ -2791,8 +2859,9 @@ fn prepay_failures_counted() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -2803,7 +2872,7 @@ fn prepay_failures_counted() {
     let canister_with_cycles = test.create_canister_with(
         Cycles::new(1_000_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -2811,7 +2880,7 @@ fn prepay_failures_counted() {
     let canister_without_cycles = test.create_canister_with(
         Cycles::new(10),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -2986,7 +3055,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
-    use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 
     let test = StateMachineBuilder::new().build();
 
@@ -3003,6 +3072,8 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
             body: None,
             transform: None,
             max_response_bytes: None,
+            is_replicated: None,
+            pricing_version: None,
         })
         .unwrap();
 
@@ -3188,8 +3259,9 @@ fn execution_round_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(400),
             max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_message_without_dts: NumInstructions::new(10),
+            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::from(10),
+            max_instructions_per_install_code_slice: NumInstructions::from(10),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -3361,8 +3433,9 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -3371,7 +3444,7 @@ fn heartbeat_metrics_are_recorded() {
     let canister0 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -3379,7 +3452,7 @@ fn heartbeat_metrics_are_recorded() {
     let canister1 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -3430,8 +3503,9 @@ fn execution_round_does_not_end_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -3676,8 +3750,9 @@ fn scheduler_maintains_canister_order() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -3690,7 +3765,7 @@ fn scheduler_maintains_canister_order() {
         let id = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ComputeAllocation::try_from(*ca).unwrap(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
@@ -3787,6 +3862,13 @@ fn threshold_signature_agreements_metric_is_updated() {
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // Metrics are observed at the beginning of the round, so there should be no in flight contexts yet
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert!(in_flight_contexts_metric.is_empty());
+
     // Check that the SubnetCallContextManager contains all requests.
     let sign_with_ecdsa_contexts = &test
         .state()
@@ -3811,12 +3893,50 @@ fn threshold_signature_agreements_metric_is_updated() {
     test.state_mut().consensus_queue.push(response);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
+    // At the beginning of the next round, the in flight contexts should have been observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 1, sum: 1.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
+    );
+
     observe_replicated_state_metrics(
         test.scheduler().own_subnet_id,
         test.state(),
         1.into(),
         &test.scheduler().metrics,
         &no_op_logger(),
+    );
+
+    // After the round, the rejected context should be observed
+    let in_flight_contexts_metric = fetch_histogram_vec_stats(
+        test.metrics_registry(),
+        "execution_in_flight_signature_request_contexts",
+    );
+    assert_eq!(
+        metric_vec(&[
+            (
+                &[("key_id", &master_ecdsa_key_id.to_string())],
+                HistogramStats { count: 2, sum: 3.0 }
+            ),
+            (
+                &[("key_id", &master_schnorr_key_id.to_string())],
+                HistogramStats { count: 2, sum: 2.0 }
+            ),
+        ]),
+        in_flight_contexts_metric,
     );
 
     let threshold_signature_agreements_before = &test
@@ -4030,6 +4150,8 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             }),
             context: transform_context,
         }),
+        is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to `HttpRequest` method.
@@ -4091,13 +4213,78 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
 }
 
 #[test]
+fn http_outcalls_free() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let caller_canister = test.create_canister();
+
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+    test.set_cost_schedule(CanisterCyclesCostSchedule::Free);
+
+    let cycles_before = test.canister_state(caller_canister).system_state.balance();
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: Some(response_size_limit),
+        headers: BoundedHttpHeaders::new(vec![]),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name,
+            }),
+            context: transform_context,
+        }),
+        is_replicated: None,
+        pricing_version: None,
+    };
+
+    // Create request to `HttpRequest` method.
+    let payment = Cycles::new(0);
+    let payload = args.encode();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        payload,
+        payment,
+        caller_canister,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+    assert_eq!(fee, Cycles::new(0));
+    let cycles_after = test.canister_state(caller_canister).system_state.balance();
+    assert_eq!(cycles_before, cycles_after);
+}
+
+#[test]
 fn consumed_cycles_are_updated_from_valid_canisters() {
     let mut test = SchedulerTestBuilder::new().build();
 
     let canister_id = test.create_canister_with(
         Cycles::from(5_000_000_000_000u128),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -4132,7 +4319,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         Some(CanisterStatusType::Stopped),
@@ -4276,10 +4463,11 @@ fn construct_scheduler_for_prop_test(
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
         max_instructions_per_message: NumInstructions::from(instructions_per_message as u64),
-        max_instructions_per_message_without_dts: NumInstructions::from(
+        max_instructions_per_query_message: NumInstructions::from(instructions_per_message as u64),
+        max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
+        max_instructions_per_install_code_slice: NumInstructions::from(
             instructions_per_message as u64,
         ),
-        max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
         instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
@@ -4307,7 +4495,7 @@ fn construct_scheduler_for_prop_test(
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ca,
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             if heartbeat {
                 Some(SystemMethod::CanisterHeartbeat)
             } else {
@@ -4459,9 +4647,7 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
     assert!(
         minimum_executed_messages <= total_executed_messages,
-        "Executed {} messages but expected at least {}.",
-        total_executed_messages,
-        minimum_executed_messages,
+        "Executed {total_executed_messages} messages but expected at least {minimum_executed_messages}.",
     );
 }
 
@@ -4695,8 +4881,9 @@ fn dts_long_execution_completes() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -4770,8 +4957,9 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -4836,8 +5024,9 @@ fn dts_long_execution_runs_out_of_instructions() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -4875,8 +5064,9 @@ fn complete_concurrent_long_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -4916,8 +5106,9 @@ fn respect_max_paused_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions,
             ..SchedulerConfig::application_subnet()
         })
@@ -4970,7 +5161,7 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             scheduler_cores,
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
+            max_instructions_per_query_message: max_instructions_per_slice.into(),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -5036,7 +5227,7 @@ fn filter_after_long_executions() {
         .with_scheduler_config(SchedulerConfig {
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
+            max_instructions_per_query_message: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5075,7 +5266,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(160),
             max_instructions_per_message: NumInstructions::from(40),
-            max_instructions_per_message_without_dts: NumInstructions::from(10),
+            max_instructions_per_query_message: NumInstructions::from(10),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
@@ -5295,8 +5486,9 @@ fn dts_resume_long_execution_after_abort() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5343,8 +5535,9 @@ fn dts_update_and_heartbeat() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(200),
-            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(200),
+            max_instructions_per_slice: NumInstructions::from(200),
+            max_instructions_per_install_code_slice: NumInstructions::from(200),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5352,7 +5545,7 @@ fn dts_update_and_heartbeat() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -5484,7 +5677,7 @@ fn test_is_next_method_added_to_task_queue() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -5493,11 +5686,13 @@ fn test_is_next_method_added_to_task_queue() {
     let may_schedule_global_timer = false;
 
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-    assert!(!test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        !test
+            .canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     for _ in 0..3 {
         // The timer did not reach the deadline and the canister does not have
@@ -5531,11 +5726,12 @@ fn test_is_next_method_added_to_task_queue() {
             expiry_time: expiry_time_from_now(),
         });
 
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     while test
         .canister_state_mut(canister)
@@ -5555,11 +5751,12 @@ fn test_is_next_method_added_to_task_queue() {
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .is_empty());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .is_empty()
+    );
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
@@ -5660,11 +5857,11 @@ fn test_is_next_method_added_to_task_queue() {
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
-    EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
+    EcdsaKeyId::from_str(&format!("Secp256k1:key_{id:?}")).unwrap()
 }
 
 pub(crate) fn make_schnorr_key_id(id: u64) -> SchnorrKeyId {
-    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{:?}", id)).unwrap()
+    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{id:?}")).unwrap()
 }
 
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
@@ -5687,9 +5884,21 @@ fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_enabled() {
+    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Enabled);
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples_stash_disabled() {
+    test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(FlagStatus::Disabled);
+}
+
+fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples(
+    store_pre_signatures_in_state: FlagStatus,
+) {
     let key_id = make_ecdsa_key_id(0);
     let mut test = SchedulerTestBuilder::new()
+        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
 
@@ -5708,24 +5917,66 @@ fn test_sign_with_ecdsa_contexts_are_not_updated_without_quadruples() {
 
         // Check that quadruple and nonce are none
         assert!(sign_with_ecdsa_context.nonce.is_none());
-        assert!(sign_with_ecdsa_context.matched_pre_signature.is_none());
+        assert!(sign_with_ecdsa_context.requires_pre_signature());
     }
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_enabled() {
+    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Enabled);
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples_stash_disabled() {
+    test_sign_with_ecdsa_contexts_are_updated_with_quadruples(FlagStatus::Disabled);
+}
+
+fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
+    store_pre_signatures_in_state: FlagStatus,
+) {
     let key_id = make_ecdsa_key_id(0);
+    let master_key_id = MasterPublicKeyId::Ecdsa(key_id.clone()).try_into().unwrap();
     let mut test = SchedulerTestBuilder::new()
+        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_key(MasterPublicKeyId::Ecdsa(key_id.clone()))
         .build();
     let pre_sig_id = PreSigId(0);
-    let pre_sig_ids = BTreeSet::from_iter([pre_sig_id]);
+    let pre_sig = pre_signature_for_tests(&master_key_id);
+    let pre_signatures = BTreeMap::from_iter([(pre_sig_id, pre_sig.clone())]);
+
+    let key_transcript = key_transcript_for_tests(&master_key_id);
+    test.deliver_pre_signatures(BTreeMap::from_iter([(
+        master_key_id.clone(),
+        AvailablePreSignatures {
+            key_transcript: key_transcript.clone(),
+            pre_signatures,
+        },
+    )]));
+
+    if store_pre_signatures_in_state == FlagStatus::Enabled {
+        // If the stash is enabled, deliver pre-signatures only once.
+        // They should be stored in the stash and don't have to be delivered in every round.
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        test.deliver_pre_signatures(BTreeMap::from_iter([(
+            master_key_id.clone(),
+            AvailablePreSignatures {
+                key_transcript: key_transcript.clone(),
+                pre_signatures: BTreeMap::new(),
+            },
+        )]));
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 1);
+        assert!(
+            stashes[&master_key_id]
+                .pre_signatures
+                .contains_key(&pre_sig_id),
+        );
+    }
 
     inject_ecdsa_signing_request(&mut test, &key_id);
-    test.deliver_pre_signature_ids(BTreeMap::from_iter([(
-        MasterPublicKeyId::Ecdsa(key_id),
-        pre_sig_ids,
-    )]));
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -5742,8 +5993,29 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
         sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
     );
+    assert_eq!(
+        sign_with_ecdsa_context
+            .ecdsa_args()
+            .pre_signature
+            .clone()
+            .unwrap(),
+        EcdsaMatchedPreSignature {
+            id: pre_sig_id,
+            height: expected_height,
+            pre_signature: pre_sig.as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript.clone()),
+        }
+    );
+
     // Check that nonce is still none
     assert!(sign_with_ecdsa_context.nonce.is_none());
+
+    if store_pre_signatures_in_state == FlagStatus::Enabled {
+        // If pre-signatures were stored in the state, they should now have been consumed.
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 1);
+        assert!(stashes[&master_key_id].pre_signatures.is_empty());
+    }
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     let contexts = test
@@ -5757,6 +6029,19 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
     assert_eq!(
         sign_with_ecdsa_context.matched_pre_signature,
         Some((pre_sig_id, expected_height))
+    );
+    assert_eq!(
+        sign_with_ecdsa_context
+            .ecdsa_args()
+            .pre_signature
+            .clone()
+            .unwrap(),
+        EcdsaMatchedPreSignature {
+            id: pre_sig_id,
+            height: expected_height,
+            pre_signature: pre_sig.as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript),
+        }
     );
     // Check that nonce is set
     let nonce = sign_with_ecdsa_context.nonce;
@@ -5776,9 +6061,27 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples() {
 }
 
 #[test]
-fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_enabled() {
+    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Enabled);
+}
+
+#[test]
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys_stash_disabled() {
+    test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(FlagStatus::Disabled);
+}
+
+fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
+    store_pre_signatures_in_state: FlagStatus,
+) {
     let key_ids: Vec<_> = (0..3).map(make_ecdsa_key_id).collect();
+    let master_key_ids: Vec<_> = key_ids
+        .iter()
+        .cloned()
+        .map(MasterPublicKeyId::Ecdsa)
+        .flat_map(IDkgMasterPublicKeyId::try_from)
+        .collect();
     let mut test = SchedulerTestBuilder::new()
+        .with_store_pre_signatures_in_state(store_pre_signatures_in_state)
         .with_chain_keys(
             key_ids
                 .iter()
@@ -5789,19 +6092,48 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
         .build();
 
     // Deliver 2 quadruples for the first key, 1 for the second, 0 for the third
-    let pre_sig_ids0 = BTreeSet::from_iter([PreSigId(0), PreSigId(1)]);
-    let pre_sig_ids1 = BTreeSet::from_iter([PreSigId(2)]);
-    let pre_sig_id_map = BTreeMap::from_iter([
+    let pre_sigs0 = BTreeMap::from_iter([
+        (PreSigId(0), pre_signature_for_tests(&master_key_ids[0])),
+        (PreSigId(1), pre_signature_for_tests(&master_key_ids[0])),
+    ]);
+    let key_transcript0 = key_transcript_for_tests(&master_key_ids[0]);
+    let pre_sigs1 =
+        BTreeMap::from_iter([(PreSigId(2), pre_signature_for_tests(&master_key_ids[1]))]);
+    let key_transcript1 = key_transcript_for_tests(&master_key_ids[1]);
+    let mut pre_signatures = BTreeMap::from_iter([
         (
-            MasterPublicKeyId::Ecdsa(key_ids[0].clone()),
-            pre_sig_ids0.clone(),
+            master_key_ids[0].clone(),
+            AvailablePreSignatures {
+                key_transcript: key_transcript0.clone(),
+                pre_signatures: pre_sigs0.clone(),
+            },
         ),
         (
-            MasterPublicKeyId::Ecdsa(key_ids[1].clone()),
-            pre_sig_ids1.clone(),
+            master_key_ids[1].clone(),
+            AvailablePreSignatures {
+                key_transcript: key_transcript1.clone(),
+                pre_signatures: pre_sigs1.clone(),
+            },
         ),
     ]);
-    test.deliver_pre_signature_ids(pre_sig_id_map);
+    test.deliver_pre_signatures(pre_signatures.clone());
+
+    if store_pre_signatures_in_state == FlagStatus::Enabled {
+        // If the stash is enabled, deliver pre-signatures only once.
+        // They should be stored in the stash and don't have to be delivered in every round.
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        pre_signatures
+            .values_mut()
+            .for_each(|pre_sigs| pre_sigs.pre_signatures.clear());
+        test.deliver_pre_signatures(pre_signatures);
+        test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        let stashes = test.state().pre_signature_stashes();
+        assert_eq!(stashes.len(), 2);
+        assert_eq!(stashes[&master_key_ids[0]].pre_signatures, pre_sigs0);
+        assert_eq!(stashes[&master_key_ids[1]].pre_signatures, pre_sigs1);
+    }
 
     // Inject 3 contexts requesting the third, second and first key in order
     for i in (0..3).rev() {
@@ -5811,6 +6143,19 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     // Execute two rounds
     for _ in 0..2 {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+        if store_pre_signatures_in_state == FlagStatus::Enabled {
+            // If pre-signatures were stored in the state, they should now have been consumed.
+            let stashes = test.state().pre_signature_stashes();
+            assert_eq!(stashes.len(), 2);
+            assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
+            assert!(
+                stashes[&master_key_ids[0]]
+                    .pre_signatures
+                    .contains_key(&PreSigId(1))
+            );
+            assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
+        }
     }
 
     let sign_with_ecdsa_contexts = &test
@@ -5822,7 +6167,7 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     // First context (requesting key 3) should be unmatched
     let context0 = sign_with_ecdsa_contexts.get(&CallbackId::from(0)).unwrap();
     assert!(context0.nonce.is_none());
-    assert!(context0.matched_pre_signature.is_none());
+    assert!(context0.requires_pre_signature());
 
     // Remaining contexts should have been matched
     let expected_height = Height::from(test.last_round().get() - 1);
@@ -5830,14 +6175,32 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys() {
     assert!(context1.nonce.is_some());
     assert_eq!(
         context1.matched_pre_signature,
-        Some((*pre_sig_ids1.first().unwrap(), expected_height))
+        Some((*pre_sigs1.keys().next().unwrap(), expected_height))
+    );
+    assert_eq!(
+        context1.ecdsa_args().pre_signature.clone().unwrap(),
+        EcdsaMatchedPreSignature {
+            id: *pre_sigs1.keys().next().unwrap(),
+            height: expected_height,
+            pre_signature: pre_sigs1.values().next().unwrap().as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript1),
+        }
     );
 
     let context2 = sign_with_ecdsa_contexts.get(&CallbackId::from(2)).unwrap();
     assert!(context2.nonce.is_some());
     assert_eq!(
         context2.matched_pre_signature,
-        Some((*pre_sig_ids0.first().unwrap(), expected_height))
+        Some((*pre_sigs0.keys().next().unwrap(), expected_height))
+    );
+    assert_eq!(
+        context2.ecdsa_args().pre_signature.clone().unwrap(),
+        EcdsaMatchedPreSignature {
+            id: *pre_sigs0.keys().next().unwrap(),
+            height: expected_height,
+            pre_signature: pre_sigs0.values().next().unwrap().as_ecdsa().unwrap(),
+            key_transcript: Arc::new(key_transcript0),
+        }
     );
 }
 
@@ -5850,8 +6213,9 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -5913,6 +6277,93 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
     // Simulate a subnet split that migrates the canister to another subnet.
     test.state_mut().take_canister_state(&canister_id);
     after_split(test.state_mut());
+
+    // Should have removed the `RawRandContext` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+}
+
+#[test]
+fn subnet_split_cleans_in_progress_raw_rand_requests() {
+    let canister_id = canister_test_id(2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    test.advance_to_round(ExecutionRound::new(2));
+    let last_round = test.last_round();
+
+    // Inject fake request to be able to create a response.
+    let canister = get_running_canister(canister_id);
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::new(0),
+        canister_id,
+        InputQueueType::LocalSubnet,
+    );
+    let state = test.state_mut();
+    state.put_canister_state(canister);
+    state.pop_subnet_input();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(
+            RequestBuilder::new().sender(canister_id).build(),
+            last_round,
+            UNIX_EPOCH,
+        );
+    // `SubnetCallContextManager` contains one `RawRandContext`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert!(own_subnet_id != other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `RawRandContext` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates the canister to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `RawRandContext` and produced a reject response.
     assert_eq!(
@@ -6055,8 +6506,9 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (instructions * max_messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_message_without_dts: instructions.into(),
+            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
+            max_instructions_per_install_code_slice: instructions.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -6117,8 +6569,9 @@ fn inner_round_long_execution_is_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (slice * 2).into(),
             max_instructions_per_message: (slice * 10).into(),
-            max_instructions_per_message_without_dts: slice.into(),
+            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -6175,8 +6628,9 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             scheduler_cores,
             max_instructions_per_round: (instructions * messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_message_without_dts: instructions.into(),
+            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
+            max_instructions_per_install_code_slice: instructions.into(),
             instruction_overhead_per_execution: 0.into(),
             instruction_overhead_per_canister: 0.into(),
             instruction_overhead_per_canister_for_finalization: 0.into(),
@@ -6269,8 +6723,9 @@ fn charge_idle_canisters_for_full_execution_round() {
             scheduler_cores,
             max_instructions_per_round: slice.into(),
             max_instructions_per_message: slice.into(),
-            max_instructions_per_message_without_dts: slice.into(),
+            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),

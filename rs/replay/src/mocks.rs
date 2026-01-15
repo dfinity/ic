@@ -4,9 +4,9 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
     Height, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
 };
 
 /// A mock we're using to instantiate the consensus Validator. Since notarizations

@@ -2,7 +2,7 @@
 //! The types in this module are used to serialize and deserialize data
 //! from and to JSON, and are used by both crates.
 
-use crate::UserError;
+use crate::RejectResponse;
 use candid::Principal;
 use hex;
 use reqwest::Response;
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use strum_macros::EnumIter;
 
 pub type InstanceId = usize;
 
@@ -30,6 +31,14 @@ pub enum HttpGatewayBackend {
 pub struct HttpsConfig {
     pub cert_path: String,
     pub key_path: String,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InstanceHttpGatewayConfig {
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -67,13 +76,14 @@ pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
         topology: Topology,
+        http_gateway_info: Option<HttpGatewayInfo>,
     },
     Error {
         message: String,
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -104,11 +114,11 @@ impl std::fmt::Display for RawEffectivePrincipal {
             RawEffectivePrincipal::None => write!(f, "None"),
             RawEffectivePrincipal::SubnetId(subnet_id) => {
                 let principal = Principal::from_slice(subnet_id);
-                write!(f, "SubnetId({})", principal)
+                write!(f, "SubnetId({principal})")
             }
             RawEffectivePrincipal::CanisterId(canister_id) => {
                 let principal = Principal::from_slice(canister_id);
-                write!(f, "CanisterId({})", principal)
+                write!(f, "CanisterId({principal})")
             }
         }
     }
@@ -123,9 +133,9 @@ pub struct RawMessageId {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawSubmitIngressResult {
-    Ok(RawMessageId),
-    Err(UserError),
+pub struct RawIngressStatusArgs {
+    pub raw_message_id: RawMessageId,
+    pub raw_caller: Option<RawPrincipalId>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -145,21 +155,30 @@ pub struct RawCanisterCall {
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
 pub enum RawCanisterResult {
-    Ok(RawWasmResult),
-    Err(UserError),
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
-pub enum RawWasmResult {
-    /// Raw response, returned in a "happy" case
-    Reply(
+    Ok(
         #[serde(deserialize_with = "base64::deserialize")]
         #[serde(serialize_with = "base64::serialize")]
         Vec<u8>,
     ),
-    /// Returned with an error message when the canister decides to reject the
-    /// message
-    Reject(String),
+    Err(RejectResponse),
+}
+
+impl From<Result<Vec<u8>, RejectResponse>> for RawCanisterResult {
+    fn from(result: Result<Vec<u8>, RejectResponse>) -> Self {
+        match result {
+            Ok(data) => RawCanisterResult::Ok(data),
+            Err(reject_response) => RawCanisterResult::Err(reject_response),
+        }
+    }
+}
+
+impl From<RawCanisterResult> for Result<Vec<u8>, RejectResponse> {
+    fn from(result: RawCanisterResult) -> Self {
+        match result {
+            RawCanisterResult::Ok(data) => Ok(data),
+            RawCanisterResult::Err(reject_response) => Err(reject_response),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
@@ -205,7 +224,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(t) => ApiResponse::Success(t),
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -216,7 +235,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Started { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -227,7 +246,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                         ApiResponse::Busy { state_label, op_id }
                     }
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse response: {}", e),
+                        message: format!("Could not parse response: {e}"),
                     },
                 }
             }
@@ -236,7 +255,7 @@ impl<T: DeserializeOwned> ApiResponse<T> {
                 match result {
                     Ok(e) => ApiResponse::Error { message: e.message },
                     Err(e) => ApiResponse::Error {
-                        message: format!("Could not parse error: {}", e),
+                        message: format!("Could not parse error: {e}"),
                     },
                 }
             }
@@ -347,6 +366,18 @@ impl From<Principal> for RawNodeId {
     }
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Default)]
+pub struct RawTickConfigs {
+    pub blockmakers: Option<Vec<RawSubnetBlockmakers>>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RawSubnetBlockmakers {
+    pub subnet: RawSubnetId,
+    pub blockmaker: RawNodeId,
+    pub failed_blockmakers: Vec<RawNodeId>,
+}
+
 #[derive(Serialize, Deserialize, JsonSchema)]
 pub struct RawVerifyCanisterSigArg {
     #[serde(deserialize_with = "base64::deserialize")]
@@ -409,7 +440,18 @@ pub mod base64 {
 // ================================================================================================================= //
 
 #[derive(
-    Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd, Serialize, Deserialize, JsonSchema,
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    Hash,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    EnumIter,
 )]
 pub enum SubnetKind {
     Application,
@@ -499,13 +541,113 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum IcpConfigFlag {
+    Disabled,
+    Enabled,
+}
+
+/// Specifies ICP config of this instance.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpConfig {
+    /// Beta features (disabled on the ICP mainnet).
+    pub beta_features: Option<IcpConfigFlag>,
+    /// Canister backtraces (enabled on the ICP mainnet).
+    pub canister_backtrace: Option<IcpConfigFlag>,
+    /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub function_name_length_limits: Option<IcpConfigFlag>,
+    /// Rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Canister execution refers to instructions and memory writes here.
+    pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IcpFeaturesConfig {
+    /// Default configuration of an ICP feature resembling mainnet configuration as closely as possible.
+    #[default]
+    DefaultConfig,
+}
+
+/// Specifies ICP features enabled by deploying their corresponding system canisters
+/// when creating a PocketIC instance and keeping them up to date
+/// during the PocketIC instance lifetime.
+/// The subnets to which the corresponding system canisters are deployed must be empty,
+/// i.e., their corresponding field in `ExtendedSubnetConfigSet` must be `None`
+/// or `Some(config)` with `config.state_config = SubnetStateConfig::New`.
+/// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
+/// if the corresponding field is not `None`.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpFeatures {
+    /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
+    /// Subnets: NNS.
+    pub registry: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
+    /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
+    /// Subnets: NNS.
+    pub cycles_minting: Option<IcpFeaturesConfig>,
+    /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
+    /// Subnets: NNS.
+    pub icp_token: Option<IcpFeaturesConfig>,
+    /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
+    /// Subnets: II.
+    pub cycles_token: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
+    /// The initial NNS neuron is controlled by the anonymous principal.
+    /// Subnets: NNS.
+    pub nns_governance: Option<IcpFeaturesConfig>,
+    /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
+    /// and uploads the SNS canister WASMs to the SNS-W canister.
+    /// Subnets: NNS, SNS.
+    pub sns: Option<IcpFeaturesConfig>,
+    /// Deploys the Internet Identity canister.
+    /// Subnets: II.
+    pub ii: Option<IcpFeaturesConfig>,
+    /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
+    /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
+    /// Subnets: NNS.
+    pub nns_ui: Option<IcpFeaturesConfig>,
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub dogecoin: Option<IcpFeaturesConfig>,
+    /// Deploys the canister migration orchestrator canister.
+    /// Subnets: NNS.
+    pub canister_migration: Option<IcpFeaturesConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum InitialTime {
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    Timestamp(RawTime),
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    AutoProgress(AutoProgressConfig),
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IncompleteStateFlag {
+    #[default]
+    Disabled,
+    Enabled,
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: bool,
+    pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub dogecoind_addr: Option<Vec<SocketAddr>>,
+    pub icp_features: Option<IcpFeatures>,
+    pub incomplete_state: Option<IncompleteStateFlag>,
+    pub initial_time: Option<InitialTime>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -528,8 +670,8 @@ pub struct SubnetSpec {
 }
 
 impl SubnetSpec {
-    pub fn with_state_dir(mut self, path: PathBuf, subnet_id: SubnetId) -> SubnetSpec {
-        self.state_config = SubnetStateConfig::FromPath(path, RawSubnetId::from(subnet_id));
+    pub fn with_state_dir(mut self, path: PathBuf) -> SubnetSpec {
+        self.state_config = SubnetStateConfig::FromPath(path);
         self
     }
 
@@ -540,14 +682,6 @@ impl SubnetSpec {
 
     pub fn get_state_path(&self) -> Option<PathBuf> {
         self.state_config.get_path()
-    }
-
-    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
-        match &self.state_config {
-            SubnetStateConfig::New => None,
-            SubnetStateConfig::FromPath(_, subnet_id) => Some(subnet_id.clone()),
-            SubnetStateConfig::FromBlobStore(_, subnet_id) => Some(subnet_id.clone()),
-        }
     }
 
     pub fn get_instruction_config(&self) -> SubnetInstructionConfig {
@@ -591,24 +725,17 @@ pub enum SubnetStateConfig {
     New,
     /// Load existing subnet state from the given path.
     /// The path must be on a filesystem accessible to the server process.
-    FromPath(PathBuf, RawSubnetId),
+    FromPath(PathBuf),
     /// Load existing subnet state from blobstore. Needs to be uploaded first!
     /// Not implemented!
-    FromBlobStore(BlobId, RawSubnetId),
+    FromBlobStore(BlobId),
 }
 
 impl SubnetStateConfig {
     pub fn get_path(&self) -> Option<PathBuf> {
         match self {
-            SubnetStateConfig::FromPath(path, _) => Some(path.clone()),
-            SubnetStateConfig::FromBlobStore(_, _) => None,
-            SubnetStateConfig::New => None,
-        }
-    }
-    pub fn get_subnet_id(&self) -> Option<RawSubnetId> {
-        match self {
-            SubnetStateConfig::FromPath(_, id) => Some(id.clone()),
-            SubnetStateConfig::FromBlobStore(_, id) => Some(id.clone()),
+            SubnetStateConfig::FromPath(path) => Some(path.clone()),
+            SubnetStateConfig::FromBlobStore(_) => None,
             SubnetStateConfig::New => None,
         }
     }
@@ -617,14 +744,7 @@ impl SubnetStateConfig {
 impl ExtendedSubnetConfigSet {
     // Return the configured named subnets in order.
     #[allow(clippy::type_complexity)]
-    pub fn get_named(
-        &self,
-    ) -> Vec<(
-        SubnetKind,
-        Option<PathBuf>,
-        Option<RawSubnetId>,
-        SubnetInstructionConfig,
-    )> {
+    pub fn get_named(&self) -> Vec<(SubnetKind, Option<PathBuf>, SubnetInstructionConfig)> {
         use SubnetKind::*;
         vec![
             (self.nns.clone(), NNS),
@@ -637,12 +757,7 @@ impl ExtendedSubnetConfigSet {
         .filter(|(mb, _)| mb.is_some())
         .map(|(mb, kind)| {
             let spec = mb.unwrap();
-            (
-                kind,
-                spec.get_state_path(),
-                spec.get_subnet_id(),
-                spec.get_instruction_config(),
-            )
+            (kind, spec.get_state_path(), spec.get_instruction_config())
         })
         .collect()
     }
@@ -661,6 +776,71 @@ impl ExtendedSubnetConfigSet {
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
     }
+
+    pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
+        let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
+            if let Some(config) = subnet
+                && !matches!(config.state_config, SubnetStateConfig::New)
+            {
+                return Err(format!(
+                    "The {subnet_desc} subnet must be empty when specifying the `{icp_feature}` ICP feature."
+                ));
+            }
+            Ok(())
+        };
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            registry,
+            cycles_minting,
+            icp_token,
+            cycles_token,
+            nns_governance,
+            sns,
+            ii,
+            nns_ui,
+            bitcoin,
+            dogecoin,
+            canister_migration,
+        } = icp_features;
+        // NNS canisters
+        for (flag, icp_feature_str) in [
+            (registry, "registry"),
+            (cycles_minting, "cycles_minting"),
+            (icp_token, "icp_token"),
+            (nns_governance, "nns_governance"),
+            (sns, "sns"),
+            (nns_ui, "nns_ui"),
+            (canister_migration, "canister_migration"),
+        ] {
+            if flag.is_some() {
+                check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
+                self.nns = Some(self.nns.unwrap_or_default());
+            }
+        }
+        // canisters on the II subnet
+        for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.ii, "II", icp_feature_str)?;
+                self.ii = Some(self.ii.unwrap_or_default());
+            }
+        }
+        // canisters on the SNS subnet
+        for (flag, icp_feature_str) in [(sns, "sns")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
+                self.sns = Some(self.sns.unwrap_or_default());
+            }
+        }
+        // canisters on the Bitcoin subnet
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
+            if flag.is_some() {
+                check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
+                self.bitcoin = Some(self.bitcoin.unwrap_or_default());
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
@@ -670,8 +850,6 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Node ids of nodes in the subnet.
-    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }
@@ -914,4 +1092,29 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
             additional_responses: mock_canister_http_response.additional_responses,
         }
     }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
 }

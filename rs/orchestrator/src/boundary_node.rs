@@ -5,7 +5,7 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::crypto::CryptoConfig;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{NodeId, ReplicaVersion};
 use std::{
     collections::HashMap,
@@ -67,9 +67,7 @@ impl BoundaryNodeManager {
         Self {
             registry,
             _metrics: metrics,
-            process: Arc::new(Mutex::new(ProcessManager::new(
-                logger.clone().inner_logger.root,
-            ))),
+            process: Arc::new(Mutex::new(ProcessManager::new(logger.clone()))),
             ic_binary_dir,
             crypto_config,
             version,
@@ -115,7 +113,10 @@ impl BoundaryNodeManager {
                         }
                         // BN should not be active when the node doesn't have a domain name
                         Ok(None) => {
-                            warn!(self.logger, "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down.");
+                            warn!(
+                                self.logger,
+                                "There is no domain associated with the node, while this is a requirement for the API boundary node. Shutting ic-boundary down."
+                            );
                             if let Err(err) = self.ensure_boundary_node_stopped() {
                                 warn!(self.logger, "Failed to stop Boundary Node: {}", err);
                             }

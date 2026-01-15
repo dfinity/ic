@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic_principal",
+]
+
+DEV_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_canister(
+    name = "call-loop-canister",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    keep_name_section = True,
+    service_file = ":call_loop_canister.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "call_loop_canister_test",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    data = ["call_loop_canister.did"],
+    env = {
+        "DID_PATH": "rs/rust_canisters/call_loop_canister/call_loop_canister.did",
+    },
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_binary(
+    name = "call-loop-canister-binary",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    visibility = [],
+    deps = DEPENDENCIES,
+)

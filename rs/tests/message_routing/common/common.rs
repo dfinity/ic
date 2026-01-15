@@ -1,8 +1,8 @@
 use candid::Principal;
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
-use futures::{future::join_all, Future};
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use futures::{Future, future::join_all};
+use ic_management_canister_types::CanisterId;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
 use slog::info;
@@ -13,7 +13,9 @@ use xnet_test::StartArgs;
 /// given parameters.
 pub async fn start_all_canisters(
     canisters: &[Vec<Canister<'_>>],
-    payload_size_bytes: u64,
+    request_payload_size_bytes: u64,
+    call_timeouts_seconds: &[Option<u32>],
+    response_payload_size_bytes: u64,
     canister_to_subnet_rate: u64,
 ) {
     let topology: Vec<Vec<CanisterId>> = canisters
@@ -33,7 +35,9 @@ pub async fn start_all_canisters(
         let input = StartArgs {
             network_topology: topology.clone(),
             canister_to_subnet_rate,
-            payload_size_bytes,
+            request_payload_size_bytes,
+            call_timeouts_seconds: call_timeouts_seconds.to_vec(),
+            response_payload_size_bytes,
         };
         futures.push(async move {
             let _: String = canister
@@ -41,8 +45,7 @@ pub async fn start_all_canisters(
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed because of: {}",
-                        canister_idx, subnet_idx, e
+                        "Starting canister_idx={canister_idx} on subnet_idx={subnet_idx} failed because of: {e}"
                     )
                 });
         });
@@ -57,40 +60,56 @@ pub async fn install_canisters(
     endpoints_runtime: &[Runtime],
     subnets: usize,
     canisters_per_subnet: usize,
-) -> Vec<Vec<Canister>> {
+) -> Vec<Vec<Canister<'_>>> {
     let logger = env.logger();
     let wasm = Wasm::from_file(get_dependency_path(
         env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),
     ));
-    let mut futures: Vec<Vec<_>> = Vec::new();
-    for subnet_idx in 0..subnets {
-        futures.push(vec![]);
-        for canister_idx in 0..canisters_per_subnet {
-            let new_wasm = wasm.clone();
-            let new_logger = logger.clone();
-            futures[subnet_idx].push(async move {
-                let canister = new_wasm
-                    .clone()
-                    .install_(&endpoints_runtime[subnet_idx], vec![])
-                    .await
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Installation of the canister_idx={} on subnet_idx={} failed.",
-                            canister_idx, subnet_idx
-                        )
-                    });
-                info!(
-                    new_logger,
-                    "Installed canister (#{:?}) {} on subnet #{:?}",
-                    canister_idx,
-                    canister.canister_id(),
-                    subnet_idx
-                );
-                canister
-            });
+
+    // Install canisters in batches to avoid running into HTTP endpoint rate limits.
+    const BATCH_SIZE: usize = 40;
+    let mut result = (0..subnets).map(|_| Vec::new()).collect::<Vec<_>>();
+    for batch in 0.. {
+        if batch * BATCH_SIZE >= canisters_per_subnet {
+            break;
+        }
+        let mut futures: Vec<Vec<_>> = Vec::new();
+        for subnet_idx in 0..subnets {
+            futures.push(vec![]);
+            for canister_idx in (0..canisters_per_subnet)
+                .skip(batch * BATCH_SIZE)
+                .take(BATCH_SIZE)
+            {
+                let new_wasm = wasm.clone();
+                let new_logger = logger.clone();
+                futures[subnet_idx].push(async move {
+                    let canister = new_wasm
+                        .clone()
+                        .install_(&endpoints_runtime[subnet_idx], vec![])
+                        .await
+                        .unwrap_or_else(|e| {
+                            panic!(
+                                "Installation of the canister_idx={canister_idx} on subnet_idx={subnet_idx} failed with error: {e}"
+                            )
+                        });
+                    info!(
+                        new_logger,
+                        "Installed canister (#{:?}) {} on subnet #{:?}",
+                        canister_idx,
+                        canister.canister_id(),
+                        subnet_idx
+                    );
+                    canister
+                });
+            }
+        }
+        let batch_canisters =
+            join_all(futures.into_iter().map(|x| async { join_all(x).await })).await;
+        for (subnet, canisters) in batch_canisters.into_iter().enumerate() {
+            result[subnet].extend(canisters);
         }
     }
-    join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
+    result
 }
 
 /// Concurrently executes the `call` async closure for every item in `targets`,

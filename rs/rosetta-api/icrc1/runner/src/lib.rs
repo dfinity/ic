@@ -5,7 +5,7 @@ use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";
@@ -45,12 +45,18 @@ pub struct RosettaOptions {
     pub symbol: Option<String>,
 
     pub decimals: Option<u32>,
+
+    pub multi_tokens: Option<String>,
+
+    pub multi_tokens_store_dir: Option<String>,
+
+    pub log_file: Option<String>,
 }
 
 impl Default for RosettaOptions {
     fn default() -> Self {
         RosettaOptions {
-            ledger_id: Principal::anonymous(),
+            ledger_id: Principal::from_str("3jkp5-oyaaa-aaaaj-azwqa-cai").unwrap(),
             store_type: "in-memory".to_owned(),
             network_type: "testnet".to_owned(),
             network_url: None,
@@ -58,6 +64,9 @@ impl Default for RosettaOptions {
             offline: true,
             symbol: Some(DEFAULT_TOKEN_SYMBOL.to_string()),
             decimals: Some(DEFAULT_DECIMAL_PLACES.into()),
+            multi_tokens: None,
+            multi_tokens_store_dir: None,
+            log_file: None,
         }
     }
 }
@@ -72,10 +81,18 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
     let state = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let port_file = state.path().join("port");
 
-    let mut command = &mut Command::new(rosetta_bin);
-    command = command
-        .arg("--ledger-id")
-        .arg(arguments.ledger_id.to_string())
+    let mut command = Command::new(rosetta_bin);
+    if let Some(multi_tokens) = arguments.multi_tokens {
+        command.arg("--multi-tokens").arg(multi_tokens);
+        if let Some(store_dir) = arguments.multi_tokens_store_dir {
+            command.arg("--multi-tokens-store-dir").arg(store_dir);
+        }
+    } else {
+        command
+            .arg("--ledger-id")
+            .arg(arguments.ledger_id.to_string());
+    }
+    command
         .arg("--network-type")
         .arg(arguments.network_type)
         .arg("--store-type")
@@ -84,28 +101,31 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
         .arg(port_file.clone())
         .stderr(std::process::Stdio::piped());
 
-    if arguments.network_url.is_some() {
-        command = command
-            .arg("--network-url")
-            .arg(arguments.network_url.unwrap());
+    if let Some(network_url) = arguments.network_url {
+        command.arg("--network-url").arg(network_url);
     }
 
     if arguments.offline {
-        command = command.arg("--offline");
+        command.arg("--offline");
     }
 
     if let Some(symbol) = arguments.symbol {
-        command = command.arg("--icrc1-symbol").arg(symbol);
+        command.arg("--icrc1-symbol").arg(symbol);
     }
 
     if let Some(decimals) = arguments.decimals {
-        command = command.arg("--icrc1-decimals").arg(decimals.to_string());
+        command.arg("--icrc1-decimals").arg(decimals.to_string());
     }
 
     if arguments.exit_on_sync {
-        command = command.arg("--exit-on-sync");
+        command.arg("--exit-on-sync");
     }
-    let child_process = command.spawn().unwrap_or_else(|e| {
+
+    if let Some(log_file) = arguments.log_file {
+        command.arg("--log-file").arg(log_file);
+    }
+
+    let mut child_process = command.spawn().unwrap_or_else(|e| {
         panic!(
             "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
             rosetta_bin.display(),
@@ -125,9 +145,12 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                     break;
                 }
                 Err(e) => {
-                    println!("Expected port in port file, got {}: {}", port_str, e);
+                    println!("Expected port in port file, got {port_str}: {e}");
                 }
             }
+        } else if let Some(exit_status) = child_process.try_wait().unwrap() {
+            println!("Rosetta exited with status: {exit_status}");
+            break;
         }
         sleep(Duration::from_millis(100)).await;
         tries_left -= 1;
@@ -138,7 +161,7 @@ pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> Ros
                 .wait_with_output()
                 .expect("Failed to wait for child process");
 
-            panic!("Failed to start rosetta: {:?}", output);
+            panic!("Failed to start rosetta: {output:?}");
         }
         Some(port) => RosettaContext {
             _proc: KillOnDrop(child_process),

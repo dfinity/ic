@@ -7,7 +7,7 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
@@ -20,7 +20,7 @@ impl Registry {
         &mut self,
         payload: UpdateUnassignedNodesConfigPayload,
     ) {
-        println!("{}do_update_unassigned_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_update_unassigned_nodes: {payload:?}");
 
         let unassigned_nodes_key = make_unassigned_nodes_config_record_key();
         let (current_ssh_readonly_access, current_replica_version) = match self
@@ -115,7 +115,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),

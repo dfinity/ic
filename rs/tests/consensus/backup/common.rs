@@ -31,12 +31,12 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::{
-        assert_assigned_replica_version, bless_public_replica_version,
-        deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version, UpdateImageType,
+        assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
+        get_assigned_replica_version,
     },
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -50,105 +50,72 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
+    util::{MessageCanister, block_on, get_nns_node},
 };
-use ic_types::{Height, ReplicaVersion};
-use slog::{debug, error, info, Logger};
-use std::fs::File;
+use ic_types::Height;
+use slog::{Logger, debug, error, info};
 use std::{
     ffi::OsStr,
-    fs::{self, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    fs,
+    io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
+use std::{fs::File, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
 const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
-fn setup_common() -> InternetComputer {
-    InternetComputer::new().add_subnet(
-        Subnet::new(SubnetType::System)
-            .add_nodes(SUBNET_SIZE)
-            .with_chain_key_config(ChainKeyConfig {
-                key_configs: make_key_ids_for_all_schemes()
-                    .into_iter()
-                    .map(|key_id| KeyConfig {
-                        max_queue_size: 20,
-                        pre_signatures_to_create_in_advance: 7,
-                        key_id,
-                    })
-                    .collect(),
-                signature_request_timeout_ns: None,
-                idkg_key_rotation_period_ms: None,
-            })
-            .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
-    )
-}
-
-pub fn setup_upgrade(env: TestEnv) {
-    setup_common()
-        .with_mainnet_config()
+pub fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .add_nodes(SUBNET_SIZE)
+                .with_chain_key_config(ChainKeyConfig {
+                    key_configs: make_key_ids_for_all_schemes()
+                        .into_iter()
+                        .map(|key_id| KeyConfig {
+                            max_queue_size: 20,
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
+                            key_id,
+                        })
+                        .collect(),
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                })
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
+        )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-pub fn setup_downgrade(env: TestEnv) {
-    setup_common()
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-
-    install_nns_and_check_progress(env.topology_snapshot());
-}
-
-pub fn test_upgrade(env: TestEnv) {
+pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
-    info!(log, "Elect the branch replica version");
-    let original_branch_version = read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")
-        .expect("tip-of-branch IC version");
-    let branch_version = format!("{}-test", original_branch_version);
+    info!(log, "Elect the target replica version");
+    let binary_version = get_current_branch_version();
+    let target_version = get_guestos_update_img_version();
 
-    // Bless branch version
-    let sha256 = get_ic_os_update_img_test_sha256().unwrap();
-    let upgrade_url = get_ic_os_update_img_test_url().unwrap();
+    // Bless target version
+    let sha256 = get_guestos_update_img_sha256();
+    let upgrade_url = get_guestos_update_img_url();
+    let guest_launch_measurements = get_guestos_launch_measurements();
     block_on(bless_replica_version(
         &nns_node,
-        &original_branch_version,
-        UpdateImageType::ImageTest,
+        &target_version,
         &log,
-        &sha256,
+        sha256,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
-    info!(log, "TARGET_VERSION: {}", branch_version);
-    test(env, branch_version.clone(), branch_version);
-}
-
-pub fn test_downgrade(env: TestEnv) {
-    let log = env.logger();
-    let nns_node = get_nns_node(&env.topology_snapshot());
-    let initial_version =
-        get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let mainnet_version = read_dependency_to_string("testnet/mainnet_nns_revision.txt")
-        .expect("could not read mainnet version!");
-    info!(log, "Elect the mainnet replica version");
-    info!(log, "TARGET_VERSION: {}", mainnet_version);
-    block_on(bless_public_replica_version(
-        &nns_node,
-        &mainnet_version,
-        UpdateImageType::Image,
-        UpdateImageType::Image,
-        &log,
-    ));
-    test(env, initial_version, mainnet_version);
-}
-
-fn test(env: TestEnv, binary_version: String, target_version: String) {
-    let log = env.logger();
+    info!(log, "TARGET_VERSION: {}", target_version);
 
     info!(log, "Create all directories");
     let root_dir = tempfile::TempDir::new()
@@ -168,25 +135,43 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
-    let replica_version =
+    let initial_replica_version =
         get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
-    let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
-        .expect("Assigned replica version should be valid");
 
     info!(
         log,
         "Copy the binaries needed for replay of the current version"
     );
-    let backup_binaries_dir = backup_dir.join("binaries").join(&binary_version);
+    let backup_binaries_dir = backup_dir.join("binaries").join(binary_version.to_string());
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
     // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
-    let testing_dir = get_dependency_path("rs/tests");
-    let binaries_path = testing_dir.join("backup/binaries");
-    copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
-    copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
-    copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
-    copy_file(&binaries_path, &backup_binaries_dir, "compiler_sandbox");
+    copy_file(
+        &get_dependency_path(std::env::var("IC_REPLAY_PATH").expect("IC_REPLAY_PATH not set")),
+        &backup_binaries_dir,
+        "ic-replay",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("SANDBOX_LAUNCHER_PATH").expect("SANDBOX_LAUNCHER_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "sandbox_launcher",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("CANISTER_SANDBOX_PATH").expect("CANISTER_SANDBOX_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "canister_sandbox",
+    );
+    copy_file(
+        &get_dependency_path(
+            std::env::var("COMPILER_SANDBOX_PATH").expect("COMPILER_SANDBOX_PATH not set"),
+        ),
+        &backup_binaries_dir,
+        "compiler_sandbox",
+    );
 
     // Generate keypair and store the private key
     info!(log, "Create backup user credentials");
@@ -219,7 +204,14 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
         async move {
-            let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
+            let canister = MessageCanister::new_with_retries(
+                &agent,
+                id,
+                &log2,
+                Duration::from_secs(120),
+                Duration::from_secs(1),
+            )
+            .await;
             hex::encode(canister.canister_id().as_slice())
         }
     });
@@ -228,7 +220,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
 
     info!(log, "Fetch NNS public key");
     let nns_public_key = env
@@ -239,7 +231,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     info!(log, "Generate config file for ic-backup");
     let subnet = SubnetConfig {
         subnet_id,
-        initial_replica_version,
+        initial_replica_version: initial_replica_version.clone(),
         nodes_syncing: 2,
         sync_period_secs: 30,
         replay_period_secs: 30,
@@ -251,8 +243,8 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         versions_hot: 1,
     });
     let config = Config {
-        push_metrics: false,
-        metrics_urls: vec![],
+        push_metrics: true,
+        metrics_urls: vec!["https://127.0.0.1:8080".try_into().unwrap()],
         network_name: "testnet".to_string(),
         backup_instance: "backup_test_node".to_string(),
         nns_url: Some(nns_node.get_public_url()),
@@ -260,6 +252,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
+        max_logs_age_to_keep_days: None,
         hot_disk_resource_threshold_percentage: 75,
         cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
@@ -272,11 +265,12 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     info!(log, "Config: {}", config_str);
     let config_file = config_dir.join("config.json5");
     let mut f = File::create(&config_file).expect("Should be able to create the config file");
-    write!(f, "{}", config_str).expect("Should be able to write the config file");
+    write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
-    let ic_backup_path = binaries_path.join("ic-backup");
-    let mut command = Command::new(&ic_backup_path);
+    let ic_backup_path =
+        &get_dependency_path(std::env::var("IC_BACKUP_PATH").expect("IC_BACKUP_PATH not set"));
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
@@ -303,7 +297,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(deploy_guestos_to_all_subnet_nodes(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
+        &target_version,
         subnet_id,
     ));
 
@@ -317,12 +311,12 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let orig_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(replica_version)
+        .join(initial_replica_version.to_string())
         .join("0");
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(target_version)
+        .join(target_version.to_string())
         .join("0");
 
     info!(
@@ -355,6 +349,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         "Restart and wait for cold storage and divergence to happen"
     );
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     let checkpoint =
         some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
@@ -368,11 +363,12 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
         .expect("Should find file");
 
     assert!(memory_artifact_path.exists());
-    info!(log, "Modify memory file: {:?}", memory_artifact_path);
-    modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
+    info!(log, "Removing memory file: {:?}", memory_artifact_path);
+    fs::remove_file(&memory_artifact_path).unwrap();
+    assert!(!memory_artifact_path.exists());
 
     info!(log, "Start again the backup process in a separate thread");
-    let mut command = Command::new(&ic_backup_path);
+    let mut command = Command::new(ic_backup_path);
     command
         .arg("--config-file")
         .arg(&config_file)
@@ -395,28 +391,32 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
     let mut hash_mismatch = false;
     for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
-        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
-            for en in dirs {
-                info!(log, "DirEntry in logs: {:?}", en);
-                match en {
-                    Ok(d) => {
-                        let contents = fs::read_to_string(d.path())
-                            .expect("Should have been able to read the log file");
-                        if i == 15 {
-                            println!("{}", contents);
-                        }
+        match fs::read_dir(backup_dir.join("logs")) {
+            Ok(dirs) => {
+                for en in dirs {
+                    info!(log, "DirEntry in logs: {:?}", en);
+                    match en {
+                        Ok(d) => {
+                            let contents = fs::read_to_string(d.path())
+                                .expect("Should have been able to read the log file");
+                            if i == 15 {
+                                println!("{}", contents);
+                            }
 
-                        if contents.contains(DIVERGENCE_LOG_STR) {
-                            hash_mismatch = true;
-                            break;
+                            if contents.contains(DIVERGENCE_LOG_STR) {
+                                hash_mismatch = true;
+                                break;
+                            }
                         }
+                        Err(e) => error!(log, "Error opening log file: {:?}", e),
                     }
-                    Err(e) => error!(log, "Error opening log file: {:?}", e),
                 }
             }
-        } else {
-            error!(log, "Error reading log file directory")
+            Err(err) => {
+                error!(log, "Error reading log file directory: {err}");
+            }
         }
+
         if hash_mismatch {
             break;
         }
@@ -425,6 +425,7 @@ fn test(env: TestEnv, binary_version: String, target_version: String) {
 
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+    child.wait().expect("Error waiting for backup process");
 
     assert!(hash_mismatch);
     info!(log, "There was a divergence of the state");
@@ -442,26 +443,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
     if lcp == 0 {
         return None;
     }
-    Some(dir.join(format!("checkpoints/{:016x}", lcp)))
-}
-
-fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
-    let mut perms = fs::metadata(&file_path)?.permissions();
-    #[allow(clippy::permissions_set_readonly_false)]
-    perms.set_readonly(false);
-    fs::set_permissions(&file_path, perms)?;
-    let mut file = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(file_path)?;
-    file.seek(SeekFrom::Start(0))?;
-    let mut byte: [u8; 1] = [0];
-    assert!(file.read(&mut byte)? == 1);
-    byte[0] ^= 0x01;
-    file.seek(SeekFrom::Start(0))?;
-    file.write_all(&byte)
+    Some(dir.join(format!("checkpoints/{lcp:016x}")))
 }
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
@@ -491,12 +473,8 @@ fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
     have_file
 }
 
-fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
-    fs::copy(
-        binaries_path.join(file_name),
-        backup_binaries_dir.join(file_name),
-    )
-    .expect("failed to copy file");
+fn copy_file(binary_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
+    fs::copy(binary_path, backup_binaries_dir.join(file_name)).expect("failed to copy file");
 }
 
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {

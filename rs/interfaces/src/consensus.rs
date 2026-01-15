@@ -15,14 +15,17 @@ use crate::{
         SelfValidatingPayloadValidationFailure,
     },
     validation::{ValidationError, ValidationResult},
+    vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
-    registry::RegistryClientError,
     Height, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
+    registry::RegistryClientError,
 };
+
+pub mod errors;
 
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that
 /// is included in consensus blocks.
@@ -62,6 +65,7 @@ pub enum InvalidPayloadReason {
     InvalidSelfValidatingPayload(InvalidSelfValidatingPayloadReason),
     InvalidCanisterHttpPayload(InvalidCanisterHttpPayloadReason),
     InvalidQueryStatsPayload(InvalidQueryStatsPayloadReason),
+    InvalidVetKdPayload(InvalidVetKdPayloadReason),
     /// The overall block size is too large, even though the individual payloads are valid
     PayloadTooBig {
         expected: NumBytes,
@@ -76,6 +80,7 @@ pub enum PayloadValidationFailure {
     SelfValidatingPayloadValidationFailed(SelfValidatingPayloadValidationFailure),
     CanisterHttpPayloadValidationFailed(CanisterHttpPayloadValidationFailure),
     QueryStatsPayloadValidationFailed(QueryStatsPayloadValidationFailure),
+    VetKdPayloadValidationFailed(VetKdPayloadValidationFailure),
     RegistryUnavailable(RegistryClientError),
     SubnetNotFound(SubnetId),
 }

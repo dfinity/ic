@@ -1,7 +1,7 @@
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-    pb::v1::{proposal::Action, Proposal},
+    pb::v1::{Proposal, proposal::Action},
 };
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{GetStateResponse, Init, Swap};
@@ -72,7 +72,8 @@ lazy_static! {
         url: "".to_string(),
         action: Some(Action::CreateServiceNervousSystem(
             CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone(),
-        ))
+        )),
+        self_describing_action: None,
     };
     pub static ref DEPLOY_NEW_SNS_RESPONSE: DeployNewSnsResponse = DeployNewSnsResponse {
         canisters: Some(SnsCanisterIds {

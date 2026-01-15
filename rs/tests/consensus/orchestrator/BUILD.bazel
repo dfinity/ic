@@ -1,19 +1,15 @@
-load("//rs/tests:common.bzl", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "MAINNET_REVISION_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
 system_test_nns(
     name = "node_assign_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/constants",
@@ -33,15 +29,11 @@ system_test_nns(
 
 system_test_nns(
     name = "node_reassignment_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_features",
@@ -55,25 +47,22 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "node_registration_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "k8s",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    name = "node_registration_with_max_rewardable_nodes_test",
     deps = [
         # Keep sorted.
-        "//rs/nns/constants",
-        "//rs/nns/governance/api",
-        "//rs/registry/canister",
-        "//rs/registry/subnet_type",
-        "//rs/rust_canisters/canister_test",
-        "//rs/tests/consensus/utils",
+        "//rs/tests/consensus:node_registration_test_common",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/base_types",
-        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
+system_test_nns(
+    name = "node_registration_with_node_allowance_test",
+    deps = [
+        # Keep sorted.
+        "//rs/tests/consensus:node_registration_test_common",
+        "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
@@ -81,9 +70,8 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = MAINNET_REVISION_RUNTIME_DEPS + [
+    env = MAINNET_ENV,
+    runtime_deps = [
         "//rs/tests:cup_compatibility/binaries",
     ],
     deps = [
@@ -100,21 +88,16 @@ system_test(
 
 system_test_nns(
     name = "ssh_access_to_nodes_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/nns/common",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
@@ -122,15 +105,13 @@ system_test_nns(
 
 system_test_nns(
     name = "unstuck_subnet_test",
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MESSAGE_CANISTER_ENV,
+    flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
+    guestos_update = "test",
     tags = [
-        "k8s",
-        "system_test_hourly",
+        "long_test",
     ],
-    target_compatible_with = ["@platforms//os:linux"],
-    uses_guestos_dev_test = True,
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
@@ -144,15 +125,11 @@ system_test_nns(
 
 system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/interfaces/registry",
         "//rs/protobuf",

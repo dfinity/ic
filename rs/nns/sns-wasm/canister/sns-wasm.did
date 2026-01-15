@@ -1,14 +1,11 @@
 type AddWasmRequest = record {
   hash : blob;
   wasm : opt SnsWasm;
+  skip_update_latest_version : opt bool;
 };
 
 type AddWasmResponse = record {
   result : opt Result;
-};
-
-type AirdropDistribution = record {
-  airdrop_neurons : vec NeuronDistribution;
 };
 
 type Canister = record {
@@ -55,7 +52,6 @@ type DeveloperDistribution = record {
 type FractionalDeveloperVotingPower = record {
   treasury_distribution : opt TreasuryDistribution;
   developer_distribution : opt DeveloperDistribution;
-  airdrop_distribution : opt AirdropDistribution;
   swap_distribution : opt SwapDistribution;
 };
 

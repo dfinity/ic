@@ -130,7 +130,7 @@ fn icrc1_block_from_value(
                 .map(|(k, v)| {
                     let key = k
                         .into_text()
-                        .map_err(|k| ValueDecodingError::UnsupportedKeyType(format!("{:?}", k)))?;
+                        .map_err(|k| ValueDecodingError::UnsupportedKeyType(format!("{k:?}")))?;
                     Ok((key, icrc1_block_from_value(v, depth + 1)?))
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,
@@ -200,8 +200,7 @@ fn negative_integer_round_trip() {
         assert_eq!(
             value,
             icrc1_block_from_value(cbor_value, 0).unwrap(),
-            "round trip failed for {}",
-            text
+            "round trip failed for {text}"
         );
     }
 
@@ -222,8 +221,7 @@ fn positive_big_integer_round_trip() {
         assert_eq!(
             value,
             icrc1_block_from_value(cbor_value, 0).unwrap(),
-            "round trip failed for {}",
-            text
+            "round trip failed for {text}"
         );
     }
 

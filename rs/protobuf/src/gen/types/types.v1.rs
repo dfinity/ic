@@ -379,10 +379,6 @@ pub struct Summary {
     pub next_interval_length: u64,
     #[prost(uint64, tag = "4")]
     pub height: u64,
-    #[prost(message, repeated, tag = "5")]
-    pub current_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
-    #[prost(message, repeated, tag = "6")]
-    pub next_transcripts_deprecated: ::prost::alloc::vec::Vec<TaggedNiDkgTranscript>,
     #[prost(message, repeated, tag = "7")]
     pub configs: ::prost::alloc::vec::Vec<NiDkgConfig>,
     #[prost(message, repeated, tag = "9")]
@@ -390,18 +386,9 @@ pub struct Summary {
     #[prost(message, repeated, tag = "10")]
     pub transcripts_for_remote_subnets: ::prost::alloc::vec::Vec<CallbackIdedNiDkgTranscript>,
     #[prost(message, repeated, tag = "11")]
-    pub current_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
+    pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
-    pub next_transcripts_new: ::prost::alloc::vec::Vec<NiDkgTranscript>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct TaggedNiDkgTranscript {
-    #[prost(message, optional, tag = "1")]
-    pub transcript: ::core::option::Option<NiDkgTranscript>,
-    #[prost(enumeration = "NiDkgTag", tag = "2")]
-    pub tag: i32,
-    #[prost(message, optional, tag = "3")]
-    pub key_id: ::core::option::Option<MasterPublicKeyId>,
+    pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
@@ -567,6 +554,8 @@ pub struct CanisterHttpResponseMetadata {
     pub content_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "4")]
     pub registry_version: u64,
+    #[prost(string, tag = "5")]
+    pub replica_version: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -605,6 +594,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(uint64, tag = "3")]
     pub registry_version: u64,
+    #[prost(string, tag = "8")]
+    pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
 }
@@ -639,6 +630,13 @@ pub mod canister_http_response_message {
         #[prost(message, tag = "3")]
         DivergenceResponse(super::CanisterHttpResponseDivergence),
     }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpArtifact {
+    #[prost(message, optional, tag = "1")]
+    pub share: ::core::option::Option<CanisterHttpShare>,
+    #[prost(message, optional, tag = "2")]
+    pub response: ::core::option::Option<CanisterHttpResponse>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgPayload {
@@ -839,6 +837,64 @@ pub mod pre_signature_ref {
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaPreSignatureQuadruple {
+    #[prost(message, optional, tag = "1")]
+    pub kappa_unmasked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "2")]
+    pub lambda_masked: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "3")]
+    pub kappa_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_times_lambda:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrPreSignatureTranscript {
+    #[prost(message, optional, tag = "1")]
+    pub blinder_unmasked:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PreSignature {
+    #[prost(oneof = "pre_signature::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<pre_signature::Msg>,
+}
+/// Nested message and enum types in `PreSignature`.
+pub mod pre_signature {
+    #[allow(clippy::large_enum_variant)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Ecdsa(super::EcdsaPreSignatureQuadruple),
+        #[prost(message, tag = "2")]
+        Schnorr(super::SchnorrPreSignatureTranscript),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<EcdsaPreSignatureQuadruple>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SchnorrMatchedPreSignature {
+    #[prost(uint64, tag = "1")]
+    pub pre_signature_id: u64,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(message, optional, tag = "3")]
+    pub pre_signature: ::core::option::Option<SchnorrPreSignatureTranscript>,
+    #[prost(message, optional, tag = "4")]
+    pub key_transcript: ::core::option::Option<super::super::registry::subnet::v1::IDkgTranscript>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuadrupleInCreation {
     #[prost(message, optional, tag = "3")]
     pub lambda_config: ::core::option::Option<RandomTranscriptParams>,
@@ -928,7 +984,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -947,6 +1003,8 @@ pub mod i_dkg_message {
         Opening(super::SignedIDkgOpening),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::SchnorrSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::VetKdKeyShare),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -966,6 +1024,17 @@ pub struct SchnorrSigShare {
     pub request_id: ::core::option::Option<RequestId>,
     #[prost(bytes = "vec", tag = "3")]
     pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdKeyShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub encrypted_key_share: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub node_signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignedIDkgComplaint {
@@ -1041,7 +1110,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -1060,6 +1129,8 @@ pub mod i_dkg_artifact_id {
         Opening(super::PrefixPairIDkg),
         #[prost(message, tag = "6")]
         SchnorrSigShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "7")]
+        VetkdKeyShare(super::PrefixPairSigShare),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
@@ -1292,6 +1363,8 @@ pub struct Block {
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
     pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "17")]
+    pub vetkd_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1506,6 +1579,23 @@ pub struct CanisterQueryStats {
     pub egress_payload_size: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct VetKdAgreement {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(oneof = "vet_kd_agreement::Agreement", tags = "2, 3")]
+    pub agreement: ::core::option::Option<vet_kd_agreement::Agreement>,
+}
+/// Nested message and enum types in `VetKdAgreement`.
+pub mod vet_kd_agreement {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Agreement {
+        #[prost(bytes, tag = "2")]
+        Data(::prost::alloc::vec::Vec<u8>),
+        #[prost(enumeration = "super::VetKdErrorCode", tag = "3")]
+        Reject(i32),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressIdOffset {
     #[prost(uint64, tag = "1")]
     pub expiry: u64,
@@ -1515,11 +1605,18 @@ pub struct IngressIdOffset {
     pub offset: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IngressMessage {
+    #[prost(bytes = "vec", tag = "1")]
+    pub message_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(uint64, tag = "2")]
+    pub expiry: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signed_request_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IngressPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub id_and_pos: ::prost::alloc::vec::Vec<IngressIdOffset>,
-    #[prost(bytes = "vec", tag = "2")]
-    pub buffer: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, repeated, tag = "3")]
+    pub ingress_messages: ::prost::alloc::vec::Vec<IngressMessage>,
 }
 /// Stripped consensus artifacts messages below
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1528,6 +1625,8 @@ pub struct GetIngressMessageInBlockRequest {
     pub ingress_message_id: ::core::option::Option<IngressMessageId>,
     #[prost(message, optional, tag = "2")]
     pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetIngressMessageInBlockResponse {
@@ -1535,18 +1634,48 @@ pub struct GetIngressMessageInBlockResponse {
     pub ingress_message: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct StrippedBlockProposal {
+pub struct GetIDkgDealingInBlockRequest {
+    #[prost(uint32, tag = "1")]
+    pub node_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
+    #[prost(message, optional, tag = "3")]
+    pub block_proposal_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIDkgDealingInBlockResponse {
     #[prost(message, optional, tag = "1")]
-    pub block_proposal_without_ingress_payload: ::core::option::Option<BlockProposal>,
+    pub signed_dealing:
+        ::core::option::Option<super::super::registry::subnet::v1::IDkgSignedDealingTuple>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedBlockProposal {
+    /// The original block proposal proto but all \[`Strippable`\] data is removed.
+    #[prost(message, optional, tag = "1")]
+    pub pruned_block_proposal: ::core::option::Option<BlockProposal>,
+    /// The stripped ingress messages, i.e. the IDs of ingress messages that were pruned from the block proposal.
     #[prost(message, repeated, tag = "2")]
     pub ingress_messages: ::prost::alloc::vec::Vec<StrippedIngressMessage>,
+    /// The consensus message ID of the original (unstripped) block proposal, including the \[`Strippable`\] data.
     #[prost(message, optional, tag = "3")]
     pub unstripped_consensus_message_id: ::core::option::Option<ConsensusMessageId>,
+    /// The stripped IDKG dealings, i.e. the IDs of IDKG dealings that were pruned from the block proposal.
+    #[prost(message, repeated, tag = "4")]
+    pub stripped_idkg_dealings: ::prost::alloc::vec::Vec<StrippedIDkgDealing>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StrippedIDkgDealing {
+    #[prost(uint32, tag = "1")]
+    pub dealer_index: u32,
+    #[prost(message, optional, tag = "2")]
+    pub dealing_id: ::core::option::Option<IDkgArtifactId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StrippedIngressMessage {
     #[prost(message, optional, tag = "1")]
     pub stripped: ::core::option::Option<IngressMessageId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub ingress_bytes_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -1569,4 +1698,33 @@ pub mod stripped_consensus_message {
 pub struct StrippedConsensusMessageId {
     #[prost(message, optional, tag = "1")]
     pub unstripped_id: ::core::option::Option<ConsensusMessageId>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum VetKdErrorCode {
+    Unspecified = 0,
+    TimedOut = 1,
+    InvalidKey = 2,
+}
+impl VetKdErrorCode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "VET_KD_ERROR_CODE_UNSPECIFIED",
+            Self::TimedOut => "VET_KD_ERROR_CODE_TIMED_OUT",
+            Self::InvalidKey => "VET_KD_ERROR_CODE_INVALID_KEY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "VET_KD_ERROR_CODE_UNSPECIFIED" => Some(Self::Unspecified),
+            "VET_KD_ERROR_CODE_TIMED_OUT" => Some(Self::TimedOut),
+            "VET_KD_ERROR_CODE_INVALID_KEY" => Some(Self::InvalidKey),
+            _ => None,
+        }
+    }
 }

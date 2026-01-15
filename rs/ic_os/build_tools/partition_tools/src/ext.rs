@@ -1,91 +1,102 @@
-use std::path::{Path, PathBuf};
-use std::process::{Output, Stdio};
-
-use anyhow::{anyhow, bail, Context, Result};
-use async_trait::async_trait;
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use itertools::Itertools;
 use pcre2::bytes::Regex;
-use tempfile::{tempdir, TempDir};
-use tokio::fs;
-use tokio::fs::File;
-use tokio::io::{self, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, SeekFrom};
-use tokio::process::Command;
+use std::fs;
+use std::fs::File;
+use std::io::{self, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output, Stdio};
+use tempfile::{NamedTempFile, TempDir, tempdir};
 
-use crate::exes::{debugfs, faketime};
-use crate::partition;
 use crate::Partition;
+use crate::gpt;
 
 const STORE_NAME: &str = "backing_store";
 
 pub struct ExtPartition {
-    index: Option<usize>,
     backing_dir: TempDir,
     original: PathBuf,
+    offset_bytes: Option<u64>,
 }
 
-#[async_trait]
 impl Partition for ExtPartition {
     /// Open an ext4 partition for writing, via debugfs
-    async fn open(image: PathBuf, index: Option<usize>) -> Result<Self> {
-        let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
+    fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
+        if let Some(index) = index {
+            let offset = gpt::get_partition_offset(&image, index)?;
+            let length = gpt::get_partition_length(&image, index)?;
+            Self::open_range(image, offset, length)
+        } else {
+            // open_range is several times slower than fs::copy, therefore we use fs::copy
+            // on the fast path if no seeking is necessary.
+            let backing_dir = tempdir()?;
+            let output_path = backing_dir.path().join(STORE_NAME);
+            fs::copy(&image, &output_path)?;
+            Ok(ExtPartition {
+                backing_dir,
+                original: image,
+                offset_bytes: None,
+            })
+        }
+    }
 
+    /// Open an ext4 partition for writing, via debugfs, using explicit offset and length
+    fn open_range(image: PathBuf, offset_bytes: u64, length_bytes: u64) -> Result<Self> {
         let backing_dir = tempdir()?;
         let output_path = backing_dir.path().join(STORE_NAME);
 
-        let mut input = File::open(&image).await?;
-
-        if let Some(index) = index {
-            let mut output = File::create(output_path).await?;
-            let offset = partition::check_offset(&image, index).await?;
-            let length = partition::check_length(&image, index).await?;
-
-            input.seek(SeekFrom::Start(offset)).await?;
-            io::copy(&mut input.take(length), &mut output).await?;
-        } else {
-            // Tokio's io::copy is several times slower than fs::copy, therefore we use fs::copy
-            // on the fast path if no seeking is necessary.
-            fs::copy(&image, &output_path).await?;
-        }
+        // Use dd command to copy the specific range, with sparse file support
+        ensure!(
+            Command::new("dd")
+                .args([
+                    &format!("if={}", image.display()),
+                    &format!("of={}", output_path.display()),
+                    "bs=4M",
+                    &format!("skip={offset_bytes}"),
+                    &format!("count={length_bytes}"),
+                    "conv=sparse",
+                    "iflag=skip_bytes,count_bytes"
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .context("failed to run dd command")?
+                .success()
+        );
 
         Ok(ExtPartition {
-            index,
+            offset_bytes: Some(offset_bytes), // No partition index when using explicit range
             backing_dir,
             original: image,
         })
     }
 
     /// Close an ext4 partition, and write back to the input disk
-    async fn close(self) -> Result<()> {
+    fn close(self) -> Result<()> {
         let input_path = self.backing_dir.path().join(STORE_NAME);
         let output_path = self.original;
 
-        if let Some(index) = self.index {
-            let mut input = File::open(&input_path).await?;
-            let mut output = File::options().write(true).open(&output_path).await?;
-            let offset = partition::check_offset(&output_path, index).await?;
+        if let Some(offset) = self.offset_bytes {
+            let mut input = File::open(&input_path)?;
+            let mut output = File::options().write(true).open(&output_path)?;
 
-            output.seek(SeekFrom::Start(offset)).await?;
-            io::copy(&mut input, &mut output).await?;
+            output.seek(SeekFrom::Start(offset))?;
+            io::copy(&mut input, &mut output)?;
         } else {
-            // Tokio's io::copy is several times slower than fs::copy, therefore we use fs::copy
-            // on the fast path if no seeking is necessary.
-            fs::copy(&input_path, &output_path).await?;
+            fs::copy(&input_path, &output_path)?;
         }
 
         Ok(())
     }
 
     /// Copy a file into place
-    async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let mut cmd = Command::new(faketime().context("faketime is needed to write files")?)
+    fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
+        let mut cmd = Command::new("faketime")
             .args([
                 "-f",
                 "1970-1-1 0:0:0",
-                // debugfs has already been ensured.
-                debugfs()
-                    .context("debugfs is needed to write files")?
-                    .to_str()
-                    .unwrap(),
+                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -100,23 +111,66 @@ impl Partition for ExtPartition {
         cmd.stdin
             .as_mut()
             .unwrap()
-            .write_all(Self::debugfs_input(input, output).as_bytes())
-            .await?;
-        Self::check_debugfs_result(&cmd.wait_with_output().await?)
+            .write_all(Self::debugfs_input(input, output).as_bytes())?;
+        Self::check_debugfs_result(&cmd.wait_with_output()?)
     }
 
     /// Read a file from a given partition
-    async fn read_file(&mut self, input: &Path) -> Result<String> {
+    fn read_file(&mut self, input: &Path) -> Result<Vec<u8>> {
+        let temp_file = NamedTempFile::new()?;
+        self.copy_file_to(input, temp_file.path())?;
+        let contents = fs::read(temp_file.path())?;
+
+        Ok(contents)
+    }
+
+    fn copy_files_to(&mut self, output: &Path) -> Result<()> {
+        ensure!(
+            output.exists() && output.is_dir(),
+            "output must be an existing directory"
+        );
+
+        // Use debugfs to dump the entire filesystem
+        let out = Command::new("/usr/sbin/debugfs")
+            .args([
+                "-R",
+                &format!("rdump / {}", output.display()),
+                self.backing_dir.path().join(STORE_NAME).to_str().unwrap(),
+            ])
+            .output()
+            .context("failed to run debugfs for extraction")?;
+
+        Self::check_debugfs_result(&out)?;
+
+        Ok(())
+    }
+
+    fn copy_file_to(&mut self, from: &Path, to: &Path) -> Result<()> {
+        let file_name = from.file_name().expect("`from` must reference a file");
+
+        // When extracting to a directory, use the from filename.
+        let dest = if to.is_dir() {
+            ensure!(to.exists(), "the path to `to` must already exist");
+
+            &to.join(file_name)
+        } else {
+            ensure!(
+                to.parent().map(|v| v.exists()).unwrap_or(false),
+                "the path to `to` must already exist"
+            );
+
+            to
+        };
+
         // run the underlying debugfs operation
-        // debugfs has already been ensured.
-        let mut cmd = Command::new(debugfs().context("debugfs is needed to read files")?)
+        let mut cmd = Command::new("/usr/sbin/debugfs")
             .args([
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
                 "-",
             ])
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
+            .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .context("failed to read file using debugfs")?;
@@ -126,57 +180,45 @@ impl Partition for ExtPartition {
             &mut indoc::formatdoc!(
                 r#"
                 cd {path}
-                cat {filename}
+                dump {filename} {dest}
             "#,
-                path = input.parent().unwrap().to_str().unwrap(),
-                filename = input.file_name().unwrap().to_str().unwrap(),
+                path = from.parent().unwrap().to_str().unwrap(),
+                filename = from.file_name().unwrap().to_str().unwrap(),
+                dest = dest.display(),
             )
             .as_bytes(),
             &mut stdin,
-        )
-        .await?;
+        )?;
 
-        let out = cmd.wait_with_output().await?;
-        Self::check_debugfs_result(&out)?;
+        let out = cmd.wait_with_output()?;
 
-        let cleaned_output = std::str::from_utf8(&out.stdout)?
-            .lines()
-            .skip(2)
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Ok(cleaned_output)
+        Self::check_debugfs_result(&out)
     }
 }
 
 impl ExtPartition {
     /// Clear timestamps, fix ownership, and update security context
-    pub async fn fixup_metadata(
+    pub fn fixup_metadata(
         &mut self,
         output: &Path,
         mode: usize,
         context: Option<&str>,
     ) -> Result<()> {
-        let mut cmd =
-            Command::new(faketime().context("faketime is needed to fix metadata in files")?)
-                .args([
-                    "-f",
-                    "1970-1-1 0:0:0",
-                    // debugfs has already been ensured.
-                    debugfs()
-                        .context("debugfs is needed to write files")?
-                        .to_str()
-                        .unwrap(),
-                    "-w",
-                    (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
-                    "-f",
-                    "-",
-                ])
-                .stdin(Stdio::piped())
-                .stdout(Stdio::null())
-                .stderr(Stdio::piped())
-                .spawn()
-                .context("failed to run debugfs")?;
+        let mut cmd = Command::new("faketime")
+            .args([
+                "-f",
+                "1970-1-1 0:0:0",
+                "/usr/sbin/debugfs",
+                "-w",
+                (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
+                "-f",
+                "-",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("failed to run debugfs")?;
 
         let mut stdin = cmd.stdin.as_mut().unwrap();
 
@@ -206,10 +248,9 @@ impl ExtPartition {
             )
             .as_bytes(),
             &mut stdin,
-        )
-        .await?;
+        )?;
 
-        let out = cmd.wait_with_output().await?;
+        let out = cmd.wait_with_output()?;
         if !out.status.success() {
             return Err(anyhow!(
                 "debugfs failed: {}",
@@ -227,6 +268,7 @@ impl ExtPartition {
             // Some errors we ignore.
             .filter(|error| !error.contains("Ext2 directory already exists"))
             .filter(|error| !error.contains("rm: File not found"))
+            .filter(|error| !error.contains("Invalid argument while changing ownership"))
             .join("\n");
         if !out.status.success() || !errors.is_empty() {
             bail!("debugfs failed:\n{errors}");
@@ -382,7 +424,7 @@ mod test {
         check_lookup(
             &contexts,
             "system_u:object_r:boot_t:s0",
-            "/extra_boot_args",
+            "/boot_args",
             Some("/boot"),
         );
     }
@@ -406,7 +448,7 @@ mod test {
         );
     }
 
-    async fn create_empty_partition_img(path: &Path) -> Result<()> {
+    fn create_empty_partition_img(path: &Path) -> Result<()> {
         Command::new("/usr/bin/dd")
             .args([
                 "if=/dev/zero",
@@ -414,72 +456,164 @@ mod test {
                 "bs=1K",
                 "count=256",
             ])
-            .spawn()
-            .unwrap()
-            .wait()
-            .await?;
+            .status()?;
 
         Command::new("/usr/sbin/mkfs.ext4")
             .args([path.as_os_str()])
-            .spawn()
-            .unwrap()
-            .wait()
-            .await?;
+            .status()?;
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn write_read_test() {
+    #[test]
+    fn write_read_test() {
         let dir = tempdir().unwrap();
         let img_path = dir.path().join("empty_ext4.img");
-        create_empty_partition_img(&img_path)
-            .await
-            .expect("Could not create test partition image");
+        create_empty_partition_img(&img_path).expect("Could not create test partition image");
 
         let input_file1 = dir.path().join("input.txt");
         let contents1 = b"Hello World!";
-        fs::write(input_file1.clone(), contents1).await.unwrap();
+        fs::write(input_file1.clone(), contents1).unwrap();
 
         let input_file2 = dir.path().join("input2.txt");
         let contents2 = b"Foo Bar";
-        fs::write(input_file2.clone(), contents2).await.unwrap();
+        fs::write(input_file2.clone(), contents2).unwrap();
 
-        let mut partition = ExtPartition::open(img_path.to_path_buf(), None)
-            .await
-            .expect("Could not open partition");
+        let mut partition =
+            ExtPartition::open(img_path.to_path_buf(), None).expect("Could not open partition");
 
         // Copy a file to the partition.
         let target_path = Path::new("/home/ubuntu/files/out.txt");
         partition
             .write_file(&input_file1, target_path)
-            .await
             .expect("Could not write file to partition");
         let read = partition
             .read_file(target_path)
-            .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents1).unwrap());
+        assert_eq!(read, contents1);
 
         // Overwrite the file that we just created.
-        partition
-            .write_file(&input_file2, target_path)
-            .await
-            .unwrap();
+        partition.write_file(&input_file2, target_path).unwrap();
         let read = partition
             .read_file(target_path)
-            .await
             .expect("Could not read file from partition");
 
-        assert_eq!(read, std::str::from_utf8(contents2).unwrap());
+        assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
-        assert!(partition
-            .read_file(Path::new("/does/not/exist.txt"))
-            .await
-            .expect_err("Expected reading non-existing file to fail")
-            .to_string()
-            .contains("File not found"));
+        assert!(
+            partition
+                .read_file(Path::new("/does/not/exist.txt"))
+                .expect_err("Expected reading non-existing file to fail")
+                .to_string()
+                .contains("File not found")
+        );
+    }
+
+    #[test]
+    fn copy_files_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path).expect("Could not create test partition image");
+
+        let mut partition =
+            ExtPartition::open(img_path.to_path_buf(), None).expect("Could not open partition");
+
+        let input_file_names = ["input.txt", "input2.txt"];
+        for file in input_file_names {
+            let input_path = dir.path().join(file);
+            let output_path = Path::new("/").join(file);
+            fs::write(input_path.clone(), b"").unwrap();
+            partition
+                .write_file(&input_path, &output_path)
+                .expect("Could not write file in partition");
+        }
+
+        let output_dir = TempDir::new().expect("Could not create temp dir");
+        partition.copy_files_to(output_dir.path()).unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["input.txt", "input2.txt", "lost+found"]);
+    }
+
+    #[test]
+    fn copy_file_test() {
+        let dir = tempdir().unwrap();
+        let img_path = dir.path().join("empty_ext4.img");
+        create_empty_partition_img(&img_path).expect("Could not create test partition image");
+
+        let mut partition =
+            ExtPartition::open(img_path.to_path_buf(), None).expect("Could not open partition");
+
+        let input_file_names = ["input.txt", "input2.txt"];
+        for file in input_file_names {
+            let input_path = dir.path().join(file);
+            let output_path = Path::new("/").join(file);
+            fs::write(input_path.clone(), b"").unwrap();
+            partition
+                .write_file(&input_path, &output_path)
+                .expect("Could not write file in partition");
+        }
+
+        let output_dir = TempDir::new().expect("Could not create temp dir");
+
+        // Copy with assumed name (from input).
+        partition
+            .copy_file_to(Path::new("/input.txt"), output_dir.path())
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["input.txt"]);
+
+        // Copy with explicit name (from output).
+        partition
+            .copy_file_to(
+                Path::new("/input2.txt"),
+                &output_dir.path().join("different.txt"),
+            )
+            .unwrap();
+
+        let mut actual_file_names = std::fs::read_dir(output_dir.path())
+            .expect("read_dir failed")
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect::<Vec<_>>();
+        actual_file_names.sort();
+
+        assert_eq!(actual_file_names, ["different.txt", "input.txt"]);
     }
 }

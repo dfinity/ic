@@ -33,7 +33,7 @@ impl LinearMap {
         let to = Decimal::from(to.start)..Decimal::from(to.end);
 
         // from must have nonzero length.
-        assert!(from.end != from.start, "{:#?}", from);
+        assert!(from.end != from.start, "{from:#?}");
         Self { from, to }
     }
 

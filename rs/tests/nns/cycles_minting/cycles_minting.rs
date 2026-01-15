@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cycles_minting_canister::{
-    create_canister_txn, top_up_canister_txn, CreateCanisterResult, NotifyCreateCanister,
-    NotifyError, NotifyTopUp, SubnetSelection, TopUpCanisterResult,
+    CreateCanisterResult, NotifyCreateCanister, NotifyError, NotifyTopUp, SubnetSelection,
+    TopUpCanisterResult, create_canister_txn, top_up_canister_txn,
 };
 use dfn_candid::CandidOne;
 use dfn_protobuf::{ProtoBuf, ToProto};
@@ -10,12 +10,12 @@ use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block,
-    BlockArg, BlockIndex, BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation,
-    Subaccount, TipOfChainRes, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockIndex, BlockRes, CyclesResponse,
+    DEFAULT_TRANSFER_FEE, Memo, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
+    TransferArgs, TransferError, protobuf::TipOfChainRequest, tokens_from_proto,
 };
 use on_wire::{FromWire, IntoWire};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
 
@@ -91,19 +91,6 @@ impl UserHandle {
         CandidOne::from_bytes(bytes).map(|c| c.0)
     }
 
-    /// Creates a canister via the deprecated ledger.notify flow. That is,
-    ///
-    ///     1. Send ICP to the CMC.
-    ///
-    ///     2. Call ledger.noitfy.
-    pub async fn create_canister_ledger(&self, amount: Tokens) -> CreateCanisterResult {
-        let block = self
-            .pay_for_canister(amount, None, &self.principal_id())
-            .await;
-        self.notify_canister_create_ledger(block, None, &self.principal_id())
-            .await
-    }
-
     /// Creates a canister using the notify_create_canister flow. That is,
     ///
     ///     1. Send ICP to the CMC.
@@ -135,19 +122,6 @@ impl UserHandle {
         PrincipalId::new_self_authenticating(&ic_canister_client_sender::ed25519_public_key_to_der(
             self.user_keypair.public_key.to_vec(),
         ))
-    }
-
-    pub async fn top_up_canister_ledger(
-        &self,
-        amount: Tokens,
-        sender_subaccount: Option<Subaccount>,
-        target_canister_id: &CanisterId,
-    ) -> TopUpCanisterResult {
-        let block = self
-            .pay_for_top_up(amount, sender_subaccount, target_canister_id)
-            .await;
-        self.notify_top_up_ledger(block, sender_subaccount, target_canister_id)
-            .await
     }
 
     pub async fn top_up_canister_cmc(
@@ -245,6 +219,8 @@ impl UserHandle {
         }
     }
 
+    /// Notify the ledger canister about a canister creation. This deprecated path is no longer
+    /// supported - the ledger traps when the `notify_pb` method is called, so this will always fail.
     pub async fn notify_canister_create_ledger(
         &self,
         block: BlockIndex,
@@ -299,6 +275,8 @@ impl UserHandle {
         }
     }
 
+    /// Notify the ledger canister about a canister top-up. This deprecated path is no longer
+    /// supported - the ledger traps when the `notify_pb` method is called, so this will always fail.
     pub async fn notify_top_up_ledger(
         &self,
         block: BlockIndex,
@@ -362,6 +340,18 @@ impl TestAgent {
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
+    pub async fn query(
+        &self,
+        canister_id: &CanisterId,
+        method: &str,
+        arg: Vec<u8>,
+    ) -> Result<Vec<u8>, String> {
+        self.agent
+            .execute_query(canister_id, method, arg)
+            .await?
+            .ok_or_else(|| "Reply payload was empty".to_string())
+    }
+
     pub async fn get_block(&self, h: BlockIndex) -> Result<Option<Block>, String> {
         match self
             .query_pb(&LEDGER_CANISTER_ID, "block_pb", BlockArg(h))
@@ -415,7 +405,7 @@ impl TestAgent {
                     AccountIdentifier::new(expected_destination_principal_id, None)
                 );
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
 
         let block = self.get_block(refund_block + 1).await.unwrap().unwrap();
@@ -432,7 +422,7 @@ impl TestAgent {
                 assert_eq!(balance, Tokens::ZERO, "All funds should have been burned");
                 assert_eq!(spender, None);
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
     }
 }

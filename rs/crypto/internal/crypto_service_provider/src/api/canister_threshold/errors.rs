@@ -18,22 +18,19 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
         match self {
             Self::SerializationError(tecdsa_err) => write!(
                 f,
-                "Error (de)serializing MEGa keypair: Underlying operation failed: {:?}",
-                tecdsa_err
+                "Error (de)serializing MEGa keypair: Underlying operation failed: {tecdsa_err:?}"
             ),
             Self::TransientInternalError { internal_error } => write!(
                 f,
-                "Error creating MEGa keypair: Transient internal error: {}",
-                internal_error
+                "Error creating MEGa keypair: Transient internal error: {internal_error}"
             ),
             Self::DuplicateKeyId { key_id } => {
-                write!(f, "A key with ID {} has already been inserted", key_id)
+                write!(f, "A key with ID {key_id} has already been inserted")
             }
             Self::InternalError { internal_error } => {
                 write!(
                     f,
-                    "Error creating MEGa keypair: Internal error: {}",
-                    internal_error
+                    "Error creating MEGa keypair: Internal error: {internal_error}"
                 )
             }
         }
@@ -42,6 +39,6 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
 
 impl From<CspCreateMEGaKeyError> for IDkgDealingEncryptionKeyRotationError {
     fn from(error: CspCreateMEGaKeyError) -> Self {
-        IDkgDealingEncryptionKeyRotationError::KeyGenerationError(format!("{:?}", error))
+        IDkgDealingEncryptionKeyRotationError::KeyGenerationError(format!("{error:?}"))
     }
 }

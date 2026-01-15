@@ -1,27 +1,14 @@
 //! The state manager public interface.
 
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification, CryptoHashOfPartialState,
-    CryptoHashOfState, Height,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
+    consensus::certification::Certification, state_manager::StateManagerResult,
 };
 use phantom_newtype::BitMask;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use thiserror::Error;
-
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Error)]
-pub enum StateManagerError {
-    /// The state at the specified height was removed and cannot be recovered
-    /// anymore.
-    #[error("state at height {0} has already been removed")]
-    StateRemoved(Height),
-    /// The state at the specified height is not committed yet.
-    #[error("state at height {0} is not committed yet")]
-    StateNotCommittedYet(Height),
-}
-
-pub type StateManagerResult<T> = Result<T, StateManagerError>;
 
 /// Errors for functions returning state hashes that are permanent (i.e. no
 /// point in retrying)
@@ -29,7 +16,9 @@ pub type StateManagerResult<T> = Result<T, StateManagerError>;
 pub enum PermanentStateHashError {
     #[error("state at height {0} has already been removed and cannot be recovered anymore")]
     StateRemoved(Height),
-    #[error("state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full")]
+    #[error(
+        "state at height {0} was committed with CertificationScope::Metadata, not CertificationScope::Full"
+    )]
     StateNotFullyCertified(Height),
 }
 
@@ -339,6 +328,14 @@ pub trait CertifiedStateSnapshot: Send + Sync {
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(MixedHashTree, Certification)>;
 }
 
@@ -368,6 +365,10 @@ pub trait StateReader: Send + Sync {
     /// height.  If nothing was committed so far, returns an empty valid
     /// state.
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>>;
+
+    /// Returns a shared object of the state at the latest certified block
+    /// height. If nothing was certified so far, returns `None`.
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>>;
 
     /// Returns the height of the latest state available.
     fn latest_state_height(&self) -> Height;
@@ -404,6 +405,17 @@ pub trait StateReader: Send + Sync {
     fn read_certified_state(
         &self,
         paths: &LabeledTree<()>,
+    ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
+        self.read_certified_state_with_exclusion(paths, None)
+    }
+
+    /// An extension of [`Self::read_certified_state`] which additonally also takes a tree of exclusions.
+    /// If a path is mentioned both in `paths` and `exclusion` it is pruned in the returned [`MixedHashTree`].
+    /// This might be useful for cases where large subtrees are requested, but a small number of leafs should be omitted.
+    fn read_certified_state_with_exclusion(
+        &self,
+        paths: &LabeledTree<()>,
+        exclusion: Option<&MatchPatternPath>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)>;
 
     /// Returns a CertifiedStateSnapshot corresponding to the latest certified state.

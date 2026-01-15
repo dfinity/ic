@@ -1,6 +1,6 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::artifact::PbArtifact;
-use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge, histogram_opts, labels, opts};
 
 use crate::uri_prefix;
 

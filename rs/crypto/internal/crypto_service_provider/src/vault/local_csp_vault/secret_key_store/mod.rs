@@ -1,8 +1,8 @@
 //! The crypto service provider API for querying secret keys.
+use crate::SecretKeyStore;
 use crate::key_id::KeyId;
 use crate::vault::api::{CspSecretKeyStoreContainsError, SecretKeyStoreCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::SecretKeyStore;
 
 use crate::public_key_store::PublicKeyStore;
 use rand::{CryptoRng, Rng};

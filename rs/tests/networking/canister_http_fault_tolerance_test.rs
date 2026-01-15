@@ -15,33 +15,34 @@ Success::
 1. Http requests succeed in environment where nodes fail.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use candid::Principal;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
-};
+use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    load_wasm, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
-    RETRY_BACKOFF,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF, load_wasm,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util;
+use ic_system_test_driver::util::block_on;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
+use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
 use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -151,9 +152,9 @@ pub fn test(env: TestEnv) {
                         RemoteHttpRequest,
                     >,
                     RemoteHttpRequest {
-                        request: CanisterHttpRequestArgs {
-                            url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
-                            headers: BoundedHttpHeaders::new(vec![]),
+                        request: UnvalidatedCanisterHttpRequestArgs {
+                            url: format!("https://[{webserver_ipv6}]/anything/{n}"),
+                            headers: vec![],
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
                             transform: Some(TransformContext {
@@ -164,6 +165,8 @@ pub fn test(env: TestEnv) {
                                 context: vec![0, 1, 2],
                             }),
                             max_response_bytes: None,
+                            is_replicated: None,
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },
@@ -177,7 +180,7 @@ pub fn test(env: TestEnv) {
     });
 
     info!(&logger, "Killing one of the node now.");
-    killed_app_endpoint.vm().kill();
+    block_on(async { killed_app_endpoint.vm().await.kill().await });
 
     // Wait the node is actually killed
     let http_client = reqwest::blocking::ClientBuilder::new()
@@ -203,7 +206,7 @@ pub fn test(env: TestEnv) {
 
     // Recover the killed node and observe it caught up on state
     info!(&logger, "Restarting the killed node now.");
-    killed_app_endpoint.vm().start();
+    block_on(async { killed_app_endpoint.vm().await.start().await });
     let healthy_runtime = &util::runtime_from_url(
         healthy_app_endpoint.get_public_url(),
         healthy_app_endpoint.effective_canister_id(),
@@ -269,7 +272,7 @@ pub fn test(env: TestEnv) {
                             Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
                             String,
                         >,
-                        format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
+                        format!("https://[{webserver_ipv6}]/anything/{n}"),
                     )
                     .await
                     .expect("Failed to call proxy canister.");

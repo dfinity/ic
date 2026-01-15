@@ -1,12 +1,12 @@
 use dfn_candid::candid_one;
 use dfn_core::{over_async, println};
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Playground Canister Init!");
 }
 
-#[export_name = "canister_update test"]
+#[unsafe(export_name = "canister_update test")]
 fn test() {
     over_async(candid_one, |_: ()| async move { test_().await })
 }
@@ -17,7 +17,7 @@ async fn test_() {
 
 // Example of ic_cdk canister - comment out the above to use
 // use ic_cdk::println;
-// use ic_cdk_macros::{init, update};
+// use ic_cdk::{init, update};
 // use std::time::Duration;
 //
 // #[init]

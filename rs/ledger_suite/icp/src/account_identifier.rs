@@ -1,16 +1,17 @@
 use candid::{CandidType, Principal};
-use dfn_core::CanisterId;
-use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
+use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
+use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{de, de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de, de::Error};
+use std::borrow::Cow;
 use std::{
     convert::{TryFrom, TryInto},
     fmt::{Display, Formatter},
     str::FromStr,
 };
 
-use crate::{protobuf as proto, AccountIdBlob};
+use crate::{AccountIdBlob, protobuf as proto};
 
 /// While this is backed by an array of length 28, it's canonical representation
 /// is a hex string of length 64. The first 8 characters are the CRC-32 encoded
@@ -49,6 +50,25 @@ impl From<Account> for AccountIdentifier {
     fn from(account: Account) -> Self {
         Self::new(account.owner.into(), account.subaccount.map(Subaccount))
     }
+}
+
+impl Storable for AccountIdentifier {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        let mut buffer: Vec<u8> = vec![];
+        buffer.extend(self.hash.as_slice());
+        Cow::Owned(buffer)
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        AccountIdentifier {
+            hash: bytes[0..28].try_into().unwrap(),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 28,
+        is_fixed_size: true,
+    };
 }
 
 pub static SUB_ACCOUNT_ZERO: Subaccount = Subaccount([0; 32]);
@@ -132,6 +152,12 @@ impl AccountIdentifier {
         let mut hasher = crc32fast::Hasher::new();
         hasher.update(&self.hash);
         hasher.finalize().to_be_bytes()
+    }
+
+    pub fn into_proto_with_checksum(&self) -> proto::AccountIdentifier {
+        proto::AccountIdentifier {
+            hash: self.to_vec(),
+        }
     }
 }
 
@@ -320,7 +346,7 @@ pub enum AccountIdParseError {
 impl Display for AccountIdParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidChecksum(err) => write!(f, "{}", err),
+            Self::InvalidChecksum(err) => write!(f, "{err}"),
             Self::InvalidLength(input) => write!(
                 f,
                 "Received an invalid AccountIdentifier with length {} bytes instead of the expected 28 or 32.",
@@ -481,9 +507,11 @@ fn test_account_id_from_hex() {
     );
 
     let length_64 = "0000000000000000000000000000000000000000000000000000000000000000";
-    assert!(AccountIdentifier::from_hex(length_64)
-        .unwrap_err()
-        .contains("Checksum failed"));
+    assert!(
+        AccountIdentifier::from_hex(length_64)
+            .unwrap_err()
+            .contains("Checksum failed")
+    );
 
     // Try again with correct checksum
     let length_64 = "807077e900000000000000000000000000000000000000000000000000000000";
@@ -491,4 +519,11 @@ fn test_account_id_from_hex() {
         AccountIdentifier::from_hex(length_64),
         Ok(AccountIdentifier { hash: [0; 28] })
     );
+}
+
+#[test]
+fn test_account_id_serialization() {
+    let length_56 = "00000000000000000000000000000000000000000000000000000012";
+    let id = AccountIdentifier::from_hex(length_56).expect("failed to generate account");
+    assert_eq!(AccountIdentifier::from_bytes(id.to_bytes()), id);
 }

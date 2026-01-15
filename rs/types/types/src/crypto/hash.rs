@@ -4,14 +4,17 @@ use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
 use crate::consensus::{
+    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
     dkg as consensus_dkg,
-    idkg::{EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare},
-    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
+    idkg::{
+        EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
+        VetKdKeyShare,
+    },
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
@@ -30,11 +33,6 @@ use domain_separator::DomainSeparator;
 
 #[cfg(test)]
 mod tests;
-
-/// The domain separator to be used when calculating the sender signature for a
-/// request to the Internet Computer according to the
-/// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
 
 /// A type that specifies a domain for a cryptographic hash.
 ///
@@ -118,6 +116,7 @@ mod private {
     impl CryptoHashDomainSeal for IDkgTranscript {}
     impl CryptoHashDomainSeal for EcdsaSigShare {}
     impl CryptoHashDomainSeal for SchnorrSigShare {}
+    impl CryptoHashDomainSeal for VetKdKeyShare {}
 
     impl CryptoHashDomainSeal for IDkgComplaintContent {}
     impl CryptoHashDomainSeal for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {}
@@ -377,6 +376,12 @@ impl CryptoHashDomain for EcdsaSigShare {
 impl CryptoHashDomain for SchnorrSigShare {
     fn domain(&self) -> String {
         DomainSeparator::SchnorrSigShare.to_string()
+    }
+}
+
+impl CryptoHashDomain for VetKdKeyShare {
+    fn domain(&self) -> String {
+        DomainSeparator::VetKdKeyShare.to_string()
     }
 }
 

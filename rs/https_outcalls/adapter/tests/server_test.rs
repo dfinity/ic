@@ -8,7 +8,9 @@ mod test {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
-        https_outcalls_service_client::HttpsOutcallsServiceClient, HttpMethod, HttpsOutcallRequest,
+        CanisterHttpAdapterMetrics, CanisterHttpError, CanisterHttpErrorKind, HttpMethod,
+        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result,
+        https_outcalls_service_client::HttpsOutcallsServiceClient,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -23,13 +25,58 @@ mod test {
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
         Filter,
+        filters::BoxedFilter,
+        http::{Response, StatusCode, header::HeaderValue},
     };
 
     #[cfg(feature = "http")]
+    use socks5_impl::protocol::{
+        Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
+        Response as Socks5Response, handshake,
+    };
+    #[cfg(feature = "http")]
+    use std::io;
+    #[cfg(feature = "http")]
     use std::net::IpAddr;
+    #[cfg(feature = "http")]
+    use std::net::SocketAddr;
+    #[cfg(feature = "http")]
+    use tokio::{
+        io::AsyncWriteExt,
+        net::{TcpListener, TcpStream},
+    };
+
+    fn unwrap_response(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (HttpsOutcallResponse, CanisterHttpAdapterMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Response(r) => (r, metrics),
+            https_outcall_result::Result::Error(e) => {
+                panic!(
+                    "Expected Http Response, got Error: {:?} - {}",
+                    e.kind, e.message
+                )
+            }
+        }
+    }
+
+    fn unwrap_error(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (CanisterHttpError, CanisterHttpAdapterMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Error(e) => (e, metrics),
+            https_outcall_result::Result::Response(r) => {
+                panic!("Expected Error, got Success Response: status {}", r.status)
+            }
+        }
+    }
 
     // Selfsigned localhost cert
     const CERT: &str = "
@@ -54,6 +101,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 -----END PRIVATE KEY-----
 ";
 
+    const INVALID_HEADER_KEY: &str = "invalid-ascii-value";
+    const INVALID_HEADER_VALUE: &str = "x√ab c";
+    const VALID_HEADER_KEY: &str = "valid-ascii-value";
+    const VALID_HEADER_VALUE: &str = "abc";
+
     // Variable that stores the directory of our cert/key files.
     // This is a oncecell because we don't want each test to call
     // `generate_certs` and generate a race on the SSL_CERT_FILE
@@ -65,18 +117,20 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // Store self signed cert
         let cert_file_path = dir.path().join("cert.crt");
         let mut cert_file = std::fs::File::create(cert_file_path).unwrap();
-        writeln!(cert_file, "{}", CERT).unwrap();
+        writeln!(cert_file, "{CERT}").unwrap();
         let key_file_path = dir.path().join("key.pem");
         let mut key_file = std::fs::File::create(key_file_path).unwrap();
-        writeln!(key_file, "{}", KEY).unwrap();
+        writeln!(key_file, "{KEY}").unwrap();
 
         // The Nix environment with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
         // https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openssl/1.1/nix-ssl-cert-file.patch
         // SSL_CERT_FILE is respected by OpenSSL and Rustls.
         // Rustlts: https://github.com/rustls/rustls/issues/540
         // OpenSSL: https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_default_verify_paths.html
-        env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt"));
-        env::remove_var("NIX_SSL_CERT_FILE");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt")) };
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("NIX_SSL_CERT_FILE") };
         dir
     }
 
@@ -92,8 +146,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
             Response::builder()
                 .header(
-                    "invalid-ascii-value",
-                    HeaderValue::from_maybe_shared_unchecked("x√ab c".as_bytes()),
+                    INVALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()),
+                )
+                .header(
+                    VALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()),
                 )
                 .body("hi")
         });
@@ -122,12 +180,116 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .boxed()
     }
 
-    fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> {
+    fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
         cert_dir.path().join("cert.crt")
     }
 
-    fn key_path(cert_dir: &TempDir) -> impl AsRef<Path> {
+    fn key_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
         cert_dir.path().join("key.pem")
+    }
+
+    /// Spawns a minimal forwarding SOCKS5 server on `bind_addr` in the background.
+    /// All requests will be forwarded to `url`, regardless of the destination in the request.
+    /// Returns the actual local address that the server ended up binding to.
+    /// This is not an actual proxy because setting up an IT environment where direct requests
+    /// fail, but the ones through the proxy succeed is infeasible.
+    /// The general testing setup is to make direct request to an unreachable URL, which fail,
+    /// and that makes the adapter try the socks proxy, which always connects to the "good" URL.
+    #[cfg(feature = "http")]
+    pub async fn spawn_forward_socks5_server(
+        bind_addr: &str,
+        url: String,
+    ) -> io::Result<SocketAddr> {
+        let listener = TcpListener::bind(bind_addr).await?;
+        let local_addr = listener.local_addr()?;
+
+        tokio::spawn(async move {
+            loop {
+                match listener.accept().await {
+                    Ok((stream, _client_addr)) => {
+                        let url = url.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) = handle_client(stream, url).await {
+                                eprintln!("[SOCKS5] Error in client handler: {e:?}");
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!("[SOCKS5] Error accepting: {e:?}");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(local_addr)
+    }
+
+    #[cfg(feature = "http")]
+    pub async fn handle_client(stream: TcpStream, url: String) -> io::Result<()> {
+        // 1) Perform SOCKS5 handshake
+        let mut stream = stream;
+        let handshake_req = handshake::Request::retrieve_from_async_stream(&mut stream).await?;
+        if handshake_req.evaluate_method(AuthMethod::NoAuth) {
+            // Accept "no auth"
+            handshake::Response::new(AuthMethod::NoAuth)
+                .write_to_async_stream(&mut stream)
+                .await?;
+        } else {
+            // If the client doesn't support "no auth", reject.
+            handshake::Response::new(AuthMethod::NoAcceptableMethods)
+                .write_to_async_stream(&mut stream)
+                .await?;
+            stream.shutdown().await?;
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "No supported authentication method",
+            ));
+        }
+
+        // 2) Read the SOCKS request
+        // Even though we don't use it, this is necessary to unstuck the client.
+        let _req = match Socks5Request::retrieve_from_async_stream(&mut stream).await {
+            Ok(req) => req,
+            Err(e) => {
+                Socks5Response::new(Reply::GeneralFailure, Address::unspecified())
+                    .write_to_async_stream(&mut stream)
+                    .await?;
+                stream.shutdown().await?;
+                return Err(e);
+            }
+        };
+
+        // Connect to the target server (constant  url, not the one from the request)
+        let remote_stream = TcpStream::connect(url.clone()).await?;
+
+        // 3) Send "Succeeded" to the client
+        let local_sock = remote_stream.local_addr()?;
+        Socks5Response::new(Reply::Succeeded, Address::SocketAddress(local_sock))
+            .write_to_async_stream(&mut stream)
+            .await?;
+
+        // Perform "proxying":
+        let (client_read, client_write) = stream.into_split();
+        let (remote_read, remote_write) = remote_stream.into_split();
+
+        // Forward client -> remote in a background task
+        tokio::spawn(async move {
+            let mut client_read = client_read;
+            let mut remote_write = remote_write;
+            let _ = tokio::io::copy(&mut client_read, &mut remote_write).await;
+            let _ = remote_write.shutdown().await;
+        });
+
+        // Forward remote -> client in the current task
+        {
+            let mut remote_read = remote_read;
+            let mut client_write = client_write;
+            let _ = tokio::io::copy(&mut remote_read, &mut client_write).await;
+            let _ = client_write.shutdown().await;
+        }
+
+        Ok(())
     }
 
     fn start_server(cert_dir: &TempDir) -> String {
@@ -149,6 +311,86 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         format!("{}:{}", ip, addr.port())
     }
 
+    #[cfg(feature = "http")]
+    #[tokio::test]
+    /// This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
+    /// The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
+    /// This tests the socks proxy passed to the adapter via the request.
+    async fn test_canister_http_api_bn_socks_server() {
+        let url = start_http_server("127.0.0.1".parse().unwrap());
+
+        // ipv6 socks proxy.
+        let socks_addr = spawn_forward_socks5_server("[::1]:0", url.clone())
+            .await
+            .expect("Failed to bind socks");
+
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        // Suppose the server does not have a socks client set.
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+        let unreachable_url = "10.255.255.1:9999";
+
+        // Make a request without socks proxy.
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+        // Everything should fail.
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
+
+        // Make a request with socks proxy/
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: format!("http://{}/get", &unreachable_url),
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            // Suppose there are two socks proxies passed, one broken, and one working.
+            socks_proxy_addrs: vec![
+                format!("socks5://{}", unreachable_url),
+                format!("socks5://[{0}]:{1}", socks_addr.ip(), socks_addr.port()),
+            ],
+        });
+        // The requests succeeds.
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
+        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_on_connection_failure() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: "https://127.0.0.1:54321".to_string(), // Random closed port
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
+        assert_eq!(metrics.downloaded_bytes, 0);
+    }
+
     #[tokio::test]
     async fn test_canister_http_server() {
         let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
@@ -160,16 +402,27 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/get", &url),
+            url: format!("https://{url}/get"),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, metrics) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+
+        let headers_size: u64 = http_response
+            .headers
+            .iter()
+            .map(|h| (h.name.len() + h.value.len()) as u64)
+            .sum();
+        // Check that downloaded bytes includes headers + body.
+        assert_eq!(
+            metrics.downloaded_bytes,
+            http_response.content.len() as u64 + headers_size
+        );
     }
 
     #[cfg(not(feature = "http"))]
@@ -191,17 +444,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::InvalidArgument
-        );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Url need to specify https scheme".to_string()));
+        let response: tonic::Response<HttpsOutcallResult> =
+            client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
+        assert!(error.message.contains("Url need to specify https scheme"));
     }
 
     #[cfg(feature = "http")]
@@ -223,10 +473,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -247,11 +497,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Post as i32,
             body: "420".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
         assert_eq!(String::from_utf8_lossy(&http_response.content), "420");
     }
@@ -273,11 +523,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -300,18 +550,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::OutOfRange
-        );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Http body exceeds size limit of".to_string()));
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::LimitExceeded as i32);
+        assert!(error.message.contains("Http body exceeds size limit of"));
+
+        // Check that we report we've downloaded the response, even though the final result is an error.
+        assert!(metrics.downloaded_bytes >= response_limit);
     }
 
     #[tokio::test]
@@ -330,13 +579,13 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             url: format!("https://{}/size", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
-            body: format!("{}", response_size).as_bytes().to_vec(),
+            body: format!("{response_size}").as_bytes().to_vec(),
             max_response_size_bytes: response_size * 2,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -357,9 +606,9 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             url: format!("https://{}/delay", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
-            body: format!("{}", delay).as_bytes().to_vec(),
+            body: format!("{delay}").as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
         let response = client.https_outcall(request).await;
@@ -367,10 +616,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             response.as_ref().unwrap_err().code(),
             tonic::Code::Cancelled
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Timeout expired".to_string()));
+        assert!(
+            response
+                .unwrap_err()
+                .message()
+                .contains(&"Timeout expired".to_string())
+        );
     }
 
     #[tokio::test]
@@ -395,24 +646,19 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 64,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::Unavailable
-        );
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
 
-        let response_error = response.unwrap_err();
-        let actual_error_message = response_error.message();
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
+        let actual_error_message = error.message;
         let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
 
         assert!(
             actual_error_message.contains(expected_error_message),
-            "Expected error message to contain, {}, got: {}",
-            expected_error_message,
-            actual_error_message
+            "Expected error message to contain, {expected_error_message}, got: {actual_error_message}"
         );
     }
 
@@ -434,11 +680,22 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Internal as i32);
+        assert!(error.message.contains("Failed to parse headers"));
+
+        // Important: check that even though parsing headers failed and the adapter returned an error,
+        // we still report how much data was downloaded (all the headers)
+        let minimum_expected_downloaded_bytes = (INVALID_HEADER_KEY.len()
+            + INVALID_HEADER_VALUE.len()
+            + VALID_HEADER_KEY.len()
+            + VALID_HEADER_VALUE.len()) as u64;
+        assert!(metrics.downloaded_bytes >= minimum_expected_downloaded_bytes);
     }
 
     #[tokio::test]
@@ -459,10 +716,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
+            ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (_, _) = unwrap_error(response);
     }
 
     #[rstest]
@@ -562,12 +819,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     method: HttpMethod::Get as i32,
                     body: "hello".to_string().as_bytes().to_vec(),
                     max_response_size_bytes: 512,
-                    socks_proxy_allowed: false,
+                    ..Default::default()
                 });
 
-                let response = client.https_outcall(request).await;
+                let response = client.https_outcall(request).await.unwrap();
 
-                let http_response = response.unwrap().into_inner();
+                let (http_response, _) = unwrap_response(response);
                 assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
             });
     }
@@ -597,59 +854,5 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             return HttpsOutcallsServiceClient::new(channel);
         }
         panic!("Bad incoming path.");
-    }
-
-    // implements unix listener that removes socket file when done
-    // adapter does not need this because the socket is managed by systemd
-    mod unix {
-        use std::{
-            pin::Pin,
-            task::{Context, Poll},
-        };
-        use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-        use tonic::transport::server::Connected;
-
-        #[derive(Debug)]
-        pub struct UnixStream(pub tokio::net::UnixStream);
-
-        impl Connected for UnixStream {
-            type ConnectInfo = ();
-
-            fn connect_info(&self) -> Self::ConnectInfo {}
-        }
-
-        impl AsyncRead for UnixStream {
-            fn poll_read(
-                mut self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-                buf: &mut ReadBuf<'_>,
-            ) -> Poll<std::io::Result<()>> {
-                Pin::new(&mut self.0).poll_read(cx, buf)
-            }
-        }
-
-        impl AsyncWrite for UnixStream {
-            fn poll_write(
-                mut self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-                buf: &[u8],
-            ) -> Poll<std::io::Result<usize>> {
-                Pin::new(&mut self.0).poll_write(cx, buf)
-            }
-
-            fn poll_flush(
-                mut self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<std::io::Result<()>> {
-                Pin::new(&mut self.0).poll_flush(cx)
-            }
-
-            fn poll_shutdown(
-                mut self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<std::io::Result<()>> {
-                Pin::new(&mut self.0).poll_shutdown(cx)
-            }
-        }
     }
 }

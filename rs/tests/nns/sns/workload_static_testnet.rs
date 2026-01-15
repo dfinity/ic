@@ -18,7 +18,10 @@ fn workload_static_testnet(env: TestEnv) {
         );
         workload_static_testnet_sale_bot(env)
     } else if std::env::var("GET_ACCOUNT").is_ok() {
-        info!(log, ">>> Running workload generation to model an SNS users reloading the launchpag page ...");
+        info!(
+            log,
+            ">>> Running workload generation to model an SNS users reloading the launchpag page ..."
+        );
         workload_static_testnet_get_account(env)
     } else {
         info!(

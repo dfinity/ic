@@ -1,15 +1,17 @@
+#![allow(deprecated)]
 use crate::{
     ChangeCanisterControllersError, ChangeCanisterControllersRequest,
     ChangeCanisterControllersResponse, ChangeCanisterControllersResult,
 };
 use async_trait::async_trait;
-use dfn_candid::candid_one;
-use dfn_core::call;
 use ic_base_types::PrincipalId;
+use ic_cdk::call;
+use ic_nervous_system_clients::canister_status::MemoryMetrics;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{
         CanisterStatusResult, CanisterStatusType, DefiniteCanisterSettings, LogVisibility,
+        QueryStats,
     },
 };
 use ic_nns_constants::ROOT_CANISTER_ID;
@@ -44,12 +46,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         change_canister_controllers_request: ChangeCanisterControllersRequest,
     ) -> Result<ChangeCanisterControllersResponse, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "change_canister_controllers",
-            candid_one,
-            change_canister_controllers_request,
+            (change_canister_controllers_request,),
         )
         .await
+        .map(|(response,): (ChangeCanisterControllersResponse,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 
     async fn canister_status(
@@ -57,12 +60,13 @@ impl NnsRootCanisterClient for NnsRootCanisterClientImpl {
         canister_id_record: CanisterIdRecord,
     ) -> Result<CanisterStatusResult, (Option<i32>, String)> {
         call(
-            ROOT_CANISTER_ID,
+            ROOT_CANISTER_ID.get().0,
             "canister_status",
-            candid_one,
-            canister_id_record,
+            (canister_id_record,),
         )
         .await
+        .map(|(response,): (CanisterStatusResult,)| response)
+        .map_err(|(code, message)| (Some(code as i32), message))
     }
 }
 
@@ -103,17 +107,13 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
         let reply = self.replies.lock().unwrap().pop_front();
         let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call change_canister_controllers({:?})",
-                change_canister_controllers_request
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call change_canister_controllers({change_canister_controllers_request:?})"
             )
         });
 
         match reply {
             SpyNnsRootCanisterClientReply::ChangeCanisterControllers(response) => response,
-            reply => panic!(
-                "Expected a ChangeCanisterControllers reply. Instead have {:?}",
-                reply
-            ),
+            reply => panic!("Expected a ChangeCanisterControllers reply. Instead have {reply:?}"),
         }
     }
 
@@ -131,14 +131,13 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
         let reply = self.replies.lock().unwrap().pop_front();
         let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call canister_status({:?})",
-                canister_id_record
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call canister_status({canister_id_record:?})"
             )
         });
 
         match reply {
             SpyNnsRootCanisterClientReply::CanisterStatus(response) => response,
-            reply => panic!("Expected a CanisterStatus reply. Instead have {:?}", reply),
+            reply => panic!("Expected a CanisterStatus reply. Instead have {reply:?}"),
         }
     }
 }
@@ -220,10 +219,27 @@ impl SpyNnsRootCanisterClientReply {
                 reserved_cycles_limit: Some(candid::Nat::from(10_u32)),
                 wasm_memory_limit: Some(candid::Nat::from(11_u32)),
                 log_visibility: Some(LogVisibility::Controllers),
+                wasm_memory_threshold: Some(candid::Nat::from(6_u32)),
             },
             cycles: candid::Nat::from(42_u32),
             idle_cycles_burned_per_day: Some(candid::Nat::from(43_u32)),
             reserved_cycles: Some(candid::Nat::from(44_u32)),
+            query_stats: Some(QueryStats {
+                num_calls_total: Some(candid::Nat::from(45_u32)),
+                num_instructions_total: Some(candid::Nat::from(46_u32)),
+                request_payload_bytes_total: Some(candid::Nat::from(47_u32)),
+                response_payload_bytes_total: Some(candid::Nat::from(48_u32)),
+            }),
+            memory_metrics: Some(MemoryMetrics {
+                wasm_memory_size: Some(candid::Nat::from(1_u32)),
+                stable_memory_size: Some(candid::Nat::from(2_u32)),
+                global_memory_size: Some(candid::Nat::from(3_u32)),
+                wasm_binary_size: Some(candid::Nat::from(4_u32)),
+                custom_sections_size: Some(candid::Nat::from(5_u32)),
+                canister_history_size: Some(candid::Nat::from(6_u32)),
+                wasm_chunk_store_size: Some(candid::Nat::from(7_u32)),
+                snapshots_size: Some(candid::Nat::from(8_u32)),
+            }),
         }))
     }
 

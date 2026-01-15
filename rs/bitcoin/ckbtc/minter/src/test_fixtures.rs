@@ -1,9 +1,15 @@
-use crate::lifecycle::init::{BtcNetwork, InitArgs};
-use crate::Timestamp;
-use crate::{lifecycle, ECDSAPublicKey};
+use crate::address::BitcoinAddress;
+use crate::fees::BitcoinFeeEstimator;
+use crate::lifecycle::init::InitArgs;
+use crate::queries::WithdrawalFee;
+use crate::state::utxos::UtxoSet;
+use crate::{
+    BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
+    lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
+};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{GetUtxosResponse, OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use std::time::Duration;
 
@@ -16,7 +22,7 @@ pub const BTC_CHECKER_CANISTER_ID: Principal =
 #[allow(deprecated)]
 pub fn init_args() -> InitArgs {
     InitArgs {
-        btc_network: BtcNetwork::Mainnet,
+        btc_network: Network::Mainnet,
         ecdsa_key_name: "key_1".to_string(),
         retrieve_btc_min_amount: 10_000,
         ledger_id: CanisterId::unchecked_from_principal(
@@ -31,11 +37,14 @@ pub fn init_args() -> InitArgs {
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
+        get_utxos_cache_expiration_seconds: None,
+        utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     }
 }
 
 pub fn init_state(args: InitArgs) {
-    lifecycle::init::init(args)
+    lifecycle::init::init(args, &IC_CANISTER_RUNTIME)
 }
 
 pub fn ecdsa_public_key() -> ECDSAPublicKey {
@@ -105,26 +114,84 @@ pub fn quarantined_utxo() -> Utxo {
 pub fn get_uxos_response() -> GetUtxosResponse {
     GetUtxosResponse {
         utxos: vec![],
-        tip_block_hash: hex::decode(
-            "00000000000000000002716d23b6b02097a297a84da484c7a9b6427a999112d8",
-        )
-        .unwrap(),
         tip_height: 871160,
         next_page: None,
     }
 }
 
+pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
+    f: F,
+    expected_message: &str,
+) {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(f));
+    let error = result.expect_err(&format!(
+        "Expected panic with message containing: {expected_message}"
+    ));
+    let panic_message = {
+        if let Some(s) = error.downcast_ref::<String>() {
+            s.to_string()
+        } else if let Some(s) = error.downcast_ref::<&str>() {
+            s.to_string()
+        } else {
+            format!("{error:?}")
+        }
+    };
+    assert!(
+        panic_message.contains(expected_message),
+        "Expected panic message to contain: {expected_message}, but got: {panic_message}"
+    );
+}
+
+pub fn build_bitcoin_unsigned_transaction(
+    available_utxos: &mut UtxoSet,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        state::ChangeOutput,
+        WithdrawalFee,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
+    let bitcoin_fee_estimator = bitcoin_fee_estimator();
+    crate::build_unsigned_transaction(
+        available_utxos,
+        outputs,
+        &main_address,
+        DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION,
+        fee_per_vbyte,
+        &bitcoin_fee_estimator,
+    )
+}
+
+pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
+    const RETRIEVE_BTC_MIN_AMOUNT: u64 = 50_000;
+    const BTC_CHECK_FEE: u64 = 100;
+    BitcoinFeeEstimator::new(Network::Mainnet, RETRIEVE_BTC_MIN_AMOUNT, BTC_CHECK_FEE)
+}
+
 pub mod mock {
+    use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
+    use crate::state::eventlog::CkBtcEventLogger;
+    use crate::tx::{SignedRawTransaction, UnsignedTransaction};
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::CanisterRuntime;
+    use crate::{
+        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
+        GetUtxosRequest, GetUtxosResponse, Network,
+    };
+    use crate::{CkBtcMinterState, ECDSAPublicKey};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
-    use ic_btc_interface::{GetUtxosRequest, GetUtxosResponse, Utxo};
+    use ic_btc_interface::Utxo;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
+    use std::time::Duration;
 
     mock! {
         #[derive(Debug)]
@@ -132,13 +199,513 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Estimator = BitcoinFeeEstimator;
+            type EventLogger = CkBtcEventLogger;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
-            async fn bitcoin_get_utxos(&self, request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
-            async fn check_transaction(&self, btc_checker_principal: Principal, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
+            fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+            fn block_time(&self, network: Network) -> Duration;
+            fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+            fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+            fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
+            fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
+            fn event_logger(&self) -> CkBtcEventLogger;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
+            async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
+            async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
+            async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
+            async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
+            async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
+        }
+    }
+}
+
+pub mod arbitrary {
+    use crate::state::eventlog::CkBtcMinterEvent;
+    use crate::state::utxos::UtxoSet;
+    use crate::{
+        WithdrawalFee,
+        address::BitcoinAddress,
+        memo::{BurnMemo, MintMemo, Status},
+        reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
+        signature::EncodedSignature,
+        state::{
+            ChangeOutput, LedgerBurnIndex, Mode, ReimbursementReason, RetrieveBtcRequest,
+            SuspendedReason,
+            eventlog::{EventType, ReplacedReason},
+        },
+        tx,
+        tx::{SignedInput, TxOut, UnsignedInput},
+    };
+    use candid::Principal;
+    pub use event::event_type;
+    use ic_base_types::CanisterId;
+    use ic_btc_interface::{OutPoint, Satoshi, Txid, Utxo};
+    use icrc_ledger_types::icrc1::account::Account;
+    use proptest::{
+        array::uniform20,
+        array::uniform32,
+        collection::{SizeRange, vec as pvec},
+        option,
+        prelude::{Just, Strategy, any},
+        prop_oneof,
+    };
+    use serde_bytes::ByteBuf;
+
+    // Macro to simplify writing strategies that generate structs.
+    macro_rules! prop_struct {
+        ($struct_path:path { $($field_name:ident: $strategy:expr_2021),* $(,)? }) => {
+            #[allow(unused_parens)]
+            ($($strategy),*).prop_map(|($($field_name),*)| {
+                $struct_path {
+                    $($field_name),*
+                }
+            })
+        };
+    }
+
+    pub(crate) fn burn_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        prop_oneof![burn_convert_memo(), burn_consolidate_memo()]
+    }
+
+    pub(crate) fn burn_consolidate_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (any::<u64>(), any::<u64>())
+            .prop_map(|(value, inputs)| BurnMemo::Consolidate { value, inputs })
+    }
+
+    pub(crate) fn burn_convert_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (
+            option::of("[a-z0-9]{20,62}"),
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+        )
+            .prop_map(|(address, kyt_fee, status)| {
+                BurnMemo::Convert {
+                    address: address.as_ref().map(|s| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static str = Box::leak(s.clone().into_boxed_str());
+                        leaked
+                    }),
+                    kyt_fee,
+                    status,
+                }
+            })
+    }
+
+    pub(crate) fn mint_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        prop_oneof![
+            mint_convert_memo(),
+            mint_kyt_memo(),
+            mint_kyt_fail_memo(),
+            mint_reimburse_withdrawal_memo()
+        ]
+    }
+
+    pub(crate) fn mint_convert_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(proptest::collection::vec(any::<u8>(), 32)),
+            option::of(any::<u32>()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(|(txid, vout, kyt_fee)| {
+                MintMemo::Convert {
+                    txid: txid.as_ref().map(|v| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static [u8] = Box::leak(v.clone().into_boxed_slice());
+                        leaked
+                    }),
+                    vout,
+                    kyt_fee,
+                }
+            })
+    }
+
+    pub(crate) fn mint_kyt_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        #[allow(deprecated)]
+        Just(MintMemo::Kyt)
+    }
+
+    #[allow(deprecated)]
+    pub(crate) fn mint_kyt_fail_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(
+                |(kyt_fee, status, associated_burn_index)| MintMemo::KytFail {
+                    kyt_fee,
+                    status,
+                    associated_burn_index,
+                },
+            )
+    }
+
+    pub(crate) fn mint_reimburse_withdrawal_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        any::<u64>().prop_map(|withdrawal_id| MintMemo::ReimburseWithdrawal {
+            withdrawal_id: LedgerBurnIndex::from(withdrawal_id),
+        })
+    }
+
+    pub(crate) fn memo_status() -> impl Strategy<Value = Status> {
+        prop_oneof![
+            Just(Status::Accepted),
+            Just(Status::Rejected),
+            Just(Status::CallFailed),
+        ]
+    }
+
+    fn amount() -> impl Strategy<Value = Satoshi> {
+        1..10_000_000_000u64
+    }
+
+    fn txid() -> impl Strategy<Value = Txid> {
+        uniform32(any::<u8>()).prop_map(Txid::from)
+    }
+
+    fn outpoint() -> impl Strategy<Value = OutPoint> {
+        prop_struct!(OutPoint {
+            txid: txid(),
+            vout: any::<u32>(),
+        })
+    }
+
+    fn canister_id() -> impl Strategy<Value = CanisterId> {
+        any::<u64>().prop_map(CanisterId::from_u64)
+    }
+
+    pub fn retrieve_btc_requests(
+        amount: impl Strategy<Value = Satoshi>,
+        num: impl Into<SizeRange>,
+    ) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
+        pvec(retrieve_btc_request(amount), num).prop_map(|mut reqs| {
+            reqs.sort_by_key(|req| req.received_at);
+            for (i, req) in reqs.iter_mut().enumerate() {
+                req.block_index = i as u64;
+            }
+            reqs
+        })
+    }
+
+    fn principal() -> impl Strategy<Value = Principal> {
+        pvec(any::<u8>(), 1..=Principal::MAX_LENGTH_IN_BYTES)
+            .prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
+    }
+
+    fn retrieve_btc_request(
+        amount: impl Strategy<Value = Satoshi>,
+    ) -> impl Strategy<Value = RetrieveBtcRequest> {
+        prop_struct!(RetrieveBtcRequest {
+            amount: amount,
+            address: address(),
+            block_index: any::<u64>(),
+            received_at: 1569975147000..2069975147000u64,
+            kyt_provider: option::of(principal()),
+            reimbursement_account: option::of(account()),
+        })
+    }
+
+    fn reimbursement_reason() -> impl Strategy<Value = ReimbursementReason> {
+        prop_oneof![
+            (principal(), any::<u64>()).prop_map(|(kyt_provider, kyt_fee)| {
+                ReimbursementReason::TaintedDestination {
+                    kyt_provider,
+                    kyt_fee,
+                }
+            }),
+            Just(ReimbursementReason::CallFailed),
+        ]
+    }
+
+    fn suspended_reason() -> impl Strategy<Value = SuspendedReason> {
+        prop_oneof![
+            Just(SuspendedReason::ValueTooSmall),
+            Just(SuspendedReason::Quarantined),
+        ]
+    }
+
+    fn withdrawal_fee() -> impl Strategy<Value = WithdrawalFee> {
+        (any::<u64>(), any::<u64>()).prop_map(|(bitcoin_fee, minter_fee)| WithdrawalFee {
+            bitcoin_fee,
+            minter_fee,
+        })
+    }
+
+    fn withdrawal_reimbursement_reason() -> impl Strategy<Value = WithdrawalReimbursementReason> {
+        (0..2000usize, 500..1000usize).prop_map(|(n, m)| {
+            WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: n + m + 1,
+                    max_num_inputs: n,
+                },
+            )
+        })
+    }
+
+    fn replaced_reason() -> impl Strategy<Value = ReplacedReason> {
+        prop_oneof![
+            Just(ReplacedReason::ToRetry),
+            withdrawal_reimbursement_reason()
+                .prop_map(|reason| ReplacedReason::ToCancel { reason })
+        ]
+    }
+
+    fn change_output() -> impl Strategy<Value = ChangeOutput> {
+        (any::<u32>(), any::<u64>()).prop_map(|(vout, value)| ChangeOutput { vout, value })
+    }
+
+    fn mode() -> impl Strategy<Value = Mode> {
+        prop_oneof![
+            Just(Mode::ReadOnly),
+            pvec(principal(), 0..10_000).prop_map(Mode::RestrictedTo),
+            pvec(principal(), 0..10_000).prop_map(Mode::DepositsRestrictedTo),
+            Just(Mode::GeneralAvailability),
+        ]
+    }
+
+    fn encoded_signature() -> impl Strategy<Value = EncodedSignature> {
+        pvec(1u8..0xff, 64).prop_map(|bytes| EncodedSignature::from_sec1(bytes.as_slice()))
+    }
+
+    pub fn unsigned_input(
+        value: impl Strategy<Value = Satoshi>,
+    ) -> impl Strategy<Value = UnsignedInput> {
+        prop_struct!(UnsignedInput {
+            previous_output: outpoint(),
+            value: value,
+            sequence: any::<u32>(),
+        })
+    }
+
+    pub fn signed_input() -> impl Strategy<Value = SignedInput> {
+        prop_struct!(SignedInput {
+            previous_output: outpoint(),
+            sequence: any::<u32>(),
+            signature: encoded_signature(),
+            pubkey: pvec(any::<u8>(), tx::PUBKEY_LEN).prop_map(ByteBuf::from),
+        })
+    }
+
+    pub fn address() -> impl Strategy<Value = BitcoinAddress> {
+        prop_oneof![
+            uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
+            uniform32(any::<u8>()).prop_map(BitcoinAddress::P2wshV0),
+            uniform32(any::<u8>()).prop_map(BitcoinAddress::P2trV1),
+            uniform20(any::<u8>()).prop_map(BitcoinAddress::P2pkh),
+            uniform20(any::<u8>()).prop_map(BitcoinAddress::P2sh),
+        ]
+    }
+
+    pub fn tx_out() -> impl Strategy<Value = TxOut> {
+        prop_struct!(TxOut {
+            value: amount(),
+            address: address(),
+        })
+    }
+
+    pub fn utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
+        prop_struct!(Utxo {
+            outpoint: outpoint(),
+            value: amount,
+            height: any::<u32>(),
+        })
+    }
+
+    pub fn utxo_set(
+        amount: impl Strategy<Value = Satoshi> + Clone,
+        size: impl Into<SizeRange>,
+    ) -> impl Strategy<Value = UtxoSet> {
+        (proptest::collection::btree_set(outpoint(), size))
+            .prop_flat_map(move |outpoints| {
+                let num_utxos = outpoints.len();
+                (
+                    Just(outpoints),
+                    proptest::collection::vec(amount.clone(), num_utxos),
+                    proptest::collection::vec(any::<u32>(), num_utxos),
+                )
+            })
+            .prop_map(|(outpoints, amounts, heights)| {
+                outpoints
+                    .into_iter()
+                    .zip(amounts)
+                    .zip(heights)
+                    .map(|((outpoint, amount), height)| Utxo {
+                        outpoint,
+                        value: amount,
+                        height,
+                    })
+                    .collect::<UtxoSet>()
+            })
+    }
+
+    pub fn account() -> impl Strategy<Value = Account> {
+        prop_struct!(Account {
+            owner: principal(),
+            subaccount: option::of(uniform32(any::<u8>())),
+        })
+    }
+
+    pub fn event() -> impl Strategy<Value = CkBtcMinterEvent> {
+        (any::<Option<u64>>(), event_type())
+            .prop_map(|(timestamp, payload)| CkBtcMinterEvent { timestamp, payload })
+    }
+
+    // Some event types are deprecated, however we still want to use them in prop tests as we want
+    // to make sure they can still be deserialized.
+    // For convenience, the module is not visible to the outside.
+    #[allow(deprecated)]
+    mod event {
+        use super::*;
+        use crate::Network;
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
+
+        fn btc_network() -> impl Strategy<Value = Network> {
+            prop_oneof![
+                Just(Network::Mainnet),
+                Just(Network::Testnet),
+                Just(Network::Regtest),
+            ]
+        }
+
+        fn init_args() -> impl Strategy<Value = InitArgs> {
+            // The number of fields in InitArgs exceeds the max tuple depth Strategy supports.
+            // The workaround is to use the strategy for UpgradeArgs to help.
+            (
+                btc_network(),
+                canister_id(),
+                ".*",
+                0..u64::MAX,
+                0..u64::MAX,
+                mode(),
+                upgrade_args(),
+            )
+                .prop_map(
+                    |(
+                        btc_network,
+                        ledger_id,
+                        ecdsa_key_name,
+                        retrieve_btc_min_amount,
+                        max_time_in_queue_nanos,
+                        mode,
+                        args,
+                    )| InitArgs {
+                        btc_network,
+                        ledger_id,
+                        ecdsa_key_name,
+                        retrieve_btc_min_amount,
+                        max_time_in_queue_nanos,
+                        mode,
+                        min_confirmations: args.min_confirmations,
+                        check_fee: args.check_fee,
+                        kyt_fee: args.kyt_fee,
+                        btc_checker_principal: args.btc_checker_principal,
+                        kyt_principal: args.kyt_principal,
+                        get_utxos_cache_expiration_seconds: args.get_utxos_cache_expiration_seconds,
+                        utxo_consolidation_threshold: args.utxo_consolidation_threshold,
+                        max_num_inputs_in_transaction: args.max_num_inputs_in_transaction,
+                    },
+                )
+        }
+
+        fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
+            prop_struct!(UpgradeArgs {
+                retrieve_btc_min_amount: option::of(any::<u64>()),
+                min_confirmations: option::of(any::<u32>()),
+                max_time_in_queue_nanos: option::of(any::<u64>()),
+                mode: option::of(mode()),
+                check_fee: option::of(any::<u64>()),
+                kyt_fee: option::of(any::<u64>()),
+                btc_checker_principal: option::of(canister_id()),
+                kyt_principal: option::of(canister_id()),
+                get_utxos_cache_expiration_seconds: option::of(any::<u64>()),
+                utxo_consolidation_threshold: option::of(any::<u64>()),
+                max_num_inputs_in_transaction: option::of(any::<u64>()),
+            })
+        }
+
+        pub fn event_type() -> impl Strategy<Value = EventType> {
+            prop_oneof![
+                init_args().prop_map(EventType::Init),
+                upgrade_args().prop_map(EventType::Upgrade),
+                retrieve_btc_request(amount()).prop_map(EventType::AcceptedRetrieveBtcRequest),
+                prop_struct!(EventType::ReceivedUtxos {
+                    mint_txid: option::of(any::<u64>()),
+                    to_account: account(),
+                    utxos: pvec(utxo(amount()), 0..10_000),
+                }),
+                prop_struct!(EventType::RemovedRetrieveBtcRequest {
+                    block_index: any::<u64>()
+                }),
+                prop_struct!(EventType::SentBtcTransaction {
+                    request_block_indices: pvec(any::<u64>(), 0..10_000),
+                    txid: txid(),
+                    utxos: pvec(utxo(amount()), 0..10_000),
+                    change_output: option::of(change_output()),
+                    submitted_at: any::<u64>(),
+                    fee_per_vbyte: option::of(any::<u64>()),
+                    withdrawal_fee: option::of(withdrawal_fee()),
+                    signed_tx: option::of(pvec(any::<u8>(), 1..10_000)),
+                }),
+                prop_struct!(EventType::ReplacedBtcTransaction {
+                    old_txid: txid(),
+                    new_txid: txid(),
+                    change_output: change_output(),
+                    submitted_at: any::<u64>(),
+                    fee_per_vbyte: any::<u64>(),
+                    withdrawal_fee: option::of(withdrawal_fee()),
+                    reason: option::of(replaced_reason()),
+                    new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),
+                }),
+                prop_struct!(EventType::ConfirmedBtcTransaction { txid: txid() }),
+                prop_struct!(EventType::CheckedUtxo {
+                    utxo: utxo(amount()),
+                    uuid: any::<String>(),
+                    clean: any::<bool>(),
+                    kyt_provider: option::of(principal())
+                }),
+                prop_struct!(EventType::CheckedUtxoV2 {
+                    utxo: utxo(amount()),
+                    account: account(),
+                }),
+                prop_struct!(EventType::IgnoredUtxo {
+                    utxo: utxo(amount())
+                }),
+                prop_struct!(EventType::SuspendedUtxo {
+                    utxo: utxo(amount()),
+                    account: account(),
+                    reason: suspended_reason(),
+                }),
+                prop_struct!(EventType::DistributedKytFee {
+                    kyt_provider: principal(),
+                    amount: any::<u64>(),
+                    block_index: any::<u64>(),
+                }),
+                prop_struct!(EventType::RetrieveBtcKytFailed {
+                    owner: principal(),
+                    address: ".*",
+                    amount: any::<u64>(),
+                    uuid: ".*",
+                    kyt_provider: principal(),
+                    block_index: any::<u64>(),
+                }),
+                prop_struct!(EventType::ScheduleDepositReimbursement {
+                    account: account(),
+                    amount: any::<u64>(),
+                    reason: reimbursement_reason(),
+                    burn_block_index: any::<u64>(),
+                }),
+                prop_struct!(EventType::ReimbursedFailedDeposit {
+                    burn_block_index: any::<u64>(),
+                    mint_block_index: any::<u64>(),
+                }),
+            ]
         }
     }
 }

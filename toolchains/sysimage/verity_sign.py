@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 
@@ -38,9 +39,7 @@ def main():
 
     args = parser.parse_args(sys.argv[1:])
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
     partition = os.path.join(tmpdir, "partition.img")
 
     subprocess.run(
@@ -113,6 +112,8 @@ def main():
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

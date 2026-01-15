@@ -12,6 +12,9 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
+
+from toolchains.sysimage.utils import parse_size
 
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):
@@ -79,17 +82,6 @@ def install_extra_files(out_file, extra_files, path_transform):
         )
 
 
-def parse_size(s):
-    if s[-1] == "k" or s[-1] == "K":
-        return 1024 * int(s[:-1])
-    elif s[-1] == "m" or s[-1] == "M":
-        return 1024 * 1024 * int(s[:-1])
-    elif s[-1] == "g" or s[-1] == "G":
-        return 1024 * 1024 * 1024 * int(s[:-1])
-    else:
-        return int(s)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--label", help="Label to add to partition", type=str)
@@ -124,9 +116,7 @@ def main():
     limit_prefix = args.path
     extra_files = args.extra_files
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     fs_basedir = os.path.join(tmpdir, "fs")
     os.mkdir(fs_basedir)
@@ -177,6 +167,8 @@ def main():
         ],
         check=True,
     )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

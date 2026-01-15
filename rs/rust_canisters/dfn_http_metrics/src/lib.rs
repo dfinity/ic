@@ -1,4 +1,4 @@
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use serde_bytes::ByteBuf;
 
 /// Implements an HTTP endpoint that handles /metrics requests and return 404
@@ -30,6 +30,7 @@ pub fn serve_metrics(
                                     "text/plain; version=0.0.4".to_string(),
                                 ),
                                 ("Content-Length".to_string(), body.len().to_string()),
+                                ("Cache-Control".to_string(), "no-store".to_string()),
                             ],
                             body: ByteBuf::from(body),
                         }
@@ -37,7 +38,7 @@ pub fn serve_metrics(
                     Err(err) => HttpResponse {
                         status_code: 500,
                         headers: vec![],
-                        body: ByteBuf::from(format!("Failed to encode metrics: {}", err)),
+                        body: ByteBuf::from(format!("Failed to encode metrics: {err}")),
                     },
                 }
             } else {

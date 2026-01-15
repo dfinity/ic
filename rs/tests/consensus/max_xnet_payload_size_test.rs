@@ -34,7 +34,7 @@ use ic_universal_canister::{call_args, wasm};
 
 use anyhow::Result;
 use futures::join;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::sync::Arc;
 
 const INGRESS_MAX_SIZE: usize = 4 * 1024 * 1024;

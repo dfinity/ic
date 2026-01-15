@@ -208,10 +208,12 @@ class SlackVulnerabilityInfo:
         if self.vulnerability.score != other.vulnerability.score:
             vuln_updated_fields["Score"] = str(self.vulnerability.score) if self.vulnerability.score != -1 else "n/a"
             self.vulnerability.score = other.vulnerability.score
-        if len(vuln_updated_fields) > 0:
-            for channel in self.msg_info_by_channel.keys():
-                if channel not in channels_vuln_removed:
+        for channel in self.msg_info_by_channel.keys():
+            if channel not in channels_vuln_removed:
+                if len(vuln_updated_fields) > 0:
                     vuln_events.append(SlackVulnerabilityEvent.vuln_changed(vuln_id, channel, vuln_updated_fields))
+                else:
+                    vuln_events.append(SlackVulnerabilityEvent.vuln_unchanged(vuln_id, channel))
         return vuln_events + res
 
     def get_slack_msg_for(self, channel_id: str, info_by_project: Dict[str, SlackProjectInfo]) -> Optional[str]:

@@ -1,22 +1,29 @@
-use crate::eth_logs::{
-    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
+use crate::{
+    eth_logs::{
+        LogParser, LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping,
+        ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError, report_transaction_error,
+    },
+    eth_rpc::{Topic, is_response_too_large},
+    eth_rpc_client::{
+        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE, HEADER_SIZE_LIMIT, MIN_ATTACHED_CYCLES,
+        MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
+    },
+    guard::TimerGuard,
+    logs::{DEBUG, INFO},
+    numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex},
+    state::{
+        State, TaskType, audit::process_event, eth_logs_scraping::LogScrapingId, event::EventType,
+        mutate_state, read_state,
+    },
 };
-use crate::eth_rpc::{BlockSpec, GetLogsParam, HttpOutcallError, LogEntry, Topic};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
-use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
-use crate::state::eth_logs_scraping::LogScrapingId;
-use crate::state::{
-    audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
-};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
+use evm_rpc_types::{Hex32, LogEntry};
 use ic_canister_log::log;
+use ic_canister_runtime::IcRuntime;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
-use std::collections::VecDeque;
-use std::time::Duration;
+use std::{collections::VecDeque, time::Duration};
 
 async fn mint() {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -126,7 +133,7 @@ async fn mint() {
             INFO,
             "Failed to mint {error_count} events, rescheduling the minting"
         );
-        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, async { mint().await });
     }
 }
 
@@ -153,19 +160,22 @@ pub async fn scrape_logs() {
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
-    match read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockSpec::Tag(block_height))
+    match read_state(rpc_client)
+        .get_block_by_number(block_height.clone())
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .send()
         .await
+        .reduce_with_strategy(NoReduction)
     {
         Ok(latest_block) => {
-            let block_number = Some(latest_block.number);
+            let block_number = Some(BlockNumber::from(latest_block.number));
             mutate_state(|s| s.last_observed_block_number = block_number);
             block_number
         }
         Err(e) => {
             log!(
                 INFO,
-                "Failed to get the latest {block_height} block number: {e:?}"
+                "Failed to get the latest {block_height:?} block number: {e:?}"
             );
             read_state(|s| s.last_observed_block_number)
         }
@@ -199,7 +209,7 @@ where
         "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
         S::ID
     );
-    let rpc_client = read_state(EthRpcClient::from_state);
+    let rpc_client = read_state(rpc_client);
     for block_range in block_range.into_chunks(max_block_spread) {
         match scrape_block_range::<S>(
             &rpc_client,
@@ -223,7 +233,7 @@ where
 }
 
 async fn scrape_block_range<S>(
-    rpc_client: &EthRpcClient,
+    rpc_client: &EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles>,
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,
@@ -238,16 +248,18 @@ where
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
-        let request = GetLogsParam {
-            from_block: BlockSpec::from(from_block),
-            to_block: BlockSpec::from(to_block),
-            address: vec![contract_address],
-            topics: topics.clone(),
-        };
-
         let result = rpc_client
-            .eth_get_logs(request)
+            .get_logs(vec![contract_address.into_bytes()])
+            .with_from_block(from_block)
+            .with_to_block(to_block)
+            .with_topics(into_evm_topic(topics.clone()))
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .with_response_size_estimate(
+                ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
+            )
+            .send()
             .await
+            .reduce_with_strategy(NoReduction)
             .map(<S::Parser>::parse_all_logs);
 
         match result {
@@ -257,7 +269,7 @@ where
             }
             Err(e) => {
                 log!(INFO, "Failed to get {} logs in range {range}: {e:?}", S::ID);
-                if e.has_http_outcall_error_matching(HttpOutcallError::is_response_too_large) {
+                if e.has_http_outcall_error_matching(is_response_too_large) {
                     if from_block == to_block {
                         mutate_state(|s| {
                             process_event(
@@ -329,7 +341,7 @@ pub fn register_deposit_events(
         }
     }
     if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(Duration::from_secs(0), async { mint().await });
     }
     for error in errors {
         if let ReceivedEventError::InvalidEventSource { source, error } = &error {
@@ -345,4 +357,15 @@ pub fn register_deposit_events(
         }
         report_transaction_error(error);
     }
+}
+
+fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
+    let mut result = Vec::with_capacity(topics.len());
+    for topic in topics {
+        result.push(match topic {
+            Topic::Single(single_topic) => vec![single_topic],
+            Topic::Multiple(multiple_topic) => multiple_topic.into_iter().collect(),
+        });
+    }
+    result
 }

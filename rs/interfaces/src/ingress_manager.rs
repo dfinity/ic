@@ -3,15 +3,15 @@ use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     validation::{ValidationError, ValidationResult},
 };
-use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
+    CanisterId, Height, NumBytes,
     artifact::IngressMessageId,
-    batch::{IngressPayload, IngressPayloadError, ValidationContext},
+    batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
     messages::MessageId,
+    state_manager::StateManagerError,
     time::{Time, UNIX_EPOCH},
-    CanisterId, Height, NumBytes,
 };
 use std::collections::HashSet;
 
@@ -52,8 +52,14 @@ impl IngressSetQuery for IngressSets {
 /// Reasons for why an ingress payload might be invalid.
 #[derive(Eq, PartialEq, Debug)]
 pub enum InvalidIngressPayloadReason {
+    /// An [`IngressMessageId`] inside the payload doesn't match the referenced [`SignedIngress`].
+    MismatchedMessageId {
+        expected: IngressMessageId,
+        computed: IngressMessageId,
+    },
+    /// Failed to deserialize an ingress message.
+    IngressMessageDeserializationFailure(IngressMessageId, String),
     IngressValidationError(MessageId, String),
-    IngressPayloadError(IngressPayloadError),
     IngressExpired(MessageId, String),
     IngressMessageTooBig(usize, usize),
     IngressPayloadTooManyMessages(usize, usize),

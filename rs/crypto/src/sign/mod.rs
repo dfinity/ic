@@ -1,13 +1,11 @@
 use super::*;
 
-use crate::sign::basic_sig::BasicSigVerifierInternal;
-use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
+use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier,
@@ -15,6 +13,7 @@ use ic_interfaces::crypto::{
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_logger::{debug, new_logger};
+use ic_types::crypto::KeyPurpose::CommitteeSigning;
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -27,7 +26,6 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use ic_types::crypto::threshold_sig::errors::threshold_sign_error::ThresholdSignError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::crypto::KeyPurpose::CommitteeSigning;
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
     CombinedThresholdSigOf, CryptoError, CryptoResult, IndividualMultiSig, IndividualMultiSigOf,
@@ -37,16 +35,18 @@ use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
-pub use threshold_sig::ThresholdSigDataStoreImpl;
+pub(crate) use basic_sig::BasicSigVerifierInternal;
+pub(crate) use threshold_sig::lazily_calculated_public_key_from_store;
+pub use threshold_sig::{ThresholdSigDataStore, ThresholdSigDataStoreImpl};
 
-mod basic_sig;
+pub(crate) mod basic_sig;
 mod canister_threshold_sig;
 mod multi_sig;
 mod threshold_sig;
 
 pub use canister_threshold_sig::{
-    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
-    MegaKeyFromRegistryError,
+    MegaKeyFromRegistryError, get_master_public_key_from_transcript,
+    retrieve_mega_public_key_from_registry,
 };
 
 #[cfg(test)]
@@ -55,13 +55,10 @@ use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsSc
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
 
-impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentImpl<C> {
-    fn sign_basic(
-        &self,
-        message: &H,
-        signer: NodeId,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<H>> {
+impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
+    for CryptoComponentImpl<C>
+{
+    fn sign_basic(&self, message: &H) -> CryptoResult<BasicSigOf<H>> {
         let log_id = get_log_id(&self.logger);
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
@@ -70,18 +67,12 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentIm
         );
         debug!(logger;
             crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
             crypto.signed_bytes => format!("0x{}", hex::encode(message.as_signed_bytes())),
-            crypto.signer => format!("{:?}", signer),
         );
         let start_time = self.metrics.now();
-        let result = BasicSignerInternal::sign_basic(
-            &self.csp,
-            self.registry_client.as_ref(),
-            message,
-            signer,
-            registry_version,
-        );
+
+        let result = basic_sig::sign(message, self.vault.as_ref(), &self.metrics);
+
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
@@ -441,8 +432,6 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
 }
 
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
-    // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
-    // ThresholdSigDataNotFoundError>
     fn sign_threshold(
         &self,
         message: &T,
@@ -988,7 +977,7 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentIm
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
     if let Some(error) = error_option {
-        return format!("{}", error);
+        return format!("{error}");
     }
     "none".to_string()
 }
@@ -1005,14 +994,14 @@ fn ensure_ic_canister_signature(algorithm_id: AlgorithmId) -> CryptoResult<()> {
 
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
-        return format!("{}", content);
+        return format!("{content}");
     }
     "none".to_string()
 }
 
 pub fn debug_ok_content<T: fmt::Debug, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
-        return format!("{:?}", content);
+        return format!("{content:?}");
     }
     "none".to_string()
 }

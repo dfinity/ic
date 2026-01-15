@@ -1,9 +1,9 @@
-use axum::{http::Request, Router};
+use axum::{Router, http::Request};
 use bytes::Bytes;
 use consensus::{TestConsensus, U64Artifact};
 use futures::{
-    future::{join_all, BoxFuture},
     FutureExt,
+    future::{BoxFuture, join_all},
 };
 use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -18,23 +18,22 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{ConnId, QuicTransport, SubnetTopology, Transport, create_udp_socket};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
-use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_registry::add_subnet_record;
+use ic_test_utilities_registry::{add_subnet_record, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_types::ids::subnet_test_id;
-use rcgen::{generate_simple_self_signed, CertifiedKey};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     str::FromStr,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -55,7 +54,7 @@ pub mod turmoil;
 pub fn temp_crypto_component_with_tls_keys(
     registry_and_data: &RegistryConsensusHandle,
     node_id: NodeId,
-) -> Arc<dyn TlsConfig + Send + Sync> {
+) -> Arc<dyn TlsConfig> {
     TempCryptoComponent::builder()
         .with_registry_client_and_data(
             registry_and_data.registry_client.clone(),
@@ -225,22 +224,6 @@ pub fn fully_connected_localhost_subnet(
     (node_ids, topology_watcher)
 }
 
-/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
-fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
-    let tempdir = TempDir::new().unwrap();
-    let store = LocalStoreImpl::new(tempdir.path());
-    let changelog =
-        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
-            .expect("")
-            .1;
-
-    for (v, changelog_entry) in changelog.into_iter().enumerate() {
-        let v = RegistryVersion::from((v + 1) as u64);
-        store.store(v, changelog_entry).unwrap();
-    }
-    (tempdir, store)
-}
-
 pub fn create_peer_manager_with_local_store(
     rt: &Handle,
     log: ReplicaLogger,
@@ -318,7 +301,8 @@ impl ConnectivityChecker {
 
     pub fn check_fut(
         &self,
-    ) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
+    ) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static + use<>
+    {
         let conn_checker = self.clone();
         move |peer, transport| {
             let conn_checker_clone = conn_checker.clone();
@@ -449,31 +433,28 @@ pub fn start_consensus_manager(
     processor: TestConsensus<U64Artifact>,
 ) -> (
     Box<dyn JoinGuard>,
-    ic_consensus_manager::ConsensusManagerBuilder,
+    ic_consensus_manager::AbortableBroadcastChannelBuilder,
 ) {
     let _enter = rt_handle.enter();
     let pool = Arc::new(RwLock::new(processor));
-    let (artifact_processor_jh, artifact_manager_event_rx, artifact_sender) =
-        start_test_processor(pool.clone(), pool.clone().read().unwrap().clone());
     let bouncer_factory = Arc::new(pool.clone().read().unwrap().clone());
-    let mut cm1 = ic_consensus_manager::ConsensusManagerBuilder::new(
+    let downloader = FetchArtifact::new(
+        log.clone(),
+        rt_handle.clone(),
+        pool.clone(),
+        bouncer_factory,
+        MetricsRegistry::default(),
+    );
+
+    let mut cm1 = ic_consensus_manager::AbortableBroadcastChannelBuilder::new(
         log.clone(),
         rt_handle.clone(),
         MetricsRegistry::default(),
     );
-    let downloader = FetchArtifact::new(
-        log,
-        rt_handle,
-        pool,
-        bouncer_factory,
-        MetricsRegistry::default(),
-    );
-    cm1.add_client(
-        artifact_manager_event_rx,
-        artifact_sender,
-        downloader,
-        usize::MAX,
-    );
+    let channel = cm1.abortable_broadcast_channel(downloader, usize::MAX);
+
+    let artifact_processor_jh =
+        start_test_processor(channel, pool.clone(), pool.clone().read().unwrap().clone());
     (artifact_processor_jh, cm1)
 }
 

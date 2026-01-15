@@ -24,16 +24,11 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
-    fn open_wasm_serialized(
-        &self,
-        req: OpenWasmSerializedRequest,
-    ) -> Call<OpenWasmSerializedReply> {
-        let cell = self
-            .channel
-            .call(Request::OpenWasmSerialized(req), |rep| match rep {
-                Reply::OpenWasmSerialized(rep) => Ok(rep),
-                _ => Err(Error::ServerError),
-            });
+    fn open_wasm(&self, req: OpenWasmRequest) -> Call<OpenWasmReply> {
+        let cell = self.channel.call(Request::OpenWasm(req), |rep| match rep {
+            Reply::OpenWasm(rep) => Ok(rep),
+            _ => Err(Error::ServerError),
+        });
         Call::new(cell)
     }
 
@@ -95,17 +90,16 @@ impl SandboxService for SandboxClientStub {
         Call::new(cell)
     }
 
-    fn create_execution_state_serialized(
+    fn create_execution_state(
         &self,
-        req: CreateExecutionStateSerializedRequest,
-    ) -> Call<CreateExecutionStateSerializedReply> {
-        let cell = self.channel.call(
-            Request::CreateExecutionStateSerialized(req),
-            |rep| match rep {
-                Reply::CreateExecutionStateSerialized(rep) => Ok(rep),
+        req: CreateExecutionStateRequest,
+    ) -> Call<CreateExecutionStateReply> {
+        let cell = self
+            .channel
+            .call(Request::CreateExecutionState(req), |rep| match rep {
+                Reply::CreateExecutionState(rep) => Ok(rep),
                 _ => Err(Error::ServerError),
-            },
-        );
+            });
         Call::new(cell)
     }
 }

@@ -2,13 +2,32 @@ load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//rs/nervous_system/patch_canister_did:defs.bzl", "canister_test_did")
 load(":feature_flags.bzl", "test_with_tla")
 
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
 
-exports_files(["canister/governance.did"])
+exports_files(
+    # Notice that governance.proto is NOT included. This is very intentional. We
+    # only use that for storing things to stable memory, not for communication
+    # with clients.
+    [
+        "canister/governance.did",
+        "canister/governance_test.did.patch",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+canister_test_did(
+    name = "test_did",
+    canister_did = "canister/governance.did",
+    canister_test_did_patch = "canister/governance_test.did.patch",
+    output_path = "canister/governance_test.did",
+)
 
 # Allows temporarily disabling TLA checks from the command line;
 # just pass `--define tla_disabled=true` to your Bazel command
@@ -29,20 +48,30 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/getrandom_for_wasm",
+    "//packages/ic-dummy-getrandom-for-wasm",
+    "//packages/ic-http-types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/limits",
+    "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/validation",
     "//rs/nervous_system/governance",
     "//rs/nervous_system/linear_map",
+    "//rs/nervous_system/lock",
     "//rs/nervous_system/long_message",
     "//rs/nervous_system/neurons_fund",
     "//rs/nervous_system/proto",
+    "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/temporary",
+    "//rs/nervous_system/time_helpers",
+    "//rs/nervous_system/timer_task",
+    "//rs/nervous_system/timers",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -51,10 +80,10 @@ DEPENDENCIES = [
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
+    "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/http_types",
+    "//rs/registry/subnet_type",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
@@ -66,6 +95,8 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",
@@ -99,8 +130,8 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
+    "//rs/nns/governance/derive_self_describing",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
 ]
@@ -119,7 +150,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/tla_instrumentation",
     "//rs/tla_instrumentation:local_key",
-    "@crate_index//:candid_parser",
     "@crate_index//:prometheus-parse",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
@@ -182,6 +212,24 @@ rust_library(
     ],
 )
 
+# We are not relying on test feature for this test because we want to test only the performance-based-rewards related code in isolation.
+# Enabling test feature causes the Governance to fail the upgrade leading to its panic when running golden-state test.
+# The upgrades fails because it doesn't complete after 50B instructions.
+# This feature will be removed once the performance-based-rewards feature is active on mainnet.
+# TODO(DRE-645): Remove this feature once performance-based-rewards is active on mainnet.
+rust_library(
+    name = "governance--pbr_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["performance-based-rewards"],
+    crate_name = "ic_nns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [
+        ":build_script",
+    ],
+)
+
 rust_library(
     name = "governance--canbench_feature",
     srcs = LIB_SRCS,
@@ -190,6 +238,7 @@ rust_library(
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
+    visibility = ["//visibility:private"],
     deps = DEPENDENCIES + [
         "@crate_index//:canbench-rs",
     ],
@@ -206,9 +255,30 @@ rust_library(
 rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
+    add_test = True,
+    noise_threshold = 5.0,
+    # For some reason, the NNS Governance benchmarks are sensitive to the optimization level.
+    # We would like to figure out why and fix it, but for now, we are reducing the optimization
+    # level so that tests against the optimization level can be added.
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.
+        ":governance--canbench_feature",
+    ],
+)
+
+# Used for benchmarking compilation/instrumentation/execution changes in the
+# embedders crate.
+rust_canister(
+    name = "governance-bench-canister",
+    srcs = ["canbench/main.rs"],
+    aliases = ALIASES,
+    compile_data = ["canbench/bench.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canbench/bench.did",
+    visibility = ["//visibility:public"],
+    deps = [
         ":governance--canbench_feature",
     ],
 )
@@ -220,30 +290,48 @@ rust_canister(
     compile_data = ["canister/governance.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
 rust_canister(
     name = "governance-canister-test",
+    testonly = True,
     srcs = [
         "canister/canister.rs",
         "canister/tla_ledger.rs",
     ],
     aliases = ALIASES,
-    compile_data = ["canister/governance_test.did"],
+    compile_data = [":test_did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":canister/governance_test.did",
+    did_check = False,  # we don't check in the did so can't meaningfully check
+    proc_macro_deps = MACRO_DEPENDENCIES + [
+        "//rs/tla_instrumentation:proc_macros",
+    ],
+    service_file = ":test_did",
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        "//rs/nervous_system/canisters",
         "//rs/tla_instrumentation",
+    ],
+)
+
+rust_canister(
+    name = "governance-canister-pbr",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    compile_data = ["canister/governance.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/governance.did",
+    visibility = ["//visibility:public"],
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":governance--pbr_feature",
     ],
 )
 
@@ -255,6 +343,7 @@ generated_files_check(
         "//rs/ledger_suite/icp:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
+        "//rs/protobuf:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
         "//rs/types/base_types:protos",
@@ -271,27 +360,25 @@ generated_files_check(
 rust_test(
     name = "canister_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = ["canister/governance.did"],
+    compile_data = [":canister/governance.did"],
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance",
-        "//rs/nervous_system/canisters",
     ],
 )
 
 rust_test(
     name = "canister_test_unit_test",
     srcs = glob(["canister/**/*.rs"]),
-    compile_data = ["canister/governance_test.did"],
+    compile_data = [":canister/governance_test.did"],
     crate_features = test_with_tla(),
     crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
         ":governance--test_feature",
-        "//rs/nervous_system/canisters",
     ],
 )
 
@@ -313,24 +400,6 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        "//rs/nervous_system/canisters",
-    ],
-)
-
-rust_bench(
-    name = "scale_bench",
-    srcs = ["benches/scale.rs"],
-    proc_macro_deps = ["@crate_index//:async-trait"],
-    deps = [
-        # Keep sorted.
-        ":governance",
-        "//rs/ledger_suite/icp:icp_ledger",
-        "//rs/nervous_system/common",
-        "//rs/nns/common",
-        "//rs/types/base_types",
-        "@crate_index//:criterion",
-        "@crate_index//:futures",
-        "@crate_index//:tokio-test",
     ],
 )
 
@@ -343,6 +412,9 @@ filegroup(
 
 rust_test_suite_with_extra_srcs(
     name = "governance_integration_test",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-04
+    timeout = "long",
     srcs = glob(
         ["tests/*.rs"],
         exclude = [
@@ -369,6 +441,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob([
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
+    flaky = True,  # the governance test times out in over 2% of runs
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     toolchains = ["@bazel_tools//tools/jdk:current_java_runtime"],
     deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [

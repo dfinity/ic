@@ -21,49 +21,55 @@ path = "tests/governance.rs"
 name = "governance-interleaving-test"
 path = "tests/interleaving_tests.rs"
 
-[[bench]]
-name = "scale"
-harness = false
-
 [dependencies]
 build-info = { workspace = true }
 
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
+candid_parser = { workspace = true }
+chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
-dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha2 = { path = "../../crypto/sha2/" }
+ic-dummy-getrandom-for-wasm = { path = "../../../packages/ic-dummy-getrandom-for-wasm" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
-ic-management-canister-types = { path = "../../types/management_canister_types" }
+ic-limits = { path = "../../limits" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
+ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
+ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
+ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
+ic-nervous-system-time-helpers = { path = "../../nervous_system/time_helpers" }
+ic-nervous-system-timers = { path = "../../nervous_system/timers" }
 ic-neurons-fund = { path = "../../nervous_system/neurons_fund" }
 ic-nns-common = { path = "../common" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-gtc-accounts = { path = "../gtc_accounts" }
 ic-nns-governance-api = { path = "./api" }
+ic-nns-governance-derive-self-describing = { path = "./derive_self_describing" }
 ic-nns-governance-init = { path = "./init" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
+ic-node-rewards-canister-api = { path = "../../node_rewards/canister/api" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-sns-init = { path = "../../sns/init" }                                                         # This is just for a couple of PB definitions.
 ic-sns-root = { path = "../../sns/root" }                                                         # This is just for a couple of PB definitions.
 ic-sns-swap = { path = "../../sns/swap" }                                                         # This is just for a couple of PB definitions.
@@ -72,6 +78,7 @@ ic-stable-structures = { workspace = true }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../ledger_suite/icp" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 maplit = "1.0.2"
@@ -92,7 +99,7 @@ registry-canister = { path = "../../registry/canister" }
 strum_macros = { workspace = true }
 strum = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 
 local_key = { path = "../../tla_instrumentation/local_key", optional = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
@@ -126,5 +133,6 @@ tokio-test = { workspace = true }
 
 [features]
 test = ["ic-sns-swap/test"]
+performance-based-rewards = []
 canbench-rs = ["dep:canbench-rs"]
 tla = ["local_key", "tla_instrumentation", "tla_instrumentation_proc_macros"]

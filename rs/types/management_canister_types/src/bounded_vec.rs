@@ -19,11 +19,11 @@ pub struct BoundedVec<
 >(Vec<T>);
 
 impl<
-        const MAX_ALLOWED_LEN: usize,
-        const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-        const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-        T,
-    > BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
+    const MAX_ALLOWED_LEN: usize,
+    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+    const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+    T,
+> BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
 {
     pub fn new(data: Vec<T>) -> Self {
         assert!(
@@ -42,12 +42,12 @@ impl<
 }
 
 impl<
-        'de,
-        const MAX_ALLOWED_LEN: usize,
-        const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-        const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-        T: Deserialize<'de> + DataSize,
-    > Deserialize<'de>
+    'de,
+    const MAX_ALLOWED_LEN: usize,
+    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+    const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+    T: Deserialize<'de> + DataSize,
+> Deserialize<'de>
     for BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -63,12 +63,12 @@ impl<
         use serde::de::{SeqAccess, Visitor};
 
         impl<
-                'de,
-                const MAX_ALLOWED_LEN: usize,
-                const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-                const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-                T: Deserialize<'de> + DataSize,
-            > Visitor<'de>
+            'de,
+            const MAX_ALLOWED_LEN: usize,
+            const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+            const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+            T: Deserialize<'de> + DataSize,
+        > Visitor<'de>
             for SeqVisitor<
                 MAX_ALLOWED_LEN,
                 MAX_ALLOWED_TOTAL_DATA_SIZE,
@@ -108,16 +108,14 @@ impl<
                 while let Some(element) = seq.next_element::<T>()? {
                     if elements.len() >= MAX_ALLOWED_LEN {
                         return Err(serde::de::Error::custom(format!(
-                            "The number of elements exceeds maximum allowed {}",
-                            MAX_ALLOWED_LEN
+                            "The number of elements exceeds maximum allowed {MAX_ALLOWED_LEN}"
                         )));
                     }
                     // Check that the new element data size is below the maximum allowed limit.
                     let new_element_data_size = element.data_size();
                     if new_element_data_size > MAX_ALLOWED_ELEMENT_DATA_SIZE {
                         return Err(serde::de::Error::custom(format!(
-                            "The single element data size exceeds maximum allowed {}",
-                            MAX_ALLOWED_ELEMENT_DATA_SIZE
+                            "The single element data size exceeds maximum allowed {MAX_ALLOWED_ELEMENT_DATA_SIZE}"
                         )));
                     }
                     // Check that the new total data size (including new element data size)
@@ -125,8 +123,7 @@ impl<
                     let new_total_data_size = total_data_size + new_element_data_size;
                     if new_total_data_size > MAX_ALLOWED_TOTAL_DATA_SIZE {
                         return Err(serde::de::Error::custom(format!(
-                            "The total data size exceeds maximum allowed {}",
-                            MAX_ALLOWED_TOTAL_DATA_SIZE
+                            "The total data size exceeds maximum allowed {MAX_ALLOWED_TOTAL_DATA_SIZE}"
                         )));
                     }
                     total_data_size = new_total_data_size;
@@ -154,24 +151,23 @@ fn describe_sequence(
 ) -> String {
     let mut msg = String::new();
     if max_allowed_len != UNBOUNDED {
-        msg.push_str(&format!("max {} elements", max_allowed_len));
+        msg.push_str(&format!("max {max_allowed_len} elements"));
     };
     if max_allowed_total_data_size != UNBOUNDED {
         if !msg.is_empty() {
             msg.push_str(", ");
         }
-        msg.push_str(&format!("max {} bytes total", max_allowed_total_data_size));
+        msg.push_str(&format!("max {max_allowed_total_data_size} bytes total"));
     };
     if max_allowed_element_data_size != UNBOUNDED {
         if !msg.is_empty() {
             msg.push_str(", ");
         }
         msg.push_str(&format!(
-            "max {} bytes per element",
-            max_allowed_element_data_size
+            "max {max_allowed_element_data_size} bytes per element"
         ));
     };
-    format!("a sequence with {}", msg)
+    format!("a sequence with {msg}")
 }
 
 #[cfg(test)]
@@ -251,8 +247,7 @@ mod tests {
                 assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
                 assert!(
                     error.description().contains(&format!(
-                        "Deserialize error: The number of elements exceeds maximum allowed {}",
-                        MAX_ALLOWED_LEN
+                        "Deserialize error: The number of elements exceeds maximum allowed {MAX_ALLOWED_LEN}"
                     )),
                     "Actual: {}",
                     error.description()
@@ -294,8 +289,7 @@ mod tests {
                 assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
                 assert!(
                     error.description().contains(&format!(
-                        "Deserialize error: The total data size exceeds maximum allowed {}",
-                        MAX_ALLOWED_TOTAL_DATA_SIZE
+                        "Deserialize error: The total data size exceeds maximum allowed {MAX_ALLOWED_TOTAL_DATA_SIZE}"
                     )),
                     "Actual: {}",
                     error.description()
@@ -332,8 +326,7 @@ mod tests {
                 assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
                 assert!(
                     error.description().contains(&format!(
-                        "Deserialize error: The single element data size exceeds maximum allowed {}",
-                        MAX_ALLOWED_ELEMENT_DATA_SIZE
+                        "Deserialize error: The single element data size exceeds maximum allowed {MAX_ALLOWED_ELEMENT_DATA_SIZE}"
                     )),
                     "Actual: {}",
                     error.description()

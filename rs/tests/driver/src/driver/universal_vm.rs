@@ -1,32 +1,24 @@
 use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
-use crate::driver::farm::id_of_file;
 use crate::driver::farm::AttachImageSpec;
 use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
+use crate::driver::farm::id_of_file;
 use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResources;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
-    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
+    DiskImage, allocate_resources, get_resource_request_for_universal_vm,
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::{
-    get_dependency_path, get_ssh_session_from_env, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
-};
+use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::upload_image;
-use crate::k8s::tnet::TNet;
-use crate::retry_with_msg;
 use crate::util::block_on;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
-use ssh2::Session;
 use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
@@ -34,6 +26,7 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 
 use crate::driver::constants::SSH_USERNAME;
 
@@ -63,6 +56,9 @@ const CONF_SSH_IMG_FNAME: &str = "config_ssh_disk.img.zst";
 const CONFIG_DIR_NAME: &str = "config";
 const CONFIG_SSH_DIR_NAME: &str = "config-ssh";
 const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
+
+const CREATE_UVM_CONFIG_IMAGE_SH: &[u8] =
+    include_bytes!("../../assets/create-universal-vm-config-image.sh");
 
 impl UniversalVm {
     pub fn new(name: String) -> Self {
@@ -113,7 +109,7 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let farm = Farm::from_test_env(env, "universal VM");
+        let farm = block_on(Farm::from_test_env(env, "universal VM"));
         let pot_setup = GroupSetup::read_attribute(env);
 
         env.ssh_keygen()?;
@@ -137,11 +133,11 @@ impl UniversalVm {
             let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
             create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
 
-            let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
+            let ssh_config_img_file_spec = AttachImageSpec::new(block_on(farm.upload_file(
                 &pot_setup.infra_group_name,
                 config_ssh_img,
                 CONF_SSH_IMG_FNAME,
-            )?);
+            ))?);
             image_specs.push(ssh_config_img_file_spec);
         }
 
@@ -161,7 +157,8 @@ impl UniversalVm {
                 let file_id = id_of_file(config_img.clone())?;
                 let mut file_spec = AttachImageSpec::new(file_id.clone());
 
-                let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
+                let upload = match block_on(farm.claim_file(&pot_setup.infra_group_name, &file_id))?
+                {
                     ClaimResult::FileClaimed(file_expiration) => {
                         if let Some(expiration) = file_expiration.expiration {
                             let now = Utc::now();
@@ -179,11 +176,11 @@ impl UniversalVm {
                 };
 
                 if upload {
-                    file_spec = AttachImageSpec::new(farm.upload_file(
+                    file_spec = AttachImageSpec::new(block_on(farm.upload_file(
                         &pot_setup.infra_group_name,
                         config_img,
                         CONF_IMG_FNAME,
-                    )?);
+                    ))?);
                     info!(env.logger(), "Uploaded image: {}", file_id);
                 } else {
                     info!(
@@ -192,45 +189,17 @@ impl UniversalVm {
                     );
                 }
                 image_specs.push(file_spec);
-            } else {
-                let tnet = TNet::read_attribute(env);
-                let tnet_node = tnet.nodes.last().expect("no nodes");
-                info!(
-                    env.logger(),
-                    "Uploading image {} to {}",
-                    config_img.clone().display().to_string(),
-                    tnet_node.config_url.clone().expect("missing config url")
-                );
-                block_on(upload_image(
-                    config_img,
-                    &format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config url"),
-                        CONF_IMG_FNAME
-                    ),
-                ))?;
-                block_on(tnet_node.deploy_config_image(
-                    CONF_IMG_FNAME,
-                    "config",
-                    DataVolumeContentType::Kubevirt,
-                ))
-                .expect("deploying config image failed");
-                block_on(tnet_node.add_volume("config")).expect("deploying config image failed");
             }
         }
 
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            farm.attach_disk_images(
+            block_on(farm.attach_disk_images(
                 &pot_setup.infra_group_name,
                 &self.name,
                 "usb-storage",
                 image_specs,
-            )?;
-            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
-        } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let tnet = TNet::read_attribute(env);
-            let tnet_node = tnet.nodes.last().expect("no nodes");
-            block_on(tnet_node.start()).expect("starting vm failed");
+            ))?;
+            block_on(farm.start_vm(&pot_setup.infra_group_name, &self.name))?;
         }
 
         Ok(())
@@ -242,30 +211,26 @@ fn create_universal_vm_config_image(
     output_img: &Path,
     label: &str,
 ) -> Result<()> {
-    let script_path = get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-    let mut cmd = Command::new(script_path);
-
-    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-    let path_env_var = "PATH";
-    let path_prefix = match std::env::var(path_env_var) {
-        Ok(old_path) => {
-            format!("{old_path}:")
-        }
-        Err(_) => String::from(""),
-    };
-    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
-
-    cmd.arg("--input")
+    // pipe the uvm creation script into bash
+    let mut cmd = Command::new("/bin/bash")
+        .stdin(Stdio::piped())
+        // with .spawn() the parent's stdout & stderr are inherited
+        .arg("-s")
+        .arg("--") // run script from stdin
+        .arg("--input")
         .arg(input_dir)
         .arg("--output")
         .arg(output_img)
         .arg("--label")
-        .arg(label);
+        .arg(label)
+        .spawn()?;
 
-    let output = cmd.output()?;
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-    if !output.status.success() {
+    cmd.stdin
+        .take()
+        .expect("could not open stdin")
+        .write_all(CREATE_UVM_CONFIG_IMAGE_SH)?;
+
+    if !cmd.wait_with_output()?.status.success() {
         bail!("could not spawn config image creation process");
     }
     Ok(())
@@ -382,20 +347,8 @@ impl DeployedUniversalVm {
 }
 
 impl SshSession for DeployedUniversalVm {
-    fn get_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        get_ssh_session_from_env(&self.env, IpAddr::V6(vm.ipv6))
-    }
-
-    fn block_on_ssh_session(&self) -> Result<Session> {
-        let vm = self.get_vm()?;
-        retry_with_msg!(
-            format!("get_ssh_session to {}", vm.ipv6.to_string()),
-            self.env.logger(),
-            SSH_RETRY_TIMEOUT,
-            RETRY_BACKOFF,
-            || { self.get_ssh_session() }
-        )
+    fn get_host_ip(&self) -> Result<IpAddr> {
+        Ok(self.get_vm()?.ipv6.into())
     }
 }
 
@@ -406,6 +359,7 @@ until ipv4=$(ip -j address show dev enp2s0 \
             '.[0].addr_info | map(select(.scope == "global")) | .[0].local'); \
 do
   if [ "$count" -ge 120 ]; then
+    echo "Timed out waiting for IPv4 address!" >&2
     exit 1
   fi
   sleep 1

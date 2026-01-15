@@ -4,19 +4,16 @@ A macro to build grub partitions for ICOS images
 
 load("//toolchains/sysimage:toolchain.bzl", "vfat_image")
 
-def build_grub_partition(name, grub_config = None, visibility = None, tags = None):
+def build_grub_partition(name, grub_config, visibility = None, tags = None):
     """
     Create a grub partition with the given configuration.
 
     Args:
       name: Name for the generated filegroup.
-      grub_config: If set, override the default grub config
+      grub_config: Label pointing to the grub.cfg file to include in the partition.
       visibility: See Bazel documentation
       tags: Bazel tags to be passed
     """
-
-    if grub_config == None:
-        grub_config = Label("//ic-os/bootloader:grub.cfg")
 
     vfat_image(
         name = name,

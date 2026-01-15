@@ -13,9 +13,9 @@ ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-embedders = { path = "../../embedders" }
 ic-interfaces = { path = "../../interfaces" }
 ic-logger = { path = "../../monitoring/logger" }
+ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-replicated-state = { path = "../../replicated_state" }
-ic-system-api = { path = "../../system_api" }
 ic-test-utilities = { path = ".." }
 ic-test-utilities-state = { path = "../state" }
 ic-test-utilities-types = { path = "../types" }

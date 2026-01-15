@@ -1,21 +1,23 @@
 mod candid;
 mod canister;
 mod dashboard;
+mod forum;
 mod git;
 mod ic_admin;
 mod proposal;
 
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
+use crate::forum::{CreateTopicRequest, DiscourseClient, ForumTopic};
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -75,6 +77,18 @@ enum Commands {
         #[command(subcommand)]
         submit: Option<SubmitProposal>,
     },
+    /// Create a forum post for a new proposal
+    #[command(arg_required_else_help = true)]
+    CreateForumPost {
+        /// ID of the proposals for which a forum topic should be created.
+        proposal_ids: Vec<u64>,
+        /// API key to submit the post
+        #[arg(long)]
+        api_key: String,
+        /// Username associated with the API key
+        #[arg(long)]
+        api_user: String,
+    },
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -120,7 +134,8 @@ async fn main() {
                 let release_notes = git_repo.release_notes_batch(&canisters, &from, &to);
                 git_repo.checkout(&to);
                 let upgrade_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
-                let canister_ids = git_repo.parse_canister_id_batch(&canisters);
+                let canister_ids: Vec<_> =
+                    canisters.iter().map(TargetCanister::canister_id).collect();
                 let last_upgrade_proposal_ids: Vec<_> = dashboard
                     .list_canister_upgrade_proposals_batch(&canister_ids)
                     .await
@@ -167,7 +182,8 @@ async fn main() {
                 let mut git_repo = GitRepository::clone(git_repo_url);
                 git_repo.checkout(&at);
                 let install_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
-                let canister_ids = git_repo.parse_canister_id_batch(&canisters);
+                let canister_ids: Vec<_> =
+                    canisters.iter().map(TargetCanister::canister_id).collect();
                 let compressed_wasm_hashes = git_repo.build_canister_artifact_batch(&canisters);
 
                 for (index, canister) in canisters.into_iter().enumerate() {
@@ -186,6 +202,47 @@ async fn main() {
                 }
             }
         }
+        Commands::CreateForumPost {
+            proposal_ids,
+            api_key,
+            api_user,
+        } => {
+            let dashboard = DashboardClient::new();
+            let proposals = dashboard.retrieve_proposal_batch(&proposal_ids).await;
+            let topic = ForumTopic::for_upgrade_proposals(proposals).unwrap_or_else(|e| {
+                panic!("Failed to create forum topic for proposals {proposal_ids:?}: {e}")
+            });
+            let request = CreateTopicRequest::from(topic);
+            println!("The following topic will be created");
+            println!();
+            println!("{request:?}");
+            println!();
+            println!("Are you sure? [y/N]");
+
+            let mut confirm = String::new();
+            io::stdin()
+                .read_line(&mut confirm)
+                .expect("Failed to read line");
+
+            match confirm.trim() {
+                "y" => {
+                    const DFINITY_FORUM_URL: &str = "https://forum.dfinity.org";
+                    let forum_client =
+                        DiscourseClient::new(DFINITY_FORUM_URL.parse().unwrap(), api_user, api_key);
+                    let response = forum_client
+                        .create_topic(request)
+                        .await
+                        .expect("Failed to create topic");
+                    println!(
+                        "Forum post successfully created at {}{}",
+                        DFINITY_FORUM_URL, response.post_url
+                    );
+                }
+                _ => {
+                    println!("Aborting, no forum topic created!")
+                }
+            }
+        }
     }
 }
 
@@ -201,13 +258,13 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     let proposal = proposal.into();
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
-            .unwrap_or_else(|_| panic!("failed to remove {:?}", output_dir));
+            .unwrap_or_else(|_| panic!("failed to remove {output_dir:?}"));
     }
-    fs::create_dir_all(&output_dir).unwrap_or_else(|_| panic!("failed to create {:?}", output_dir));
+    fs::create_dir_all(&output_dir).unwrap_or_else(|_| panic!("failed to create {output_dir:?}"));
 
     let bin_args_file_path = output_dir.join("args.bin");
     let mut args_file = fs::File::create(&bin_args_file_path)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", bin_args_file_path));
+        .unwrap_or_else(|_| panic!("failed to create {bin_args_file_path:?}"));
     proposal.write_bin_args(&mut args_file);
     println!(
         "Binary upgrade args written to '{}'",
@@ -228,7 +285,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     }
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));
+        .unwrap_or_else(|_| panic!("failed to create {proposal_summary:?}"));
     summary_file
         .write_all(proposal_summary_content.as_bytes())
         .unwrap();
@@ -253,7 +310,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
             .write(true)
             .mode(0o740) //ensure script is executable
             .open(submit_script.as_path())
-            .unwrap_or_else(|_| panic!("failed to create {:?}", submit_script));
+            .unwrap_or_else(|_| panic!("failed to create {submit_script:?}"));
         submit_file.write_all(command.as_bytes()).unwrap();
         println!("Submit script written to '{}'", submit_script.display());
     }
@@ -261,7 +318,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     if !errors.is_empty() {
         println!("Proposal was generated, but some errors were detected:");
         for error in errors {
-            println!("  * {}", error);
+            println!("  * {error}");
         }
         panic!("errors detected");
     }

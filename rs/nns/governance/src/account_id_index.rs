@@ -1,5 +1,5 @@
 use crate::{
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
     storage::validate_stable_btree_map,
 };
 use ic_nns_common::pb::v1::NeuronId;
@@ -37,10 +37,7 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
                     .insert(account_id.hash, previous_neuron_id);
                 Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!(
-                        "AccountIdentifier {:?} already exists in the index",
-                        account_id
-                    ),
+                    format!("AccountIdentifier {account_id:?} already exists in the index"),
                 ))
             }
         }
@@ -63,18 +60,14 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
                     Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
                         format!(
-                            "AccountIdentifier ({}) exists in the index with a different neuron id {}",
-                            account_identifier, previous_neuron_id
-                        )
+                            "AccountIdentifier ({account_identifier}) exists in the index with a different neuron id {previous_neuron_id}"
+                        ),
                     ))
                 }
             }
             None => Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!(
-                    "AccountIdentifier ({}) already absent in the index",
-                    account_identifier
-                ),
+                format!("AccountIdentifier ({account_identifier}) already absent in the index"),
             )),
         }
     }

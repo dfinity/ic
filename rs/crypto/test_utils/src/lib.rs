@@ -15,7 +15,7 @@ pub use ic_crypto_internal_csp_test_utils::files;
 pub fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T {
     crypto_components
         .get(&node_id)
-        .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
+        .unwrap_or_else(|| panic!("missing crypto component for {node_id:?}"))
 }
 
 pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {

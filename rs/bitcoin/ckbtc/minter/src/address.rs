@@ -1,8 +1,7 @@
 //! Utilities to derive, display, and parse Bitcoin addresses.
 
-use crate::ECDSAPublicKey;
+use crate::{ECDSAPublicKey, Network};
 use bech32::Variant;
-use ic_btc_interface::Network;
 use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,9 @@ const BTC_MAINNET_P2SH_PREFIX: u8 = 5;
 const BTC_TESTNET_PREFIX: u8 = 111;
 const BTC_TESTNET_P2SH_PREFIX: u8 = 196;
 
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
+#[derive(
+    Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize, candid::CandidType,
+)]
 pub enum BitcoinAddress {
     /// Pay to witness public key hash address.
     /// See BIP-173.
@@ -98,8 +99,11 @@ pub fn derivation_path(account: &Account) -> Vec<ByteBuf> {
 }
 
 /// Returns a valid extended BIP-32 derivation path from an Account (Principal + subaccount)
-pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -> ECDSAPublicKey {
-    use ic_crypto_secp256k1::{DerivationIndex, DerivationPath, PublicKey};
+pub fn derive_public_key_from_account(
+    ecdsa_public_key: &ECDSAPublicKey,
+    account: &Account,
+) -> ECDSAPublicKey {
+    use ic_secp256k1::{DerivationIndex, DerivationPath};
 
     let path = DerivationPath::new(
         derivation_path(account)
@@ -107,6 +111,15 @@ pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -
             .map(|x| DerivationIndex(x.into_vec()))
             .collect(),
     );
+
+    derive_public_key(ecdsa_public_key, &path)
+}
+
+pub fn derive_public_key(
+    ecdsa_public_key: &ECDSAPublicKey,
+    path: &ic_secp256k1::DerivationPath,
+) -> ECDSAPublicKey {
+    use ic_secp256k1::PublicKey;
 
     let pk = PublicKey::deserialize_sec1(&ecdsa_public_key.public_key)
         .expect("Failed to parse ECDSA public key");
@@ -118,7 +131,7 @@ pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -
         .expect("Incorrect chain code size");
 
     let (derived_public_key, derived_chain_code) =
-        pk.derive_subkey_with_chain_code(&path, &chain_code);
+        pk.derive_subkey_with_chain_code(path, &chain_code);
 
     ECDSAPublicKey {
         public_key: derived_public_key.serialize_sec1(true),
@@ -135,7 +148,7 @@ pub fn account_to_p2wpkh_address(
 ) -> String {
     network_and_public_key_to_p2wpkh(
         network,
-        &derive_public_key(ecdsa_public_key, account).public_key,
+        &derive_public_key_from_account(ecdsa_public_key, account).public_key,
     )
 }
 
@@ -144,7 +157,7 @@ pub fn account_to_bitcoin_address(
     ecdsa_public_key: &ECDSAPublicKey,
     account: &Account,
 ) -> BitcoinAddress {
-    let pk = derive_public_key(ecdsa_public_key, account).public_key;
+    let pk = derive_public_key_from_account(ecdsa_public_key, account).public_key;
     BitcoinAddress::P2wpkhV0(crate::tx::hash160(&pk))
 }
 
@@ -195,9 +208,9 @@ pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> 
 /// Returns the human-readable part of a bech32 address
 pub fn hrp(network: Network) -> &'static str {
     match network {
-        ic_btc_interface::Network::Mainnet => "bc",
-        ic_btc_interface::Network::Testnet => "tb",
-        ic_btc_interface::Network::Regtest => "bcrt",
+        Network::Mainnet => "bc",
+        Network::Testnet => "tb",
+        Network::Regtest => "bcrt",
     }
 }
 
@@ -216,15 +229,14 @@ pub enum ParseAddressError {
 impl fmt::Display for ParseAddressError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MalformedAddress(msg) => write!(fmt, "{}", msg),
-            Self::UnsupportedWitnessVersion(v) => write!(fmt, "unsupported witness version {}", v),
+            Self::MalformedAddress(msg) => write!(fmt, "{msg}"),
+            Self::UnsupportedWitnessVersion(v) => write!(fmt, "unsupported witness version {v}"),
             Self::UnexpectedHumanReadablePart { expected, actual } => {
-                write!(fmt, "expected address HRP {}, got {}", expected, actual)
+                write!(fmt, "expected address HRP {expected}, got {actual}")
             }
             Self::BadWitnessLength { expected, actual } => write!(
                 fmt,
-                "expected witness program of length {}, got {}",
-                expected, actual
+                "expected witness program of length {expected}, got {actual}"
             ),
             Self::UnsupportedAddressType => {
                 write!(fmt, "ckBTC supports only P2WPKH and P2PKH addresses")
@@ -232,15 +244,13 @@ impl fmt::Display for ParseAddressError {
             Self::WrongNetwork { expected, actual } => {
                 write!(
                     fmt,
-                    "expected an address from network {}, got an address from network {}",
-                    expected, actual
+                    "expected an address from network {expected}, got an address from network {actual}"
                 )
             }
             Self::NoData => write!(fmt, "the address contains no data"),
             Self::InvalidBech32Variant { expected, found } => write!(
                 fmt,
-                "invalid bech32 variant, expected: {:?}, found: {:?}",
-                expected, found
+                "invalid bech32 variant, expected: {expected:?}, found: {found:?}"
             ),
         }
     }
@@ -361,8 +371,7 @@ fn parse_bip173_address(
             )
             .map_err(|e| {
                 ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {}: {}",
-                    address, e
+                    "failed to decode witness from address {address}: {e}"
                 ))
             })?;
 
@@ -400,8 +409,7 @@ fn parse_bip173_address(
             )
             .map_err(|e| {
                 ParseAddressError::MalformedAddress(format!(
-                    "failed to decode witness from address {}: {}",
-                    address, e
+                    "failed to decode witness from address {address}: {e}"
                 ))
             })?;
 
@@ -424,9 +432,9 @@ fn parse_bip173_address(
 
 #[cfg(test)]
 mod tests {
-    use super::{hrp, BitcoinAddress, ParseAddressError};
+    use super::{BitcoinAddress, ParseAddressError, hrp};
+    use crate::Network;
     use bech32::u5;
-    use ic_btc_interface::Network;
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
         let data: Vec<u5> = witness_version
@@ -446,8 +454,8 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::util::address::Payload;
         use bitcoin::Address;
+        use bitcoin::util::address::Payload;
         use std::str::FromStr;
 
         assert_eq!(

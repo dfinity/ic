@@ -1,17 +1,17 @@
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
     InitialIDkgDealings, SignedIDkgDealing,
 };
-use crate::crypto::ExtendedDerivationPath;
 use crate::{Height, NodeId, PrincipalId};
 
+use crate::Id;
+use crate::crypto::canister_threshold_sig::idkg::IDkgDealingSupport;
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
     create_idkg_params, mock_transcript, mock_unmasked_transcript_type,
 };
-use crate::crypto::canister_threshold_sig::idkg::IDkgDealingSupport;
 use crate::crypto::{BasicSig, BasicSigOf, CryptoHash};
 use crate::signature::BasicSignature;
-use crate::Id;
 use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
@@ -205,11 +205,11 @@ fn mock_sig<T, R: Rng + CryptoRng>(node_id: NodeId, rng: &mut R) -> BasicSignatu
 
 fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport {
     let transcript_id = IDkgTranscriptId::new(
-        SubnetId::new(PrincipalId::new_subnet_test_id(rng.gen())),
-        rng.gen(),
-        Height::from(rng.gen::<u64>()),
+        SubnetId::new(PrincipalId::new_subnet_test_id(rng.r#gen())),
+        rng.r#gen(),
+        Height::from(rng.r#gen::<u64>()),
     );
-    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.gen()));
+    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.r#gen()));
     let sig_share = mock_sig(dealer_id, rng);
     IDkgDealingSupport {
         transcript_id,

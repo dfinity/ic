@@ -14,11 +14,7 @@ const RUN_ALL_BENCHMARKS: bool = true;
 
 /// Returns either the first or all the benchmarks.
 pub fn first_or_all<'a>(all: &'a [&'a str]) -> &'a [&'a str] {
-    if RUN_ALL_BENCHMARKS {
-        all
-    } else {
-        &all[..1]
-    }
+    if RUN_ALL_BENCHMARKS { all } else { &all[..1] }
 }
 
 /// Creates a benchmark with its confirmation for the specified `code` snippet.

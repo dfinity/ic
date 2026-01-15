@@ -19,7 +19,6 @@ DEV_DEPENDENCIES = []
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:ic-cdk-macros",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

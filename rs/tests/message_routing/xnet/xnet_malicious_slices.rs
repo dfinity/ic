@@ -26,20 +26,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
+use ic_types::malicious_behavior::MaliciousBehavior;
 use slog::info;
 use std::time::Duration;
 use systest_message_routing_common::{install_canisters, start_all_canisters};
-
-const PER_TASK_TIMEOUT: Duration = Duration::from_secs(5 * 60);
-const OVERALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 fn main() -> Result<()> {
     let config = Config::new();
@@ -47,8 +43,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config.build())
         .add_test(systest!(test))
-        .with_timeout_per_test(PER_TASK_TIMEOUT) // each task (including the setup function) may take up to `per_task_timeout`.
-        .with_overall_timeout(OVERALL_TIMEOUT) // the entire group may take up to `overall_timeout`.
         .execute_from_args()?;
     Ok(())
 }
@@ -81,7 +75,7 @@ impl Config {
             setup(
                 env,
                 self,
-                MaliciousBehaviour::new(true).set_maliciously_alter_certified_hash(),
+                MaliciousBehavior::new(true).set_maliciously_alter_certified_hash(),
             )
         }
     }
@@ -93,10 +87,7 @@ impl Config {
 }
 
 // Generic setup
-fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
+fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehavior) {
     (0..config.subnets)
         .fold(InternetComputer::new(), |ic, _idx| {
             ic.add_subnet(
@@ -111,7 +102,6 @@ fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv, config: Config) {
@@ -153,8 +143,11 @@ pub async fn test_async(env: TestEnv, config: Config) {
     // Start all canisters (via update `start` call).
     info!(logger, "Calling start() on all canisters...");
     start_all_canisters(
-        &canisters, 1024, // send messages with 1024 byte payloads
-        10,   // each canister sends 10 RPS
+        &canisters,
+        1024,                    // send messages with 1024 byte payloads
+        &[None, Some(u32::MAX)], // mix of guaranteed response and best-effort calls
+        1024,                    // same response size
+        10,                      // each canister sends 10 RPS
     )
     .await;
     info!(logger, "Starting chatter: 10 messages/round * 1024 bytes",);
@@ -163,7 +156,7 @@ pub async fn test_async(env: TestEnv, config: Config) {
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
 
     for (index, subnet) in env.topology_snapshot().subnets().enumerate() {
-        println!("Collecting metrics for subnet {}.", index);
+        println!("Collecting metrics for subnet {index}.");
         fetch_metrics_and_assert(&env, subnet).await;
     }
 }

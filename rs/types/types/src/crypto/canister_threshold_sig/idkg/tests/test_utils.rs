@@ -1,13 +1,14 @@
+use crate::crypto::AlgorithmId;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
-use crate::crypto::AlgorithmId;
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 // Due to a quasi-circular dependency with ic-types
 // the test utilities here cannot be replaced by the ones in
@@ -31,9 +32,9 @@ pub fn create_idkg_params<R: Rng + CryptoRng>(
 
 // A randomized way to get non-repeating IDs.
 pub fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -68,7 +69,7 @@ pub fn mock_transcript<R: Rng + CryptoRng>(
         transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
         internal_transcript_raw: vec![],

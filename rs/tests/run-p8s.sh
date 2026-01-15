@@ -6,17 +6,17 @@
 
 set -euo pipefail
 
-grafana_dashboards_path=$(
-    cd "$(dirname ${BASH_SOURCE[0]})"
-    pwd -P
-)/dashboards
-
 function usage() {
     cat <<EOF
 Usage:
-  run-p8s.sh OPTIONS prometheus-data-dir.tar.zst
+  run-p8s.sh [--prometheus-port PROMETHEUS_PORT] [--grafana-port GRAFANA_PORT] [--grafana-dashboards-dir GRAFANA_DASHBOARDS_DIR] prometheus-data-dir.tar.zst
 
   Run a local prometheus and grafana on the data directory packaged in the specified tarball.
+
+  Tip: you're most likely running this script on your devenv. So to make the Grafana Web UI accessible on your laptop
+  use the following to forward its port to your devenv:
+
+      ssh devenv -L 3000:localhost:3000 -N
 
   OPTIONS:
 
@@ -30,15 +30,13 @@ Usage:
     Let grafana listen on port GRAFANA_PORT.
     Defaults to 3000.
 
-  --dont-provision-grafana-dashboards
+  --grafana-dashboards-dir GRAFANA_DASHBOARDS_DIR
 
-    By default the mainnet grafana dashboards from:
+    Provision Grafana dashboards from the specified GRAFANA_DASHBOARDS_DIR directory.
 
-      $grafana_dashboards_path
+    Tip: point it to your local clone of the k8s repo. I.e.:
 
-    are automatically provisioned in the local grafana server.
-
-    This option disables that default behaviour.
+        --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards/
 
   --help
 
@@ -67,8 +65,8 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
-        --dont-provision-grafana-dashboards)
-            DONT_PROVISION_GRAFANA_DASHBOARDS="1"
+        --grafana-dashboards-dir)
+            GRAFANA_DASHBOARDS_DIR="$2"
             shift
             ;;
         *)
@@ -135,7 +133,7 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
     "apiVersion": 1,
     "datasources": [
         {
-            "name": "prometheus",
+            "name": "IC Metrics (cluster local)",
             "type": "prometheus",
             "uid": "000000001",
             "url": "http://127.0.0.1:$PROMETHEUS_PORT",
@@ -150,9 +148,9 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
 }
 EOF
 
-if [ -z "${DONT_PROVISION_GRAFANA_DASHBOARDS:-}" ]; then
+if [ -n "${GRAFANA_DASHBOARDS_DIR:-}" ]; then
     provisioned_grafana_dashboards="$grafana_data_dir/dashboards/provisioned"
-    cp -r "$grafana_dashboards_path" "$provisioned_grafana_dashboards"
+    cp -r "$GRAFANA_DASHBOARDS_DIR" "$provisioned_grafana_dashboards"
     cat <<EOF >"$grafana_data_dir/dashboards/dashboard.yaml"
 {
     "apiVersion": 1,

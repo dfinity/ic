@@ -1,6 +1,6 @@
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::types::CspSecretKey;
 use crate::{KeyId, SecretKeyStore};
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
@@ -45,9 +45,11 @@ pub fn secret_key_store_containing_key_with_invalid_encoding(key_id: KeyId) -> i
     let secret_key_with_invalid_der = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(
         b"invalid DER encoding".to_vec(),
     ));
-    assert!(key_store
-        .insert(key_id, secret_key_with_invalid_der, None)
-        .is_ok());
+    assert!(
+        key_store
+            .insert(key_id, secret_key_with_invalid_der, None)
+            .is_ok()
+    );
     key_store
 }
 
@@ -57,8 +59,10 @@ pub fn secret_key_store_containing_key_with_invalid_length(key_id: KeyId) -> imp
     let secret_key_with_invalid_length = CspSecretKey::TlsEd25519(
         TlsEd25519SecretKeyDerBytes::new(b"invalid_ed25519_key".to_vec()),
     );
-    assert!(key_store
-        .insert(key_id, secret_key_with_invalid_length, None)
-        .is_ok());
+    assert!(
+        key_store
+            .insert(key_id, secret_key_with_invalid_length, None)
+            .is_ok()
+    );
     key_store
 }

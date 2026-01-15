@@ -95,10 +95,9 @@ fn ed25519_rejects_non_canonical_points_search() {
      */
 
     fn is_rejected_or_canonical(bytes: &[u8; 32]) -> bool {
-        if let Ok(pt) = EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
-            pt.serialize() == bytes
-        } else {
-            true
+        match EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
+            Ok(pt) => pt.serialize() == bytes,
+            _ => true,
         }
     }
 
@@ -231,7 +230,7 @@ fn generator_h_has_expected_value() -> CanisterThresholdResult<()> {
             "idkg"
         };
 
-        let dst = format!("ic-crypto-{}-{}-generator-h", proto_name, curve_type);
+        let dst = format!("ic-crypto-{proto_name}-{curve_type}-generator-h");
 
         let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 
@@ -392,7 +391,7 @@ fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
         node_indices.push(u32::MAX - 1);
         node_indices.push(u32::MAX);
         for _ in 0..100 {
-            node_indices.push(rng.gen());
+            node_indices.push(rng.r#gen());
         }
 
         for node_index in node_indices {
@@ -567,7 +566,7 @@ fn test_mul_n_ct_pippenger_is_correct() -> CanisterThresholdResult<()> {
         for num_terms in 2..20 {
             // generate point-scalar pairs
             let pairs: Vec<_> = (0..num_terms)
-                .map(|_| (random_point_and_scalar(curve_type)))
+                .map(|_| random_point_and_scalar(curve_type))
                 .collect::<Result<Vec<_>, _>>()?;
 
             // create "deep" refs of pairs
@@ -648,4 +647,96 @@ fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
     }
 
     Ok(())
+}
+
+#[test]
+fn test_scalar_inversion() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let zero = EccScalar::zero(curve);
+        assert!(zero.invert().is_none());
+        assert!(zero.invert_vartime().is_none());
+
+        let hex_one = hex::encode(EccScalar::one(curve).serialize());
+
+        for _trial in 0..1024 {
+            let s = EccScalar::random(curve, rng);
+
+            match (s.invert(), s.invert_vartime()) {
+                (Some(si), Some(siv)) => {
+                    assert_eq!(hex::encode(si.serialize()), hex::encode(siv.serialize()));
+                    assert_eq!(hex::encode(s.mul(&si)?.serialize()), hex_one);
+                }
+                (None, None) => {
+                    assert!(s.is_zero());
+                }
+                (Some(_), None) => panic!("Invert and invert vartime disagreed"),
+                (None, Some(_)) => panic!("Invert and invert vartime disagreed"),
+            }
+        }
+
+        for n in 0..64 {
+            let scalars = (0..n)
+                .map(|_i| EccScalar::random(curve, rng))
+                .collect::<Vec<_>>();
+
+            if let Ok(inverses) = EccScalar::batch_invert_vartime(&scalars) {
+                assert_eq!(inverses.len(), scalars.len());
+
+                for (s, i) in scalars.iter().zip(&inverses) {
+                    assert_eq!(hex::encode(s.mul(i)?.serialize()), hex_one);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn test_scalarbytes_deserialization_with_old_cbor_format() {
+    let old_ser = [
+        (EccCurveType::K256, hex!("a1644b323536982018c8183c18431893183f188f188e182e1857181b18ab18ce041870187f183b1856185d1886187018d518ce182418421871184618ba187b186918ac09183d").to_vec()),
+        (EccCurveType::P256, hex!("a1645032353698201830182a185d1018c018290a189e189b04183c1822185b061896182e187018af1887182f18d1182e183b189b18cb18441822187618b303185c186f").to_vec()),
+        (EccCurveType::Ed25519, hex!("a16745643235353139982018a118a9187c11187818ed18df18cb182218ad184b18ce182b187f1878188618d9185d18d9186d11181f182b1892186018221882187a18a8186f0c0e").to_vec()),
+    ];
+
+    for (curve, bytes) in &old_ser {
+        let sb: EccScalarBytes =
+            serde_cbor::from_slice(bytes).expect("Failed to deserialize CBOR encoding");
+
+        assert_eq!(*curve, sb.curve_type());
+
+        // Confirm that (for now) the default serialization is the old format for K256 and Ed25519
+        if *curve == EccCurveType::K256 || *curve == EccCurveType::Ed25519 {
+            assert_eq!(
+                hex::encode(serde_cbor::to_vec(&sb).unwrap()),
+                hex::encode(bytes)
+            );
+        }
+    }
+}
+
+#[test]
+fn test_scalarbytes_deserialization_compact_cbor_format() {
+    let compact_ser = [
+        (EccCurveType::K256, hex!("a1644b3235365820b5ebe6143c8a7f7f459413a69c34ffce7227ea0e37f3524e67283b1e99fd8194").to_vec()),
+        (EccCurveType::P256, hex!("a164503235365820eadb7e4360365ce1a417d9fdddda706296e367053e14136f57b4a69b00494c06").to_vec()),
+        (EccCurveType::Ed25519, hex!("a1674564323535313958207f7096a7e536695c1ecce3d6b3ba75e81bd910a79cb2e33f1e60cc4df292e404").to_vec()),
+    ];
+
+    for (curve, bytes) in &compact_ser {
+        let sb: EccScalarBytes =
+            serde_cbor::from_slice(bytes).expect("Failed to deserialize CBOR encoding");
+
+        assert_eq!(*curve, sb.curve_type());
+
+        // Confirm that the new format is used for P256
+        if *curve == EccCurveType::P256 {
+            assert_eq!(
+                hex::encode(serde_cbor::to_vec(&sb).unwrap()),
+                hex::encode(bytes)
+            );
+        }
+    }
 }

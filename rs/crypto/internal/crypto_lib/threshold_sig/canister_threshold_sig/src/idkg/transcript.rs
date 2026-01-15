@@ -1,6 +1,6 @@
 use crate::*;
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 use ic_types::NodeIndex;
+use ic_types::crypto::canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptOperation};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -16,8 +16,7 @@ impl IDkgTranscriptInternal {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize IDkgTranscriptInternal: {}",
-                e
+                "failed to serialize IDkgTranscriptInternal: {e}"
             ))
         })
     }
@@ -25,8 +24,7 @@ impl IDkgTranscriptInternal {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize IDkgTranscriptInternal: {}",
-                e
+                "failed to deserialize IDkgTranscriptInternal: {e}"
             ))
         })
     }
@@ -87,6 +85,13 @@ impl CombinedCommitment {
         }
     }
 
+    pub fn into_commitment(self) -> PolynomialCommitment {
+        match self {
+            Self::BySummation(c) => c,
+            Self::ByInterpolation(c) => c,
+        }
+    }
+
     pub(crate) fn curve_type(&self) -> EccCurveType {
         match self {
             Self::BySummation(c) => c.curve_type(),
@@ -97,8 +102,7 @@ impl CombinedCommitment {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize CombinedCommitment: {}",
-                e
+                "failed to serialize CombinedCommitment: {e}"
             ))
         })
     }
@@ -106,8 +110,7 @@ impl CombinedCommitment {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize CombinedCommitment: {}",
-                e
+                "failed to deserialize CombinedCommitment: {e}"
             ))
         })
     }
@@ -466,7 +469,7 @@ impl CommitmentOpening {
                             )
                         }
                         e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToReconstruct(
-                            format!("{:?}", e),
+                            format!("{e:?}"),
                         ),
                     }
                 })?
@@ -506,7 +509,7 @@ impl CommitmentOpening {
                     )
                 }
                 e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToCombineOpenings(
-                    format!("{:?}", e),
+                    format!("{e:?}"),
                 ),
             },
         )
@@ -567,7 +570,7 @@ impl CommitmentOpening {
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(|e| {
-            IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e))
+            IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{e:?}"))
         })
     }
 

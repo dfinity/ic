@@ -1,11 +1,11 @@
 use dfn_core::{bytes, over, stable};
 use rand::{
-    distributions::{Distribution, Standard, Uniform},
     Rng, SeedableRng,
+    distributions::{Distribution, Standard, Uniform},
 };
 use rand_pcg::Pcg64Mcg;
 
-#[export_name = "canister_query stable"]
+#[unsafe(export_name = "canister_query stable")]
 fn main() {
     over(bytes, |_| {
         // This is a poor mans quick check

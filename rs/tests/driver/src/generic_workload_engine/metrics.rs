@@ -8,7 +8,7 @@ use std::{
 
 use async_trait::async_trait;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 use crate::util::{add_box_drawing_left_border, pad_all_lines_but_first};
 

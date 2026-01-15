@@ -65,7 +65,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     let blob_fields = vec!["NeuronId.id"];
     for field in blob_fields {
         config.field_attribute(
-            format!(".ic_sns_swap.pb.v1.{}", field),
+            format!(".ic_sns_swap.pb.v1.{field}"),
             "#[serde(with = \"serde_bytes\")]",
         );
     }
@@ -76,7 +76,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ];
     for field in option_blob_fields {
         config.field_attribute(
-            format!(".ic_sns_swap.pb.v1.{}", field),
+            format!(".ic_sns_swap.pb.v1.{field}"),
             "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
         );
     }

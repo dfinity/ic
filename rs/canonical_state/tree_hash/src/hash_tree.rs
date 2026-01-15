@@ -1,7 +1,7 @@
 use crate::lazy_tree::{LazyFork, LazyTree};
 use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
-    self as crypto, hasher::Hasher, Digest, Label, LabeledTree, WitnessBuilder,
+    self as crypto, Digest, Label, LabeledTree, WitnessBuilder, hasher::Hasher,
 };
 use itertools::izip;
 use std::fmt;
@@ -445,10 +445,11 @@ impl HashTree {
             check_same_dimensions(&self.node_digests, &self.node_labels);
             check_same_dimensions(&self.node_digests, &self.node_children);
             check_same_dimensions(&self.node_digests, &self.node_children_labels_ranges);
-            debug_assert!(self
-                .node_children_labels_ranges
-                .iter()
-                .all(|vec| vec.iter().all(|range| range.indexes_into(self))));
+            debug_assert!(
+                self.node_children_labels_ranges
+                    .iter()
+                    .all(|vec| vec.iter().all(|range| range.indexes_into(self)))
+            );
         }
     }
 

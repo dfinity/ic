@@ -1,5 +1,5 @@
 ---- MODULE Spawn_Neuron ----
-EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants
+EXTENDS TLC, Sequences, Naturals, FiniteSets, Variants, Common
 
 CONSTANTS
     \* @type: Set($proc);
@@ -29,6 +29,7 @@ variables
     locks = {};
     governance_to_ledger = <<>>;
     ledger_to_governance = {};
+    spawning_neurons = FALSE;
 
 \* Since spawn_neuron always executes in a single message handler, there's no real need
 \* to support multiple procesees (i.e., we could've had `Spasn_Neuron = Spawn_Neuron_Process_Id`
@@ -55,13 +56,14 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
                     maturity_to_spawn \in MIN_STAKE..neuron[parent_neuron_id].maturity;
                     child_neuron_id = FRESH_NEURON_ID(DOMAIN(neuron));
                 ) {
+                    await(neuron[parent_neuron_id].state # SPAWNING);
 
                     \* The code takes a lock on the child neuron, but releases it in the same message handler,
                     \* effectively only checking that the lock isn't already taken.
                     await child_neuron_id \notin locks;
 
                     neuron_id_by_account := child_account_id :> child_neuron_id @@ neuron_id_by_account;
-                    neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn ]
+                    neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING, maturity_disbursements_in_progress |-> <<>> ]
                            @@ [ neuron EXCEPT ![parent_neuron_id].maturity = @ - maturity_to_spawn ];
                 };
             };
@@ -69,12 +71,12 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
     }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "8e28ba76" /\ chksum(tla) = "e2a72833")
-VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger,
-          ledger_to_governance
+\* BEGIN TRANSLATION (chksum(pcal) = "a2172260" /\ chksum(tla) = "f68bb7dc")
+VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
+          ledger_to_governance, spawning_neurons
 
-vars == << neuron, neuron_id_by_account, locks, governance_to_ledger,
-           ledger_to_governance >>
+vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
+           ledger_to_governance, spawning_neurons >>
 
 ProcSet == (Spawn_Neuron_Process_Ids)
 
@@ -84,6 +86,7 @@ Init == (* Global variables *)
         /\ locks = {}
         /\ governance_to_ledger = <<>>
         /\ ledger_to_governance = {}
+        /\ spawning_neurons = FALSE
 
 Spawn_Neuron(self) == /\ \/ /\ TRUE
                             /\ UNCHANGED <<neuron, neuron_id_by_account>>
@@ -91,12 +94,13 @@ Spawn_Neuron(self) == /\ \/ /\ TRUE
                                  \E child_account_id \in Governance_Account_Ids \ DOMAIN neuron_id_by_account:
                                    \E maturity_to_spawn \in MIN_STAKE..neuron[parent_neuron_id].maturity:
                                      LET child_neuron_id == FRESH_NEURON_ID(DOMAIN(neuron)) IN
+                                       /\ (neuron[parent_neuron_id].state # SPAWNING)
                                        /\ child_neuron_id \notin locks
                                        /\ neuron_id_by_account' = (child_account_id :> child_neuron_id @@ neuron_id_by_account)
-                                       /\ neuron' = (   child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn ]
+                                       /\ neuron' = (   child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING, maturity_disbursements_in_progress |-> <<>> ]
                                                      @@ [ neuron EXCEPT ![parent_neuron_id].maturity = @ - maturity_to_spawn ])
-                      /\ UNCHANGED << locks, governance_to_ledger,
-                                      ledger_to_governance >>
+                      /\ UNCHANGED << locks, governance_to_ledger, 
+                                      ledger_to_governance, spawning_neurons >>
 
 Next == (\E self \in Spawn_Neuron_Process_Ids: Spawn_Neuron(self))
 

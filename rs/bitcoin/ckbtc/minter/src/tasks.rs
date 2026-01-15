@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests;
+use crate::reimbursement::reimburse_withdrawals;
 use crate::{
-    distribute_kyt_fees, estimate_fee_per_vbyte, finalize_requests, reimburse_failed_kyt,
-    submit_pending_requests, CanisterRuntime,
+    CanisterRuntime, consolidate_utxos, estimate_fee_per_vbyte, finalize_requests,
+    submit_pending_requests,
 };
-use ic_btc_interface::Network;
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,7 +19,7 @@ thread_local! {
 pub enum TaskType {
     ProcessLogic,
     RefreshFeePercentiles,
-    DistributeKytFee,
+    ConsolidateUtxos,
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -105,7 +105,7 @@ impl TaskQueue {
 /// Schedules a task for execution after the given delay.
 pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: TaskType, runtime: &R) {
     let now_nanos = runtime.time();
-    let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(crate::SEC_NANOS));
+    let execute_at_ns = now_nanos.saturating_add(delay.as_nanos() as u64);
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
     set_global_timer(execution_time, runtime);
@@ -145,15 +145,14 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
 
-            submit_pending_requests().await;
-            finalize_requests().await;
-            reimburse_failed_kyt().await;
+            submit_pending_requests(&runtime).await;
+            finalize_requests(&runtime).await;
+            reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
-            const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
-                    FEE_ESTIMATE_DELAY,
+                    runtime.refresh_fee_percentiles_frequency(),
                     TaskType::RefreshFeePercentiles,
                     &runtime,
                 )
@@ -163,31 +162,30 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 Some(guard) => guard,
                 None => return,
             };
-            let _ = estimate_fee_per_vbyte().await;
+            let _ = estimate_fee_per_vbyte(&runtime).await;
         }
-        TaskType::DistributeKytFee => {
-            const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration = Duration::from_secs(24 * 60 * 60);
+        TaskType::ConsolidateUtxos => {
+            const CONSOLIDATION_TASK_INTERVAL: Duration = Duration::from_secs(3600);
 
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
-                    MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
-                    TaskType::DistributeKytFee,
+                    CONSOLIDATION_TASK_INTERVAL,
+                    TaskType::ConsolidateUtxos,
                     &runtime,
-                );
+                )
             });
-            let _guard = match crate::guard::DistributeKytFeeGuard::new() {
+
+            let _guard = match crate::guard::TimerLogicGuard::new() {
                 Some(guard) => guard,
                 None => return,
             };
-
-            match crate::state::read_state(|s| s.btc_network) {
-                Network::Mainnet | Network::Testnet => {
-                    distribute_kyt_fees().await;
-                }
-                // We use a debug canister build exposing an endpoint
-                // triggering the fee distribution in tests.
-                Network::Regtest => {}
-            }
+            let result = consolidate_utxos(&runtime).await;
+            // This is a low frequency log
+            canlog::log!(
+                crate::logs::Priority::Info,
+                "[run_task] consolidate_utxos returns {:?}",
+                result
+            );
         }
     }
 }

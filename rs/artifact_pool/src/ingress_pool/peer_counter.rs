@@ -1,10 +1,10 @@
 use std::{
-    collections::{btree_map::Entry, BTreeMap},
+    collections::{BTreeMap, btree_map::Entry},
     ops::Add,
 };
 
 use ic_interfaces::ingress_pool::IngressPoolObject;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_types::{CountBytes, NodeId};
 
 pub(super) struct Counter {
@@ -110,10 +110,7 @@ impl PeerCounter {
                 );
 
                 if cfg!(debug_assertions) {
-                    panic!(
-                        "Attempting to subtract the counter for unknown node: {}",
-                        originator_id
-                    );
+                    panic!("Attempting to subtract the counter for unknown node: {originator_id}");
                 }
             }
         }

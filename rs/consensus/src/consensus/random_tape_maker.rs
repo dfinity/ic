@@ -27,11 +27,11 @@ use ic_consensus_utils::{
     pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace};
 use ic_types::{
+    Height,
     consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
     replica_config::ReplicaConfig,
-    Height,
 };
 use std::{
     cmp::{max, min},
@@ -46,7 +46,7 @@ use std::{
 // aggregate random tape shares.
 pub(crate) const RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE: u64 = 16;
 
-pub struct RandomTapeMaker {
+pub(crate) struct RandomTapeMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -187,7 +187,7 @@ impl RandomTapeMaker {
 mod tests {
     use super::*;
     use crate::consensus::add_all_to_validated;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_interfaces::{p2p::consensus::MutablePool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;

@@ -4,10 +4,10 @@
 use assert_matches::assert_matches;
 use dfn_candid::candid_multi_arity;
 use ic_error_types::ErrorCode;
-use ic_management_canister_types::CanisterIdRecord;
+use ic_management_canister_types_private::CanisterIdRecord;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 
 #[test]

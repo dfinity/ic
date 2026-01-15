@@ -1,12 +1,20 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
-    proposals::call_canister::CallCanister,
+    pb::v1::{
+        GovernanceError, InstallCode, SelfDescribingValue, Topic, install_code::CanisterInstallMode,
+    },
+    proposals::{
+        call_canister::CallCanister,
+        invalid_proposal_error,
+        self_describing::{
+            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
+        },
+        topic_to_manage_canister,
+    },
 };
 
 use candid::{CandidType, Deserialize, Encode};
 use ic_base_types::CanisterId;
-use ic_management_canister_types::CanisterInstallMode as RootCanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode as RootCanisterInstallMode;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use serde::Serialize;
@@ -90,7 +98,7 @@ impl InstallCode {
             wasm_module,
             module_arg,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 
     fn payload_to_upgrade_non_root(&self) -> Result<Vec<u8>, GovernanceError> {
@@ -99,8 +107,6 @@ impl InstallCode {
         let canister_id = self.valid_canister_id()?;
         let wasm_module = self.valid_wasm_module()?.clone();
         let arg = self.valid_arg()?.clone();
-        let compute_allocation = None;
-        let memory_allocation = None;
 
         Encode!(&ChangeCanisterRequest {
             stop_before_installing,
@@ -108,10 +114,9 @@ impl InstallCode {
             canister_id,
             wasm_module,
             arg,
-            compute_allocation,
-            memory_allocation,
+            chunked_canister_wasm: None,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 
     pub fn allowed_when_resources_are_low(&self) -> bool {
@@ -144,9 +149,8 @@ impl CallCanister for InstallCode {
                 // (uninstall cancels open calls), and that is achieved by
                 // HardResetNnsRootToVersion.
                 Err(invalid_proposal_error(&format!(
-                    "InstallCode mode {:?} is not supported for root canister, consider using \
-                     HardResetNnsRootToVersion proposal instead",
-                    install_mode
+                    "InstallCode mode {install_mode:?} is not supported for root canister, consider using \
+                     HardResetNnsRootToVersion proposal instead"
                 )))
             }
             RootCanisterInstallMode::Upgrade => Ok((LIFELINE_CANISTER_ID, "upgrade_root")),
@@ -164,15 +168,52 @@ impl CallCanister for InstallCode {
     }
 }
 
+impl LocallyDescribableProposalAction for InstallCode {
+    const TYPE_NAME: &'static str = "Install Code";
+    const TYPE_DESCRIPTION: &'static str =
+        "Installs, reinstalls, or upgrades the code of an NNS canister.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        let Self {
+            canister_id,
+            install_mode,
+            wasm_module_hash,
+            arg_hash,
+            skip_stopping_before_installing,
+            wasm_module: _,
+            arg: _,
+        } = self;
+
+        let install_mode = install_mode.map(SelfDescribingProstEnum::<CanisterInstallMode>::new);
+
+        ValueBuilder::new()
+            .add_field("canister_id", *canister_id)
+            .add_field("install_mode", install_mode)
+            .add_field("wasm_module_hash", wasm_module_hash.clone())
+            .add_field("arg_hash", arg_hash.clone())
+            .add_field(
+                "skip_stopping_before_installing",
+                skip_stopping_before_installing.unwrap_or_default(),
+            )
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
+    use crate::{
+        pb::v1::governance_error::ErrorType,
+        proposals::self_describing::LocallyDescribableProposalAction,
+    };
 
     use candid::Decode;
     use ic_base_types::CanisterId;
+    use ic_crypto_sha2::Sha256;
     use ic_nns_constants::{REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
+    use ic_nns_governance_api::SelfDescribingValue;
+    use maplit::hashmap;
 
     #[test]
     fn test_invalid_install_code_proposal() {
@@ -182,6 +223,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         let is_invalid_proposal_with_keywords = |install_code: InstallCode, keywords: Vec<&str>| {
@@ -193,9 +236,7 @@ mod tests {
                 let error_message = error.error_message.to_lowercase();
                 assert!(
                     error_message.contains(keyword),
-                    "{} not found in {:#?}",
-                    keyword,
-                    error_message
+                    "{keyword} not found in {error_message:#?}"
                 );
             }
         };
@@ -283,6 +324,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -305,8 +348,7 @@ mod tests {
                 canister_id: REGISTRY_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![4, 5, 6],
-                compute_allocation: None,
-                memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -319,6 +361,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Upgrade as i32),
             arg: Some(vec![4, 5, 6]),
             skip_stopping_before_installing: None,
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -351,6 +395,8 @@ mod tests {
             install_mode: Some(CanisterInstallMode::Reinstall as i32),
             arg: Some(vec![]),
             skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
         };
 
         assert_eq!(install_code.validate(), Ok(()));
@@ -373,8 +419,7 @@ mod tests {
                 canister_id: SNS_WASM_CANISTER_ID,
                 wasm_module: vec![1, 2, 3],
                 arg: vec![],
-                compute_allocation: None,
-                memory_allocation: None,
+                chunked_canister_wasm: None,
             }
         );
     }
@@ -386,7 +431,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 
@@ -397,10 +442,73 @@ mod tests {
                 install_mode: Some(CanisterInstallMode::Upgrade as i32),
                 arg: Some(vec![4, 5, 6]),
                 skip_stopping_before_installing: None,
+                wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
             };
 
             assert_eq!(install_code.validate(), Ok(()));
             assert_eq!(install_code.valid_topic(), Ok(expected_topic));
         }
+    }
+
+    #[test]
+    fn test_install_code_to_self_describing() {
+        use SelfDescribingValue::*;
+
+        let wasm_hash = Sha256::hash(&[1, 2, 3]).to_vec();
+        let arg_hash = Sha256::hash(&[4, 5, 6]).to_vec();
+
+        let install_code = InstallCode {
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            install_mode: Some(CanisterInstallMode::Upgrade as i32),
+            arg: Some(vec![4, 5, 6]),
+            skip_stopping_before_installing: Some(true),
+            wasm_module_hash: Some(wasm_hash.clone()),
+            arg_hash: Some(arg_hash.clone()),
+        };
+
+        let action = install_code.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => Text("Upgrade".to_string()),
+                "wasm_module_hash".to_string() => Blob(wasm_hash),
+                "arg_hash".to_string() => Blob(arg_hash),
+                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(1_u8)),
+            })
+        );
+    }
+
+    #[test]
+    fn test_install_code_to_self_describing_install_mode() {
+        use SelfDescribingValue::*;
+
+        let install_code = InstallCode {
+            canister_id: Some(REGISTRY_CANISTER_ID.get()),
+            wasm_module: Some(vec![1, 2, 3]),
+            install_mode: Some(CanisterInstallMode::Install as i32),
+            arg: Some(vec![]),
+            skip_stopping_before_installing: Some(false),
+            wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+            arg_hash: Some(Sha256::hash(&[]).to_vec()),
+        };
+
+        let action = install_code.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            Map(hashmap! {
+                "canister_id".to_string() => Text(REGISTRY_CANISTER_ID.get().to_string()),
+                "install_mode".to_string() => Text("Install".to_string()),
+                "wasm_module_hash".to_string() => Blob(Sha256::hash(&[1, 2, 3]).to_vec()),
+                "arg_hash".to_string() => Blob(Sha256::hash(&[]).to_vec()),
+                "skip_stopping_before_installing".to_string() => Nat(candid::Nat::from(0_u8)),
+            })
+        );
     }
 }

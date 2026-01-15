@@ -34,6 +34,7 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         // The anonymous end-user tries to add a node operator, bypassing the proposals
@@ -47,9 +48,11 @@ fn test_the_anonymous_user_cannot_add_a_node_operator() {
 
         let key = make_node_operator_record_key(PrincipalId::new_anonymous()).into_bytes();
         // .. And there should therefore be no node operator record
-        assert!(get_value::<NodeOperatorRecord>(&registry, &key)
-            .await
-            .is_none());
+        assert!(
+            get_value::<NodeOperatorRecord>(&registry, &key)
+                .await
+                .is_none()
+        );
 
         Ok(())
     });
@@ -77,6 +80,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         // The attacker canister tries to add a node operator, pretending to be the
@@ -94,9 +98,11 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
         let key = make_node_operator_record_key(PrincipalId::new_anonymous()).into_bytes();
 
         // But there should be no node operator record
-        assert!(get_value::<NodeOperatorRecord>(&registry, &key)
-            .await
-            .is_none());
+        assert!(
+            get_value::<NodeOperatorRecord>(&registry, &key)
+                .await
+                .is_none()
+        );
 
         Ok(())
     });
@@ -129,6 +135,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -156,6 +163,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 dc_id: "an1".into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
+                max_rewardable_nodes: BTreeMap::new(),
             }
         );
 
@@ -167,6 +175,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "bc1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         assert!(
@@ -192,6 +201,7 @@ fn test_accepted_proposal_mutates_the_registry() {
                 dc_id: "bc1".into(),
                 rewardable_nodes: BTreeMap::new(),
                 ipv6: None,
+                max_rewardable_nodes: BTreeMap::new(),
             }
         );
 
@@ -203,6 +213,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             dc_id: "ca1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: None,
+            max_rewardable_nodes: None,
         };
 
         assert!(

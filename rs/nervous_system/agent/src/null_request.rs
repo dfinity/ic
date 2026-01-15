@@ -27,8 +27,8 @@ impl<T: CandidType + DeserializeOwned + Send> Request for NullRequest<T> {
     fn update(&self) -> bool {
         self.update
     }
-    fn payload(&self) -> Vec<u8> {
-        Encode!().unwrap()
+    fn payload(&self) -> Result<Vec<u8>, candid::Error> {
+        Encode!()
     }
 
     type Response = T;

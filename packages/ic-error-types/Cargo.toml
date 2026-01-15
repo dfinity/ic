@@ -1,0 +1,20 @@
+[package]
+authors.workspace = true
+categories = ["api-bindings", "development-tools"]
+description = "Error types of the Internet Computer"
+documentation = "https://docs.rs/ic-error-types/latest/ic_error_types/"
+edition.workspace = true
+include = ["CHANGELOG.md", "Cargo.toml", "LICENSE", "README.md", "src"]
+keywords = ["error", "icp", "internet-computer", "smart-contract"]
+license = "Apache-2.0"
+name = "ic-error-types"
+readme = "README.md"
+repository = "https://github.com/dfinity/ic"
+version = "0.2.0"
+
+[dependencies]
+ic-heap-bytes = { path = "../ic-heap-bytes" }
+regex-lite = { workspace = true }
+serde = { workspace = true }
+strum = { workspace = true }
+strum_macros = { workspace = true }

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -21,6 +21,13 @@ rust_library(
         "//rs/types/management_canister_types",
         "//rs/utils",
         "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:serde",
     ],
+)
+
+rust_test(
+    name = "ledger_canister_core_test",
+    crate = ":ledger_canister_core",
 )

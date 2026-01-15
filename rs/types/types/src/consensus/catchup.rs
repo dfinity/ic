@@ -1,16 +1,16 @@
 //! Defines types that allow outdated replicas to catch up to the latest state.
 
 use crate::{
+    CryptoHashOfState, Height, RegistryVersion, ReplicaVersion,
     consensus::{
         Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
         HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
     },
     crypto::*,
-    node_id_into_protobuf, node_id_try_from_option, CryptoHashOfState, Height, RegistryVersion,
-    ReplicaVersion,
+    node_id_into_protobuf, node_id_try_from_option,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use prost::Message;

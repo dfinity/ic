@@ -7,6 +7,7 @@ pub use scope::Scope;
 use std::fmt;
 
 // Implementations
+pub mod memory_secret_key_store;
 pub mod proto_store;
 
 #[cfg(test)]
@@ -127,13 +128,13 @@ impl fmt::Display for SecretKeyStoreInsertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
-                write!(f, "Key with ID {} already exists in the key store", key_id)
+                write!(f, "Key with ID {key_id} already exists in the key store")
             }
             SecretKeyStoreInsertionError::SerializationError(e) => {
-                write!(f, "Error serializing secret key store: {}", e)
+                write!(f, "Error serializing secret key store: {e}")
             }
             SecretKeyStoreInsertionError::TransientError(e) => {
-                write!(f, "Transient error persisting secret key store: {}", e)
+                write!(f, "Transient error persisting secret key store: {e}")
             }
         }
     }
@@ -165,10 +166,10 @@ impl fmt::Display for SecretKeyStoreWriteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SecretKeyStoreWriteError::SerializationError(e) => {
-                write!(f, "Error serializing secret key store: {}", e)
+                write!(f, "Error serializing secret key store: {e}")
             }
             SecretKeyStoreWriteError::TransientError(e) => {
-                write!(f, "Transient error persisting secret key store: {}", e)
+                write!(f, "Transient error persisting secret key store: {e}")
             }
         }
     }

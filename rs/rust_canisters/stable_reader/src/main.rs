@@ -8,9 +8,9 @@
 /// ```
 fn main() {
     match stable_reader::read(&mut std::io::stdin(), std::io::stdout()) {
-        Ok(num_bytes) => eprintln!("Forwarded {} bytes to stdout.", num_bytes),
+        Ok(num_bytes) => eprintln!("Forwarded {num_bytes} bytes to stdout."),
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             std::process::exit(-1);
         }
     }

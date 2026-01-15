@@ -27,8 +27,8 @@ impl std::fmt::Debug for UpgradeRootProposal {
 
         f.debug_struct("UpgradeRootProposalPayload")
             .field("stop_upgrade_start", &self.stop_upgrade_start)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("module_arg_sha256", &format!("{:x?}", arg_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
+            .field("module_arg_sha256", &format!("{arg_sha:x?}"))
             .finish()
     }
 }
@@ -43,8 +43,8 @@ impl std::fmt::Debug for HardResetNnsRootToVersionPayload {
         let arg_sha = arg_sha.finish();
 
         f.debug_struct("UpgradeRootProposalPayload")
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("module_arg_sha256", &format!("{:x?}", arg_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
+            .field("module_arg_sha256", &format!("{arg_sha:x?}"))
             .finish()
     }
 }

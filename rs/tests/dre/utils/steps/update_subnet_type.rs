@@ -8,17 +8,18 @@ use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::{
     driver::test_env_api::{
-        GetFirstHealthyNodeSnapshot, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot, TopologySnapshot,
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot, get_guestos_img_version,
     },
     nns::{
-        get_governance_canister, submit_update_unassigned_node_version_proposal,
-        vote_execute_proposal_assert_executed,
+        get_governance_canister, submit_update_api_boundary_node_version_proposal,
+        submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
 };
+use ic_types::ReplicaVersion;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::runtime::Handle;
 
 use super::Step;
@@ -26,7 +27,7 @@ use super::Step;
 #[derive(Clone)]
 pub struct UpdateSubnetType {
     pub subnet_type: Option<SubnetType>,
-    pub version: String,
+    pub version: ReplicaVersion,
 }
 
 impl Step for UpdateSubnetType {
@@ -45,7 +46,7 @@ impl Step for UpdateSubnetType {
                 .filter(|subnet| subnet.raw_subnet_record().subnet_type().eq(&subnet_type))
             {
                 let raw_record = subnet_snaphost.raw_subnet_record();
-                if raw_record.replica_version_id.eq(&self.version) {
+                if raw_record.replica_version_id == self.version.as_ref() {
                     info!(
                         logger,
                         "Subnet `{}` is already on version `{}`",
@@ -63,7 +64,7 @@ impl Step for UpdateSubnetType {
 
                 rt.block_on(deploy_guestos_to_all_subnet_nodes(
                     &nns_node,
-                    &ic_types::ReplicaVersion::try_from(self.version.clone())?,
+                    &self.version,
                     subnet_snaphost.subnet_id,
                 ));
                 let new_topology =
@@ -83,7 +84,7 @@ impl Step for UpdateSubnetType {
                         subnet_snaphost.subnet_id
                     ))?;
 
-                if !current_subnet.replica_version_id.eq(&self.version) {
+                if current_subnet.replica_version_id != self.version.as_ref() {
                     return Err(anyhow::anyhow!(
                         "Subnet `{}` is not at the correct version after upgrade",
                         subnet_snaphost.subnet_id
@@ -100,20 +101,12 @@ impl Step for UpdateSubnetType {
                 ))?;
             }
         } else {
-            let versions = get_unassigned_nodes_version(env.topology_snapshot());
-            if versions.len() > 1 {
-                return Err(anyhow::anyhow!(
-                    "Found multiple versions on unassigned nodes: {}",
-                    versions.iter().join(", ")
-                ));
-            }
-
-            if versions.is_empty() {
+            if env.topology_snapshot().unassigned_nodes().next().is_none() {
                 info!(logger, "Network contains no unassigned nodes");
                 return Ok(());
             }
 
-            let version = versions.first().unwrap();
+            let version = get_guestos_img_version();
             if version.eq(&self.version) {
                 info!(
                     logger,
@@ -132,7 +125,7 @@ impl Step for UpdateSubnetType {
                 &governance_canister,
                 proposal_sender,
                 test_neuron_id,
-                self.version.clone(),
+                &self.version,
             ));
             rt.block_on(vote_execute_proposal_assert_executed(
                 &governance_canister,
@@ -146,10 +139,82 @@ impl Step for UpdateSubnetType {
     }
 }
 
+#[derive(Clone)]
+pub struct UpdateApiBoundaryNodes {
+    pub version: ReplicaVersion,
+}
+
+impl Step for UpdateApiBoundaryNodes {
+    fn execute(
+        &self,
+        env: ic_system_test_driver::driver::test_env::TestEnv,
+        rt: Handle,
+    ) -> anyhow::Result<()> {
+        let logger = env.logger();
+
+        // check that there are even API boundary nodes
+        if env
+            .topology_snapshot()
+            .api_boundary_nodes()
+            .next()
+            .is_none()
+        {
+            info!(logger, "There are no API boundary nodes to be upgraded");
+            return Ok(());
+        }
+
+        // check whether the current version of the API BNs is already the one they should be upgraded to
+        let current_version = get_guestos_img_version();
+        if current_version.eq(&self.version) {
+            info!(
+                logger,
+                "API boundary nodes are already on version {}", self.version
+            );
+            return Ok(());
+        }
+
+        // try to upgrade them
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let governance_canister = get_governance_canister(&nns);
+        let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
+        let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+
+        let node_ids: Vec<_> = env
+            .topology_snapshot()
+            .api_boundary_nodes()
+            .map(|n| n.node_id)
+            .collect();
+
+        info!(logger, "Submit the proposal to upgrade the API BNs");
+        let proposal_id = rt.block_on(submit_update_api_boundary_node_version_proposal(
+            &governance_canister,
+            proposal_sender,
+            test_neuron_id,
+            node_ids,
+            &self.version,
+        ));
+
+        info!(logger, "Vote on the proposal");
+        rt.block_on(vote_execute_proposal_assert_executed(
+            &governance_canister,
+            proposal_id,
+        ));
+
+        info!(
+            logger,
+            "Wait for the proposal to pass and update the registry"
+        );
+        rt.block_on(env.topology_snapshot().block_for_newer_registry_version())?;
+
+        Ok(())
+    }
+}
+
 async fn assert_version_on_all_nodes(
     nodes: Vec<IcNodeSnapshot>,
     logger: Logger,
-    version: String,
+    version: ReplicaVersion,
     rt: Handle,
 ) -> anyhow::Result<()> {
     let threads = nodes.into_iter().map(|node| {
@@ -172,17 +237,4 @@ async fn assert_version_on_all_nodes(
     }
 
     Ok(())
-}
-
-fn get_unassigned_nodes_version(topology_snapshot: TopologySnapshot) -> Vec<String> {
-    let unassigned_nodes = topology_snapshot.unassigned_nodes().collect_vec();
-    unassigned_nodes
-        .iter()
-        .map(|n| {
-            n.get_initial_replica_version()
-                .expect("Should be able to read unassigned nodes version")
-                .to_string()
-        })
-        .dedup()
-        .collect_vec()
 }

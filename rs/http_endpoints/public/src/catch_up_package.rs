@@ -3,16 +3,16 @@
 use crate::common;
 use crate::verify_cbor_content_header;
 
+use axum::Router;
 use axum::body::Body;
 use axum::extract::State;
 use axum::response::IntoResponse;
-use axum::Router;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::{Response, StatusCode};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_types::consensus::catchup::CatchUpPackageParam;
 use ic_types::consensus::CatchUpPackage;
+use ic_types::consensus::catchup::CatchUpPackageParam;
 use prost::Message;
 use std::sync::Arc;
 use tower::{BoxError, ServiceBuilder};
@@ -80,7 +80,7 @@ async fn cup(
             }
             Err(e) => {
                 let code = StatusCode::BAD_REQUEST;
-                let text = format!("Could not parse body as CatchUpPackage param: {}", e);
+                let text = format!("Could not parse body as CatchUpPackage param: {e}");
                 (code, text).into_response()
             }
         }
@@ -89,11 +89,11 @@ async fn cup(
 
 #[cfg(test)]
 mod tests {
-    use http::{header::CONTENT_TYPE, Method, Request};
+    use http::{Method, Request, header::CONTENT_TYPE};
     use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
     use tower::ServiceExt;
 
-    use crate::{common::CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_CBOR};
+    use crate::{CONTENT_TYPE_CBOR, common::CONTENT_TYPE_PROTOBUF};
 
     use super::*;
 

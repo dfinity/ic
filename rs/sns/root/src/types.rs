@@ -1,8 +1,14 @@
 use std::fmt::{self, Display, Formatter};
 
 use async_trait::async_trait;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
+
+use crate::pb::v1::{
+    CanisterCallError, CleanUpFailedRegisterExtensionResponse, Extensions,
+    RegisterExtensionRequest, RegisterExtensionResponse,
+    clean_up_failed_register_extension_response, register_extension_response,
+};
 
 /// A general trait for the environment in which governance is running.
 #[async_trait]
@@ -47,6 +53,80 @@ impl Display for SnsCanisterType {
             SnsCanisterType::Dapp => write!(f, "dapp"),
             SnsCanisterType::Archive => write!(f, "archive"),
             SnsCanisterType::Index => write!(f, "index"),
+        }
+    }
+}
+
+pub(crate) enum RejectCode {
+    #[allow(unused)]
+    SysFatal = 1,
+    #[allow(unused)]
+    SysTransient = 2,
+    DestinationInvalid = 3,
+    CanisterReject = 4,
+    #[allow(unused)]
+    CanisterError = 5,
+    #[allow(unused)]
+    SysUnknown = 6,
+}
+
+impl TryFrom<RegisterExtensionRequest> for PrincipalId {
+    type Error = CanisterCallError;
+
+    fn try_from(value: RegisterExtensionRequest) -> Result<Self, Self::Error> {
+        let RegisterExtensionRequest { canister_id } = value;
+
+        let Some(canister_id) = canister_id else {
+            let code = Some(RejectCode::DestinationInvalid as i32);
+            let description = "RegisterExtensionRequest.canister_id must be set.".to_string();
+
+            let err = CanisterCallError { code, description };
+
+            return Err(err);
+        };
+
+        Ok(canister_id)
+    }
+}
+
+impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
+    fn from(result: Result<(), CanisterCallError>) -> Self {
+        use register_extension_response::{Ok, Result};
+        match result {
+            Ok(_) => RegisterExtensionResponse {
+                result: Some(Result::Ok(Ok {})),
+            },
+            Err(err) => RegisterExtensionResponse {
+                result: Some(Result::Err(err)),
+            },
+        }
+    }
+}
+
+impl From<Result<(), CanisterCallError>> for CleanUpFailedRegisterExtensionResponse {
+    fn from(result: Result<(), CanisterCallError>) -> Self {
+        use clean_up_failed_register_extension_response::{Ok, Result};
+        match result {
+            Ok(_) => CleanUpFailedRegisterExtensionResponse {
+                result: Some(Result::Ok(Ok {})),
+            },
+            Err(err) => CleanUpFailedRegisterExtensionResponse {
+                result: Some(Result::Err(err)),
+            },
+        }
+    }
+}
+
+// impl Default for Extensions {
+//     fn default() -> Self {
+//         Self { extension_canister_ids: vec![] }
+//     }
+// }
+
+impl From<Vec<PrincipalId>> for Extensions {
+    fn from(extension_canister_ids: Vec<PrincipalId>) -> Self {
+        Self {
+            extension_canister_ids,
         }
     }
 }

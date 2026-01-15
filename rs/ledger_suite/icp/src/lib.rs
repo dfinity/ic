@@ -1,5 +1,6 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use dfn_protobuf::ProtoBuf;
+use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -10,10 +11,11 @@ use ic_ledger_core::{
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
 };
-use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -26,7 +28,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{TOKEN_SUBDIVIDABLE_BY, Tokens},
 };
 
 pub mod account_identifier;
@@ -35,6 +37,7 @@ pub mod account_identifier;
 pub mod protobuf;
 mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc1::account::Subaccount as Icrc1Subaccount;
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
 /// Note that the Ledger can be deployed with a
@@ -46,6 +49,25 @@ pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
+
+pub const MAX_TAKE_ALLOWANCES: u64 = 500;
+
+pub const GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 1;
+pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
+pub const ROOT_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 3;
+pub const LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
+
+/// 1: rrkah-fqaaa-aaaaa-aaaaq-cai
+pub const GOVERNANCE_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 2: ryjl3-tyaaa-aaaaa-aaaba-cai
+pub const LEDGER_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 3: r7inp-6aaaa-aaaaa-aaabq-cai
+pub const ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(ROOT_CANISTER_INDEX_IN_NNS_SUBNET);
+/// 11: qhbym-qaaaa-aaaaa-aaafq-cai
+pub const LEDGER_INDEX_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(LEDGER_INDEX_CANISTER_INDEX_IN_NNS_SUBNET);
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
@@ -373,7 +395,7 @@ impl Block {
         Self::from_transaction(parent_hash, transaction, timestamp, effective_fee, None)
     }
 
-    pub fn transaction(&self) -> Cow<Transaction> {
+    pub fn transaction(&self) -> Cow<'_, Transaction> {
         Cow::Borrowed(&self.transaction)
     }
 }
@@ -474,8 +496,6 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
-    pub maximum_number_of_accounts: Option<usize>,
-    pub accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -508,8 +528,6 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
-    maximum_number_of_accounts: Option<usize>,
-    accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -526,9 +544,28 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
-            maximum_number_of_accounts: None,
-            accounts_overflow_trim_quantity: None,
         }
+    }
+
+    pub fn new_with_mainnet_settings() -> Self {
+        Self::new()
+            .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+            .archive_options(ArchiveOptions {
+                trigger_threshold: 2000,
+                num_blocks_to_archive: 1000,
+                // 1 GB, which gives us 3 GB space when upgrading
+                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                // 128kb
+                max_message_size_bytes: Some(128 * 1024),
+                controller_id: ROOT_CANISTER_ID.into(),
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            })
+            .max_message_size_bytes(128 * 1024)
+            // 24 hour transaction window
+            .transaction_window(Duration::from_secs(24 * 60 * 60))
+            .transfer_fee(DEFAULT_TRANSFER_FEE)
     }
 
     pub fn minting_account(mut self, minting_account: AccountIdentifier) -> Self {
@@ -582,23 +619,6 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
-    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: Option<u64>) -> Self {
-        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
-            self.maximum_number_of_accounts = Some(maximum_number_of_accounts as usize);
-        }
-        self
-    }
-
-    pub fn accounts_overflow_trim_quantity(
-        mut self,
-        accounts_overflow_trim_quantity: Option<u64>,
-    ) -> Self {
-        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
-            self.accounts_overflow_trim_quantity = Some(accounts_overflow_trim_quantity as usize);
-        }
-        self
-    }
-
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -632,8 +652,6 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
-                maximum_number_of_accounts: self.maximum_number_of_accounts,
-                accounts_overflow_trim_quantity: self.accounts_overflow_trim_quantity,
             },
         )))
     }
@@ -726,13 +744,12 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transfer fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {expected_fee}")
             }
             Self::InsufficientFunds { balance } => {
                 write!(
                     f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {balance}"
                 )
             }
             Self::TxTooOld {
@@ -745,8 +762,7 @@ impl fmt::Display for TransferError {
             Self::TxCreatedInFuture => write!(f, "transaction's created_at_time is in future"),
             Self::TxDuplicate { duplicate_of } => write!(
                 f,
-                "transaction is a duplicate of another transaction in block {}",
-                duplicate_of
+                "transaction is a duplicate of another transaction in block {duplicate_of}"
             ),
         }
     }
@@ -806,6 +822,26 @@ impl NotifyCanisterArgs {
 }
 
 /// Arguments taken by the account_balance candid endpoint.
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
+pub struct AccountIdentifierByteBuf {
+    pub account: ByteBuf,
+}
+
+impl TryFrom<AccountIdentifierByteBuf> for BinaryAccountBalanceArgs {
+    type Error = String;
+
+    fn try_from(value: AccountIdentifierByteBuf) -> Result<Self, Self::Error> {
+        Ok(BinaryAccountBalanceArgs {
+            account: AccountIdBlob::try_from(value.account.as_slice()).map_err(|_| {
+                format!(
+                    "Invalid account identifier length (expected 32, got {})",
+                    value.account.len()
+                )
+            })?,
+        })
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct BinaryAccountBalanceArgs {
     pub account: AccountIdBlob,
@@ -917,18 +953,11 @@ impl TryFrom<CandidOperation> for Operation {
                 from,
                 amount,
                 spender,
-            } => {
-                let spender = if spender.is_some() {
-                    Some(address_to_accountidentifier(spender.unwrap())?)
-                } else {
-                    None
-                };
-                Operation::Burn {
-                    from: address_to_accountidentifier(from)?,
-                    amount,
-                    spender,
-                }
-            }
+            } => Operation::Burn {
+                from: address_to_accountidentifier(from)?,
+                amount,
+                spender: spender.map(address_to_accountidentifier).transpose()?,
+            },
             CandidOperation::Mint { to, amount } => Operation::Mint {
                 to: address_to_accountidentifier(to)?,
                 amount,
@@ -939,20 +968,13 @@ impl TryFrom<CandidOperation> for Operation {
                 spender,
                 amount,
                 fee,
-            } => {
-                let spender = if spender.is_some() {
-                    Some(address_to_accountidentifier(spender.unwrap())?)
-                } else {
-                    None
-                };
-                Operation::Transfer {
-                    to: address_to_accountidentifier(to)?,
-                    from: address_to_accountidentifier(from)?,
-                    spender,
-                    amount,
-                    fee,
-                }
-            }
+            } => Operation::Transfer {
+                to: address_to_accountidentifier(to)?,
+                from: address_to_accountidentifier(from)?,
+                spender: spender.map(address_to_accountidentifier).transpose()?,
+                amount,
+                fee,
+            },
             CandidOperation::Approve {
                 from,
                 spender,
@@ -1088,6 +1110,7 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,
     pub tip_index: BlockIndex,
@@ -1096,7 +1119,7 @@ pub struct TipOfChainRes {
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
-    pub length: usize,
+    pub length: u64,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Serialize)]
@@ -1137,7 +1160,7 @@ pub struct IterBlocksRes(pub Vec<EncodedBlock>);
 pub struct BlockArg(pub BlockIndex);
 pub struct BlockRes(pub Option<Result<EncodedBlock, CanisterId>>);
 
-// A helper function for ledger/get_blocks and archive_node/get_blocks endpoints
+// A helper function for archive_node/get_blocks endpoints
 pub fn get_blocks(
     blocks: &[EncodedBlock],
     range_from_offset: BlockIndex,
@@ -1152,8 +1175,9 @@ pub fn get_blocks(
     // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
-        return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to)));
+        return GetBlocksRes(Err(format!(
+            "Requested blocks outside the range stored in the archive node. Requested [{range_from} .. {requested_range_to}]. Available [{range_from_offset} .. {range_to}]."
+        )));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
     // is 100 and the Block with BlockIndex 100 is at index 0
@@ -1161,8 +1185,7 @@ pub fn get_blocks(
     GetBlocksRes(Ok(blocks[offset..offset + length].to_vec()))
 }
 
-// A helper function for ledger/iter_blocks and archive_node/iter_blocks
-// endpoints
+// A helper function for archive_node/iter_blocks endpoint
 pub fn iter_blocks(blocks: &[EncodedBlock], offset: usize, length: usize) -> IterBlocksRes {
     let start = std::cmp::min(offset, blocks.len());
     let end = std::cmp::min(start + length, blocks.len());
@@ -1235,14 +1258,56 @@ impl Default for FeatureFlags {
 }
 
 pub fn max_blocks_per_request(principal_id: &PrincipalId) -> usize {
-    if ic_cdk::api::data_certificate().is_none() && principal_id.is_self_authenticating() {
+    if ic_cdk::api::in_replicated_execution() && principal_id.is_self_authenticating() {
         return MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST;
     }
     MAX_BLOCKS_PER_REQUEST
 }
 
+pub fn to_proto_bytes<T: ToProto>(msg: T) -> Result<Vec<u8>, String> {
+    let proto = msg.into_proto();
+    let mut proto_bytes = Vec::with_capacity(proto.encoded_len());
+    proto.encode(&mut proto_bytes).map_err(|e| e.to_string())?;
+    Ok(proto_bytes)
+}
+
+pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
+    T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
+}
+
+/// The arguments for the `get_allowances` endpoint.
+/// The `prev_spender_id` argument can be used for pagination. If specified
+/// the endpoint returns allowances that are lexicographically greater than
+/// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GetAllowancesArgs {
+    pub from_account_id: AccountIdentifier,
+    pub prev_spender_id: Option<AccountIdentifier>,
+    pub take: Option<u64>,
+}
+
+/// The allowance returned by the `get_allowances` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Allowance {
+    pub from_account_id: AccountIdentifier,
+    pub to_spender_id: AccountIdentifier,
+    pub allowance: Tokens,
+    pub expires_at: Option<u64>,
+}
+
+/// The allowances vector returned by the `get_allowances` endpoint.
+pub type Allowances = Vec<Allowance>;
+
+/// The arguments for the `remove_approval` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RemoveApprovalArgs {
+    pub from_subaccount: Option<Icrc1Subaccount>,
+    pub spender: AccountIdBlob,
+    pub fee: Option<Nat>,
+}
 #[cfg(test)]
 mod test {
+    use ic_stable_structures::storable::Storable;
     use std::str::FromStr;
 
     use proptest::{arbitrary::any, prop_assert_eq, prop_oneof, proptest, strategy::Strategy};
@@ -1404,6 +1469,13 @@ mod test {
             let encoded = block.clone().encode();
             let decoded = Block::decode(encoded).expect("Unable to decode block!");
             prop_assert_eq!(block, decoded)
+        })
+    }
+
+    #[test]
+    fn test_storable_serialization() {
+        proptest!(|(a in arb_account())| {
+            prop_assert_eq!(AccountIdentifier::from_bytes(a.to_bytes()), a)
         })
     }
 }

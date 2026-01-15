@@ -29,14 +29,13 @@ macro_rules! import_mod {
 /// Emit the given `LogEntry` field in `LogEntry.serialize_fallback`
 #[macro_export(local_inner_macros)]
 macro_rules! serialize_fallback_for {
-    ($log_entry:expr, $serializer:expr, $field:ident) => {
+    ($log_entry:expr_2021, $serializer:expr_2021, $field:ident) => {
         match &$log_entry.$field {
             Some(ctx) => {
                 let json = serde_json::to_string(&ctx).map_err(|e| {
-                    slog::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        std::format!("Serialization error: {}", e),
-                    ))
+                    slog::Error::Io(std::io::Error::other(std::format!(
+                        "Serialization error: {e}"
+                    )))
                 })?;
                 let key = std::stringify!($field);
                 $serializer.emit_str(key, json.as_str())?;

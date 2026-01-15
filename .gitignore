@@ -55,12 +55,6 @@ tarpaulin-report.html
 *.swo
 .envrc
 
-### Haskell related ###
-
-dist-newstyle
-
-**/.stack-work
-
 ### Rust tags created by rusty-tags
 **/rusty-tags.vi
 **/rusty-tags.emacs
@@ -88,13 +82,12 @@ cpp/**/infogetty.o
 cpp/**/network_info.o
 
 # Various build artifacts
-artifacts
+/artifacts
 **/build
 **/build-tmp
 **/build-out
 **/boot/version.txt
 **/bin/canister_sandbox
-**/bin/ic-btc-adapter
 **/bin/ic-https-outcalls-adapter
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
@@ -113,7 +106,6 @@ artifacts
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
-bazel-timestamp.txt
 user.bazelrc
 
 # Bazel profile
@@ -145,4 +137,7 @@ profile.json
 test_tmpdir/**
 
 # Bare metal deployment secrets files
-zh2-dll01.csv
+zh2-dll01.*
+
+# Claude Code settings
+.claude/settings.local.json

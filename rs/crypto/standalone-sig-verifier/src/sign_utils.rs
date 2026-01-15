@@ -37,7 +37,7 @@ pub fn user_public_key_from_bytes(
 ) -> CryptoResult<(UserPublicKey, KeyBytesContentType)> {
     let (pkix_algo_id, pk_bytes) = der_utils::algo_id_and_public_key_bytes_from_der(bytes)
         .map_err(|e| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: e.internal_error,
         })?;
@@ -86,7 +86,7 @@ pub fn user_public_key_from_bytes(
         )
     } else {
         return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
             internal_error: "Unsupported or unparsable public key".to_string(),
         });
@@ -106,8 +106,7 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
             algorithm: AlgorithmId::Ed25519,
             key_bytes: Some(raw_key),
             internal_error: format!(
-                "Incorrect length. Expected 32 bytes but found {} bytes",
-                key_length
+                "Incorrect length. Expected 32 bytes but found {key_length} bytes"
             ),
         }
     })?;

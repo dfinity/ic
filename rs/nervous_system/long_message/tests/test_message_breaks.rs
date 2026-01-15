@@ -25,7 +25,7 @@ fn state_machine_for_test(instructions_limit: u64) -> StateMachine {
     subnet_config.scheduler_config.max_instructions_per_message = instruction_limit;
     subnet_config
         .scheduler_config
-        .max_instructions_per_message_without_dts = instruction_limit;
+        .max_instructions_per_query_message = instruction_limit;
     hypervisor_config.max_query_call_graph_instructions = instruction_limit;
 
     StateMachineBuilder::new()
@@ -58,11 +58,7 @@ fn test_next_message_if_over_instructions() {
     )
     .unwrap_err();
     assert!(err.contains(
-        format!(
-            "Canister exceeded the limit of {} instructions",
-            instructions_limit
-        )
-        .as_str()
+        format!("Canister exceeded the limit of {instructions_limit} instructions").as_str()
     ));
 
     update_with_sender::<BreakMessageParams, ()>(
@@ -100,7 +96,7 @@ fn test_upper_bound() {
         PrincipalId::new_anonymous(),
     )
     .unwrap_err();
-    assert!(err.contains("OverCallContextError"), "Error was: {:?}", err);
+    assert!(err.contains("OverCallContextError"), "Error was: {err:?}");
 
     update_with_sender::<BreakMessageParams, ()>(
         &state_machine,

@@ -1,7 +1,16 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
-    proposals::call_canister::CallCanister,
+    pb::v1::{
+        GovernanceError, SelfDescribingValue, StopOrStartCanister, Topic,
+        stop_or_start_canister::CanisterAction,
+    },
+    proposals::{
+        call_canister::CallCanister,
+        invalid_proposal_error,
+        self_describing::{
+            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
+        },
+        topic_to_manage_canister,
+    },
 };
 
 use candid::Encode;
@@ -84,7 +93,26 @@ impl CallCanister for StopOrStartCanister {
             canister_id,
             action,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
+    }
+}
+
+impl LocallyDescribableProposalAction for StopOrStartCanister {
+    const TYPE_NAME: &'static str = "Stop or Start Canister";
+    const TYPE_DESCRIPTION: &'static str = "Stops or starts an NNS canister.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        let Self {
+            canister_id,
+            action,
+        } = self;
+
+        let action = action.map(SelfDescribingProstEnum::<CanisterAction>::new);
+
+        ValueBuilder::new()
+            .add_field("canister_id", *canister_id)
+            .add_field("action", action)
+            .build()
     }
 }
 
@@ -92,10 +120,15 @@ impl CallCanister for StopOrStartCanister {
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
+    use crate::{
+        pb::v1::governance_error::ErrorType,
+        proposals::self_describing::LocallyDescribableProposalAction,
+    };
 
     use candid::Decode;
     use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+    use ic_nns_governance_api::SelfDescribingValue;
+    use maplit::hashmap;
 
     #[test]
     fn test_invalid_stop_or_start_canister() {
@@ -114,9 +147,7 @@ mod tests {
                     let error_message = error.error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
-                        "{} not found in {:#?}",
-                        keyword,
-                        error_message
+                        "{keyword} not found in {error_message:#?}"
                     );
                 }
             };
@@ -256,7 +287,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 
@@ -269,5 +300,47 @@ mod tests {
             assert_eq!(stop_or_start_canister.validate(), Ok(()));
             assert_eq!(stop_or_start_canister.valid_topic(), Ok(expected_topic));
         }
+    }
+
+    #[test]
+    fn test_stop_or_start_canister_to_self_describing_stop() {
+        use SelfDescribingValue::*;
+
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
+            action: Some(CanisterAction::Stop as i32),
+        };
+
+        let action = stop_or_start_canister.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => Text("Stop".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn test_stop_or_start_canister_to_self_describing_start() {
+        use SelfDescribingValue::*;
+
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
+            action: Some(CanisterAction::Start as i32),
+        };
+
+        let action = stop_or_start_canister.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => Text(CYCLES_MINTING_CANISTER_ID.get().to_string()),
+                "action".to_string() => Text("Start".to_string()),
+            })
+        );
     }
 }

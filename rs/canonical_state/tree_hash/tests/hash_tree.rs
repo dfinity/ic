@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
-use ic_canonical_state_tree_hash::hash_tree::{hash_lazy_tree, HashTreeError};
+use ic_canonical_state_tree_hash::hash_tree::{HashTreeError, hash_lazy_tree};
 use ic_canonical_state_tree_hash_test_utils::{as_lazy, test_membership_witness};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree, MixedHashTree, flatmap};
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_labeled_tree;
 use proptest::prelude::*;
 use rand::SeedableRng;
@@ -111,18 +111,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"Z"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -135,18 +132,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"b"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -159,25 +153,23 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"d"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 }
 
-proptest! {
-    #[test]
-    fn same_witness(t in arbitrary_labeled_tree(), seed in prop::array::uniform32(any::<u8>())) {
-        let rng = &mut ChaCha20Rng::from_seed(seed);
-        test_membership_witness(&t, rng);
-    }
+#[test_strategy::proptest]
+fn same_witness(
+    #[strategy(arbitrary_labeled_tree())] t: LabeledTree<Vec<u8>>,
+    #[strategy(prop::array::uniform32(any::<u8>()))] seed: [u8; 32],
+) {
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    test_membership_witness(&t, rng);
 }

@@ -1,5 +1,7 @@
 """ Rules for component conformance tests. """
 
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
+
 def component_file_references_test(name, component_files, image, tags = None):
     """
     Verifies that the `component_files` only reference file paths that are accessible within the provided `image`.
@@ -16,8 +18,7 @@ def component_file_references_test(name, component_files, image, tags = None):
     for component in component_files:
         deps.append(component)
         component_paths.append("$(location %s)" % component)
-
-    native.sh_test(
+    sh_test(
         name = name,
         srcs = ["//ic-os/components/conformance_tests:check_file_references.py"],
         data = deps,

@@ -1,27 +1,28 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_config::Config;
 use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob, IC_00,
+    InstallCodeArgs, LogVisibilityV2, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
-use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
+use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId, ingress::WasmResult};
 use maplit::btreeset;
 use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
+const TEST_DEFAULT_LOG_MEMORY_LIMIT: u64 = 4_096;
 
 #[test]
 fn can_create_canister_from_another_canister() {
@@ -36,7 +37,7 @@ fn can_create_canister_from_another_canister() {
         // Call method "create_canister" on ic:00. This should create a canister
         // with the auto-generated id above.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(expected_response_payload))
         );
     });
@@ -52,7 +53,7 @@ fn full_canister_lifecycle_from_another_canister() {
 
         // Create a new canister from within a canister.
         assert_eq!(
-            canister.update(wasm().call(management::create_canister(num_cycles.into_parts()))),
+            canister.update(wasm().call(management::create_canister(num_cycles))),
             Ok(WasmResult::Reply(canister_id_record,)),
         );
 
@@ -521,10 +522,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
 
         let old_canister_cycles_balance_after =
             test.canister_state(&canister_id).system_state.balance();
-        println!(
-            "old canister balance after: {}",
-            old_canister_cycles_balance_after
-        );
+        println!("old canister balance after: {old_canister_cycles_balance_after}");
         let new_canister_cycles_balance =
             test.canister_state(&new_canister_id).system_state.balance();
 
@@ -533,14 +531,14 @@ fn can_create_canister_with_cycles_from_another_canister() {
         assert!(
             old_canister_cycles_balance_after
                 <= old_canister_cycles_balance_before - cycles_for_new_canister,
-            "Cycle balance of the creating canister should decrease by at least {}",
-            cycles_for_new_canister
+            "Cycle balance of the creating canister should decrease by at least {cycles_for_new_canister}"
         );
 
         // Check that the balance of the created canister is at most the cycles
         // transferred.
-        assert!(new_canister_cycles_balance <= cycles_for_new_canister,
-                "Cycle balance of the newly created canister is larger than the cycles transferred to it"
+        assert!(
+            new_canister_cycles_balance <= cycles_for_new_canister,
+            "Cycle balance of the newly created canister is larger than the cycles transferred to it"
         );
     });
 }
@@ -689,6 +687,8 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
 
+        let canister_history_size =
+            NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64);
         // Request the status of canister_b.
         assert_matches!(
             test.ingress(
@@ -704,16 +704,27 @@ fn can_get_canister_information() {
             // canister that's created but has no code installed on it.
             Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap() == CanisterStatusResultV2::new(
                 CanisterStatusType::Running,
+                false,
+                1,
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
-                NumBytes::from((2 * size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>()) as u64),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                NumBytes::from(0),
+                canister_history_size,
+                NumBytes::from(0),
+                NumBytes::from(0),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
                 2592000,
                 Some(5_000_000_000_000u128),
-                Default::default(),
+                LogVisibilityV2::default(),
+                TEST_DEFAULT_LOG_MEMORY_LIMIT,
                 0u128,
                 0u128,
                 0u128,
@@ -722,6 +733,7 @@ fn can_get_canister_information() {
                 0u128,
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                 0u64,
+                Default::default(),
             )
         );
 
@@ -738,8 +750,6 @@ fn can_get_canister_information() {
                         canister_b,
                         UNIVERSAL_CANISTER_WASM.to_vec(),
                         vec![],
-                        None,
-                        None,
                     )
                     .encode(),
                 ),
@@ -761,18 +771,29 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
+                    false,
+                    0,
                     Some(ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
                     NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
+                    NumBytes::from(0),
                     num_cycles.get(),
                     ComputeAllocation::default().as_percent(),
                     None,
                     259200,
                     None,
-                    Default::default(),
+                    LogVisibilityV2::default(),
+                    TEST_DEFAULT_LOG_MEMORY_LIMIT,
                     0u128,
                     0u128,
                     0u128,
@@ -781,6 +802,7 @@ fn can_get_canister_information() {
                     0u128,
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0u64,
+                    Default::default(),
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,
@@ -801,133 +823,9 @@ fn cannot_run_method_on_empty_canister() {
                     to execute a message, but the canister contains no Wasm module.",
                 );
             }
-            rest => panic!("Unexpected behaviour {:?}", rest),
+            rest => panic!("Unexpected behaviour {rest:?}"),
         }
     })
-}
-
-#[test]
-fn installing_a_canister_with_lower_memory_allocation_than_it_uses_fails() {
-    utils::canister_test(|test| {
-        let num_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-        let canister_id = test.create_canister_with_cycles(num_cycles.get()).unwrap();
-
-        // Install code to canister_id with low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Install,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    // Set memory allocation to 42 bytes (i.e. something ridiculously small).
-                    Some(42),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Install code to canister_id with enough memory allocation.
-        test.ingress(
-            ic00::IC_00,
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Install,
-                canister_id,
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                vec![],
-                None,
-                None,
-            )
-            .encode(),
-        )
-        .unwrap();
-
-        // Re-install code to canister_id with low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Reinstall,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    // Set memory allocation to 10 bytes.
-                    Some(10),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Canister is still callable.
-        assert_matches!(
-            test.ingress(
-                canister_id,
-                "update",
-                wasm().reply_data(b"Hello").build(),
-            ),
-            Ok(WasmResult::Reply(res)) if std::str::from_utf8(&res).unwrap() == "Hello"
-        );
-    });
-}
-
-#[test]
-fn upgrading_a_canister_with_lower_memory_allocation_than_it_needs_fails() {
-    utils::canister_test(|test| {
-        let num_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-        let canister_id = test.create_canister_with_cycles(num_cycles.get()).unwrap();
-
-        // Install code to canister_id.
-        test.ingress(
-            ic00::IC_00,
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Install,
-                canister_id,
-                UNIVERSAL_CANISTER_WASM.to_vec(),
-                vec![],
-                None,
-                None,
-            )
-            .encode(),
-        )
-        .unwrap();
-
-        // Attempt to upgrade the canister with a very low memory allocation.
-        assert_matches!(
-            test.ingress(
-                ic00::IC_00,
-                Method::InstallCode,
-                InstallCodeArgs::new(
-                    CanisterInstallMode::Upgrade,
-                    canister_id,
-                    UNIVERSAL_CANISTER_WASM.to_vec(),
-                    vec![],
-                    None,
-                    Some(10),
-                )
-                .encode(),
-            ),
-            Err(err) if err.code() == ErrorCode::InsufficientMemoryAllocation
-        );
-
-        // Canister is still callable.
-        assert_matches!(
-            test.ingress(
-                canister_id,
-                "update",
-                wasm().reply_data(b"Hello").build(),
-            ),
-            Ok(WasmResult::Reply(res)) if std::str::from_utf8(&res).unwrap() == "Hello"
-        );
-    });
 }
 
 // Asserts that two `CanisterStatusResult`s are almost equal. Because
@@ -957,7 +855,7 @@ fn test_canister_skip_upgrade() {
 
         // Create a new canister from within a canister.
         let reply = match canister
-            .update(wasm().call(management::create_canister(num_cycles.into_parts())))
+            .update(wasm().call(management::create_canister(num_cycles)))
             .unwrap()
         {
             WasmResult::Reply(reply) => reply,

@@ -5,11 +5,11 @@ mod tests;
 
 use crate::scheduler::{Task, TaskExecution};
 use crate::state::{
-    Archive, ArchiveWasm, GitCommitHash, Index, IndexWasm, Ledger, LedgerSuiteVersion, LedgerWasm,
-    Wasm, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    ARCHIVE_NODE_BYTECODE, Archive, ArchiveWasm, GitCommitHash, INDEX_BYTECODE, Index, IndexWasm,
+    LEDGER_BYTECODE, Ledger, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
 use crate::storage::memory::{
-    deadline_by_task_memory, task_queue_memory, wasm_store_memory, StableMemory,
+    StableMemory, deadline_by_task_memory, task_queue_memory, wasm_store_memory,
 };
 use candid::Deserialize;
 use ic_stable_structures::storable::Bound;
@@ -34,8 +34,8 @@ thread_local! {
 }
 
 pub(crate) mod memory {
-    use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
     use ic_stable_structures::DefaultMemoryImpl;
+    use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
     use std::cell::RefCell;
 
     thread_local! {
@@ -113,7 +113,7 @@ impl StorableWasm for Archive {
 }
 
 impl Storable for StoredWasm {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a StorableWasm to bytes");
@@ -133,7 +133,7 @@ impl Storable for StoredWasm {
 }
 
 impl Storable for TaskExecution {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a TaskExecution to bytes");
@@ -153,7 +153,7 @@ impl Storable for TaskExecution {
 }
 
 impl Storable for Task {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf).expect("failed to encode a Task to bytes");
         Cow::Owned(buf)
@@ -290,23 +290,26 @@ pub fn validate_wasm_hashes(
     index_hash: Option<&str>,
     archive_hash: Option<&str>,
 ) -> Result<[Option<WasmHash>; 3], WasmHashError> {
-    let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, archive_compressed_wasm_hash] =
-        WasmHash::from_distinct_opt_str([ledger_hash, index_hash, archive_hash])
-            .map_err(WasmHashError::Invalid)?;
-    if let Some(ledger_hash) = &ledger_compressed_wasm_hash {
-        if !wasm_store_contain::<Ledger>(wasm_store, ledger_hash) {
-            return Err(WasmHashError::NotFound(ledger_hash.clone()));
-        }
+    let [
+        ledger_compressed_wasm_hash,
+        index_compressed_wasm_hash,
+        archive_compressed_wasm_hash,
+    ] = WasmHash::from_distinct_opt_str([ledger_hash, index_hash, archive_hash])
+        .map_err(WasmHashError::Invalid)?;
+    if let Some(ledger_hash) = &ledger_compressed_wasm_hash
+        && !wasm_store_contain::<Ledger>(wasm_store, ledger_hash)
+    {
+        return Err(WasmHashError::NotFound(ledger_hash.clone()));
     }
-    if let Some(index_hash) = &index_compressed_wasm_hash {
-        if !wasm_store_contain::<Index>(wasm_store, index_hash) {
-            return Err(WasmHashError::NotFound(index_hash.clone()));
-        }
+    if let Some(index_hash) = &index_compressed_wasm_hash
+        && !wasm_store_contain::<Index>(wasm_store, index_hash)
+    {
+        return Err(WasmHashError::NotFound(index_hash.clone()));
     }
-    if let Some(archive_hash) = &archive_compressed_wasm_hash {
-        if !wasm_store_contain::<Archive>(wasm_store, archive_hash) {
-            return Err(WasmHashError::NotFound(archive_hash.clone()));
-        }
+    if let Some(archive_hash) = &archive_compressed_wasm_hash
+        && !wasm_store_contain::<Archive>(wasm_store, archive_hash)
+    {
+        return Err(WasmHashError::NotFound(archive_hash.clone()));
     }
     Ok([
         ledger_compressed_wasm_hash,

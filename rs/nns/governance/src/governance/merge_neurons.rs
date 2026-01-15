@@ -1,16 +1,16 @@
 use crate::{
     governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
+    neuron::{DissolveStateAndAge, Neuron, combine_aged_stakes},
     neuron_store::NeuronStore,
     pb::v1::{
+        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
         governance_error::ErrorType,
         manage_neuron::{Merge, NeuronIdOrSubaccount},
-        manage_neuron_response::MergeResponse,
-        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
     },
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance_api::manage_neuron_response::MergeResponse;
 use icp_ledger::Subaccount;
 use std::collections::BTreeMap;
 
@@ -352,17 +352,19 @@ pub fn build_merge_neurons_response(
     let source_neuron = Some(
         source
             .clone()
-            .into_proto(voting_power_economics, now_seconds),
+            .into_api(now_seconds, voting_power_economics, false),
     );
     let target_neuron = Some(
         target
             .clone()
-            .into_proto(voting_power_economics, now_seconds),
+            .into_api(now_seconds, voting_power_economics, false),
     );
+
     let source_neuron_info =
-        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester));
+        Some(source.get_neuron_info(voting_power_economics, now_seconds, requester, false));
     let target_neuron_info =
-        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester));
+        Some(target.get_neuron_info(voting_power_economics, now_seconds, requester, false));
+
     MergeResponse {
         source_neuron,
         target_neuron,
@@ -631,7 +633,7 @@ mod tests {
     use super::*;
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{neuron::Followees, proposal::Action, ManageNeuron, NeuronType, Proposal, Topic},
+        pb::v1::{Followees, ManageNeuron, NeuronType, Proposal, Topic, proposal::Action},
         storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;
@@ -1415,6 +1417,7 @@ mod tests {
                 }))),
                 ..Default::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..Default::default()
         };
         let managed_neuron_proposal_by_subaccount = ProposalData {
@@ -1429,6 +1432,7 @@ mod tests {
                 }))),
                 ..Default::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..Default::default()
         };
         // The proposer is a neuron 'not involved', which is OK because the proposal is decided.

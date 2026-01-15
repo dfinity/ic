@@ -2,7 +2,7 @@
 #[cfg(test)]
 use assert_matches::assert_matches;
 #[cfg(test)]
-use candid::{Int, Nat};
+use candid::{Int, Nat, Principal};
 use num_bigint::BigInt;
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -278,7 +278,19 @@ pub fn is(expected: Value) -> ValuePredicate {
         if v.as_ref() == &expected {
             Ok(())
         } else {
-            Err(Fail::new(format!("expected {}", expected)))
+            Err(Fail::new(format!("expected {expected}")))
+        }
+    })
+}
+
+pub fn is_not(value: Value) -> ValuePredicate {
+    use ValuePredicateFailures as Fail;
+
+    Arc::new(move |v: Cow<Value>| {
+        if v.as_ref() == &value {
+            Err(Fail::new(format!("should not be {value}")))
+        } else {
+            Ok(())
         }
     })
 }
@@ -297,8 +309,8 @@ pub fn is_equal_to(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for = {}", n))),
-        Some(num) if num != n => Err(Fail::new(format!("the number {} is not = {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for = {n}"))),
+        Some(num) if num != n => Err(Fail::new(format!("the number {num} is not = {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -308,8 +320,8 @@ pub fn is_more_than(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for > {}", n))),
-        Some(num) if num <= n => Err(Fail::new(format!("the number {} is not > {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for > {n}"))),
+        Some(num) if num <= n => Err(Fail::new(format!("the number {num} is not > {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -319,8 +331,8 @@ pub fn is_less_than(n: impl Into<BigInt>) -> ValuePredicate {
 
     let n: BigInt = n.into();
     Arc::new(move |v: Cow<Value>| match value_to_num(v.into_owned()) {
-        None => Err(Fail::new(format!("expected a number to check for < {}", n))),
-        Some(num) if num >= n => Err(Fail::new(format!("the number {} is not < {}", num, n))),
+        None => Err(Fail::new(format!("expected a number to check for < {n}"))),
+        Some(num) if num >= n => Err(Fail::new(format!("the number {num} is not < {n}"))),
         Some(_) => Ok(()),
     })
 }
@@ -341,7 +353,7 @@ pub fn len(p: ValuePredicate) -> ValuePredicate {
             Value::Nat(_) | Value::Nat64(_) | Value::Int(_) => {
                 return Err(Fail::new(
                     "expected a collection (blob, text, array or map)",
-                ))
+                ));
             }
             Value::Blob(bs) => Value::Nat64(bs.len() as u64),
             Value::Text(s) => Value::Nat64(s.len() as u64),
@@ -364,8 +376,7 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
                 p(Cow::Owned(Value::Nat64(*b as u64))).map_err(|f| Fail::item(idx.to_string(), f))
             }
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given blob",
-                idx
+                "index {idx} is out of bounds for the given blob"
             ))),
         },
         Value::Text(s) => match s.chars().nth(idx) {
@@ -373,18 +384,150 @@ pub fn element(idx: usize, p: ValuePredicate) -> ValuePredicate {
                 p(Cow::Owned(Value::text(subs))).map_err(|f| Fail::item(idx.to_string(), f))
             }
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given string",
-                idx
+                "index {idx} is out of bounds for the given string"
             ))),
         },
         Value::Array(array) => match array.get(idx) {
             Some(e) => p(Cow::Borrowed(e)).map_err(|f| Fail::item(idx.to_string(), f)),
             None => Err(Fail::new(format!(
-                "index {} is out of bounds for the given array",
-                idx
+                "index {idx} is out of bounds for the given array"
             ))),
         },
     })
+}
+
+pub fn is_principal() -> ValuePredicate {
+    and(vec![is_blob(), len(is_less_or_equal_to(29))])
+}
+
+#[test]
+fn test_is_principal() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::Array(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_principal()(Cow::Owned(value)), Err(_));
+    }
+
+    for len in 0..Principal::MAX_LENGTH_IN_BYTES + 1 {
+        assert_eq!(
+            is_principal()(Cow::Owned(Value::blob(vec![0u8; len]))),
+            Ok(())
+        );
+    }
+    assert_matches!(
+        is_principal()(Cow::Owned(Value::blob(vec![
+            0u8;
+            Principal::MAX_LENGTH_IN_BYTES
+                + 1
+        ]))),
+        Err(_)
+    );
+}
+
+pub fn is_subaccount() -> ValuePredicate {
+    and(vec![is_blob(), len(is_equal_to(32))])
+}
+
+#[test]
+fn test_is_subaccount() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::Array(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_principal()(Cow::Owned(value)), Err(_));
+    }
+
+    for len in 31..34 {
+        if len == 32 {
+            assert_eq!(
+                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                Ok(())
+            );
+        } else {
+            assert_matches!(
+                is_subaccount()(Cow::Owned(Value::blob(vec![0u8; len]))),
+                Err(_)
+            );
+        }
+    }
+}
+
+pub fn is_account() -> ValuePredicate {
+    and(vec![
+        is_array(),
+        element(0, is_principal()),
+        or(vec![
+            len(is_equal_to(1)),
+            and(vec![len(is_equal_to(2)), element(1, is_subaccount())]),
+        ]),
+    ])
+}
+
+#[test]
+fn test_is_account() {
+    for value in [
+        Value::text("foobar"),
+        Value::Int(Int::from(0)),
+        Value::Nat(Nat::from(0_u8)),
+        Value::Nat64(0),
+        Value::blob(vec![]),
+        Value::Map(BTreeMap::new()),
+    ] {
+        assert_matches!(is_account()(Cow::Owned(value)), Err(_));
+    }
+    // empty array
+    assert_matches!(is_account()(Cow::Owned(Value::Array(vec![]))), Err(_));
+    // wrong types
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            Value::text("foobar"),
+            Value::Int(Int::from(0))
+        ]))),
+        Err(_)
+    );
+    let principal = Value::blob([1u8; 20]);
+    let subaccount = Value::blob([1u8; 32]);
+    // wrong order
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            subaccount.clone(),
+            principal.clone()
+        ]))),
+        Err(_)
+    );
+    // only subaccount
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![subaccount.clone()]))),
+        Err(_)
+    );
+    // 2 subaccounts
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![
+            principal.clone(),
+            subaccount.clone(),
+            subaccount.clone()
+        ]))),
+        Err(_)
+    );
+    // only principal
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![principal.clone()]))),
+        Ok(())
+    );
+    // principal and subaccount
+    assert_matches!(
+        is_account()(Cow::Owned(Value::Array(vec![principal, subaccount]))),
+        Ok(())
+    );
 }
 
 #[derive(Clone, Debug, PartialEq)]

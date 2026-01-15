@@ -72,7 +72,7 @@ impl TryFrom<(X509PublicKeyCert, NodeId, Time)> for ValidTlsCertificate {
         let public_key = ed25519_pubkey_from_x509_cert(&x509_cert)?;
         verify_ed25519_public_key(&public_key)?;
         verify_ed25519_signature(&x509_cert, &public_key).map_err(|e| {
-            invalid_tls_certificate_error(format!("signature verification failed: {}", e))
+            invalid_tls_certificate_error(format!("signature verification failed: {e}"))
         })?;
         Ok(Self { certificate })
     }
@@ -82,15 +82,15 @@ fn single_subject_cn_as_str<'a>(
     x509_cert: &'a X509Certificate,
 ) -> Result<&'a str, TlsCertValidationError> {
     single_cn_as_str(x509_cert.subject()).map_err(|e| {
-        invalid_tls_certificate_error(format!("invalid subject common name (CN): {}", e))
+        invalid_tls_certificate_error(format!("invalid subject common name (CN): {e}"))
     })
 }
 
 fn parse_x509_v3_certificate(
     certificate_der: &[u8],
-) -> Result<X509Certificate, TlsCertValidationError> {
+) -> Result<X509Certificate<'_>, TlsCertValidationError> {
     let (remainder, x509_cert) = x509_parser::parse_x509_certificate(certificate_der)
-        .map_err(|e| invalid_tls_certificate_error(format!("failed to parse DER: {:?}", e)))?;
+        .map_err(|e| invalid_tls_certificate_error(format!("failed to parse DER: {e:?}")))?;
     if !remainder.is_empty() {
         return Err(invalid_tls_certificate_error(format!(
             "DER not fully consumed when parsing. Remainder: 0x{}",
@@ -120,7 +120,7 @@ fn ensure_single_issuer_cn_equals_subject_cn(
     subject_cn: &str,
 ) -> Result<(), TlsCertValidationError> {
     let issuer_cn = single_cn_as_str(x509_cert.issuer()).map_err(|e| {
-        invalid_tls_certificate_error(format!("invalid issuer common name (CN): {}", e))
+        invalid_tls_certificate_error(format!("invalid issuer common name (CN): {e}"))
     })?;
     if issuer_cn != subject_cn {
         return Err(invalid_tls_certificate_error(
@@ -145,14 +145,12 @@ fn ensure_notbefore_date_is_latest_at(
     let current_time_u64 = current_time.as_secs_since_unix_epoch();
     let current_time_i64 = i64::try_from(current_time_u64).map_err(|e| {
         invalid_tls_certificate_error(format!(
-            "failed to convert current time ({current_time_u64}) to i64: {}",
-            e
+            "failed to convert current time ({current_time_u64}) to i64: {e}"
         ))
     })?;
     let current_time_asn1 = ASN1Time::from_timestamp(current_time_i64).map_err(|e| {
         invalid_tls_certificate_error(format!(
-            "failed to convert current time ({current_time_i64}) to ASN1Time: {}",
-            e
+            "failed to convert current time ({current_time_i64}) to ASN1Time: {e}"
         ))
     })?;
 
@@ -199,7 +197,7 @@ fn single_cn_as_str<'a>(name: &'a X509Name<'_>) -> Result<&'a str, String> {
         .next()
         .ok_or("missing common name (CN)")?
         .as_str()
-        .map_err(|e| format!("common name (CN) not a string: {:?}", e))?;
+        .map_err(|e| format!("common name (CN) not a string: {e:?}"))?;
     if cn_iter.next().is_some() {
         return Err("found second common name (CN) entry, but expected a single one".to_string());
     }
@@ -218,7 +216,7 @@ fn ed25519_pubkey_from_x509_cert(
             .to_vec(),
     )
     .map_err(|e| {
-        invalid_tls_certificate_error(format!("conversion to Ed25519 public key failed: {}", e))
+        invalid_tls_certificate_error(format!("conversion to Ed25519 public key failed: {e}"))
     })
 }
 
@@ -268,6 +266,6 @@ pub struct TlsCertValidationError {
 
 impl fmt::Display for TlsCertValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }

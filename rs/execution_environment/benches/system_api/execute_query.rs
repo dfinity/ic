@@ -1,16 +1,24 @@
-///
-/// Benchmark System API performance in `execute_query()`
-///
-use criterion::{criterion_group, criterion_main, Criterion};
+//! Benchmark System API performance in `execute_query()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_query_bench
+//! ```
+
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions,
-    execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
-    NonReplicatedQueryKind, RoundLimits,
+    ExecutionEnvironment, NonReplicatedQueryKind, RoundLimits, as_num_instructions,
+    as_round_instructions, execution::nonreplicated_query::execute_non_replicated_query,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
-use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
+use ic_types::batch::CanisterCyclesCostSchedule;
+use ic_types::methods::WasmMethod;
 
 use crate::common::Wasm64;
 
@@ -81,15 +89,17 @@ pub fn execute_query_bench(c: &mut Criterion) {
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
     common::run_benchmarks(
         c,
-        "query",
+        "execution_environment:query",
         &benchmarks,
-        |exec_env: &ExecutionEnvironment,
+        |id: &str,
+         exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
              canister_state,
              time,
              mut execution_parameters,
              subnet_available_memory,
+             subnet_memory_reservation,
              subnet_available_callbacks,
              network_topology,
              ..
@@ -102,6 +112,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 subnet_available_memory,
                 subnet_available_callbacks,
                 compute_allocation_used: 0,
+                subnet_memory_reservation,
             };
             let instructions_before = round_limits.instructions;
             let result = execute_non_replicated_query(
@@ -116,6 +127,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .2;
             let executed_instructions =
@@ -124,11 +136,16 @@ pub fn execute_query_bench(c: &mut Criterion) {
             assert_eq!(
                 expected_instructions,
                 executed_instructions.get(),
-                "Error comparing number of actual and expected instructions"
+                "update the reference number of instructions for '{id}' to {}",
+                executed_instructions.get()
             );
         },
     );
 }
 
-criterion_group!(benchmarks, execute_query_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_query_bench
+}
 criterion_main!(benchmarks);

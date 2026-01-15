@@ -6,20 +6,20 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NodeProvider, ProposalActionRequest, ProposalStatus, RewardNodeProvider,
     add_or_remove_node_provider::Change,
     manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
-    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, NodeProvider, ProposalActionRequest, ProposalStatus, RewardNodeProvider,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
-use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens};
+use icp_ledger::{AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens, tokens_from_proto};
 
 /// Tests that we can add and reward a node provider.
 #[test]
@@ -93,8 +93,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         let to_subaccount = Subaccount({
@@ -157,8 +157,8 @@ fn test_node_provider_rewards() {
         assert_eq!(
             wait_for_final_state(&nns_canisters.governance, ProposalId::from(pid))
                 .await
-                .status(),
-            ProposalStatus::Executed
+                .status,
+            ProposalStatus::Executed as i32
         );
 
         // The balance of the main account should now include the rewards.

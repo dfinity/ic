@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::api::time;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -7,19 +8,45 @@ use ic_nns_constants::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 pub mod canister_management;
 pub mod init;
 pub mod pb;
 pub mod root_proposals;
 
+pub fn now_nanoseconds() -> u64 {
+    if cfg!(target_arch = "wasm32") {
+        time()
+    } else {
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Failed to get time since epoch")
+            .as_nanos()
+            .try_into()
+            .expect("Failed to convert time to u64")
+    }
+}
+
+pub fn now_seconds() -> u64 {
+    Duration::from_nanos(now_nanoseconds()).as_secs()
+}
+
+fn system_time_now() -> SystemTime {
+    let nanos = now_nanoseconds();
+    UNIX_EPOCH + Duration::from_nanos(nanos)
+}
+
 thread_local! {
     // TODO: Move this to canister.rs. It needs to be here for now, because
     // other libs want to use this. Ideally, this would only be passed to the
     // constructor of TrackingManagementCanisterClient.
     pub static PROXIED_CANISTER_CALLS_TRACKER: RefCell<ProxiedCanisterCallsTracker> =
-        RefCell::new(ProxiedCanisterCallsTracker::new(dfn_core::api::now));
+        RefCell::new(ProxiedCanisterCallsTracker::new(system_time_now));
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
@@ -105,7 +132,7 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         )?;
         for (canister_id, call_count) in &canister_status_caller_to_in_flight_count {
             metrics = metrics.value(
-                &[("canister_id", &format!("{}", canister_id))],
+                &[("canister_id", &format!("{canister_id}"))],
                 (*call_count) as f64,
             )?;
         }
@@ -136,7 +163,7 @@ fn principal_name(principal_id: PrincipalId) -> String {
 
     Some(CanisterId::unchecked_from_principal(principal_id))
         .and_then(|canister_id| CANISTER_ID_TO_NAME.get(&canister_id))
-        .map(|name| format!("{}_canister", name))
+        .map(|name| format!("{name}_canister"))
         .unwrap_or_else(|| principal_id.to_string())
 }
 

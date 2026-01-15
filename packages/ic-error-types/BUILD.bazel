@@ -1,0 +1,24 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-error-types",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.2.0",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-heap-bytes",
+        "@crate_index//:regex-lite",
+        "@crate_index//:serde",
+        "@crate_index//:strum",
+    ],
+)
+
+rust_test(
+    name = "ic-error-types-tests",
+    crate = ":ic-error-types",
+)

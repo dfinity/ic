@@ -1,8 +1,8 @@
 mod targets {
     use super::to_blob;
+    use crate::Time;
     use crate::messages::{Blob, Delegation};
     use crate::time::GENESIS;
-    use crate::Time;
     use assert_matches::assert_matches;
     use ic_base_types::CanisterId;
     const CURRENT_TIME: Time = GENESIS;
@@ -58,12 +58,12 @@ mod try_from {
     mod call {
         use super::super::to_blob;
         use super::*;
+        use crate::UserId;
         use crate::messages::http::{Authentication, HttpCallContent, HttpRequestError};
         use crate::messages::{
             Blob, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope, SignedIngressContent,
             UserSignature,
         };
-        use crate::UserId;
         use assert_matches::assert_matches;
 
         fn default_call_content() -> HttpCanisterUpdate {
@@ -207,11 +207,11 @@ mod try_from {
 
     mod read_state {
         use super::*;
+        use crate::UserId;
         use crate::messages::http::{Authentication, HttpReadStateContent, HttpRequestError};
         use crate::messages::{
             Blob, HttpReadState, HttpRequest, HttpRequestEnvelope, ReadState, UserSignature,
         };
-        use crate::UserId;
         use assert_matches::assert_matches;
 
         fn default_http_read_state() -> HttpReadState {
@@ -336,13 +336,13 @@ mod try_from {
     pub(super) mod query {
         use super::super::to_blob;
         use super::*;
+        use crate::UserId;
         use crate::messages::http::{
             Authentication, HttpQueryContent, HttpRequestError, HttpUserQuery,
         };
         use crate::messages::{
             Blob, HttpRequest, HttpRequestEnvelope, Query, QuerySource, UserSignature,
         };
-        use crate::UserId;
         use assert_matches::assert_matches;
 
         fn default_http_user_query_content() -> HttpUserQuery {
@@ -558,8 +558,8 @@ mod try_from {
 mod hashing {
     use super::try_from::query;
     use crate::{
-        messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
         Time,
+        messages::{Blob, HttpQueryResponse, HttpQueryResponseReply, QueryResponseHash},
     };
     use hex_literal::hex;
 
@@ -606,13 +606,13 @@ mod hashing {
 
 mod cbor_serialization {
     use crate::{
+        AmountOf, Time,
         messages::{
-            http::{btreemap, HttpSignedQueryResponse, NodeSignature},
             Blob, Delegation, HttpQueryResponse, HttpQueryResponseReply, HttpStatusResponse,
             ReplicaHealthStatus, SignedDelegation,
+            http::{HttpSignedQueryResponse, NodeSignature, btreemap},
         },
         time::UNIX_EPOCH,
-        AmountOf, Time,
     };
 
     use candid::Principal;
@@ -730,7 +730,6 @@ mod cbor_serialization {
     fn encoding_status_without_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: None,
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -738,7 +737,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("starting"),
             }),
@@ -749,7 +747,6 @@ mod cbor_serialization {
     fn encoding_status_with_root_key() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -757,7 +754,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),
@@ -769,7 +765,6 @@ mod cbor_serialization {
     fn encoding_status_without_health_status() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -777,7 +772,6 @@ mod cbor_serialization {
                 certified_height: None,
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
             }),
@@ -788,7 +782,6 @@ mod cbor_serialization {
     fn encoding_status_with_certified_height() {
         assert_cbor_ser_equal(
             &HttpStatusResponse {
-                ic_api_version: "foobar".to_string(),
                 root_key: Some(Blob(vec![1, 2, 3])),
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
@@ -796,7 +789,6 @@ mod cbor_serialization {
                 certified_height: Some(AmountOf::new(1)),
             },
             Value::Map(btreemap! {
-                text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
                 text("replica_health_status") => text("healthy"),
@@ -858,11 +850,11 @@ mod cbor_serialization {
 }
 
 mod to_authentication {
-    use crate::messages::{
-        http::to_authentication, Authentication, Blob, Delegation, HttpQueryContent,
-        HttpRequestEnvelope, HttpRequestError, HttpUserQuery, SignedDelegation, UserSignature,
-    };
     use crate::Time;
+    use crate::messages::{
+        Authentication, Blob, Delegation, HttpQueryContent, HttpRequestEnvelope, HttpRequestError,
+        HttpUserQuery, SignedDelegation, UserSignature, http::to_authentication,
+    };
     use assert_matches::assert_matches;
 
     #[test]

@@ -38,9 +38,9 @@ impl ProfilerSink for &'static LocalKey<RefCell<SpanStats>> {
 pub fn measure_span<R>(sink: impl ProfilerSink, name: SpanName, f: impl FnOnce() -> R) -> R {
     #[cfg(target_arch = "wasm32")]
     let (r, measurement) = {
-        let start = unsafe { ic0::performance_counter(0) };
+        let start = ic0::performance_counter(0);
         let r = f();
-        let measurement = unsafe { ic0::performance_counter(0) }.saturating_sub(start);
+        let measurement = ic0::performance_counter(0).saturating_sub(start);
         (r, measurement as u64)
     };
 
@@ -80,9 +80,9 @@ where
 {
     #[cfg(target_arch = "wasm32")]
     let (r, measurement) = {
-        let start = unsafe { ic0::performance_counter(1) };
+        let start = ic0::performance_counter(1);
         let r = f.await;
-        let measurement = unsafe { ic0::performance_counter(1) }.saturating_sub(start);
+        let measurement = ic0::performance_counter(1).saturating_sub(start);
         (r, measurement as u64)
     };
 

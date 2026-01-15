@@ -12,7 +12,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- New CLI option `--mainnet-registry-version` to specify the mainnet registry version to use for fetching the mainnet routing table
+  using the existing CLI option `--fetch-mainnet-routing-table`. Defaults to the latest registry version.
+
+### Changed
+- The CLI option `--fetch-mainnet-routing-table` to specify that the mainnet routing table should be fetched from the mainnet registry
+  does not require a file path specified as `--mainnet-routing-table`.
+- The field `blockmakers` in the argument of the endpoint `/instances/<instance_id>/update/tick`
+  has been flattened into an optional vector of blockmakers per subnet.
+
+
+
+## 11.0.0 - 2025-12-05
+
+### Added
+- New DELETE endpoint `/prune_graph/<state_label>/<op_id>` for pruning the result of a long-running operation.
+  This endpoint should be called after successfully reading the result using the GET endpoint `/read_graph/<state_label>/<op_id>`.
+  The `state_label` and `op_id` are returned by `ApiResponse::Started {state_label, op_id}`.
+- New ICP features `bitcoin`, `dogecoin`, and `canister_migration` can be specified in the optional field `icp_features` in the argument of the endpoint `/instances/`.
+- Support for Dogecoin: PocketIC server interacts with a `dogecoind` process listening at an address and port specified in a new optional field `dogecoind_addr` of the endpoint `/instances/`.
+- The endpoint `/instances/<instance_id>/update/canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
+- The endpoint `/instances/<instance_id>/update/canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
+- New CLI option `--mainnet-routing-table` to specify a path to a JSON file containing the mainnet routing table (used to create canisters with mainnet canister IDs).
+  The PocketIC server contains a hard-coded mainnet routing table used if this option is not provided.
+- New CLI option `--fetch-mainnet-routing-table` to specify that the mainnet routing table should be fetched from the mainnet registry
+  and written to the file path specified as `--mainnet-routing-table`.
+
+
+
+## 10.0.0 - 2025-09-12
+
+### Added
+- The endpoint `/instances/<instance_id>/update/await_ingress_message` (execute rounds on the PocketIc instance until the message is executed):
+  to fix a performance regression when using the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status` in a loop.
+- The argument of the endpoint `/instances/` takes an additional optional field `icp_features` specifying ICP features (implemented by system canisters) to be enabled in the newly created PocketIC instance.
+- The argument of the endpoint `/instances/` takes an additional optional field `incomplete_state` specifying if incomplete state (e.g., resulting from not deleting a PocketIC instance gracefully) is allowed.
+- The argument of the endpoint `/instances/` takes an additional optional field `initial_time` specifying the initial timestamp of the newly created instance or
+  if the new instance should make progress automatically, i.e., if PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
+- The argument of the endpoint `/instances/` takes an optional field `icp_config` specifying which features not available on the ICP mainnet should be available
+  in the newly created PocketIC instance (the field used to be called `nonmainnet_features` and be of a simple Boolean type before).
+- The argument of the endpoint `/instances/` takes an additional optional field `http_gateway_config` specifying that an HTTP gateway with the given configuration
+  should be created for the newly created instance.
+
+
+
+## 9.0.3 - 2025-06-06
+
+### Changed
+- The endpoint `/instances/<instance_id>/auto_progress` sets the (certified) time of the PocketIC instance
+  to the current system time before starting to execute rounds automatically.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/await_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status`
+  to execute a round and fetch the status of the update call instead.
+
+
+
+## 9.0.2 - 2025-05-27
+
+### Fixed
+- Crash when creating a canister with a specified id on a PocketIC instance created from an existing PocketIC state.
+
+
+
+## 9.0.1 - 2025-04-30
+
+### Fixed
+- Crash when creating multiple instances with the same subnet state directory simultaneously.
+
+
+
+## 9.0.0 - 2025-04-23
+
+### Added
+- The `GET` endpoint `/instances/<instance_id>/auto_progress` that returns whether the automatic progress was enabled for the PocketIC instance.
+- Support for VetKd if nonmainnet features are enabled on a PocketIC instance.
+
+### Changed
+- The II canister always belongs to the dedicated II subnet (the II canister used to belong to the NNS subnet if no II subnet was specified).
+- The II subnet size to be 34 nodes as on the ICP mainnet.
+
+
+
+## 8.0.0 - 2025-02-26
+
+### Added
 - New endpoint `/instances/<instance_id>/read/ingress_status` to fetch the status of an update call submitted through an ingress message.
+  If an optional caller is provided, the status of the update call is known, but the update call was submitted by a different caller, then an error is returned.
+- New endpoint `/instances/<instance_id>/update/set_certified_time` to set the current certified time on all subnets of the PocketIC instance.
+- The endpoint `/instances/<instance_id>/update/tick` takes an argument optionally containing the blockmaker and failed blockmakers
+  for every subnet used by the endpoint `node_metrics_history` of the management canister.
+
+### Fixed
+- Canisters created via `provisional_create_canister_with_cycles` with the management canister ID as the effective canister ID
+  are created on an arbitrary subnet.
+
+### Changed
+- The response type `RawSubmitIngressResult` is replaced by `Result<RawMessageId, RejectResponse>`.
+- The response types `RawWasmResult` and `UserError` in `RawCanisterResult` are replaced by `Vec<u8>` and `RejectResponse`.
+
+### Removed
+- The endpoint `/instances/<instance_id>/update/execute_ingress_message`:
+  use the two endpoints `/instances/<instance_id>/update/submit_ingress_message` and `/instances/<instance_id>/update/await_ingress_message`
+  to submit and then await an ingress message instead.
 
 
 

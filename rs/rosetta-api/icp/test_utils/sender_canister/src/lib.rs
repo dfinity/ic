@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{CandidType, Principal};
 use ic_cdk::api::call::RejectionCode;
 use serde::{Deserialize, Serialize};

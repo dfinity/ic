@@ -13,12 +13,68 @@ use icrc_ledger_types::{
     icrc1::{account::Account, transfer::Memo},
 };
 use rosetta_core::identifiers::BlockIdentifier;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult};
 use serde::ser::StdError;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
+
+/// Enum representing the different counter types used in the ICRC1 Rosetta storage system.
+/// Each counter serves a specific purpose for tracking state and ensuring data integrity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RosettaCounter {
+    /// Tracks the number of blocks that have been synchronized and stored in the database.
+    ///
+    /// - **Type**: INTEGER
+    /// - **Initial value**: Set to the current count of blocks in the blocks table
+    /// - **Updates**: Automatically incremented by 1 via database trigger when new blocks are inserted
+    /// - **Usage**: Used by `get_block_count()` to efficiently retrieve the total number of synced blocks
+    /// - **Reset**: Can be reset to match actual block count via `reset_blocks_counter()`
+    SyncedBlocks,
+
+    /// Flag indicating whether the fee collector balance repair has been completed.
+    ///
+    /// - **Type**: INTEGER (used as boolean flag)
+    /// - **Value**: Set to 1 when the `repair_fee_collector_balances()` function has been executed
+    /// - **Usage**: Prevents redundant execution of the balance repair process
+    /// - **Context**: Used to fix account balances for databases created before the fee collector
+    ///   block index fix (https://github.com/dfinity/ic/pull/5304) was implemented
+    /// - **One-time operation**: Once set, this counter prevents the repair from running again
+    CollectorBalancesFixed,
+}
+
+impl RosettaCounter {
+    /// Returns the string name used to identify this counter in the database.
+    pub fn name(&self) -> &'static str {
+        match self {
+            RosettaCounter::SyncedBlocks => "SyncedBlocks",
+            RosettaCounter::CollectorBalancesFixed => "CollectorBalancesFixed",
+        }
+    }
+
+    /// Returns the default initial value for this counter.
+    pub fn default_value(&self) -> i64 {
+        match self {
+            RosettaCounter::SyncedBlocks => 0, // Will be set to actual block count during initialization
+            RosettaCounter::CollectorBalancesFixed => 0, // Flag starts as false (0)
+        }
+    }
+
+    /// Returns whether this counter represents a boolean flag (0/1 values only).
+    pub fn is_flag(&self) -> bool {
+        match self {
+            RosettaCounter::SyncedBlocks => false,
+            RosettaCounter::CollectorBalancesFixed => true,
+        }
+    }
+}
+
+impl std::fmt::Display for RosettaCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RosettaBlock {
@@ -78,10 +134,10 @@ impl RosettaBlock {
         Ok(self
             .get_effective_fee()
             .or(match self.get_transaction().operation {
-                IcrcOperation::Mint { .. } => None,
+                IcrcOperation::Mint { fee, .. } => fee,
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
-                IcrcOperation::Burn { .. } => None,
+                IcrcOperation::Burn { fee, .. } => fee,
             }))
     }
 
@@ -91,6 +147,10 @@ impl RosettaBlock {
 
     pub fn get_fee_collector(&self) -> Option<Account> {
         self.block.fee_collector
+    }
+
+    pub fn get_fee_collector_block_index(&self) -> Option<u64> {
+        self.block.fee_collector_block_index
     }
 
     pub fn get_icrc1_block(&self) -> IcrcBlock {
@@ -144,7 +204,9 @@ impl TryFrom<Value> for IcrcBlock {
 
     fn try_from(value: Value) -> anyhow::Result<Self> {
         // The base of all fields is a BTreeMap that holds all the other fields from the ICRC-3 standard
-        let map = value.as_map().map_err(|err| anyhow!("{:?}", err))?;
+        let map = value
+            .as_map()
+            .map_err(|err| anyhow!("The block top level element should be map: {:?}", err))?;
 
         // Now we can try to extract every field that corresponds to a Block object from the map
         let parent_hash = get_opt_field::<Vec<u8>>(&map, &[], "phash")?
@@ -278,6 +340,7 @@ pub enum IcrcOperation {
     Mint {
         to: Account,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Transfer {
         from: Account,
@@ -290,6 +353,7 @@ pub enum IcrcOperation {
         from: Account,
         spender: Option<Account>,
         amount: Nat,
+        fee: Option<Nat>,
     },
     Approve {
         from: Account,
@@ -316,11 +380,12 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                     from,
                     spender,
                     amount,
+                    fee,
                 })
             }
             "mint" => {
                 let to: Account = get_field(&map, FIELD_PREFIX, "to")?;
-                Ok(Self::Mint { to, amount })
+                Ok(Self::Mint { to, amount, fee })
             }
             "xfer" => {
                 let from: Account = get_field(&map, FIELD_PREFIX, "from")?;
@@ -350,7 +415,9 @@ impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
                 })
             }
             found => {
-                bail!("Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}")
+                bail!(
+                    "Expected field 'op' to be 'burn', 'mint', 'xfer' or 'approve' but found {found}"
+                )
             }
         }
     }
@@ -390,6 +457,7 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
                 map.insert("op".to_string(), Value::text("burn"));
                 map.insert("from".to_string(), Value::from(from));
@@ -397,11 +465,17 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                     map.insert("spender".to_string(), Value::from(spender));
                 }
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
-            Op::Mint { to, amount } => {
+            Op::Mint { to, amount, fee } => {
                 map.insert("op".to_string(), Value::text("mint"));
                 map.insert("to".to_string(), Value::from(to));
                 map.insert("amt".to_string(), Value::Nat(amount));
+                if let Some(fee) = fee {
+                    map.insert("fee".to_string(), Value::Nat(fee));
+                }
             }
             Op::Transfer {
                 from,
@@ -509,14 +583,17 @@ where
                 from,
                 spender,
                 amount,
+                fee,
             } => Self::Burn {
                 from,
                 spender,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
-            Op::Mint { to, amount } => Self::Mint {
+            Op::Mint { to, amount, fee } => Self::Mint {
                 to,
                 amount: amount.into(),
+                fee: fee.map(Into::into),
             },
             Op::Transfer {
                 from,
@@ -531,6 +608,9 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
+            Op::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         }
     }
 }
@@ -557,8 +637,8 @@ mod tests {
         generic_transaction_from_generic_block,
     };
     use ic_icrc1_test_utils::blocks_strategy;
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::BlockType;
     use ic_ledger_core::tokens::TokensType;
@@ -615,20 +695,23 @@ mod tests {
             arb_account(),             // from
             option::of(arb_account()), // spender
             arb_nat(),                 // amount
+            option::of(arb_nat()),     // fee
         )
-            .prop_map(|(from, spender, amount)| IcrcOperation::Burn {
+            .prop_map(|(from, spender, amount, fee)| IcrcOperation::Burn {
                 from,
                 spender,
                 amount,
+                fee,
             })
     }
 
     fn arb_mint() -> impl Strategy<Value = IcrcOperation> {
         (
-            arb_account(), // to
-            arb_nat(),     // amount
+            arb_account(),         // to
+            arb_nat(),             // amount
+            option::of(arb_nat()), // fee
         )
-            .prop_map(|(to, amount)| IcrcOperation::Mint { to, amount })
+            .prop_map(|(to, amount, fee)| IcrcOperation::Mint { to, amount, fee })
     }
 
     fn arb_transfer() -> impl Strategy<Value = IcrcOperation> {
@@ -841,26 +924,31 @@ mod tests {
                     from,
                     spender,
                     amount,
+                    fee,
                 },
                 IcrcOperation::Burn {
                     from: rosetta_from,
                     spender: rosetta_spender,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(from, rosetta_from, "from");
                 assert_eq!(spender, rosetta_spender, "spender");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
-                ic_icrc1::Operation::Mint { to, amount },
+                ic_icrc1::Operation::Mint { to, amount, fee },
                 IcrcOperation::Mint {
                     to: rosetta_to,
                     amount: rosetta_amount,
+                    fee: rosetta_fee,
                 },
             ) => {
                 assert_eq!(to, rosetta_to, "to");
                 assert_eq!(amount.into(), rosetta_amount, "amount");
+                assert_eq!(fee.map(|t| t.into()), rosetta_fee, "fee");
             }
             (
                 ic_icrc1::Operation::Transfer {

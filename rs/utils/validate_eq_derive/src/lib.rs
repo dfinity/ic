@@ -13,7 +13,6 @@ use syn::Data::Struct;
 ///   - Ignore ignores the field.
 ///   - None (default) compares fields using PartialEq and reports their name in case of
 ///     divergence.
-
 enum ValidateEqFieldAttr {
     /// Compare using .eq() and return field name if it diverges.
     CompareWithPartialEq,
@@ -29,7 +28,7 @@ fn find_validate_eq_attr(field: &syn::Field) -> syn::Result<Option<&syn::Attribu
     let matching_attrs = field
         .attrs
         .iter()
-        .filter(|attr| attr.path.is_ident("validate_eq"))
+        .filter(|attr| attr.path().is_ident("validate_eq"))
         .collect::<Vec<_>>();
     if matching_attrs.len() == 1 {
         Ok(Some(matching_attrs[0]))

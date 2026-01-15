@@ -2,13 +2,14 @@ use crate::candid::{AddCkErc20Token, CyclesManagement, InitArg, LedgerInitArg};
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
 use crate::scheduler::tests::mock::MockCanisterRuntime;
-use crate::scheduler::{cycles_to_u128, InstallLedgerSuiteArgs, Task, TaskError, TaskExecution};
+use crate::scheduler::{InstallLedgerSuiteArgs, Task, TaskError, TaskExecution, cycles_to_u128};
 use crate::state::test_fixtures::new_state;
 use crate::state::{
-    read_state, Canisters, GitCommitHash, IndexCanister, LedgerCanister, LedgerSuiteVersion,
-    ManagedCanisterStatus, State, WasmHash, ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+    ARCHIVE_NODE_BYTECODE, Canisters, GitCommitHash, INDEX_BYTECODE, IndexCanister,
+    LEDGER_BYTECODE, LedgerCanister, LedgerSuiteVersion, ManagedCanisterStatus, State, WasmHash,
+    read_state,
 };
-use crate::storage::{mutate_wasm_store, record_icrc1_ledger_suite_wasms, TASKS};
+use crate::storage::{TASKS, mutate_wasm_store, record_icrc1_ledger_suite_wasms};
 use candid::Principal;
 use icrc_ledger_types::icrc3::archive::{GetArchivesArgs, GetArchivesResult};
 
@@ -189,10 +190,72 @@ async fn should_not_retry_successful_operation_after_failing_one() {
     let mut runtime = MockCanisterRuntime::new();
 
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    let expected_error = CallError {
+        method: "create_canister".to_string(),
+        reason: Reason::OutOfCycles,
+    };
     expect_create_canister_returning(
         &mut runtime,
         vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(LEDGER_PRINCIPAL)],
+        vec![Err(expected_error.clone())],
+    );
+
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(
+        task.execute(&runtime).await,
+        Err(TaskError::CanisterCreationError(expected_error))
+    );
+    assert_eq!(
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
+        Some(Canisters {
+            ledger: None,
+            index: None,
+            archives: vec![],
+            metadata: usdc_metadata(),
+        })
+    );
+
+    runtime.checkpoint();
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    let expected_error = CallError {
+        method: "create_canister".to_string(),
+        reason: Reason::OutOfCycles,
+    };
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(LEDGER_PRINCIPAL), Err(expected_error.clone())],
+    );
+
+    let task = TaskExecution {
+        task_type: Task::InstallLedgerSuite(usdc_install_args()),
+        execute_at_ns: 0,
+    };
+    assert_eq!(
+        task.execute(&runtime).await,
+        Err(TaskError::CanisterCreationError(expected_error))
+    );
+    assert_eq!(
+        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
+        Some(Canisters {
+            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
+                canister_id: LEDGER_PRINCIPAL
+            })),
+            index: None,
+            archives: vec![],
+            metadata: usdc_metadata(),
+        })
+    );
+
+    runtime.checkpoint();
+    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
+    expect_create_canister_returning(
+        &mut runtime,
+        vec![ORCHESTRATOR_PRINCIPAL],
+        vec![Ok(INDEX_PRINCIPAL)],
     );
     let expected_error = CallError {
         method: "install_code".to_string(),
@@ -217,37 +280,9 @@ async fn should_not_retry_successful_operation_after_failing_one() {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
             })),
-            index: None,
-            archives: vec![],
-            metadata: usdc_metadata(),
-        })
-    );
-
-    runtime.checkpoint();
-    runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
-    let expected_error = CallError {
-        method: "create_canister".to_string(),
-        reason: Reason::OutOfCycles,
-    };
-    runtime.expect_install_code().times(1).return_const(Ok(()));
-    expect_create_canister_returning(
-        &mut runtime,
-        vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Err(expected_error.clone())],
-    );
-
-    assert_eq!(
-        task.execute(&runtime).await,
-        Err(TaskError::CanisterCreationError(expected_error))
-    );
-    assert_eq!(
-        read_state(|s| s.managed_canisters(&usdc_token_id()).cloned()),
-        Some(Canisters {
-            ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Installed {
-                canister_id: LEDGER_PRINCIPAL,
-                installed_wasm_hash: read_ledger_wasm_hash(),
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Created {
+                canister_id: INDEX_PRINCIPAL
             })),
-            index: None,
             archives: vec![],
             metadata: usdc_metadata(),
         })
@@ -255,19 +290,11 @@ async fn should_not_retry_successful_operation_after_failing_one() {
 
     runtime.checkpoint();
     runtime.expect_id().return_const(ORCHESTRATOR_PRINCIPAL);
-    expect_create_canister_returning(
-        &mut runtime,
-        vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(INDEX_PRINCIPAL)],
-    );
     let expected_error = CallError {
         method: "install_code".to_string(),
         reason: Reason::OutOfCycles,
     };
-    runtime
-        .expect_install_code()
-        .times(1)
-        .return_const(Err(expected_error.clone()));
+    expect_install_code_returning(&mut runtime, vec![Ok(()), Err(expected_error.clone())]);
 
     assert_eq!(
         task.execute(&runtime).await,
@@ -325,7 +352,7 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
     expect_create_canister_returning(
         &mut runtime,
         vec![ORCHESTRATOR_PRINCIPAL],
-        vec![Ok(LEDGER_PRINCIPAL)],
+        vec![Ok(LEDGER_PRINCIPAL), Ok(INDEX_PRINCIPAL)],
     );
 
     assert_eq!(
@@ -340,7 +367,9 @@ async fn should_discard_add_erc20_task_when_ledger_wasm_not_found() {
             ledger: Some(LedgerCanister::new(ManagedCanisterStatus::Created {
                 canister_id: LEDGER_PRINCIPAL
             })),
-            index: None,
+            index: Some(IndexCanister::new(ManagedCanisterStatus::Created {
+                canister_id: INDEX_PRINCIPAL
+            })),
             archives: vec![],
             metadata: usdc_metadata(),
         })
@@ -394,10 +423,10 @@ mod notify_erc_20_added {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_add_ckerc20_token, init_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+        LEDGER_PRINCIPAL, MINTER_PRINCIPAL, expect_call_canister_add_ckerc20_token, init_state,
     };
     use crate::scheduler::{Task, TaskError, TaskExecution};
-    use crate::state::{mutate_state, Ledger};
+    use crate::state::{Ledger, mutate_state};
     use candid::Nat;
 
     #[tokio::test]
@@ -569,10 +598,10 @@ mod discover_archives {
     };
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_icrc3_get_archives, init_state, LEDGER_PRINCIPAL,
+        LEDGER_PRINCIPAL, expect_call_canister_icrc3_get_archives, init_state,
     };
     use crate::scheduler::{DiscoverArchivesError, Erc20Token, Task, TaskError, TaskExecution};
-    use crate::state::{mutate_state, read_state, Ledger, TokenId};
+    use crate::state::{Ledger, TokenId, mutate_state, read_state};
     use candid::Principal;
     use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
 
@@ -695,26 +724,27 @@ mod discover_archives {
 
 mod upgrade_ledger_suite {
     use crate::management::CallError;
+    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, TokenNotFound};
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata, usdc_token_id};
     use crate::scheduler::tests::{
-        execute_now, expect_call_canister_icrc3_get_archives, init_state,
-        mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
-        read_ledger_wasm_hash, task_queue_from_state, INDEX_PRINCIPAL, LEDGER_PRINCIPAL,
+        INDEX_PRINCIPAL, LEDGER_PRINCIPAL, execute_now, expect_call_canister_icrc3_get_archives,
+        init_state, mock::MockCanisterRuntime, read_archive_wasm_hash, read_index_wasm_hash,
+        read_ledger_wasm_hash, task_queue_from_state,
     };
-    use crate::scheduler::UpgradeLedgerSuiteError::{CanisterNotReady, TokenNotFound};
     use crate::scheduler::{
-        pop_if_ready, Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError,
-        UpgradeLedgerSuiteSubtask,
+        Task, TaskError, UpgradeLedgerSuite, UpgradeLedgerSuiteError, UpgradeLedgerSuiteSubtask,
+        pop_if_ready,
     };
     use crate::state::{
-        mutate_state, Index, Ledger, ManagedCanisterStatus, TokenId, WasmHash,
-        ARCHIVE_NODE_BYTECODE, INDEX_BYTECODE, LEDGER_BYTECODE,
+        ARCHIVE_NODE_BYTECODE, CanisterUpgrade, INDEX_BYTECODE, Index, LEDGER_BYTECODE, Ledger,
+        ManagedCanisterStatus, TokenId, WasmHash, mutate_state, read_state,
     };
-    use candid::Principal;
-    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
     use UpgradeLedgerSuiteSubtask::{
         DiscoverArchives, UpgradeArchives, UpgradeIndex, UpgradeLedger,
     };
+    use candid::Principal;
+    use icrc_ledger_types::icrc3::archive::ICRC3ArchiveInfo;
+    use maplit::btreemap;
 
     #[test]
     fn should_upgrade_in_the_correct_order() {
@@ -993,7 +1023,7 @@ mod upgrade_ledger_suite {
             s.record_created_canister::<Ledger>(&usdc, LEDGER_PRINCIPAL);
         });
 
-        for (task, canister_id) in vec![
+        for (task, canister_id) in [
             (update_index_task, INDEX_PRINCIPAL),
             (update_ledger_task, LEDGER_PRINCIPAL),
         ] {
@@ -1049,7 +1079,7 @@ mod upgrade_ledger_suite {
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().return_const(0_u64);
+        runtime.expect_time().return_const(1_u64);
         let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
 
         expect_stop_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
@@ -1064,6 +1094,15 @@ mod upgrade_ledger_suite {
         let result = upgrade_ledger_task.execute(&runtime).await;
 
         assert_eq!(result, Ok(()));
+
+        let completed_upgrades = read_state(|s| s.completed_upgrades().clone());
+        assert_eq!(
+            completed_upgrades,
+            btreemap! {
+                INDEX_PRINCIPAL => CanisterUpgrade {wasm_hash: read_index_wasm_hash(),timestamp: 0},
+                LEDGER_PRINCIPAL => CanisterUpgrade {wasm_hash: read_ledger_wasm_hash(),timestamp: 1},
+            }
+        )
     }
 
     #[tokio::test]
@@ -1096,14 +1135,14 @@ mod upgrade_ledger_suite {
         );
         expect_start_canister(&mut runtime, INDEX_PRINCIPAL, Ok(()));
 
-        runtime.expect_time().times(1).return_const(0_u64);
+        runtime.expect_time().return_const(0_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = execute_now(task.clone(), &runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(1_u64);
+        runtime.expect_time().return_const(1_u64);
         let upgrade_ledger_task = pop_if_ready(&runtime).expect("missing upgrade ledger task");
         runtime.checkpoint();
 
@@ -1115,14 +1154,14 @@ mod upgrade_ledger_suite {
             Ok(()),
         );
         expect_start_canister(&mut runtime, LEDGER_PRINCIPAL, Ok(()));
-        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_time().return_const(2_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = upgrade_ledger_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(2_u64);
+        runtime.expect_time().return_const(2_u64);
         let discover_archive_task = pop_if_ready(&runtime).expect("missing discover archives task");
         runtime.checkpoint();
 
@@ -1143,14 +1182,14 @@ mod upgrade_ledger_suite {
             LEDGER_PRINCIPAL,
             Ok(vec![first_archive_info, second_archive_info]),
         );
-        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_time().return_const(3_u64);
         runtime.expect_global_timer_set().times(1).return_const(());
 
         let result = discover_archive_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         runtime.checkpoint();
 
-        runtime.expect_time().times(1).return_const(3_u64);
+        runtime.expect_time().return_const(3_u64);
         let upgrade_archives_task = pop_if_ready(&runtime).expect("missing upgrade archives task");
         runtime.checkpoint();
 
@@ -1163,11 +1202,23 @@ mod upgrade_ledger_suite {
                 Ok(()),
             );
             expect_start_canister(&mut runtime, archive, Ok(()));
+            runtime.expect_time().return_const(4_u64);
         }
         let result = upgrade_archives_task.execute(&runtime).await;
         assert_eq!(result, Ok(()));
         assert_eq!(task_queue_from_state(), vec![]);
         runtime.checkpoint();
+
+        let completed_upgrades = read_state(|s| s.completed_upgrades().clone());
+        assert_eq!(
+            completed_upgrades,
+            btreemap! {
+                INDEX_PRINCIPAL => CanisterUpgrade {wasm_hash: read_index_wasm_hash(),timestamp: 0},
+                LEDGER_PRINCIPAL => CanisterUpgrade {wasm_hash: read_ledger_wasm_hash(),timestamp: 2},
+                first_archive => CanisterUpgrade {wasm_hash: read_archive_wasm_hash(),timestamp: 4},
+                second_archive => CanisterUpgrade {wasm_hash: read_archive_wasm_hash(),timestamp: 4},
+            }
+        )
     }
 
     fn expect_stop_canister(
@@ -1215,11 +1266,11 @@ mod run_task {
     use crate::scheduler::test_fixtures::{usdc, usdc_metadata};
     use crate::scheduler::tests::mock::MockCanisterRuntime;
     use crate::scheduler::tests::{
-        expect_call_canister_add_ckerc20_token, init_state, task_deadline_from_state,
-        task_queue_from_state, LEDGER_PRINCIPAL, MINTER_PRINCIPAL,
+        LEDGER_PRINCIPAL, MINTER_PRINCIPAL, expect_call_canister_add_ckerc20_token, init_state,
+        task_deadline_from_state, task_queue_from_state,
     };
-    use crate::scheduler::{run_task, Task, TaskExecution};
-    use crate::state::{mutate_state, Ledger};
+    use crate::scheduler::{Task, TaskExecution, run_task};
+    use crate::state::{Ledger, mutate_state};
     use candid::Nat;
     use std::time::Duration;
 
@@ -1466,6 +1517,25 @@ fn expect_create_canister_returning(
         });
 }
 
+fn expect_install_code_returning(
+    runtime: &mut MockCanisterRuntime,
+    results: Vec<Result<(), CallError>>,
+) {
+    assert!(!results.is_empty(), "must return at least one result");
+    let mut install_code_call_counter = 0_usize;
+    runtime
+        .expect_install_code()
+        .times(results.len())
+        .returning(move |_canister_id, _wasm, _args| {
+            if install_code_call_counter >= results.len() {
+                panic!("install_code called too many times!");
+            }
+            let result = results[install_code_call_counter].clone();
+            install_code_call_counter += 1;
+            result
+        });
+}
+
 fn expect_call_canister_add_ckerc20_token(
     runtime: &mut MockCanisterRuntime,
     expected_canister_id: Principal,
@@ -1511,7 +1581,7 @@ async fn execute_now<R: CanisterRuntime>(task: Task, runtime: &R) -> Result<(), 
 mod metrics {
     use crate::management::CallError;
     use crate::scheduler::metrics::observe_task_duration;
-    use crate::scheduler::{encode_orchestrator_metrics, Reason, Task, TaskError};
+    use crate::scheduler::{Reason, Task, TaskError, encode_orchestrator_metrics};
     use std::time::Duration;
 
     #[test]
@@ -1602,8 +1672,7 @@ orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="err"} 1 12
         .trim();
         assert_eq!(
             actual, expected,
-            "BUG: Unexpected task durations histogram. Actual:\n{}\nexpected:\n{}",
-            actual, expected
+            "BUG: Unexpected task durations histogram. Actual:\n{actual}\nexpected:\n{expected}"
         );
     }
 }
@@ -1680,14 +1749,14 @@ mod mock {
 
 mod install_ledger_suite_args {
     use crate::candid::{AddErc20Arg, InitArg, LedgerInitArg};
-    use crate::scheduler::tests::{usdc_metadata, MINTER_PRINCIPAL};
+    use crate::scheduler::tests::{MINTER_PRINCIPAL, usdc_metadata};
     use crate::scheduler::{ChainId, Erc20Token, InstallLedgerSuiteArgs, InvalidAddErc20ArgError};
     use crate::state::test_fixtures::{expect_panic_with_message, new_state, new_state_from};
     use crate::state::{GitCommitHash, IndexWasm, LedgerSuiteVersion, LedgerWasm, WasmHash};
     use crate::storage::test_fixtures::{
         embedded_ledger_suite_version, empty_task_queue, empty_wasm_store,
     };
-    use crate::storage::{record_icrc1_ledger_suite_wasms, WasmStore};
+    use crate::storage::{WasmStore, record_icrc1_ledger_suite_wasms};
     use assert_matches::assert_matches;
     use candid::Nat;
     use proptest::collection::vec;

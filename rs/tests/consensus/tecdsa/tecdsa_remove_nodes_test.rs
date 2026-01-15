@@ -22,12 +22,13 @@ use anyhow::Result;
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
+use ic_system_test_driver::util::block_on;
 
 use canister_test::Canister;
 use ic_base_types::NodeId;
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, DKG_INTERVAL,
+    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -125,7 +126,9 @@ fn test(env: TestEnv) {
         EndpointsStatus::AllUnhealthy,
     );
     info!(log, "Kill nodes after removal (last shot to the victims)");
-    nns_nodes_to_remove.iter().for_each(|node| node.vm().kill());
+    nns_nodes_to_remove
+        .iter()
+        .for_each(|node| block_on(async { node.vm().await.kill().await }));
     info!(log, "Verify signature");
     block_on(async {
         let msg_can = MessageCanister::from_canister_id(&nns_agent, canister_id);

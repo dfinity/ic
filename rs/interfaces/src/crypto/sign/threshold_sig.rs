@@ -1,7 +1,7 @@
 use ic_base_types::{NodeId, SubnetId};
+use ic_types::RegistryVersion;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::{CombinedThresholdSigOf, CryptoResult, Signable, ThresholdSigShareOf};
-use ic_types::RegistryVersion;
 use std::collections::BTreeMap;
 
 pub mod ni_dkg;
@@ -26,10 +26,8 @@ pub trait ThresholdSigner<T: Signable> {
     ///   the secret key store.
     /// * `CryptoError::TransientInternalError` if there is a transient
     ///   internal error, e.g., an RPC error when calling the CSP vault.
-    // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
-    // ThresholdSigDataNotFoundError>
     fn sign_threshold(&self, message: &T, dkg_id: &NiDkgId)
-        -> CryptoResult<ThresholdSigShareOf<T>>;
+    -> CryptoResult<ThresholdSigShareOf<T>>;
 }
 
 /// A Crypto Component interface to verify threshold signatures.

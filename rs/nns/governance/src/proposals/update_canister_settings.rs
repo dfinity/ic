@@ -1,9 +1,16 @@
-use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
     pb::v1::{
-        update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
+        GovernanceError, SelfDescribingValue, Topic, UpdateCanisterSettings,
+        update_canister_settings::{CanisterSettings, LogVisibility},
     },
-    proposals::call_canister::CallCanister,
+    proposals::{
+        call_canister::CallCanister,
+        invalid_proposal_error,
+        self_describing::{
+            LocallyDescribableProposalAction, SelfDescribingProstEnum, ValueBuilder,
+        },
+        topic_to_manage_canister,
+    },
 };
 
 use candid::{Encode, Nat};
@@ -61,6 +68,7 @@ impl UpdateCanisterSettings {
             && settings.freezing_threshold.is_none()
             && settings.log_visibility.is_none()
             && settings.wasm_memory_limit.is_none()
+            && settings.wasm_memory_threshold.is_none()
         {
             return Err(invalid_proposal_error(
                 "At least one setting must be provided",
@@ -75,6 +83,7 @@ impl UpdateCanisterSettings {
         let memory_allocation = settings.memory_allocation.map(Nat::from);
         let freezing_threshold = settings.freezing_threshold.map(Nat::from);
         let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
+        let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
         let log_visibility = match settings.log_visibility {
             Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
             None => None,
@@ -89,6 +98,7 @@ impl UpdateCanisterSettings {
             wasm_memory_limit,
             log_visibility,
             reserved_cycles_limit,
+            wasm_memory_threshold,
         })
     }
 
@@ -128,15 +138,67 @@ impl CallCanister for UpdateCanisterSettings {
     }
 }
 
+impl LocallyDescribableProposalAction for UpdateCanisterSettings {
+    const TYPE_NAME: &'static str = "Update Canister Settings";
+    const TYPE_DESCRIPTION: &'static str = "Updates the settings of an NNS canister.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        ValueBuilder::new()
+            .add_field("canister_id", self.canister_id)
+            .add_field("settings", self.settings.clone())
+            .build()
+    }
+}
+
+impl From<CanisterSettings> for SelfDescribingValue {
+    fn from(settings: CanisterSettings) -> Self {
+        let CanisterSettings {
+            controllers,
+            compute_allocation,
+            memory_allocation,
+            freezing_threshold,
+            log_visibility,
+            wasm_memory_limit,
+            wasm_memory_threshold,
+        } = settings;
+
+        // Flatten the nested `controllers` field. More specifically, get rid of the intermediate
+        // `message Controllers { repeated T controllers = 1}` message and replace it with its inner
+        // `controllers` field. The `Controllers` message is only used to work around the fact that
+        // Protocol Buffers cannot generate `Option<Vec<T>>``.
+        let controllers = controllers.map(|controllers| controllers.controllers);
+
+        let log_visibility = log_visibility.map(SelfDescribingProstEnum::<LogVisibility>::new);
+
+        ValueBuilder::new()
+            .add_field("controllers", controllers)
+            .add_field("compute_allocation", compute_allocation)
+            .add_field("memory_allocation", memory_allocation)
+            .add_field("freezing_threshold", freezing_threshold)
+            .add_field("wasm_memory_limit", wasm_memory_limit)
+            .add_field("wasm_memory_threshold", wasm_memory_threshold)
+            .add_field("log_visibility", log_visibility)
+            .build()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
-    use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
+    use crate::{
+        pb::v1::{
+            governance_error::ErrorType,
+            update_canister_settings::{CanisterSettings, Controllers},
+        },
+        proposals::self_describing::LocallyDescribableProposalAction,
+    };
+
     use candid::Decode;
     use ic_base_types::CanisterId;
     use ic_nns_constants::{LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
+    use ic_nns_governance_api::SelfDescribingValue;
+    use maplit::hashmap;
 
     #[test]
     fn test_invalid_update_canister_settings() {
@@ -158,9 +220,7 @@ mod tests {
                     let error_message = error.error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
-                        "{} not found in {:#?}",
-                        keyword,
-                        error_message
+                        "{keyword} not found in {error_message:#?}"
                     );
                 }
             };
@@ -223,6 +283,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -257,6 +318,7 @@ mod tests {
                     freezing_threshold: Some(Nat::from(100u64)),
                     log_visibility: Some(RootLogVisibility::Public),
                     reserved_cycles_limit: None,
+                    wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
                 }
             }
         );
@@ -273,6 +335,7 @@ mod tests {
                 }),
                 memory_allocation: Some(1 << 32),
                 wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
                 compute_allocation: Some(10),
                 freezing_threshold: Some(100),
                 log_visibility: Some(LogVisibility::Public as i32),
@@ -305,6 +368,7 @@ mod tests {
                 freezing_threshold: Some(Nat::from(100u64)),
                 log_visibility: Some(RootLogVisibility::Public),
                 reserved_cycles_limit: None,
+                wasm_memory_threshold: Some(Nat::from(1u64 << 30)),
             }
         );
     }
@@ -316,7 +380,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 
@@ -332,5 +396,79 @@ mod tests {
             assert_eq!(update_canister_settings.validate(), Ok(()));
             assert_eq!(update_canister_settings.valid_topic(), Ok(expected_topic),);
         }
+    }
+
+    #[test]
+    fn test_update_canister_settings_to_self_describing() {
+        use SelfDescribingValue::*;
+
+        let update_canister_settings = UpdateCanisterSettings {
+            canister_id: Some(SNS_WASM_CANISTER_ID.get()),
+            settings: Some(CanisterSettings {
+                controllers: Some(Controllers {
+                    controllers: vec![ROOT_CANISTER_ID.get(), LEDGER_CANISTER_ID.get()],
+                }),
+                memory_allocation: Some(1 << 32),
+                wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
+                compute_allocation: Some(10),
+                freezing_threshold: Some(100),
+                log_visibility: Some(LogVisibility::Public as i32),
+            }),
+        };
+
+        let action = update_canister_settings.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => Text(SNS_WASM_CANISTER_ID.get().to_string()),
+                "settings".to_string() => Map(hashmap! {
+                    "controllers".to_string() => Array(vec![
+                        Text(ROOT_CANISTER_ID.get().to_string()),
+                        Text(LEDGER_CANISTER_ID.get().to_string()),
+                    ]),
+                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 32)),
+                    "wasm_memory_limit".to_string() => Nat(candid::Nat::from(1_u64 << 31)),
+                    "wasm_memory_threshold".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
+                    "compute_allocation".to_string() => Nat(candid::Nat::from(10_u64)),
+                    "freezing_threshold".to_string() => Nat(candid::Nat::from(100_u64)),
+                    "log_visibility".to_string() => Text("Public".to_string()),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn test_update_canister_settings_to_self_describing_minimal() {
+        use SelfDescribingValue::*;
+
+        let update_canister_settings = UpdateCanisterSettings {
+            canister_id: Some(LEDGER_CANISTER_ID.get()),
+            settings: Some(CanisterSettings {
+                memory_allocation: Some(1 << 30),
+                ..Default::default()
+            }),
+        };
+
+        let action = update_canister_settings.to_self_describing_action();
+        let value = SelfDescribingValue::from(action.value.unwrap());
+
+        assert_eq!(
+            value,
+            SelfDescribingValue::Map(hashmap! {
+                "canister_id".to_string() => Text(LEDGER_CANISTER_ID.get().to_string()),
+                "settings".to_string() => Map(hashmap! {
+                    "controllers".to_string() => Null,
+                    "memory_allocation".to_string() => Nat(candid::Nat::from(1_u64 << 30)),
+                    "compute_allocation".to_string() => Null,
+                    "freezing_threshold".to_string() => Null,
+                    "wasm_memory_limit".to_string() => Null,
+                    "wasm_memory_threshold".to_string() => Null,
+                    "log_visibility".to_string() => Null,
+                }),
+            })
+        );
     }
 }

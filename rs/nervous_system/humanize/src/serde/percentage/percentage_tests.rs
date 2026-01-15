@@ -14,7 +14,7 @@ fn test_round_trip() {
             homelessness_rate: Percentage,
         }
 
-        let yaml = format!("homelessness_rate: {}", original_percentage_str);
+        let yaml = format!("homelessness_rate: {original_percentage_str}");
         let t: T = serde_yaml::from_str(&yaml).unwrap();
 
         assert_eq!(
@@ -24,13 +24,12 @@ fn test_round_trip() {
                     basis_points: Some(expected_basis_points),
                 }
             },
-            "original_percentage_str = {:?}",
-            original_percentage_str,
+            "original_percentage_str = {original_percentage_str:?}",
         );
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("homelessness_rate: {}\n", expected_formatted_str),
+            format!("homelessness_rate: {expected_formatted_str}\n"),
             "original_percentage_str = {:?}",
             original_percentage_str,
         );

@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use serde::Serialize;
 
 /// DEPRECATED
@@ -52,6 +53,6 @@ pub struct BlessReplicaVersionPayload {
     /// into a Candid message without breaking backward compatibility.
     pub release_package_urls: Option<Vec<String>>,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    pub guest_launch_measurement_sha256_hex: Option<String>,
+    /// The SEV-SNP measurements that belong to this release
+    pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 }

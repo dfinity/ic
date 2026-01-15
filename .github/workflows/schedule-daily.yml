@@ -1,281 +1,224 @@
 name: Schedule Daily
+
 on:
   schedule:
-    - cron: "0 1 * * *"
+    # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
+    # and the Release Testing workflow triggered by the Schedule RC workflow.
+    - cron: "0 0 * * *"
   workflow_dispatch:
+
 env:
-  BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_COMMIT_SHA: ${{ github.sha }}
   CI_JOB_NAME: ${{ github.job }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_RUN_ID: ${{ github.run_id }}
-  BUILDEVENT_DATASET: "github-ci-dfinity"
+
 jobs:
+  fi-tests-nightly:
+    name: Bazel Test FI Nightly
+    runs-on: &dind-large-setup
+      labels: dind-large
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:4a80139e1172d1eb886db6511ac4ce8bc151c8904ce06606595f15f18e163faf
+      options: >-
+        -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    timeout-minutes: 720 # 12 hours
+    environment: Nightly Tests
+    steps:
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+      - &backup-pod-access
+        name: Set up backup pod access
+        run: |
+          # The following adds the SSH private key to the ssh-agent such that CI can SSH into the backup pod.
+          if [ -z "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -s)"
+            ssh-add - <<'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY_BACKUP_POD }}
+          EOF
+            echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> "$GITHUB_ENV"
+          fi
+
+          rm -rf ~/.ssh
+          mkdir -p ~/.ssh
+          chmod 0700 ~/.ssh
+          echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
+      - name: Run FI Tests Nightly
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=fi_tests_nightly \
+              //rs/ledger_suite/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going --test_timeout=43200
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 120
-    runs-on:
-      group: zh1
-      labels: dind-large
+    runs-on: *dind-large-setup
+    container: *container-setup
+    environment: Nightly Tests
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+      - *checkout
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
           echo "$ZH2_DLL01_CSV_SECRETS" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
+
+          launch_bare_metal() {
+
+            # shellcheck disable=SC2046,SC2086
+            bazel --output_base=/var/tmp/bazel-output run \
+              //ic-os/setupos/envs/dev:launch_bare_metal -- \
+                --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
+                --csv_filename "$(realpath file1)" \
+                --file_share_ssh_key "$(realpath file2)" \
+                --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
+                --file_share_username ci_interim \
+                --ci_mode \
+                $@
+          }
 
           # Run bare metal installation test
-          # shellcheck disable=SC2046,SC2086
-          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
-              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-              --csv_filename "$(realpath file1)" \
-              --file_share_ssh_key "$(realpath file2)" \
-              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-              --file_share_username ci_interim \
-              --hsm \
-              --ci_mode
+          launch_bare_metal --hsm
 
           # Run bare metal node performance benchmarks
-          # shellcheck disable=SC2046,SC2086
-          bazel ${BAZEL_STARTUP_ARGS} run ${BAZEL_CI_CONFIG} \
-            //ic-os/setupos/envs/dev:launch_bare_metal -- \
-              --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-              --csv_filename "$(realpath file1)" \
-              --file_share_ssh_key "$(realpath file2)" \
-              --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
-              --file_share_username ci_interim \
-              --ci_mode \
-              --benchmark
+          launch_bare_metal --benchmark
+
+          # Run bare metal node hostOS metrics check
+          launch_bare_metal --check_hostos_metrics
+
           bazel clean
         env:
-          BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
           ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
-  fi-tests-nightly:
-    name: Bazel Test FI Nightly
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 720 # 12 hours
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run FI Tests Nightly
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/ledger_suite/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=fi_tests_nightly --test_env=SSH_AUTH_SOCK --test_timeout=43200"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+
   nns-tests-nightly:
     name: Bazel Test NNS Nightly
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 20
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 30
+    environment: Nightly Tests
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
+      - *checkout
+      - *backup-pod-access
       - name: Run NNS Tests Nightly
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//rs/nns/..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          BAZEL_EXTRA_ARGS: "--keep_going --test_tag_filters=nns_tests_nightly --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
-  system-tests-benchmarks-nightly:
-    name: Bazel System Test Benchmarks
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 480
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Set Benchmark Targets
-        shell: bash
-        run: |
-          set -xeuo pipefail
-          echo "BENCHMARK_TARGETS=$(bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns | tr '\n' ' ')" >> $GITHUB_ENV
-      - name: Test System Test Benchmarks
-        id: bazel-system-test-benchmarks
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: ${{ env.BENCHMARK_TARGETS }}
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          # note: there's just one performance cluster, so the job can't be parallelized
-          BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_benchmark --//bazel:enable_upload_perf_systest_results=True --keep_going --jobs 1"
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=nns_tests_nightly \
+              //... \
+              --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+              --keep_going
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
       - name: Post Slack Notification
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
         with:
-          channel-id: eng-crypto-alerts
+          channel-id: eng-nns
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
-  dependency-scan-nightly:
-    name: Dependency Scan Nightly
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 60
-    permissions:
-      actions: write
-    env:
-      SHELL_WRAPPER: "/usr/bin/time"
-      CARGO_WASMPACK_VERSION: "0.12.1"
-      DEFAULT_NODE_VERSION: "20"
-      CI_PROJECT_PATH: ${{ github.repository }}
-      CI_PIPELINE_ID: ${{ github.run_id }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-      SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
-      GITHUB_REF: ${{ github.ref }}
-      REPO_NAME: ${{ github.repository }}
+
+  pocketic-tests-nightly:
+    name: Bazel Test PocketIC Nightly
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - *checkout
+      - name: Run PocketIC Tests Nightly
+        uses: ./.github/actions/bazel
         with:
-          python-version: "3.12"
-      - name: Setup environment deps
-        id: setup-environment-deps
-        shell: bash
-        run: |
-          # Ignore externally-managed-environment pip error, install packages system-wide.
-          PIP_BREAK_SYSTEM_PACKAGES=1 pip3 install --ignore-installed -r requirements.txt
-          cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
-          source "${NVM_DIR}/nvm.sh"
-          nvm use ${DEFAULT_NODE_VERSION}
-          node --version
-          npm --version
-      - name: Run Dependency Scan Nightly
-        id: dependency-scan-nightly
-        shell: bash
-        run: |
-          set -euo pipefail
-          export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
-          cd ci/src/dependencies/
-          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
-          $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=pocketic_tests_nightly \
+              //rs/pocket_ic_server/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: pocket-ic
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
+  system-tests-benchmarks-nightly:
+    name: Bazel System Test Benchmarks
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 480
+    steps:
+      - *checkout
+      - name: Test System Test Benchmarks
+        id: bazel-system-test-benchmarks
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            set -euo pipefail
+
+            # NOTE: we use `bazel query` to list the targets explicitly because (at the
+            # time of writing) benchmark targets are labeled as manual and would not be
+            # picked up by e.g. `bazel test //...`
+            target_pattern_file=$(mktemp)
+            bazel query 'attr(tags, system_test_benchmark, //rs/...)' | grep -v head_nns > "$target_pattern_file"
+
+            echo "inferred system test benchmark targets:"
+            cat "$target_pattern_file"
+
+            # note: there's just one performance cluster, so the job can't be parallelized (hence --jobs=1)
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=system_test_benchmark \
+              --//bazel:enable_upload_perf_systest_results=True \
+              --target_pattern_file="$target_pattern_file" \
+              --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
+              --keep_going --jobs=1
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: eng-ic-benchmark-alerts
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
   # CI job is also executed in PR on use of 'CI_COVERAGE' label
   bazel-test-coverage:
     name: Bazel Test Coverage
-    runs-on:
-      group: zh1
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp
-    timeout-minutes: 120
+    runs-on: *dind-large-setup
+    container: *container-setup
+    if: false
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - *checkout
       - name: Run Bazel Test Coverage
         shell: bash
-        run: |
-          [ -n "${NODE_NAME:-}" ] && echo "Node: $NODE_NAME"
-          ./ci/scripts/bazel-coverage.sh
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        # TODO: enable when bazel coverage is fixed
+        #run: ./ci/scripts/bazel-coverage.sh
+        run: echo "Disabled until fixed"
+      - name: Upload bazel-coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bazel-coverage
+          retention-days: 1
+          if-no-files-found: ignore
+          compression-level: 9
+          path: |
+            cov_html.zip
+
+  pocket-ic-tests-windows:
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

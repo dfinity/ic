@@ -4,9 +4,9 @@ import Prim "mo:prim";
 import Root "canister:root";
 import Governance "canister:governance";
 
-actor {
-    private let governanceCanister : Principal = Prim.principalOfActor Governance;
-    private let root : Principal = Prim.principalOfActor Root;
+persistent actor {
+    private transient let governanceCanister : Principal = Prim.principalOfActor Governance;
+    private transient let root : Principal = Prim.principalOfActor Root;
 
     type UpgradeRootProposalPayload = {
       wasm_module : Blob;
@@ -31,11 +31,12 @@ actor {
       reserved_cycles_limit: ?Nat;
       wasm_memory_limit: ?Nat;
       log_visibility: ?LogVisibility;
+      wasm_memory_threshold: ?Nat;
     };
 
     // IC00 is the management canister. We rely on it for the four
     // fundamental methods as listed below.
-    private let ic00 = actor "aaaaa-aa" : actor {
+    private transient let ic00 = actor "aaaaa-aa" : actor {
       install_code : {
         mode : { #install; #reinstall; #upgrade };
         canister_id : Principal;

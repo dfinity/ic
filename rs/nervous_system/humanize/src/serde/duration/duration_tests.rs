@@ -14,7 +14,7 @@ fn test_round_trip() {
             duration: Duration,
         }
 
-        let yaml = format!("duration: {}", original_duration_str);
+        let yaml = format!("duration: {original_duration_str}");
         let t: T = serde_yaml::from_str(&yaml).unwrap();
 
         assert_eq!(
@@ -24,13 +24,12 @@ fn test_round_trip() {
                     seconds: Some(expected_seconds),
                 }
             },
-            "original_duration_str = {:?}",
-            original_duration_str,
+            "original_duration_str = {original_duration_str:?}",
         );
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("duration: {}\n", expected_formatted_str),
+            format!("duration: {expected_formatted_str}\n"),
             "original_duration_str = {:?}",
             original_duration_str,
         );

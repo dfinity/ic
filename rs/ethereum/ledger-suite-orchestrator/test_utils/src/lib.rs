@@ -1,5 +1,5 @@
+#![allow(deprecated)]
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
-use crate::metrics::MetricsAssert;
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -11,19 +11,16 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types::{
-    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
-    Payload,
-};
+use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs};
+use ic_management_canister_types_private::{CanisterStatusResultV2, CanisterStatusType};
+use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
-use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
 pub use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
 pub use icrc_ledger_types::icrc1::account::Account as LedgerAccount;
 use std::sync::Arc;
 
 pub mod flow;
-pub mod metrics;
 pub mod universal_canister;
 
 const MAX_TICKS: usize = 10;
@@ -166,7 +163,7 @@ impl LedgerSuiteOrchestrator {
     pub fn assert_managed_canisters(self, contract: &Erc20Contract) -> ManagedCanistersAssert {
         let canister_ids = self
             .call_orchestrator_canister_ids(contract)
-            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {:?}", contract));
+            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {contract:?}"));
 
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
@@ -305,9 +302,8 @@ impl LedgerSuiteOrchestrator {
         .unwrap()
     }
 
-    pub fn check_metrics(self) -> MetricsAssert<Self> {
-        let canister_id = self.ledger_suite_orchestrator_id;
-        MetricsAssert::from_querying_metrics(self, canister_id)
+    pub fn check_metrics(self) -> MetricsAssert<LedgerSuiteOrchestrator> {
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn wait_for<T, E, F>(&self, f: F) -> T
@@ -325,10 +321,7 @@ impl LedgerSuiteOrchestrator {
                 }
             }
         }
-        panic!(
-            "Failed to get result after {} ticks: {:?}",
-            MAX_TICKS, last_error
-        );
+        panic!("Failed to get result after {MAX_TICKS} ticks: {last_error:?}");
     }
 
     pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
@@ -341,11 +334,18 @@ impl LedgerSuiteOrchestrator {
                 Ok(())
             } else {
                 Err(format!(
-                    "Canister {} is not ready {:?}",
-                    canister_id, ledger_status
+                    "Canister {canister_id} is not ready {ledger_status:?}"
                 ))
             }
         });
+    }
+}
+
+impl CanisterHttpQuery<UserError> for LedgerSuiteOrchestrator {
+    fn http_query(&self, request: Vec<u8>) -> Result<Vec<u8>, UserError> {
+        self.as_ref()
+            .query(self.ledger_suite_orchestrator_id, "http_request", request)
+            .map(assert_reply)
     }
 }
 
@@ -365,51 +365,38 @@ pub fn new_state_machine() -> StateMachine {
 }
 
 pub fn ledger_suite_orchestrator_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator",
-        &[],
-    )
+    let wasm_path = std::env::var("LEDGER_SUITE_ORCHESTRATOR_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_suite_orchestrator_get_blocks_disabled_wasm() -> Vec<u8> {
-    load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_suite_orchestrator_get_blocks_disabled",
-        &[],
-    )
+    let wasm_path =
+        std::env::var("LEDGER_SUITE_ORCHESTRATOR_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
 }
 
 pub fn ledger_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 fn ledger_get_blocks_disabled_wasm() -> LedgerWasm {
-    LedgerWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_canister_get_blocks_disabled",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_CANISTER_GET_BLOCKS_DISABLED_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    LedgerWasm::from(wasm)
 }
 
 pub fn index_wasm() -> IndexWasm {
-    IndexWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "index_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("INDEX_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    IndexWasm::from(wasm)
 }
 
 fn archive_wasm() -> ArchiveWasm {
-    ArchiveWasm::from(load_wasm(
-        std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "ledger_archive_node_canister",
-        &[],
-    ))
+    let wasm_path = std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap();
+    let wasm = std::fs::read(wasm_path).unwrap();
+    ArchiveWasm::from(wasm)
 }
 
 fn is_gzipped_blob(blob: &[u8]) -> bool {
@@ -504,7 +491,7 @@ pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }
@@ -519,16 +506,15 @@ pub fn out_of_band_upgrade<T: AsRef<StateMachine>>(
         .execute_ingress_as(
             controller,
             CanisterId::ic_00(),
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Upgrade,
-                target,
-                wasm,
-                Encode!(&()).unwrap(),
-                None,
-                None,
-            )
-            .encode(),
+            "install_code",
+            Encode!(&InstallCodeArgs {
+                mode: CanisterInstallMode::Upgrade(None),
+                canister_id: target.into(),
+                wasm_module: wasm,
+                arg: Encode!(&()).unwrap(),
+                sender_canister_version: None,
+            })
+            .unwrap(),
         )
         .map(|_| ())
 }

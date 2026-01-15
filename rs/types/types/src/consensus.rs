@@ -1,21 +1,23 @@
 //! Defines types used internally by consensus components.
+
 use crate::{
     artifact::ConsensusMessageId,
     batch::{BatchPayload, ValidationContext},
+    consensus::dkg::DkgPayload,
     crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
     replica_version::ReplicaVersion,
     signature::*,
     *,
 };
-use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
+use ic_base_types::subnet_id_try_from_option;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
@@ -888,7 +890,7 @@ impl TryFrom<pb::EquivocationProof> for EquivocationProof {
             signer: node_id_try_from_option(proof.signer)?,
             version: ReplicaVersion::try_from(proof.version)?,
             height: Height::new(proof.height),
-            subnet_id: subnet_id_try_from_option(proof.subnet_id)?,
+            subnet_id: subnet_id_try_from_option(proof.subnet_id, "EquivocationProof::subnet_id")?,
             hash1: CryptoHashOf::new(CryptoHash(proof.hash1)),
             signature1: BasicSigOf::new(BasicSig(proof.signature1)),
             hash2: CryptoHashOf::new(CryptoHash(proof.hash2)),
@@ -1295,6 +1297,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
+            vetkd_payload_bytes,
             idkg_payload,
         ) = if payload.is_summary() {
             (
@@ -1302,6 +1305,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
+                vec![],
                 vec![],
                 vec![],
                 payload.as_summary().idkg.as_ref().map(|idkg| idkg.into()),
@@ -1315,6 +1319,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 batch.canister_http.clone(),
                 batch.query_stats.clone(),
+                batch.vetkd.clone(),
                 payload.as_data().idkg.as_ref().map(|idkg| idkg.into()),
             )
         };
@@ -1332,6 +1337,7 @@ impl From<&Block> for pb::Block {
             self_validating_payload,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
+            vetkd_payload_bytes,
             idkg_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1362,10 +1368,11 @@ impl TryFrom<pb::Block> for Block {
                 .unwrap_or_default(),
             canister_http: block.canister_http_payload_bytes,
             query_stats: block.query_stats_payload_bytes,
+            vetkd: block.vetkd_payload_bytes,
         };
 
         let payload = match dkg_payload {
-            dkg::Payload::Summary(summary) => {
+            DkgPayload::Summary(summary) => {
                 if !batch.is_empty() {
                     return Err(ProxyDecodeError::Other(String::from(
                         "Summary block has non-empty batch payload.",
@@ -1388,7 +1395,7 @@ impl TryFrom<pb::Block> for Block {
 
                 BlockPayload::Summary(SummaryPayload { dkg: summary, idkg })
             }
-            dkg::Payload::Data(dkg) => {
+            DkgPayload::Data(dkg) => {
                 let idkg = block
                     .idkg_payload
                     .as_ref()

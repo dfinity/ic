@@ -1,16 +1,17 @@
+#![allow(deprecated)]
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_suite_orchestrator::candid::{
     AddErc20Arg, CyclesManagement, LedgerInitArg, LedgerSuiteVersion, ManagedCanisterStatus,
     ManagedCanisters, ManagedLedgerSuite, OrchestratorArg, OrchestratorInfo,
     UpdateCyclesManagement, UpgradeArg,
 };
 use ic_ledger_suite_orchestrator_test_utils::{
+    GIT_COMMIT_HASH_UPGRADE, LedgerSuiteOrchestrator, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
     assert_reply, cketh_installed_canisters, default_init_arg, ledger_suite_orchestrator_wasm,
-    new_state_machine, usdc, usdc_erc20_contract, usdt, LedgerSuiteOrchestrator,
-    GIT_COMMIT_HASH_UPGRADE, MINTER_PRINCIPAL, NNS_ROOT_PRINCIPAL,
+    new_state_machine, usdc, usdc_erc20_contract, usdt,
 };
 use ic_state_machine_tests::ErrorCode;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as LedgerMetadataValue;
@@ -36,12 +37,15 @@ fn should_spawn_ledger_with_correct_init_args() {
     };
 
     let orchestrator = LedgerSuiteOrchestrator::default();
-    orchestrator
+    let managed_canisters_assert = orchestrator
         .add_erc20_token(AddErc20Arg {
             contract: usdc_erc20_contract(),
             ledger_init_arg: realistic_usdc_ledger_init_arg,
         })
-        .expect_new_ledger_and_index_canisters()
+        .expect_new_ledger_and_index_canisters();
+    let index_id = managed_canisters_assert.canister_ids.index.unwrap();
+    assert_eq!(index_id, "ryjl3-tyaaa-aaaaa-aaaba-cai".parse().unwrap());
+    managed_canisters_assert
         .assert_ledger_icrc1_fee(2_000_000_000_000_u64)
         .assert_ledger_icrc1_decimals(6_u8)
         .assert_ledger_icrc1_name("USD Coin")
@@ -75,6 +79,18 @@ fn should_spawn_ledger_with_correct_init_args() {
             (
                 "icrc1:max_memo_length".to_string(),
                 LedgerMetadataValue::from(80_u64),
+            ),
+            (
+                "icrc103:public_allowances".to_string(),
+                LedgerMetadataValue::from("true"),
+            ),
+            (
+                "icrc103:max_take_value".to_string(),
+                LedgerMetadataValue::from(500u64),
+            ),
+            (
+                "icrc106:index_principal".to_string(),
+                LedgerMetadataValue::from("ryjl3-tyaaa-aaaaa-aaaba-cai"),
             ),
         ]);
 }
@@ -138,7 +154,8 @@ fn should_discover_new_archive_and_top_up() {
         .expect_new_ledger_and_index_canisters()
         .assert_ledger_has_cycles(200_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+        .into()
         .trigger_creation_of_archive()
         .assert_ledger_has_cycles(100_000_000_000_000_u128)
         .assert_all_archives_have_cycles(100_000_000_000_000_u128);
@@ -149,14 +166,15 @@ fn should_discover_new_archive_and_top_up() {
     let managed_canisters = managed_canisters
         .assert_all_archives_have_cycles(100_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1")
+        .into();
 
     managed_canisters.setup.advance_time_for_periodic_tasks();
 
     managed_canisters
         .assert_all_archives_have_cycles(110_000_000_000_000_u128)
         .check_metrics()
-        .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+        .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
 }
 
 #[test]
@@ -535,13 +553,14 @@ mod upgrade {
     use ic_ledger_suite_orchestrator::candid::{InstalledCanister, InstalledLedgerSuite};
     use ic_ledger_suite_orchestrator::state::WasmHash;
     use ic_ledger_suite_orchestrator_test_utils::universal_canister::{
-        CanisterChangeDetails, CanisterInfoResponse, CanisterInstallMode, UniversalCanister,
+        CanisterInfoResult, ChangeDetails, CodeDeploymentMode, CodeDeploymentRecord,
+        UniversalCanister,
     };
     use ic_ledger_suite_orchestrator_test_utils::{
-        default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm, tweak_ledger_suite_wasms,
-        usdt_erc20_contract, GIT_COMMIT_HASH_UPGRADE,
+        GIT_COMMIT_HASH_UPGRADE, default_init_arg, ledger_suite_orchestrator_wasm, ledger_wasm,
+        tweak_ledger_suite_wasms, usdt_erc20_contract,
     };
-    use ic_management_canister_types::{CanisterSettingsArgsBuilder, CanisterStatusType};
+    use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusType};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
     use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
     use proptest::prelude::Rng;
@@ -675,17 +694,18 @@ mod upgrade {
         assert_ne!(tweak_index_wasm_hash, embedded_index_wasm_hash);
 
         let has_last_been_upgraded_to =
-            |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+            |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
                 let changes: Vec<_> = canister_info
-                    .changes()
+                    .recent_changes
+                    .clone()
                     .into_iter()
-                    .map(|c| c.details().clone())
+                    .map(|c| c.details.clone())
                     .collect();
-                let expected_change = CanisterChangeDetails::code_deployment(
-                    CanisterInstallMode::Upgrade,
-                    wasm_hash.clone().into(),
-                );
-                changes.last() == Some(&expected_change)
+                let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                    mode: CodeDeploymentMode::Upgrade,
+                    module_hash: wasm_hash.clone().as_ref().to_vec(),
+                });
+                changes.last() == Some(&Some(expected_change))
             };
 
         let orchestrator = orchestrator
@@ -747,37 +767,38 @@ mod upgrade {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
 
-        let has_only_install_change = |canister_info: &CanisterInfoResponse,
-                                       wasm_hash: &WasmHash| {
+        let has_only_install_change = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            matches!(
-                changes.first(),
-                Some(CanisterChangeDetails::CanisterCreation(_))
-            ) && matches!(changes.get(1), Some(x) if x == &CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Install,
-                wasm_hash.clone().into(),
-            )) && matches!(
-                changes.get(2), //ledger will change controller of spawned off archive
-                None | Some(CanisterChangeDetails::CanisterControllersChange(_))
-            ) && changes.len() <= 3
+            matches!(changes.first(), Some(Some(ChangeDetails::Creation(_))))
+                && matches!(changes.get(1), Some(Some(x)) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                    mode: CodeDeploymentMode::Install,
+                    module_hash: wasm_hash.clone().as_ref().to_vec(),
+                }))
+                && matches!(
+                    changes.get(2), //ledger will change controller of spawned off archive
+                    None | Some(Some(ChangeDetails::ControllersChange(_)))
+                )
+                && changes.len() <= 3
         };
 
-        let has_been_upgraded_to = |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+        let has_been_upgraded_to = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            let expected_change = CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Upgrade,
-                wasm_hash.clone().into(),
-            );
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                mode: CodeDeploymentMode::Upgrade,
+                module_hash: wasm_hash.clone().as_ref().to_vec(),
+            });
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 
@@ -899,7 +920,7 @@ mod upgrade {
     #[test]
     fn should_upgrade_when_some_canister_are_stopped_to_simulate_previous_upgrade_failure() {
         let rng = &mut reproducible_rng();
-        let [stop_ledger, stop_index] = rng.gen::<[bool; 2]>();
+        let [stop_ledger, stop_index] = rng.r#gen::<[bool; 2]>();
         test_when_canisters_stopped(stop_ledger, stop_index);
 
         fn test_when_canisters_stopped(stop_ledger: bool, stop_index: bool) {
@@ -969,18 +990,19 @@ mod upgrade {
         let embedded_index_wasm_hash = orchestrator.embedded_index_wasm_hash.clone();
         let embedded_archive_wasm_hash = orchestrator.embedded_archive_wasm_hash.clone();
 
-        let has_been_upgraded_to = |canister_info: &CanisterInfoResponse, wasm_hash: &WasmHash| {
+        let has_been_upgraded_to = |canister_info: &CanisterInfoResult, wasm_hash: &WasmHash| {
             let changes: Vec<_> = canister_info
-                .changes()
+                .recent_changes
+                .clone()
                 .into_iter()
-                .map(|c| c.details().clone())
+                .map(|c| c.details.clone())
                 .collect();
-            let expected_change = CanisterChangeDetails::code_deployment(
-                CanisterInstallMode::Upgrade,
-                wasm_hash.clone().into(),
-            );
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            let expected_change = ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+                mode: CodeDeploymentMode::Upgrade,
+                module_hash: wasm_hash.clone().as_ref().to_vec(),
+            });
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 
@@ -990,7 +1012,8 @@ mod upgrade {
             .assert_ledger_has_wasm_hash(embedded_ledger_wasm_hash.clone())
             .assert_index_has_wasm_hash(embedded_index_wasm_hash.clone())
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         // Run task DiscoverArchives pre-emptively to ensure it's not run during upgrade
         // so that we can test the case where the orchestrator doesn't know about the archive
@@ -998,11 +1021,13 @@ mod upgrade {
 
         let managed_canisters = managed_canisters
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .trigger_creation_of_archive()
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into();
 
         let orchestrator = managed_canisters.setup.upgrade_ledger_suite_orchestrator(
             ledger_suite_orchestrator_wasm(),
@@ -1026,7 +1051,8 @@ mod upgrade {
             })
             .check_metrics()
             // the orchestrator is not yet aware of the archive
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 0")
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 0")
+            .into()
             .setup;
 
         orchestrator.env.tick();
@@ -1038,7 +1064,7 @@ mod upgrade {
                 has_been_upgraded_to(t, &embedded_archive_wasm_hash)
             })
             .check_metrics()
-            .assert_contains_metric("ledger_suite_orchestrator_managed_archives 1");
+            .assert_contains_metric_matching("ledger_suite_orchestrator_managed_archives 1");
     }
 
     #[test]
@@ -1109,7 +1135,7 @@ mod upgrade {
         assert_eq!(
             universal_canister
                 .canister_info(CanisterId::try_from(PrincipalId(index.canister_id)).unwrap())
-                .module_hash()
+                .module_hash
                 .unwrap()
                 .as_slice(),
             embedded_index_wasm_hash.as_ref()
@@ -1117,7 +1143,7 @@ mod upgrade {
         assert_eq!(
             universal_canister
                 .canister_info(CanisterId::try_from(PrincipalId(ledger.canister_id)).unwrap())
-                .module_hash()
+                .module_hash
                 .unwrap()
                 .as_slice(),
             embedded_ledger_wasm_hash.as_ref()

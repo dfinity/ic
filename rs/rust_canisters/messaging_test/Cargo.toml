@@ -1,0 +1,25 @@
+[package]
+name = "messaging-test"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "messaging-test-canister"
+path = "src/main.rs"
+
+[dependencies]
+candid = { workspace = true }
+futures = { workspace = true }
+ic-cdk = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+canister-test = { path = "../canister_test" }
+ic-state-machine-tests = { path = "../../state_machine_tests" }
+ic-types = { path = "../../types/types" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+messaging-test-utils = { path = "./utils" }
+proptest = { workspace = true }
+test-strategy = "0.4.0"

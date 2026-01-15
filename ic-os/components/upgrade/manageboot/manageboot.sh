@@ -4,6 +4,7 @@ set -e
 
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
+source /opt/ic/bin/boot-state.sh
 
 SCRIPT="$(basename "$0")[$$]"
 VERSION_FILE="/opt/ic/share/version.txt"
@@ -18,46 +19,6 @@ get_version_noreport() {
     fi
 }
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
-}
-
-# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
-#
-# Arguments:
-# $1 - name of grubenv file
-write_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
-    (
-        echo "# GRUB Environment Block"
-        echo boot_alternative="$boot_alternative"
-        echo boot_cycle="$boot_cycle"
-        # Fill to make sure we will have 1024 bytes
-        echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}"
-    # Truncate to arrive at precisely 1024 bytes
-    truncate --size=1024 "${TMP_FILE}"
-    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
-    rm "${TMP_FILE}"
-}
-
 # Convert A -> B and B -> A
 swap_alternative() {
     if [ "$1" == B ]; then
@@ -68,12 +29,12 @@ swap_alternative() {
 }
 
 declare -A GUESTOS_PARTITIONS=(
-    [A_boot]="/dev/vda4"
-    [B_boot]="/dev/vda7"
-    [A_root]="/dev/vda5"
-    [B_root]="/dev/vda8"
-    [A_var]="/dev/vda6"
-    [B_var]="/dev/vda9"
+    [A_boot]="/dev/disk/by-partuuid/ddf618fe-7244-b446-a175-3296e6b9d02e"
+    [B_boot]="/dev/disk/by-partuuid/d5214e4f-f7b0-b945-9a9b-52b9188df4c5"
+    [A_root]="/dev/disk/by-partuuid/7c0a626e-e5ea-e543-b5c5-300eb8304db7"
+    [B_root]="/dev/disk/by-partuuid/a78bc3a8-376c-054a-96e7-3904b915d0c5"
+    [A_var]="/dev/disk/by-partuuid/22d2f5a6-1e39-d247-81cf-90c95c113e21"
+    [B_var]="/dev/disk/by-partuuid/2237d1d1-ce96-584e-8ec5-8ae6661faae9"
 )
 
 declare -A HOSTOS_PARTITIONS=(
@@ -103,10 +64,12 @@ get_partition() {
 usage() {
     cat <<EOF
 Usage:
-  manageboot.sh [ -f grubenvfile] system_type action
+  manageboot.sh [ -f grubenvfile] [--nocheck] system_type action
 
   -f specify alternative grubenv file (defaults to /boot/grub/grubenv).
      Primarily useful for testing
+
+  --nocheck disable safety checks, allows upgrading from an unstable system, use with care!
 
   Arguments:
     system_type - System type (guestos or hostos)
@@ -167,18 +130,22 @@ fi
 
 # Parsing options first
 GRUBENV_FILE=/boot/grub/grubenv
-while getopts ":f:" OPT; do
-    case "${OPT}" in
-        f)
-            GRUBENV_FILE="${OPTARG}"
+NOCHECK=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -f)
+            GRUBENV_FILE="$2"
+            shift 2
+            ;;
+        --nocheck)
+            NOCHECK=1
+            shift
             ;;
         *)
-            usage >&2
-            exit 1
+            break
             ;;
     esac
 done
-shift $((OPTIND - 1))
 
 SYSTEM_TYPE="$1"
 ACTION="$2"
@@ -190,14 +157,17 @@ if [ -z "${SYSTEM_TYPE}" ] || [ -z "${ACTION}" ]; then
 fi
 
 if [[ "${SYSTEM_TYPE}" != "guestos" && "${SYSTEM_TYPE}" != "hostos" ]]; then
-    echo "Invalid system type. Must be 'guestos' or 'hostos'."
+    write_log "Invalid system type. Must be 'guestos' or 'hostos'."
     exit 1
 fi
 
 get_version_noreport
 
 # Read current state
-read_grubenv "${GRUBENV_FILE}"
+boot_alternative="$(read_boot_alternative_from_kernel_cmdline)"
+boot_cycle="$(read_boot_cycle_from_grubenv "${GRUBENV_FILE}")"
+
+write_log "${SYSTEM_TYPE} read boot_alternative from kernel cmdline: ${boot_alternative}, boot_cycle from grubenv: ${boot_cycle}"
 
 CURRENT_ALTERNATIVE="${boot_alternative}"
 NEXT_BOOT="${CURRENT_ALTERNATIVE}"
@@ -205,8 +175,10 @@ IS_STABLE=1
 if [ "${boot_cycle}" == "first_boot" ]; then
     # If the next system to be booted according to bootloader has never been
     # booted yet, then we must still be in the other system.
+    write_log "WARNING: ${SYSTEM_TYPE} detected first_boot state - adjusting CURRENT_ALTERNATIVE from ${CURRENT_ALTERNATIVE} to $(swap_alternative "${CURRENT_ALTERNATIVE}")"
     CURRENT_ALTERNATIVE=$(swap_alternative "${CURRENT_ALTERNATIVE}")
     IS_STABLE=0
+    write_log "${SYSTEM_TYPE} system marked as unstable due to first_boot state"
 
     write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
@@ -217,11 +189,13 @@ fi
 if [ "${boot_cycle}" == "failsafe_check" ]; then
     # If the system booted is marked as "failsafe_check" then bootloader
     # will revert to the other system on next boot.
+    write_log "${SYSTEM_TYPE} detected failsafe_check state - system will rollback to $(swap_alternative "${NEXT_BOOT}") on next reboot"
     NEXT_BOOT=$(swap_alternative "${NEXT_BOOT}")
     write_log "${SYSTEM_TYPE} sets ${NEXT_BOOT} as failsafe for next boot"
 
     # TODO should also set IS_STABLE=0 here to prevent manual overwrite
     # of a backup install slot.
+    write_log "${SYSTEM_TYPE} WARNING: System is in failsafe_check state - upgrade attempts will fail until state is resolved"
 
     write_metric "${SYSTEM_TYPE}_boot_stable" \
         "0" \
@@ -245,10 +219,16 @@ TARGET_VAR=$(get_partition "${TARGET_ALTERNATIVE}" "var")
 # Execute subsequent action
 case "${ACTION}" in
     upgrade-install)
+        write_log "${SYSTEM_TYPE} upgrade-install action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
         if [ "${IS_STABLE}" != 1 ]; then
-            write_log "${SYSTEM_TYPE} attempted to install upgrade in unstable state"
-            echo "Cannot install an upgrade before present system is committed as stable." >&2
-            exit 1
+            if [ "${NOCHECK}" == 1 ]; then
+                write_log "WARNING: System stability check failed (IS_STABLE=${IS_STABLE}) but --nocheck flag is set, proceeding anyway"
+            else
+                write_log "Cannot install an upgrade before present system is committed as stable."
+                exit 1
+            fi
+        else
+            write_log "${SYSTEM_TYPE} upgrade-install proceeding - system is stable"
         fi
 
         if [ "$#" == 2 ]; then
@@ -295,15 +275,23 @@ case "${ACTION}" in
 
         ;;
     upgrade-commit)
+        write_log "${SYSTEM_TYPE} upgrade-commit action called - IS_STABLE: ${IS_STABLE}, boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}"
         if [ "${IS_STABLE}" != 1 ]; then
-            echo "Cannot install an upgrade before present system is committed as stable." >&2
-            exit 1
+            if [ "${NOCHECK}" == 1 ]; then
+                write_log "WARNING: System stability check failed (IS_STABLE=${IS_STABLE}) but --nocheck flag is set, proceeding anyway"
+            else
+                write_log "Cannot install an upgrade before present system is committed as stable."
+                exit 1
+            fi
         fi
 
         # Tell boot loader to switch partitions on next boot.
+        write_log "${SYSTEM_TYPE} upgrade-commit proceeding - switching from ${boot_alternative} to ${TARGET_ALTERNATIVE}"
+        write_log "Setting boot_alternative to ${TARGET_ALTERNATIVE} and boot_cycle to first_boot"
+        write_grubenv "${GRUBENV_FILE}" "${TARGET_ALTERNATIVE}" "first_boot"
+        # Only update variables after successful write_grubenv
         boot_alternative="${TARGET_ALTERNATIVE}"
         boot_cycle=first_boot
-        write_grubenv "${GRUBENV_FILE}"
 
         write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
         write_metric_attr "${SYSTEM_TYPE}_boot_action" \
@@ -317,16 +305,16 @@ case "${ACTION}" in
             "gauge"
 
         write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
-        sync
-        # Ignore termination signals from the following reboot, so that
-        # the script exits without error.
-        trap -- '' SIGTERM
-        reboot
+        # Use systemd-run to ensure the reboot happens after the script exits
+        systemd-run --on-active=2 systemctl reboot
         ;;
     confirm)
+        write_log "${SYSTEM_TYPE} confirm action called - current boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}, IS_STABLE: ${IS_STABLE}"
         if [ "$boot_cycle" != "stable" ]; then
+            write_log "${SYSTEM_TYPE} transitioning from boot_cycle '${boot_cycle}' to 'stable' at slot ${CURRENT_ALTERNATIVE}"
+            write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "stable"
+            # Only update boot_cycle after successful write_grubenv
             boot_cycle=stable
-            write_grubenv "${GRUBENV_FILE}"
             write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
                 "1" \
@@ -337,6 +325,8 @@ case "${ACTION}" in
                 "1" \
                 "${SYSTEM_TYPE} boot action" \
                 "gauge"
+        else
+            write_log "${SYSTEM_TYPE} confirm called but boot_cycle is already 'stable' - no action needed"
         fi
         ;;
     current)

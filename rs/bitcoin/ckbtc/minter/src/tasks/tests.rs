@@ -1,4 +1,4 @@
-use crate::tasks::{pop_if_ready, run_task, schedule_now, Task, TaskQueue, TaskType, TASKS};
+use crate::tasks::{TASKS, Task, TaskQueue, TaskType, pop_if_ready, run_task, schedule_now};
 use crate::test_fixtures::mock::MockCanisterRuntime;
 use proptest::{collection::vec as pvec, prop_assert_eq, proptest};
 use std::time::Duration;
@@ -48,16 +48,6 @@ async fn should_reschedule_refresh_fees() {
     .await;
 }
 
-#[tokio::test]
-async fn should_reschedule_distribute_kyt_fee() {
-    test_reschedule(
-        TaskType::DistributeKytFee,
-        || crate::guard::DistributeKytFeeGuard::new().unwrap(),
-        Duration::from_secs(24 * 60 * 60),
-    )
-    .await;
-}
-
 async fn test_reschedule<T, G: FnOnce() -> T>(
     task_type: TaskType,
     guard: G,
@@ -67,6 +57,9 @@ async fn test_reschedule<T, G: FnOnce() -> T>(
     let mut runtime = MockCanisterRuntime::new();
     runtime.expect_time().return_const(0_u64);
     runtime.expect_global_timer_set().return_const(());
+    runtime
+        .expect_refresh_fee_percentiles_frequency()
+        .return_const(Duration::from_secs(60 * 60));
     schedule_now(task_type.clone(), &runtime);
 
     let _guard_mocking_already_running_task = guard();

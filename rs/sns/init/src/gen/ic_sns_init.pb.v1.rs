@@ -243,7 +243,7 @@ pub mod sns_init_payload {
 }
 /// The FractionalDeveloperVotingPower token distribution strategy configures
 /// how tokens and neurons are distributed via four "buckets": developers,
-/// treasury, swap, and airdrops. This strategy will distribute all developer tokens
+/// treasury, and swap. This strategy will distribute all developer tokens
 /// at genesis in restricted neurons with an additional voting power
 /// multiplier applied. This voting power multiplier is calculated as
 /// `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
@@ -252,7 +252,6 @@ pub mod sns_init_payload {
 /// it to be a valid distribution:
 ///     - developer_distribution.developer_neurons.stake_e8s.sum <= u64:MAX
 ///     - developer_neurons.developer_neurons.stake_e8s.sum <= swap_distribution.total_e8s
-///     - airdrop_distribution.airdrop_neurons.stake_e8s.sum <= u64:MAX
 ///     - swap_distribution.initial_swap_amount_e8s > 0
 ///     - swap_distribution.initial_swap_amount_e8s <= swap_distribution.total_e8s
 ///     - swap_distribution.total_e8s >= developer_distribution.developer_neurons.stake_e8s.sum
@@ -275,9 +274,6 @@ pub struct FractionalDeveloperVotingPower {
     /// The swap bucket.
     #[prost(message, optional, tag = "3")]
     pub swap_distribution: ::core::option::Option<SwapDistribution>,
-    /// The airdrop bucket.
-    #[prost(message, optional, tag = "4")]
-    pub airdrop_distribution: ::core::option::Option<AirdropDistribution>,
 }
 /// The distributions awarded to developers at SNS genesis.
 #[derive(
@@ -338,23 +334,6 @@ pub struct SwapDistribution {
     /// deposited in the swap canister's account for the initial token swap.
     #[prost(uint64, tag = "2")]
     pub initial_swap_amount_e8s: u64,
-}
-/// The distributions airdropped at SNS genesis.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    Eq,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct AirdropDistribution {
-    /// List of `NeuronDistribution` that specify a Neuron controller and Neuron stake in e8s
-    /// (10E-8 of a token). For each entry in the airdrop_neurons list, a neuron will be
-    /// created with NO voting multiplier applied and will start in PreInitializationSwap mode.
-    #[prost(message, repeated, tag = "1")]
-    pub airdrop_neurons: ::prost::alloc::vec::Vec<NeuronDistribution>,
 }
 /// A tuple of values used to create a Neuron available at SNS genesis.
 #[derive(

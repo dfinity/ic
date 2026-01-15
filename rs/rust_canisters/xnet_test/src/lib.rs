@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::management_canister::provisional::CanisterId;
+use ic_management_canister_types::CanisterId;
 use serde::Serialize;
 use std::time::Duration;
 
@@ -14,7 +14,9 @@ pub type NetworkTopology = Vec<Vec<CanisterId>>;
 pub struct StartArgs {
     pub network_topology: NetworkTopology,
     pub canister_to_subnet_rate: u64,
-    pub payload_size_bytes: u64,
+    pub request_payload_size_bytes: u64,
+    pub call_timeouts_seconds: Vec<Option<u32>>,
+    pub response_payload_size_bytes: u64,
 }
 
 /// Metrics observed by this canister.

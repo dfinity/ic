@@ -1,9 +1,9 @@
 use crate::common::system_test_environment::RosettaTestingEnvironment;
 use crate::common::utils::test_identity;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_icrc1_test_utils::{minter_identity, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, minter_identity};
 use ic_rosetta_api::models::ConstructionDeriveRequest;
 use ic_rosetta_api::models::ConstructionMetadataRequest;
 use ic_rosetta_api::models::ConstructionMetadataResponse;
@@ -102,7 +102,7 @@ fn test_construction_metadata() {
             ConstructionMetadataResponse {
                 metadata: Default::default(),
                 suggested_fee: Some(vec![Amount {
-                    value: format!("{}", DEFAULT_TRANSFER_FEE),
+                    value: format!("{DEFAULT_TRANSFER_FEE}"),
                     currency: Currency {
                         symbol: "ICP".to_string(),
                         decimals: 8,

@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-error-types",
     "//rs/consensus/utils",
     "//rs/interfaces",
     "//rs/interfaces/adapter_client",
@@ -13,11 +14,13 @@ DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/registry/helpers",
+    "//rs/registry/subnet_type",
     "//rs/replicated_state",
-    "//rs/types/error_types",
     "//rs/types/types",
+    "//rs/utils",
     "@crate_index//:hex",
     "@crate_index//:prometheus",
+    "@crate_index//:rand",
     "@crate_index//:slog",
 ]
 
@@ -26,16 +29,15 @@ DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/registry/subnet_features",
-    "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/state",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "@crate_index//:assert_matches",
     "@crate_index//:mockall",
     "@crate_index//:proptest",
-    "@crate_index//:rand",
     "@crate_index//:rand_chacha",
 ]
 

@@ -2,31 +2,27 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/canonical_state",
-    "//rs/certification",
-    "//rs/crypto/tree_hash",
-    "//rs/tree_deserializer",
-    "//rs/types/types",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/certification/test-utils",
-]
-
 rust_library(
     name = "read_state_response_parser",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_read_state_response_parser",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/canonical_state",
+        "//rs/certification",
+        "//rs/crypto/tree_hash",
+        "//rs/tree_deserializer",
+        "//rs/types/types",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_test(
     name = "tests",
     crate = ":read_state_response_parser",
-    deps = DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/certification/test-utils",
+    ],
 )

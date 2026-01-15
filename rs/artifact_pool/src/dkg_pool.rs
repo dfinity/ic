@@ -9,9 +9,9 @@ use ic_interfaces::{
         ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_types::{consensus, consensus::dkg, consensus::dkg::DkgMessageId, Height};
+use ic_types::{Height, consensus, consensus::dkg, consensus::dkg::DkgMessageId};
 use prometheus::IntCounter;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -189,15 +189,16 @@ impl HasLabel for UnvalidatedArtifact<dkg::Message> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ic_crypto_test_utils_ni_dkg::dummy_dealing;
     use ic_interfaces::dkg::DkgPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        NodeId,
+        crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         signature::BasicSignature,
         time::UNIX_EPOCH,
-        NodeId,
     };
 
     fn make_message(start_height: Height, node_id: NodeId) -> dkg::Message {
@@ -208,7 +209,7 @@ mod test {
             target_subnet: NiDkgTargetSubnet::Local,
         };
         dkg::Message {
-            content: dkg::DealingContent::new(NiDkgDealing::dummy_dealing_for_tests(0), dkg_id),
+            content: dkg::DealingContent::new(dummy_dealing(0), dkg_id),
             signature: BasicSignature::fake(node_id),
         }
     }
@@ -262,10 +263,12 @@ mod test {
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.transmits.len(), 2);
-        assert!(!result
-            .transmits
-            .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+        assert!(
+            !result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+        );
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
@@ -274,10 +277,12 @@ mod test {
         // are purged from the validated and unvalidated sections
         let result = pool.apply(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
         assert_eq!(result.transmits.len(), 1);
-        assert!(!result
-            .transmits
-            .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+        assert!(
+            !result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+        );
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
@@ -287,10 +292,12 @@ mod test {
             current_dkg_id_start_height.increment(),
         )]);
         assert_eq!(result.transmits.len(), 1);
-        assert!(!result
-            .transmits
-            .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+        assert!(
+            !result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+        );
         assert!(result.poll_immediately);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);

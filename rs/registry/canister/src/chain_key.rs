@@ -1,6 +1,6 @@
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::MasterPublicKeyId;
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
 };
@@ -12,6 +12,7 @@ pub(crate) struct InitialChainKeyConfigInternal {
     pub key_configs: Vec<KeyConfigRequestInternal>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl InitialChainKeyConfigInternal {
@@ -35,6 +36,7 @@ impl From<InitialChainKeyConfigInternal> for ChainKeyConfigPb {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -46,6 +48,7 @@ impl From<InitialChainKeyConfigInternal> for ChainKeyConfigPb {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }

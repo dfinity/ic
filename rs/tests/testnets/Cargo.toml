@@ -1,0 +1,95 @@
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "testnets"
+version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+ic-base-types = { path = "../../types/base_types" }
+ic-limits = { path = "../../limits" }
+ic-registry-subnet-features = { path = "../../registry/subnet_features" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+ic-system-test-driver = { path = "../driver" }
+ic-testnet-mainnet-nns = { path = "./mainnet_nns" }
+ic-xrc-types = "1.0.0"
+ic_consensus_system_test_subnet_recovery = { path = "../consensus/subnet_recovery" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic_nested_nns_recovery_common = { path = "../nested/nns_recovery" }
+nested = { path = "../nested" }
+nns_dapp = { path = "../nns/nns_dapp" }
+os_qualification_utils = { path = "../dre/utils" }
+serde_json = { workspace = true }
+slog = { workspace = true }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
+
+[[bin]]
+name = "large"
+path = "large.rs"
+
+[[bin]]
+name = "io_perf_benchmark"
+path = "io_perf_benchmark.rs"
+
+[[bin]]
+name = "medium"
+path = "medium.rs"
+
+[[bin]]
+name = "single_app_large_node"
+path = "single_app_large_node.rs"
+
+[[bin]]
+name = "single_app_small_node"
+path = "single_app_small_node.rs"
+
+[[bin]]
+name = "single_large_node"
+path = "single_large_node.rs"
+
+[[bin]]
+name = "small_nns"
+path = "small_nns.rs"
+
+[[bin]]
+name = "small"
+path = "small.rs"
+
+[[bin]]
+name = "small_bitcoin"
+path = "small_bitcoin.rs"
+
+[[bin]]
+name = "small_high_perf"
+path = "small_high_perf.rs"
+
+[[bin]]
+name = "sns_testing"
+path = "sns_testing.rs"
+
+[[bin]]
+name = "src_testing"
+path = "src_testing.rs"
+
+[[bin]]
+name = "from_config"
+path = "from_config.rs"
+
+[[bin]]
+name = "single_app_large_node_with_nns"
+path = "single_app_large_node_with_nns.rs"
+
+[[bin]]
+name = "small_with_query_stats"
+path = "small_with_query_stats.rs"
+
+[[bin]]
+name = "nns_recovery"
+path = "nns_recovery.rs"
+
+[[bin]]
+name = "mainnet_nns"
+path = "mainnet_nns.rs"

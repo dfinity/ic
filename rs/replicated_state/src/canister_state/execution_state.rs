@@ -1,13 +1,12 @@
+pub mod proto;
+
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
-use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_state_bits::v1 as pb,
-};
+use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
+use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
+    methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -15,7 +14,6 @@ use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
 use std::mem::size_of_val;
 use std::{
     collections::BTreeSet,
@@ -54,93 +52,6 @@ impl EmbedderCache {
 impl std::fmt::Debug for EmbedderCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "EmbedderCache")
-    }
-}
-
-/// An enum representing the possible values of a global variable.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
-pub enum Global {
-    I32(i32),
-    I64(i64),
-    F32(f32),
-    F64(f64),
-    V128(u128),
-}
-
-impl Global {
-    pub fn type_name(&self) -> &'static str {
-        match self {
-            Global::I32(_) => "i32",
-            Global::I64(_) => "i64",
-            Global::F32(_) => "f32",
-            Global::F64(_) => "f64",
-            Global::V128(_) => "v128",
-        }
-    }
-}
-
-impl Hash for Global {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let bytes = match self {
-            Global::I32(val) => val.to_le_bytes().to_vec(),
-            Global::I64(val) => val.to_le_bytes().to_vec(),
-            Global::F32(val) => val.to_le_bytes().to_vec(),
-            Global::F64(val) => val.to_le_bytes().to_vec(),
-            Global::V128(val) => val.to_le_bytes().to_vec(),
-        };
-        bytes.hash(state)
-    }
-}
-
-impl PartialEq<Global> for Global {
-    fn eq(&self, other: &Global) -> bool {
-        match (self, other) {
-            (Global::I32(val), Global::I32(other_val)) => val == other_val,
-            (Global::I64(val), Global::I64(other_val)) => val == other_val,
-            (Global::F32(val), Global::F32(other_val)) => val == other_val,
-            (Global::F64(val), Global::F64(other_val)) => val == other_val,
-            (Global::V128(val), Global::V128(other_val)) => val == other_val,
-            _ => false,
-        }
-    }
-}
-
-impl Eq for Global {}
-
-impl From<&Global> for pb::Global {
-    fn from(item: &Global) -> Self {
-        match item {
-            Global::I32(value) => Self {
-                global: Some(pb::global::Global::I32(*value)),
-            },
-            Global::I64(value) => Self {
-                global: Some(pb::global::Global::I64(*value)),
-            },
-            Global::F32(value) => Self {
-                global: Some(pb::global::Global::F32(*value)),
-            },
-            Global::F64(value) => Self {
-                global: Some(pb::global::Global::F64(*value)),
-            },
-            Global::V128(value) => Self {
-                global: Some(pb::global::Global::V128(value.to_le_bytes().to_vec())),
-            },
-        }
-    }
-}
-
-impl TryFrom<pb::Global> for Global {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::Global) -> Result<Self, Self::Error> {
-        match try_from_option_field(value.global, "Global::global")? {
-            pb::global::Global::I32(value) => Ok(Self::I32(value)),
-            pb::global::Global::I64(value) => Ok(Self::I64(value)),
-            pb::global::Global::F32(value) => Ok(Self::F32(value)),
-            pb::global::Global::F64(value) => Ok(Self::F64(value)),
-            pb::global::Global::V128(value) => Ok(Self::V128(u128::from_le_bytes(
-                value.as_slice().try_into().unwrap(),
-            ))),
-        }
     }
 }
 
@@ -207,24 +118,6 @@ impl FromIterator<WasmMethod> for ExportedFunctions {
         T: IntoIterator<Item = WasmMethod>,
     {
         Self::new(BTreeSet::from_iter(iter))
-    }
-}
-
-impl From<&ExportedFunctions> for Vec<pb::WasmMethod> {
-    fn from(item: &ExportedFunctions) -> Self {
-        item.exported_functions.iter().map(From::from).collect()
-    }
-}
-
-impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
-    type Error = ProxyDecodeError;
-    fn try_from(value: Vec<pb::WasmMethod>) -> Result<Self, Self::Error> {
-        Ok(ExportedFunctions::new(
-            value
-                .into_iter()
-                .map(TryFrom::try_from)
-                .collect::<Result<_, _>>()?,
-        ))
     }
 }
 
@@ -304,8 +197,7 @@ impl Memory {
             Ok(())
         } else {
             Err(format!(
-                "The page map size {} exceeds the memory size {}",
-                page_map_bytes, memory_bytes
+                "The page map size {page_map_bytes} exceeds the memory size {memory_bytes}"
             ))
         }
     }
@@ -385,28 +277,6 @@ pub enum NextScheduledMethod {
     Message = 3,
 }
 
-impl From<pb::NextScheduledMethod> for NextScheduledMethod {
-    fn from(val: pb::NextScheduledMethod) -> Self {
-        match val {
-            pb::NextScheduledMethod::Unspecified | pb::NextScheduledMethod::GlobalTimer => {
-                NextScheduledMethod::GlobalTimer
-            }
-            pb::NextScheduledMethod::Heartbeat => NextScheduledMethod::Heartbeat,
-            pb::NextScheduledMethod::Message => NextScheduledMethod::Message,
-        }
-    }
-}
-
-impl From<NextScheduledMethod> for pb::NextScheduledMethod {
-    fn from(val: NextScheduledMethod) -> Self {
-        match val {
-            NextScheduledMethod::GlobalTimer => pb::NextScheduledMethod::GlobalTimer,
-            NextScheduledMethod::Heartbeat => pb::NextScheduledMethod::Heartbeat,
-            NextScheduledMethod::Message => pb::NextScheduledMethod::Message,
-        }
-    }
-}
-
 impl NextScheduledMethod {
     /// Round-robin across methods.
     pub fn inc(&mut self) {
@@ -479,7 +349,7 @@ pub struct ExecutionState {
     pub next_scheduled_method: NextScheduledMethod,
 
     /// Checks if execution is in Wasm64 mode.
-    pub is_wasm64: bool,
+    pub wasm_execution_mode: WasmExecutionMode,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -499,7 +369,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
+            wasm_execution_mode,
         } = rhs;
 
         (
@@ -511,7 +381,7 @@ impl PartialEq for ExecutionState {
             &self.metadata,
             &self.last_executed_round,
             &self.next_scheduled_method,
-            &self.is_wasm64,
+            &self.wasm_execution_mode,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -521,7 +391,7 @@ impl PartialEq for ExecutionState {
             metadata,
             last_executed_round,
             next_scheduled_method,
-            is_wasm64,
+            wasm_execution_mode,
         )
     }
 }
@@ -531,7 +401,7 @@ impl ExecutionState {
     /// The state will be created with empty stable memory, but may have wasm
     /// memory from data sections in the wasm module.
     /// The state will be created with last_executed_round = 0, a
-    /// default next_scheduled_method, and is_wasm64 = false.
+    /// default next_scheduled_method, and wasm_execution_mode = WasmExecutionMode::Wasm32.
     /// Be sure to change these if needed.
     pub fn new(
         canister_root: PathBuf,
@@ -552,7 +422,7 @@ impl ExecutionState {
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
             next_scheduled_method: NextScheduledMethod::default(),
-            is_wasm64: false,
+            wasm_execution_mode: WasmExecutionMode::Wasm32,
         }
     }
 
@@ -561,18 +431,54 @@ impl ExecutionState {
         self.exports.has_method(method)
     }
 
-    /// Returns the memory currently used by the `ExecutionState`.
-    pub fn memory_usage(&self) -> NumBytes {
-        // We use 8 bytes per global.
-        let globals_size_bytes = 8 * self.exported_globals.len() as u64;
-        let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+    /// Returns the Wasm memory currently used by the `ExecutionState`.
+    pub fn wasm_memory_usage(&self) -> NumBytes {
         num_bytes_try_from(self.wasm_memory.size)
             .expect("could not convert from wasm memory number of pages to bytes")
-            + num_bytes_try_from(self.stable_memory.size)
-                .expect("could not convert from stable memory number of pages to bytes")
-            + NumBytes::from(globals_size_bytes)
-            + NumBytes::from(wasm_binary_size_bytes)
-            + self.metadata.memory_usage()
+    }
+
+    /// Returns the stable memory currently used by the `ExecutionState`.
+    pub fn stable_memory_usage(&self) -> NumBytes {
+        num_bytes_try_from(self.stable_memory.size)
+            .expect("could not convert from stable memory number of pages to bytes")
+    }
+
+    // Returns the global memory currently used by the `ExecutionState`.
+    pub fn global_memory_usage(&self) -> NumBytes {
+        let globals_size_bytes = size_of::<Global>() as u64 * self.exported_globals.len() as u64;
+        NumBytes::from(globals_size_bytes)
+    }
+
+    // Returns the memory size of the Wasm binary currently used by the `ExecutionState`.
+    pub fn wasm_binary_memory_usage(&self) -> NumBytes {
+        let wasm_binary_size_bytes = self.wasm_binary.binary.len() as u64;
+        NumBytes::from(wasm_binary_size_bytes)
+    }
+
+    // Returns the memory size of the custom sections currently used by the `ExecutionState`.
+    pub fn custom_sections_memory_size(&self) -> NumBytes {
+        self.metadata.memory_usage()
+    }
+
+    /// Returns the memory currently used by the `ExecutionState`.
+    pub fn memory_usage(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
+            + self.custom_sections_memory_size()
+    }
+
+    /// Returns the `ExecutionState`'s contribution to the memory of a snapshot.
+    /// The difference to `memory_usage` is that the custom wasm section is not
+    /// stored explicitly in a snapshot, only implicitly in the wasm module,
+    /// whereas for the running canister, it's explicit and takes additional
+    /// memory.
+    pub fn memory_usage_in_snapshot(&self) -> NumBytes {
+        self.wasm_memory_usage()
+            + self.stable_memory_usage()
+            + self.global_memory_usage()
+            + self.wasm_binary_memory_usage()
     }
 
     /// Returns the number of global variables in the Wasm module.
@@ -587,6 +493,10 @@ impl ExecutionState {
             + self.stable_memory.page_map.num_delta_pages();
         NumBytes::from((delta_pages * PAGE_SIZE) as u64)
     }
+
+    pub(crate) fn wasm_execution_mode(&self) -> WasmExecutionMode {
+        self.wasm_execution_mode
+    }
 }
 
 /// An enum that represents the possible visibility levels a custom section
@@ -595,29 +505,6 @@ impl ExecutionState {
 pub enum CustomSectionType {
     Public = 1,
     Private = 2,
-}
-
-impl From<&CustomSectionType> for pb::CustomSectionType {
-    fn from(item: &CustomSectionType) -> Self {
-        match item {
-            CustomSectionType::Public => pb::CustomSectionType::Public,
-            CustomSectionType::Private => pb::CustomSectionType::Private,
-        }
-    }
-}
-
-impl TryFrom<pb::CustomSectionType> for CustomSectionType {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::CustomSectionType) -> Result<Self, Self::Error> {
-        match item {
-            pb::CustomSectionType::Public => Ok(CustomSectionType::Public),
-            pb::CustomSectionType::Private => Ok(CustomSectionType::Private),
-            pb::CustomSectionType::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "CustomSectionType::Unspecified",
-                err: "Encountered error while decoding CustomSection type".to_string(),
-            }),
-        }
-    }
 }
 
 /// Represents the data a custom section holds.
@@ -653,38 +540,6 @@ impl CustomSection {
 impl CountBytes for CustomSection {
     fn count_bytes(&self) -> usize {
         size_of_val(&self.visibility) + self.content.len()
-    }
-}
-
-impl From<&CustomSection> for pb::WasmCustomSection {
-    fn from(item: &CustomSection) -> Self {
-        Self {
-            visibility: pb::CustomSectionType::from(&item.visibility).into(),
-            content: item.content.clone(),
-            hash: Some(item.hash.to_vec()),
-        }
-    }
-}
-
-impl TryFrom<pb::WasmCustomSection> for CustomSection {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::WasmCustomSection) -> Result<Self, Self::Error> {
-        let visibility = CustomSectionType::try_from(
-            pb::CustomSectionType::try_from(item.visibility).unwrap_or_default(),
-        )?;
-        Ok(Self {
-            visibility,
-            hash: match item.hash {
-                Some(hash_bytes) => hash_bytes.try_into().map_err(|h: Vec<u8>| {
-                    ProxyDecodeError::InvalidDigestLength {
-                        expected: 32,
-                        actual: h.len(),
-                    }
-                })?,
-                None => ic_hashtree_leaf_hash(&item.content),
-            },
-            content: item.content,
-        })
     }
 }
 
@@ -752,19 +607,6 @@ impl Default for WasmMetadata {
     }
 }
 
-impl From<&WasmMetadata> for pb::WasmMetadata {
-    fn from(item: &WasmMetadata) -> Self {
-        let custom_sections = item
-            .custom_sections
-            .iter()
-            .map(|(name, custom_section)| {
-                (name.clone(), pb::WasmCustomSection::from(custom_section))
-            })
-            .collect();
-        Self { custom_sections }
-    }
-}
-
 impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
     fn from_iter<T>(iter: T) -> WasmMetadata
     where
@@ -774,20 +616,32 @@ impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
     }
 }
 
-impl TryFrom<pb::WasmMetadata> for WasmMetadata {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::WasmMetadata) -> Result<Self, Self::Error> {
-        let custom_sections = item
-            .custom_sections
-            .into_iter()
-            .map(
-                |(name, custom_section)| match CustomSection::try_from(custom_section) {
-                    Ok(custom_section) => Ok((name, custom_section)),
-                    Err(err) => Err(err),
-                },
-            )
-            .collect::<Result<_, _>>()?;
-        Ok(WasmMetadata::new(custom_sections))
+/// Keeps track of how a canister is executing.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum WasmExecutionMode {
+    Wasm32,
+    Wasm64,
+}
+
+impl WasmExecutionMode {
+    pub fn is_wasm64(&self) -> bool {
+        match self {
+            WasmExecutionMode::Wasm32 => false,
+            WasmExecutionMode::Wasm64 => true,
+        }
+    }
+    pub fn from_is_wasm64(is_wasm64: bool) -> Self {
+        if is_wasm64 {
+            WasmExecutionMode::Wasm64
+        } else {
+            WasmExecutionMode::Wasm32
+        }
+    }
+    pub fn as_str(&self) -> &str {
+        match self {
+            WasmExecutionMode::Wasm32 => "wasm32",
+            WasmExecutionMode::Wasm64 => "wasm64",
+        }
     }
 }
 
@@ -798,6 +652,13 @@ mod tests {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
     use std::collections::BTreeSet;
     use strum::IntoEnumIterator;
+
+    #[test]
+    fn global_exhaustive() {
+        for global in ic_management_canister_types_private::Global::iter() {
+            let _other: Global = global;
+        }
+    }
 
     #[test]
     fn test_next_scheduled_method() {

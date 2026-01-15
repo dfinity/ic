@@ -5,8 +5,8 @@ pub use askama::Template;
 use candid::Principal;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
-    Archive, Canisters, GitCommitHash, Index, IndexCanister, Ledger, LedgerCanister, State,
-    TokenId, WasmHash,
+    Archive, CanisterUpgrade, Canisters, GitCommitHash, Index, IndexCanister, Ledger,
+    LedgerCanister, State, TokenId, WasmHash,
 };
 use ic_ledger_suite_orchestrator::storage::{StorableWasm, StoredWasm, WasmStore};
 use std::cmp::Reverse;
@@ -24,6 +24,22 @@ mod filters {
             time::format_description::parse("[year]-[month]-[day]T[hour]:[minute]:[second]+00:00")
                 .unwrap();
         Ok(dt_offset.format(&format).unwrap())
+    }
+
+    pub fn opt_timestamp_to_datetime<T: std::fmt::Display>(
+        timestamp: &Option<T>,
+    ) -> askama::Result<String> {
+        timestamp
+            .as_ref()
+            .map(timestamp_to_datetime)
+            .unwrap_or(Ok("None".to_string()))
+    }
+
+    pub fn unwrap_or_none<T: std::fmt::Display>(value: &Option<T>) -> askama::Result<String> {
+        value
+            .as_ref()
+            .map(|s| Ok(s.to_string()))
+            .unwrap_or(Ok("None".to_string()))
     }
 }
 
@@ -55,34 +71,45 @@ pub struct CanisterDashboardData {
     pub canister_type: String,
     pub canister_id: String,
     pub installed_from: String,
+    pub last_upgraded_to: Option<String>,
+    pub last_upgraded_timestamp: Option<u64>,
 }
 
 impl CanisterDashboardData {
-    pub fn from_canisters(canisters: &Canisters) -> Vec<Self> {
+    pub fn from_canisters(
+        canisters: &Canisters,
+        completed_upgrades: &BTreeMap<Principal, CanisterUpgrade>,
+    ) -> Vec<Self> {
         let mut result = Vec::with_capacity(3);
         if let Some(ledger) = &canisters.ledger {
-            result.push(Self::from(ledger));
+            result.push(Self::from_ledger(
+                ledger,
+                completed_upgrades.get(ledger.canister_id()),
+            ));
         }
         if let Some(index) = &canisters.index {
-            result.push(Self::from(index));
+            result.push(Self::from_index(
+                index,
+                completed_upgrades.get(index.canister_id()),
+            ));
         }
         for archive in &canisters.archives {
-            result.push(Self::from_archive(archive));
+            result.push(Self::from_archive(archive, completed_upgrades.get(archive)));
         }
         result
     }
 
-    pub fn from_archive(canister_id: &Principal) -> Self {
+    pub fn from_archive(canister_id: &Principal, last_upgrade: Option<&CanisterUpgrade>) -> Self {
         Self {
             canister_type: "Archive".to_string(),
             canister_id: canister_id.to_string(),
             installed_from: "N/A".to_string(),
+            last_upgraded_to: last_upgrade.map(|u| u.wasm_hash.to_string()),
+            last_upgraded_timestamp: last_upgrade.map(|u| u.timestamp),
         }
     }
-}
 
-impl From<&LedgerCanister> for CanisterDashboardData {
-    fn from(canister: &LedgerCanister) -> Self {
+    pub fn from_ledger(canister: &LedgerCanister, last_upgrade: Option<&CanisterUpgrade>) -> Self {
         Self {
             canister_type: "Ledger".to_string(),
             canister_id: canister.canister_id().to_string(),
@@ -90,12 +117,12 @@ impl From<&LedgerCanister> for CanisterDashboardData {
                 .installed_wasm_hash()
                 .map(|hash| hash.to_string())
                 .unwrap_or("not installed".to_string()),
+            last_upgraded_to: last_upgrade.map(|u| u.wasm_hash.to_string()),
+            last_upgraded_timestamp: last_upgrade.map(|u| u.timestamp),
         }
     }
-}
 
-impl From<&IndexCanister> for CanisterDashboardData {
-    fn from(canister: &IndexCanister) -> Self {
+    pub fn from_index(canister: &IndexCanister, last_upgrade: Option<&CanisterUpgrade>) -> Self {
         Self {
             canister_type: "Index".to_string(),
             canister_id: canister.canister_id().to_string(),
@@ -103,6 +130,8 @@ impl From<&IndexCanister> for CanisterDashboardData {
                 .installed_wasm_hash()
                 .map(|hash| hash.to_string())
                 .unwrap_or("not installed".to_string()),
+            last_upgraded_to: last_upgrade.map(|u| u.wasm_hash.to_string()),
+            last_upgraded_timestamp: last_upgrade.map(|u| u.timestamp),
         }
     }
 }
@@ -148,6 +177,7 @@ impl DashboardTemplate {
                 TokenId::Erc20(_) => true,
                 TokenId::Other(_) => false,
             });
+        let completed_upgrades = state.completed_upgrades();
 
         Self {
             managed_canisters: erc20_canisters
@@ -157,7 +187,7 @@ impl DashboardTemplate {
                         token_id.into_erc20_unchecked().clone(),
                         CanistersDashboardData {
                             ckerc20_token_symbol: v.metadata.token_symbol.clone(),
-                            canisters: CanisterDashboardData::from_canisters(v),
+                            canisters: CanisterDashboardData::from_canisters(v, completed_upgrades),
                         },
                     )
                 })
@@ -167,7 +197,7 @@ impl DashboardTemplate {
                 .map(|(token_id, canisters)| {
                     (
                         token_id.into_other_unchecked().to_string(),
-                        CanisterDashboardData::from_canisters(canisters),
+                        CanisterDashboardData::from_canisters(canisters, completed_upgrades),
                     )
                 })
                 .collect(),

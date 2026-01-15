@@ -1,12 +1,15 @@
 use crate::Block;
-use candid::types::number::Nat;
 use candid::CandidType;
+use candid::types::number::Nat;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    Approve, Burn, FeeCollector, Mint, TRANSACTION_APPROVE, TRANSACTION_BURN,
+    TRANSACTION_FEE_COLLECTOR, TRANSACTION_MINT, TRANSACTION_TRANSFER, Transaction, Transfer,
+};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(
@@ -20,8 +23,8 @@ pub struct EndpointsTransferError<Tokens>(pub CoreTransferError<Tokens>);
 impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferError {
     type Error = String;
     fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
-        use ic_ledger_canister_core::ledger::TransferError as CTE;
         use TransferError as TE;
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
 
         Ok(match err.0 {
             CTE::BadFee { expected_fee } => TE::BadFee {
@@ -49,7 +52,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferErr
             CTE::AllowanceChanged { .. } => {
                 return Err("AllowanceChanged error should not happen for transfer".to_string());
             }
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("SelfApproval error should not happen for transfer".to_string());
             }
             CTE::BadBurn { min_burn_amount } => TE::BadBurn {
@@ -62,8 +65,8 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferErr
 impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveError {
     type Error = String;
     fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
-        use ic_ledger_canister_core::ledger::TransferError as CTE;
         use ApproveError as AE;
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
 
         Ok(match err.0 {
             CTE::BadFee { expected_fee } => AE::BadFee {
@@ -91,7 +94,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveErro
             CTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
                 current_allowance: current_allowance.into(),
             },
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("self-approvals are not allowed".to_string());
             }
             CTE::BadBurn { .. } => {
@@ -104,8 +107,8 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveErro
 impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFromError {
     type Error = String;
     fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
-        use ic_ledger_canister_core::ledger::TransferError as CTE;
         use TransferFromError as TFE;
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
 
         Ok(match err.0 {
             CTE::BadFee { expected_fee } => TFE::BadFee {
@@ -131,7 +134,7 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFro
             CTE::AllowanceChanged { .. } => {
                 return Err("AllowanceChanged not implemented for TransferFromError".to_string());
             }
-            CTE::SelfApproval { .. } => {
+            CTE::SelfApproval => {
                 return Err("self approval not implemented for TransferFromError".to_string());
             }
             CTE::BadBurn { min_burn_amount } => TFE::BadBurn {
@@ -159,33 +162,37 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            fee_collector: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
         let memo = b.transaction.memo;
 
         match b.transaction.operation {
-            Operation::Mint { to, amount } => {
-                tx.kind = "mint".to_string();
+            Operation::Mint { to, amount, fee } => {
+                tx.kind = TRANSACTION_MINT.to_string();
                 tx.mint = Some(Mint {
                     to,
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Burn {
                 from,
                 spender,
                 amount,
+                fee,
             } => {
-                tx.kind = "burn".to_string();
+                tx.kind = TRANSACTION_BURN.to_string();
                 tx.burn = Some(Burn {
                     from,
                     spender,
                     amount: amount.into(),
                     created_at_time,
                     memo,
+                    fee: fee.map(Into::into),
                 });
             }
             Operation::Transfer {
@@ -195,7 +202,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 amount,
                 fee,
             } => {
-                tx.kind = "transfer".to_string();
+                tx.kind = TRANSACTION_TRANSFER.to_string();
                 tx.transfer = Some(Transfer {
                     from,
                     to,
@@ -214,7 +221,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 expires_at,
                 fee,
             } => {
-                tx.kind = "approve".to_string();
+                tx.kind = TRANSACTION_APPROVE.to_string();
                 tx.approve = Some(Approve {
                     from,
                     spender,
@@ -226,6 +233,19 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                         .or_else(|| b.effective_fee.map(Into::into)),
                     created_at_time,
                     memo,
+                });
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+                mthd,
+            } => {
+                tx.kind = TRANSACTION_FEE_COLLECTOR.to_string();
+                tx.fee_collector = Some(FeeCollector {
+                    fee_collector,
+                    caller,
+                    ts: created_at_time,
+                    mthd,
                 });
             }
         }

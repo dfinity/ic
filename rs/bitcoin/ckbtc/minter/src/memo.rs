@@ -1,5 +1,10 @@
+#![allow(deprecated)]
+use crate::state::LedgerBurnIndex;
 use minicbor::Encoder;
 use minicbor::{Decode, Encode};
+
+#[cfg(test)]
+mod tests;
 
 /// Encodes minter memo as a binary blob.
 pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
@@ -8,7 +13,7 @@ pub fn encode<T: minicbor::Encode<()>>(t: &T) -> Vec<u8> {
     encoder.into_writer()
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Decode, Encode)]
 #[cbor(index_only)]
 pub enum Status {
     #[n(0)]
@@ -21,7 +26,7 @@ pub enum Status {
     CallFailed,
 }
 
-#[derive(Eq, PartialEq, Debug, Decode, Encode)]
+#[derive(Clone, Eq, PartialEq, Debug, Decode, Encode)]
 pub enum MintMemo<'a> {
     #[n(0)]
     /// The minter converted a single UTXO to ckBTC.
@@ -37,9 +42,11 @@ pub enum MintMemo<'a> {
         kyt_fee: Option<u64>,
     },
     #[n(1)]
+    #[deprecated]
     /// The minter minted accumulated check fees to the KYT provider.
     Kyt,
     #[n(2)]
+    #[deprecated]
     /// The minter failed to check retrieve btc destination address
     /// or the destination address is tainted.
     KytFail {
@@ -51,6 +58,13 @@ pub enum MintMemo<'a> {
         status: Option<Status>,
         #[n(2)]
         associated_burn_index: Option<u64>,
+    },
+    #[n(3)]
+    ReimburseWithdrawal {
+        #[n(0)]
+        /// The id corresponding to the withdrawal request,
+        /// which corresponds to the ledger burn index.
+        withdrawal_id: LedgerBurnIndex,
     },
 }
 
@@ -68,5 +82,14 @@ pub enum BurnMemo<'a> {
         #[n(2)]
         /// The status of the Bitcoin check.
         status: Option<Status>,
+    },
+    #[n(1)]
+    Consolidate {
+        #[n(0)]
+        /// The total value of consolidated UTXOs.
+        value: u64,
+        /// Number of consolidated UTXOs.
+        #[n(1)]
+        inputs: u64,
     },
 }

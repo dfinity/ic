@@ -21,14 +21,16 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager};
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord},
+    node::v1::{
+        ConnectionEndpoint as pbConnectionEndpoint, NodeRecord as pbNodeRecord, NodeRewardType,
+    },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
-    RegistryVersion, SubnetId,
+    Height, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    consensus::certification::Certification, crypto::KeyPurpose,
 };
 use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 
@@ -191,7 +193,7 @@ impl InitializedNode {
         // This is helpful in the ansible scripts, where some actions need to know
         // nodes' ID, for example, to set up a subnet via NNS.
         let path = PathBuf::from(self.node_path.as_path()).join("derived_node_id");
-        let output = format!("{}", node_id);
+        let output = format!("{node_id}");
         std::fs::write(path, output).map_err(|source| InitializeNodeError::SavingNodeId { source })
     }
 
@@ -235,7 +237,7 @@ impl InitializedNode {
                 Ok(state_hash) => break state_hash.get().0,
                 Err(StateHashError::Transient(_)) => (),
                 Err(StateHashError::Permanent(err)) => {
-                    panic!("Failed to generate initial state {:?}", err)
+                    panic!("Failed to generate initial state {err:?}")
                 }
             }
         }
@@ -260,7 +262,7 @@ pub struct Node {
 
 impl Node {
     pub fn from_json5_without_braces(s: &str) -> Result<Self, json5::Error> {
-        json5::from_str(&format!("{{ {} }}", s))
+        json5::from_str(&format!("{{ {s} }}"))
     }
 }
 
@@ -273,7 +275,7 @@ impl Display for Node {
         // Clear out the outermost braces.
         let stripped = &json[1..json.len() - 1];
 
-        write!(f, "{}", stripped)
+        write!(f, "{stripped}")
     }
 }
 
@@ -306,6 +308,10 @@ pub struct NodeConfiguration {
     /// The domain name of the node
     #[serde(skip_serializing, skip_deserializing)]
     pub domain: Option<String>,
+
+    /// The type of rewards that the node operator wants to receive for the node.
+    /// E.g. "type3.1" or "type1" or similar from the node reward table in the NNS.
+    pub node_reward_type: Option<String>,
 }
 
 impl From<NodeConfiguration> for pbNodeRecord {
@@ -324,6 +330,10 @@ impl From<NodeConfiguration> for pbNodeRecord {
                 .map(|id| id.to_vec())
                 .unwrap_or_default(),
             domain: node_configuration.domain,
+            node_reward_type: node_configuration
+                .node_reward_type
+                .map(NodeRewardType::from)
+                .map(|t| t as i32),
             ..Default::default()
         }
     }
@@ -440,6 +450,7 @@ mod node_configuration {
             node_operator_principal_id: None,
             secret_key_store: None,
             domain: None,
+            node_reward_type: None,
         };
 
         let got = pbNodeRecord::from(node_configuration);
@@ -459,6 +470,7 @@ mod node_configuration {
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         };
 
         assert_eq!(got, want);

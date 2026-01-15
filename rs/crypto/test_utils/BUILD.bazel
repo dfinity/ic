@@ -11,11 +11,12 @@ rust_library(
         "//rs/crypto:__subpackages__",
         "//rs/p2p/quic_transport:__subpackages__",
         "//rs/test_utilities:__pkg__",
+        "//rs/tests/crypto:__subpackages__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
         # Keep sorted.
-        "//rs/crypto/ed25519",
+        "//packages/ic-ed25519",
         "//rs/crypto/internal/csp_test_utils",
         "//rs/interfaces/registry",
         "//rs/registry/fake",

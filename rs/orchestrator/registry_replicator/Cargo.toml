@@ -10,6 +10,7 @@ documentation.workspace = true
 clap = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -27,7 +28,24 @@ prost = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+candid = { workspace = true }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-registry-transport = { path = "../../registry/transport" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+rand = { workspace = true }
 
 [[bin]]
 name = "ic-registry-replicator"

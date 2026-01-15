@@ -1,5 +1,5 @@
 use crate::errors::ApiError;
-use ic_nns_governance_api::pb::v1::ProposalInfo;
+use ic_nns_governance_api::ProposalInfo;
 use rosetta_core::objects::ObjectMap;
 use serde_json::Value;
 
@@ -11,8 +11,12 @@ impl TryFrom<ProposalInfoResponse> for ObjectMap {
     fn try_from(d: ProposalInfoResponse) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ProposalInfoResponse to ObjectMap. Expected type Object but received: {o:?}"
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ProposalInfoResponse to ObjectMap: {err:?}"
+            ))),
         }
     }
 }
@@ -28,8 +32,7 @@ impl TryFrom<Option<ObjectMap>> for ProposalInfoResponse {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `ProposalInfoResponse` from JSON object: {}",
-                e
+                "Could not parse a `ProposalInfoResponse` from JSON object: {e}"
             ))
         })
     }

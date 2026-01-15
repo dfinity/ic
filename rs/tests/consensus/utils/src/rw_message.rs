@@ -3,7 +3,7 @@ use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{driver::test_env_api::*, util::*};
 use reqwest::Url;
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::Duration;
 
 pub fn store_message(

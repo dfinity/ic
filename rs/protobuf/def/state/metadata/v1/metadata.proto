@@ -2,12 +2,14 @@ syntax = "proto3";
 package state.metadata.v1;
 
 import "bitcoin/v1/bitcoin.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/wrappers.proto";
 import "registry/routing_table/v1/routing_table.proto";
 import "registry/subnet/v1/subnet.proto";
 import "state/canister_state_bits/v1/canister_state_bits.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
+import "types/v1/idkg.proto";
 import "types/v1/types.proto";
 
 message Time {
@@ -29,6 +31,7 @@ message SubnetTopology {
   reserved 5;
   reserved "ecdsa_keys_held";
   repeated types.v1.MasterPublicKeyId chain_keys_held = 6;
+  registry.subnet.v1.CanisterCyclesCostSchedule canister_cycles_cost_schedule = 7;
 }
 
 message SubnetsEntry {
@@ -71,18 +74,20 @@ message SetupInitialDkgContextTree {
 message EcdsaArguments {
   types.v1.EcdsaKeyId key_id = 1;
   bytes message_hash = 2;
+  types.v1.EcdsaMatchedPreSignature pre_signature = 3;
 }
 
 message SchnorrArguments {
   types.v1.SchnorrKeyId key_id = 1;
   bytes message = 2;
   optional bytes taproot_tree_root = 3;
+  types.v1.SchnorrMatchedPreSignature pre_signature = 4;
 }
 
 message VetKdArguments {
   types.v1.VetKdKeyId key_id = 1;
-  bytes derivation_id = 2;
-  bytes encryption_public_key = 3;
+  bytes input = 2;
+  bytes transport_public_key = 3;
   types.v1.NiDkgId ni_dkg_id = 4;
   uint64 height = 5;
 }
@@ -111,6 +116,17 @@ message SignWithThresholdContextTree {
   SignWithThresholdContext context = 2;
 }
 
+message PreSignatureStashTree {
+  types.v1.MasterPublicKeyId key_id = 1;
+  registry.subnet.v1.IDkgTranscript key_transcript = 2;
+  repeated PreSignatureIdPair pre_signatures = 3;
+}
+
+message PreSignatureIdPair {
+  uint64 pre_sig_id = 1;
+  types.v1.PreSignature pre_signature = 2;
+}
+
 enum HttpMethod {
   HTTP_METHOD_UNSPECIFIED = 0;
   HTTP_METHOD_GET = 1;
@@ -133,7 +149,23 @@ message CanisterHttpRequestContext {
   repeated HttpHeader headers = 7;
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
+  optional Replication replication = 11;
+  optional PricingVersion pricing_version = 12;
   reserved 5;
+}
+
+message PricingVersion {
+  oneof version {
+    google.protobuf.Empty legacy = 1;
+    google.protobuf.Empty pay_as_you_go = 2;
+  }
+}
+
+message Replication {
+  oneof replication_type {
+    google.protobuf.Empty fully_replicated = 1;
+    types.v1.NodeId non_replicated = 2;
+  }
 }
 
 message CanisterHttpRequestContextTree {
@@ -141,17 +173,18 @@ message CanisterHttpRequestContextTree {
   CanisterHttpRequestContext context = 2;
 }
 
-message IDkgDealingsContext {
+message ReshareChainKeyContext {
   state.queues.v1.Request request = 1;
   types.v1.MasterPublicKeyId key_id = 2;
   repeated types.v1.NodeId nodes = 3;
   uint64 registry_version = 4;
   Time time = 5;
+  bytes target_id = 6;
 }
 
-message IDkgDealingsContextTree {
+message ReshareChainKeyContextTree {
   uint64 callback_id = 1;
-  IDkgDealingsContext context = 2;
+  ReshareChainKeyContext context = 2;
 }
 
 message BitcoinGetSuccessorsContext {
@@ -246,8 +279,9 @@ message SubnetCallContextManager {
   uint64 next_stop_canister_call_id = 14;
   repeated StopCanisterCallTree stop_canister_calls = 15;
   repeated RawRandContext raw_rand_contexts = 16;
-  repeated IDkgDealingsContextTree idkg_dealings_contexts = 17;
+  repeated ReshareChainKeyContextTree reshare_chain_key_contexts = 17;
   repeated SignWithThresholdContextTree sign_with_threshold_contexts = 18;
+  repeated PreSignatureStashTree pre_signature_stashes = 19;
 }
 
 message SubnetMetrics {
@@ -307,7 +341,7 @@ message BlockmakerMetricsTimeSeries {
 }
 
 message SystemMetadata {
-  reserved 1, 4, 12, 14;
+  reserved 1, 4, 12, 14, 22;
   reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate", "time_of_last_allocation_charge_nanos";
 
   google.protobuf.BytesValue prev_state_hash = 2;
@@ -316,6 +350,7 @@ message SystemMetadata {
   NetworkTopology network_topology = 6;
   types.v1.SubnetId own_subnet_id = 7;
   SubnetCallContextManager subnet_call_context_manager = 8;
+  types.v1.SubnetId subnet_split_from = 23;
 
   // Canister ID ranges allocated (exclusively) to this subnet, to generate
   // canister IDs from.

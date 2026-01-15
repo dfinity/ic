@@ -10,6 +10,8 @@ After=dev-ipmi0.device
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-hostname.sh --type=host
+StandardOutput=journal+console
+StandardError=journal+console
 
 [Install]
 WantedBy=multi-user.target

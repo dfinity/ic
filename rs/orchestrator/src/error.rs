@@ -1,8 +1,8 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{
-    registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
-    RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId, registry::RegistryClientError,
+    replica_version::ReplicaVersionParseError,
 };
 use std::{
     error::Error,
@@ -81,7 +81,7 @@ pub(crate) enum OrchestratorError {
 
 impl OrchestratorError {
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        OrchestratorError::IoError(format!("Failed to write to file: {:?}", file_path), e)
+        OrchestratorError::IoError(format!("Failed to write to file: {file_path:?}"), e)
     }
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
@@ -102,81 +102,70 @@ impl fmt::Display for OrchestratorError {
         match self {
             OrchestratorError::NodeUnassignedError(node_id, registry_version) => write!(
                 f,
-                "Node {:?} is not found in any subnet at registry version {:?}",
-                node_id, registry_version
+                "Node {node_id:?} is not found in any subnet at registry version {registry_version:?}"
             ),
-            OrchestratorError::RegistryClientError(e) => write!(f, "{:?}", e),
+            OrchestratorError::RegistryClientError(e) => write!(f, "{e:?}"),
             OrchestratorError::ReplicaVersionMissingError(replica_version, registry_version) => {
                 write!(
                     f,
-                    "Replica version {} was not found in the Registry at registry version {:?}",
-                    replica_version, registry_version
+                    "Replica version {replica_version} was not found in the Registry at registry version {registry_version:?}"
                 )
             }
             OrchestratorError::IoError(msg, e) => {
-                write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
+                write!(f, "IO error, message: {msg:?}, error: {e:?}")
             }
-            OrchestratorError::FileDownloadError(e) => write!(f, "File download error: {:?}", e),
+            OrchestratorError::FileDownloadError(e) => write!(f, "File download error: {e:?}"),
             OrchestratorError::ExecError(path, e) => write!(
                 f,
-                "Failed to exec new Orchestrator process: {:?}, error: {:?}",
-                path, e
+                "Failed to exec new Orchestrator process: {path:?}, error: {e:?}"
             ),
             OrchestratorError::InvalidConfigurationError(msg) => {
-                write!(f, "Invalid configuration: {}", msg)
+                write!(f, "Invalid configuration: {msg}")
             }
             OrchestratorError::RebootTimeError(msg) => {
-                write!(f, "Failed to read or write reboot time: {}", msg)
+                write!(f, "Failed to read or write reboot time: {msg}")
             }
             OrchestratorError::ThresholdKeyMonitoringError(msg) => {
                 write!(
                     f,
-                    "Failed to read or write threshold key changed metric: {}",
-                    msg
+                    "Failed to read or write threshold key changed metric: {msg}"
                 )
             }
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
-                "Subnet ID {:?} does not exist in the Registry at registry version {:?}",
-                subnet_id, registry_version
+                "Subnet ID {subnet_id:?} does not exist in the Registry at registry version {registry_version:?}"
             ),
             OrchestratorError::ApiBoundaryNodeMissingError(node_id, registry_version) => write!(
                 f,
-                "Api Boundary Node ID {:?} does not exist in the Registry at registry version {:?}",
-                node_id, registry_version
+                "Api Boundary Node ID {node_id:?} does not exist in the Registry at registry version {registry_version:?}"
             ),
             OrchestratorError::ReplicaVersionParseError(e) => {
-                write!(f, "Failed to parse replica version: {}", e)
+                write!(f, "Failed to parse replica version: {e}")
             }
             OrchestratorError::SerializeCryptoConfigError(e) => {
-                write!(f, "Failed to serialize crypto-config: {}", e)
+                write!(f, "Failed to serialize crypto-config: {e}")
             }
             OrchestratorError::MakeRegistryCupError(subnet_id, registry_version) => write!(
                 f,
-                "Failed to construct the genesis/recovery CUP, subnet_id: {}, registry_version: {}",
-                subnet_id, registry_version,
+                "Failed to construct the genesis/recovery CUP, subnet_id: {subnet_id}, registry_version: {registry_version}",
             ),
             OrchestratorError::DeserializeCupError(height, error) => write!(
                 f,
-                "Failed to deserialize the CUP at height {:?}, with error: {}",
-                height, error,
+                "Failed to deserialize the CUP at height {height:?}, with error: {error}",
             ),
-            OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {}", msg),
+            OrchestratorError::UpgradeError(msg) => write!(f, "Failed to upgrade: {msg}"),
             OrchestratorError::NetworkConfigurationError(msg) => {
-                write!(f, "Failed to apply network configuration: {}", msg)
+                write!(f, "Failed to apply network configuration: {msg}")
             }
             OrchestratorError::RoleError(msg, registry_version) => {
                 write!(
                     f,
-                    "Failed to get the role of the node at the registry version {}: {}",
-                    registry_version, msg
+                    "Failed to get the role of the node at the registry version {registry_version}: {msg}"
                 )
             }
-            OrchestratorError::DomainNameMissingError(node_id) => write!(
-                f,
-                "Node {} does not have an associated domain name",
-                node_id
-            ),
+            OrchestratorError::DomainNameMissingError(node_id) => {
+                write!(f, "Node {node_id} does not have an associated domain name")
+            }
         }
     }
 }
@@ -200,6 +189,7 @@ impl From<UpgradeError> for OrchestratorError {
             UpgradeError::FileDownloadError(e) => OrchestratorError::FileDownloadError(e),
             UpgradeError::GenericError(s) => OrchestratorError::UpgradeError(s),
             UpgradeError::RebootTimeError(s) => OrchestratorError::RebootTimeError(s),
+            UpgradeError::DiskEncryptionKeyExchangeError(s) => OrchestratorError::UpgradeError(s),
         }
     }
 }

@@ -3,8 +3,8 @@ mod tests;
 
 mod create_dealing_error_conversions {
     use crate::sign::threshold_sig::ni_dkg::utils::DkgEncPubkeyRegistryQueryError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 
     impl From<DkgEncPubkeyRegistryQueryError> for DkgCreateDealingError {
         fn from(registry_query_error: DkgEncPubkeyRegistryQueryError) -> Self {
@@ -25,8 +25,8 @@ mod create_dealing_error_conversions {
 
 mod verify_dealing_error_conversions {
     use crate::sign::threshold_sig::ni_dkg::utils::DkgEncPubkeyRegistryQueryError;
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 
     impl From<DkgEncPubkeyRegistryQueryError> for DkgVerifyDealingError {
         fn from(registry_query_error: DkgEncPubkeyRegistryQueryError) -> Self {

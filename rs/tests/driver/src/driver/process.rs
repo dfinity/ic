@@ -1,14 +1,14 @@
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::process::{Command, ExitStatus, Stdio};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
     select,
-    sync::watch::{channel, Receiver},
+    sync::watch::{Receiver, channel},
     task::{self, JoinHandle},
 };
 
@@ -98,12 +98,12 @@ impl Process {
                 line_res = lines.next_line() => {
                     match line_res {
                         Ok(Some(line)) => {
-                            let task_id: String = format!("{}", task_id);
-                            let output_channel: String = format!("{:?}", channel_tag);
+                            let task_id: String = format!("{task_id}");
+                            let output_channel: String = format!("{channel_tag:?}");
                             info!(log, "{}", line; "task_id" => task_id, "output_channel" => output_channel)
                         }
                         Ok(None) => break,
-                        Err(e) => eprintln!("listen_on_channel(): {:?}", e),
+                        Err(e) => eprintln!("listen_on_channel(): {e:?}"),
                     }
                 }
                 _ = kill_watch.changed() => {

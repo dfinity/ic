@@ -1,9 +1,9 @@
 use crate::validation::ValidationError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
+    Height, NumBytes, Time,
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
-    Height, NumBytes, Time,
 };
 
 /// A SelfValidatingPayload is invalid.

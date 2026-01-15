@@ -45,7 +45,7 @@ impl EccCurveType {
     /// Scalar here refers to the byte size of an integer which has the range
     /// [0,z) where z is the group order.
     pub const fn scalar_bytes(&self) -> usize {
-        (self.scalar_bits() + 7) / 8
+        self.scalar_bits().div_ceil(8)
     }
 
     /// Security level of the curve, in bits
@@ -127,7 +127,7 @@ impl fmt::Display for EccCurveType {
             Self::Ed25519 => "ed25519",
         };
 
-        write!(f, "{}", curve_name)
+        write!(f, "{curve_name}")
     }
 }
 
@@ -199,6 +199,78 @@ impl EccScalar {
         }
     }
 
+    /// Compute the modular inverse of Self
+    ///
+    /// This function may leak the value of self to side channels, and should only
+    /// be used for public inputs
+    ///
+    /// Returns None if self is equal to zero
+    pub fn invert_vartime(&self) -> Option<Self> {
+        match self {
+            Self::K256(s) => s.invert_vartime().map(Self::K256),
+            Self::P256(s) => s.invert_vartime().map(Self::P256),
+            Self::Ed25519(s) => s.invert_vartime().map(Self::Ed25519),
+        }
+    }
+
+    /// Variable time batch inversion
+    ///
+    /// If all the scalars are invertible then returns the inverse of
+    /// each. Same as calling `invert_vartime` but potentially faster.
+    ///
+    /// All of the scalars must be in the same group
+    pub fn batch_invert_vartime(scalars: &[Self]) -> Result<Vec<Self>, CanisterThresholdError> {
+        if scalars.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let curve = scalars[0].curve_type();
+
+        let n = scalars.len();
+        let mut accum = EccScalar::one(curve);
+        let mut products = Vec::with_capacity(scalars.len());
+
+        /*
+         * This uses Montgomery's Trick to compute many inversions using just a
+         * single field inversion. This is worthwhile because field inversions
+         * are quite expensive.
+         *
+         * The basic idea here (for n=2) is taking advantage of the fact that if
+         * x and y both have inverses then so does x*y, and (x*y)^-1 * x = y^-1
+         * and (x*y)^-1 * y = x^-1
+         *
+         * This is described in more detail in various texts such as
+         *  - <https://eprint.iacr.org/2008/199.pdf> section 2
+         *  - "Guide to Elliptic Curve Cryptography" Algorithm 2.26
+         */
+
+        for s in scalars {
+            // This will fail if any of the elements are not of the
+            // expected curve type
+            accum = accum.mul(s)?;
+            products.push(accum.clone());
+        }
+
+        if let Some(mut inv) = accum.invert_vartime() {
+            let mut result = Vec::with_capacity(n);
+
+            for i in (1..n).rev() {
+                result.push(inv.mul(&products[i - 1])?);
+                inv = inv.mul(&scalars[i])?;
+            }
+
+            result.push(inv);
+            result.reverse();
+
+            Ok(result)
+        } else {
+            // There was a zero...
+            Err(CanisterThresholdError::InvalidArguments(
+                "Zero during batch inversion".to_string(),
+            ))
+        }
+    }
+
     /// Serialize the scalar
     ///
     /// For P-256 and secp256k1 this uses a big-endian encoding.
@@ -256,7 +328,7 @@ impl EccScalar {
         let s_bits = curve.scalar_bits();
         let security_level = curve.security_level();
 
-        let field_len = (s_bits + security_level + 7) / 8; // "L" in spec
+        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
         let len_in_bytes = count * field_len;
 
         let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
@@ -455,15 +527,117 @@ impl<'de> Deserialize<'de> for EccScalar {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccScalarSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccScalar::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
     K256(Box<[u8; 32]>),
     P256(Box<[u8; 32]>),
     Ed25519(Box<[u8; 32]>),
+}
+
+// Helper enum for serialization
+//
+// TODO add #[serde(with = "serde_bytes")] once we are sure
+// that all existing nodes are upgraded to be able to
+// understand both formats.
+#[derive(Serialize)]
+enum EccScalarBytesSerializeHelper<'a> {
+    K256(&'a [u8; 32]),
+    P256(#[serde(with = "serde_bytes")] &'a [u8; 32]),
+    Ed25519(&'a [u8; 32]),
+}
+
+// TODO after a sufficient amount of time using bytes as the default
+// serialization, remove the explicit Serialize and Deserialize traits
+// so that going forward only bytes are supported for decoding
+impl Serialize for EccScalarBytes {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::K256(bytes) => {
+                EccScalarBytesSerializeHelper::K256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::P256(bytes) => {
+                EccScalarBytesSerializeHelper::P256(bytes.as_ref()).serialize(serializer)
+            }
+            Self::Ed25519(bytes) => {
+                EccScalarBytesSerializeHelper::Ed25519(bytes.as_ref()).serialize(serializer)
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for EccScalarBytes {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{self, MapAccess, SeqAccess, Visitor};
+        /// Visitor that can handle both CBOR byte string and array formats
+        struct BytesOrArrayVisitor;
+        impl<'de> Visitor<'de> for BytesOrArrayVisitor {
+            type Value = Box<[u8; 32]>;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a byte string or array of 32 bytes")
+            }
+            // New efficient format: CBOR byte string
+            fn visit_bytes<E: de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
+                if v.len() != 32 {
+                    return Err(E::invalid_length(v.len(), &"32 bytes"));
+                }
+                let mut arr = [0u8; 32];
+                arr.copy_from_slice(v);
+                Ok(Box::new(arr))
+            }
+            // Old format: CBOR array of integers
+            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut arr = [0u8; 32];
+                for (i, byte) in arr.iter_mut().enumerate() {
+                    *byte = seq
+                        .next_element()?
+                        .ok_or_else(|| de::Error::invalid_length(i, &"32 elements"))?;
+                }
+                Ok(Box::new(arr))
+            }
+        }
+
+        struct BytesOrArrayScalar;
+        impl<'de> de::DeserializeSeed<'de> for BytesOrArrayScalar {
+            type Value = Box<[u8; 32]>;
+            fn deserialize<D2: Deserializer<'de>>(
+                self,
+                deserializer: D2,
+            ) -> Result<Self::Value, D2::Error> {
+                deserializer.deserialize_any(BytesOrArrayVisitor)
+            }
+        }
+
+        struct EccScalarBytesVisitor;
+
+        impl<'de> Visitor<'de> for EccScalarBytesVisitor {
+            type Value = EccScalarBytes;
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("EccScalarBytes enum with K256, P256, or Ed25519 variant")
+            }
+            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
+                let curve_str: String = map
+                    .next_key()?
+                    .ok_or_else(|| de::Error::custom("Expected curve name"))?;
+                // Use BytesOrArrayScalar, which uses deserialize_any, to handle both bytes and seq
+                let bytes: Box<[u8; 32]> = map.next_value_seed(BytesOrArrayScalar)?;
+                match curve_str.as_str() {
+                    "K256" => Ok(EccScalarBytes::K256(bytes)),
+                    "P256" => Ok(EccScalarBytes::P256(bytes)),
+                    "Ed25519" => Ok(EccScalarBytes::Ed25519(bytes)),
+                    other => Err(de::Error::unknown_variant(
+                        other,
+                        &["K256", "P256", "Ed25519"],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(EccScalarBytesVisitor)
+    }
 }
 
 impl EccScalarBytes {
@@ -497,17 +671,17 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
         match scalar.curve_type() {
             EccCurveType::K256 => {
                 Ok(Self::K256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::P256 => {
                 Ok(Self::P256(scalar.serialize().try_into().map_err(|e| {
-                    CanisterThresholdSerializationError(format!("{:?}", e))
+                    CanisterThresholdSerializationError(format!("{e:?}"))
                 })?))
             }
             EccCurveType::Ed25519 => {
                 Ok(Self::Ed25519(scalar.serialize().try_into().map_err(
-                    |e| CanisterThresholdSerializationError(format!("{:?}", e)),
+                    |e| CanisterThresholdSerializationError(format!("{e:?}")),
                 )?))
             }
         }
@@ -778,7 +952,7 @@ impl EccPoint {
     /// and performs one step for the scalar-point multiplication.
     /// This function must be called as many times as the length of
     /// the NAF representation of the scalar.
-    ///     
+    ///
     /// Warning: this function leaks information about the scalars via
     /// side channels. Do not use this function with secret scalars.
     fn scalar_mul_step_vartime(
@@ -918,7 +1092,7 @@ impl EccPoint {
         let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
             .iter()
             .zip(luts.iter())
-            .map(|(&(_p, s), lut)| (SlidingWindowMulState::new(s, lut.window_size)))
+            .map(|(&(_p, s), lut)| SlidingWindowMulState::new(s, lut.window_size))
             .collect();
 
         let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());
@@ -988,6 +1162,7 @@ impl EccPoint {
 
         let mut buckets: Vec<EccPoint> = (0..Window::MAX).map(|_| id.clone()).collect();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..num_windows {
             for j in 0..point_scalar_pairs.len() {
                 let bucket_index = windows[j][i] as usize;
@@ -1289,7 +1464,7 @@ impl<'de> Deserialize<'de> for EccPoint {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let helper: EccPointSerializationHelper = Deserialize::deserialize(deserializer)?;
         EccPoint::deserialize_tagged(&helper.0)
-            .map_err(|e| serde::de::Error::custom(format!("{:?}", e)))
+            .map_err(|e| serde::de::Error::custom(format!("{e:?}")))
     }
 }
 
@@ -1317,7 +1492,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     /// Returns the number of windows if scalar_bits bits are used
     #[inline(always)]
     pub(crate) const fn number_of_windows_for_bits(scalar_bits: usize) -> usize {
-        (scalar_bits + WINDOW_SIZE - 1) / WINDOW_SIZE
+        scalar_bits.div_ceil(WINDOW_SIZE)
     }
 
     /// Extract a window from a serialized scalar value
@@ -1336,7 +1511,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
         const BITS_IN_BYTE: usize = 8;
 
         let scalar_bytes = scalar.len();
-        let windows = (scalar_bytes * 8 + WINDOW_SIZE - 1) / WINDOW_SIZE;
+        let windows = (scalar_bytes * 8).div_ceil(WINDOW_SIZE);
 
         // to compute the correct bit offset for bit lengths that are not a power of 2,
         // we need to start from the inverted value or otherwise we will have multiple options

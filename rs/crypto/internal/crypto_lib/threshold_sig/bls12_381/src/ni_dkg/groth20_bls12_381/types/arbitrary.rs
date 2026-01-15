@@ -1,7 +1,7 @@
 //! Prop-test utilities for Groth20 NiDKG types.
 use super::*;
 use ic_crypto_internal_types::curves::bls12_381::FrBytes;
-use proptest::prelude::{any, BoxedStrategy, Strategy};
+use proptest::prelude::{BoxedStrategy, Strategy, any};
 
 fn arbitrary_key_set_with_pop() -> impl Strategy<Value = FsEncryptionKeySetWithPop> {
     any::<u8>().prop_map(|byte| FsEncryptionKeySetWithPop {

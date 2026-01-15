@@ -7,14 +7,18 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+async-trait = { workspace = true }
+candid = { workspace = true }
 chrono = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-registry-canister-api = { path = "../canister/api" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+mockall = { workspace = true }
 prost = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -22,5 +26,14 @@ tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-nervous-system-agent = { path = "../../nervous_system/agent" }
+ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+ic-nns-test-utils = { path = "../../nns/test_utils" }
 leb128 = "0.2.4"
+pocket-ic = { path = "../../../packages/pocket-ic" }
+pretty_assertions = { workspace = true }
+tokio = { workspace = true }

@@ -24,7 +24,7 @@ end::catalog[] */
 use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -34,6 +34,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SshSession,
         },
     },
     nns::{
@@ -116,23 +117,20 @@ pub fn test(env: TestEnv) {
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-        // Confirm that the node was indeed removed by sending the proposal again and asserting failure.
-        let proposal_id = submit_external_proposal_with_test_id(
-            &governance_canister,
-            NnsFunction::RemoveNodes,
-            RemoveNodesPayload {
-                node_ids: vec![unassigned_node_id],
-            },
-        )
-        .await;
-        vote_execute_proposal_assert_failed(
-            &governance_canister,
-            proposal_id,
-            format!(
-                "Aborting node removal: Node Id {} not found in the registry",
-                unassigned_node_id
-            ),
-        )
-        .await;
+
+        // Confirm that the node was indeed removed by checking the unassigned node list in the registry.
+        topology
+            .block_for_newer_registry_version()
+            .await
+            .expect("Could not obtain updated registry.");
+        let topology = env.topology_snapshot();
+        assert_eq!(
+            topology
+                .unassigned_nodes()
+                .filter(|node| node.node_id == unassigned_node_id)
+                .map(|node| node.node_id)
+                .collect::<Vec<_>>(),
+            vec![]
+        );
     });
 }

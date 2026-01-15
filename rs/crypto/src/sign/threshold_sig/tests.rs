@@ -10,18 +10,19 @@ use ic_crypto_internal_threshold_sig_bls12381::types::{
     CombinedSignatureBytes, IndividualSignatureBytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_types::Height;
+use ic_types::SubnetId;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
 };
 use ic_types::crypto::{CombinedThresholdSig, SignableMock, ThresholdSigShare};
-use ic_types::Height;
-use ic_types::SubnetId;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
+use sign::tests::REG_V1;
 
 pub const NODE_ID: NodeId = NODE_1;
 
@@ -34,6 +35,7 @@ pub const NI_DKG_ID_1: NiDkgId = NiDkgId {
 
 mod sign_threshold {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_crypto_internal_csp::key_id::KeyId;
 
     #[test]
@@ -85,51 +87,62 @@ mod sign_threshold {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: The algorithm of the public key from the threshold signature data store is not supported: Placeholder"
-    )]
-    fn should_panic_with_correct_message_if_csp_returns_unsupported_algorithm_error() {
+    fn should_return_internal_error_if_csp_returns_unsupported_algorithm_error() {
         let csp = csp_with_sign_returning_once(Err(unsupported_algorithm()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("not supported")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Illegal state: The secret key has a wrong type")]
-    fn should_panic_if_csp_returns_wrong_secret_key_type_error() {
+    fn should_return_internal_error_if_csp_returns_wrong_secret_key_type_error() {
         let csp = csp_with_sign_returning_once(Err(wrong_secret_key_type()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("wrong type")
+        );
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: Unable to parse the secret key with algorithm id Placeholder"
-    )]
-    fn should_panic_if_csp_returns_malformed_secret_key_error() {
+    fn should_return_internal_error_if_csp_returns_malformed_secret_key_error() {
         let csp = csp_with_sign_returning_once(Err(malformed_secret_key()));
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs(pub_coeffs(), &NI_DKG_ID_1);
 
-        let _panic = ThresholdSignerInternal::sign_threshold(
+        let result = ThresholdSignerInternal::sign_threshold(
             &threshold_sig_data_store,
             &csp,
             &signable_mock(),
             &NI_DKG_ID_1,
+        );
+
+        assert_matches!(
+            result,
+            Err(ThresholdSignError::InternalError(internal_error))
+            if internal_error.contains("Unable to parse the secret key")
         );
     }
 
@@ -150,7 +163,7 @@ mod sign_threshold {
             sig_share_result,
             Err(ThresholdSignError::SecretKeyNotFound {
                 dkg_id: NI_DKG_ID_1,
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_id: KEY_ID_STRING.to_string(),
             })
         )
@@ -197,13 +210,13 @@ mod sign_threshold {
 
     fn unsupported_algorithm() -> CspThresholdSignError {
         CspThresholdSignError::UnsupportedAlgorithm {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
         }
     }
 
     fn secret_key_not_found() -> CspThresholdSignError {
         CspThresholdSignError::SecretKeyNotFound {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_id: KeyId::from(KEY_ID),
         }
     }
@@ -214,7 +227,7 @@ mod sign_threshold {
 
     fn malformed_secret_key() -> CspThresholdSignError {
         CspThresholdSignError::MalformedSecretKey {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
         }
     }
 
@@ -344,7 +357,7 @@ mod verify_threshold_sig_share {
     fn should_return_ok_if_sig_verification_ok_and_public_key_not_in_store() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -391,7 +404,7 @@ mod verify_threshold_sig_share {
         let verification_error = sig_verification_error();
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -417,7 +430,7 @@ mod verify_threshold_sig_share {
     fn should_have_correct_public_key_in_store_after_sig_verification_if_not_in_store_before() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key()
             .times(1)
@@ -510,8 +523,7 @@ mod verify_threshold_sig_share {
             verification_result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_ID
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_ID}\" in the transcript data."
                 )
             }
         );
@@ -521,7 +533,7 @@ mod verify_threshold_sig_share {
     fn should_fail_with_malformed_signature_if_signature_has_invalid_length() {
         let (sig_share, message) = (invalid_threshold_sig_share(), signable_mock());
         let threshold_sig_data_store =
-            threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(&NI_DKG_ID_1);
+            threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(&NI_DKG_ID_1);
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_threshold_individual_public_key().times(0);
         csp.expect_threshold_verify_individual_signature().times(0);
@@ -834,8 +846,7 @@ mod combine_threshold_sig_shares {
             result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_1
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_1}\" in the transcript data."
                 )
             }
         );
@@ -1167,18 +1178,18 @@ mod verify_threshold_sig_combined {
 
 mod verify_combined_threshold_sig_by_public_key {
     use super::*;
-    use crate::sign::tests::{registry_returning_none, REG_V1, SUBNET_ID};
+    use crate::sign::tests::{REG_V1, SUBNET_ID, registry_returning_none};
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-        ni_dkg_groth20_bls12_381, CspNiDkgTranscript,
+        CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
     };
     use ic_crypto_test_utils::set_of;
     use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::make_catch_up_package_contents_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
     use ic_types::NumberOfNodes;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 
     #[test]
     fn should_call_csp_with_correct_params() {
@@ -1528,7 +1539,7 @@ fn combined_csp_threshold_sig(bytes: [u8; CombinedSignatureBytes::SIZE]) -> CspS
 
 fn secret_key_not_found() -> CryptoError {
     CryptoError::SecretKeyNotFound {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         key_id: KEY_ID_STRING.to_string(),
     }
 }
@@ -1541,7 +1552,7 @@ fn invalid_argument() -> CryptoError {
 
 fn malformed_public_key() -> CryptoError {
     CryptoError::MalformedPublicKey {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         key_bytes: None,
         internal_error: "some error".to_string(),
     }
@@ -1549,7 +1560,7 @@ fn malformed_public_key() -> CryptoError {
 
 fn malformed_signature() -> CryptoError {
     CryptoError::MalformedSignature {
-        algorithm: AlgorithmId::Placeholder,
+        algorithm: AlgorithmId::Unspecified,
         sig_bytes: vec![],
         internal_error: "some error".to_string(),
     }
@@ -1598,17 +1609,20 @@ fn threshold_sig_data_store_with(
     let store = LockableThresholdSigDataStore::new();
     store
         .write()
-        .insert_transcript_data(dkg_id, public_coeffs, indices);
+        .insert_transcript_data(dkg_id, public_coeffs, indices, REG_V1);
     store
 }
 
-fn threshold_sig_data_store_with_non_empty_coeffs_and_indices_for_dkg_id(
+fn threshold_sig_data_store_with_non_empty_transcript_data_for_dkg_id(
     ni_dkg_id: &NiDkgId,
 ) -> LockableThresholdSigDataStore {
     let store = LockableThresholdSigDataStore::new();
-    store
-        .write()
-        .insert_transcript_data(ni_dkg_id, pub_coeffs(), indices(vec![(NODE_ID, 1)]));
+    store.write().insert_transcript_data(
+        ni_dkg_id,
+        pub_coeffs(),
+        indices(vec![(NODE_ID, 1)]),
+        REG_V1,
+    );
     store
 }
 
@@ -1621,6 +1635,7 @@ fn threshold_sig_data_store_with_coeffs(
         dkg_id,
         csp_public_coefficients,
         BTreeMap::new(),
+        REG_V1,
     );
     threshold_sig_data_store
 }
@@ -1633,7 +1648,7 @@ fn threshold_sig_data_store_with_coeffs_and_pubkey(
     let threshold_sig_data_store = LockableThresholdSigDataStore::new();
     {
         let mut locked_store = threshold_sig_data_store.write();
-        locked_store.insert_transcript_data(dkg_id, pub_coeffs(), BTreeMap::new());
+        locked_store.insert_transcript_data(dkg_id, pub_coeffs(), BTreeMap::new(), REG_V1);
         locked_store.insert_individual_public_key(dkg_id, node_id, public_key);
     }
     threshold_sig_data_store

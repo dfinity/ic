@@ -21,13 +21,11 @@ fn test_try_from_principal_id() {
             for key_word in ["opaque", "self", "authenticating", "class"] {
                 assert!(
                     description.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    description
+                    "{key_word} not in {description:?}"
                 );
             }
         }
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
 
     // Opaque, but wrong length.
@@ -38,13 +36,11 @@ fn test_try_from_principal_id() {
             for key_word in ["10", "5", "bytes"] {
                 assert!(
                     description.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    description
+                    "{key_word} not in {description:?}"
                 );
             }
         }
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
 
     // Near miss: opaque, length 10, but penultimate is not 0x01 (?!).
@@ -54,12 +50,10 @@ fn test_try_from_principal_id() {
             for key_word in ["byte", "8", "0x01"] {
                 assert!(
                     description.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    description
+                    "{key_word} not in {description:?}"
                 );
             }
         }
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
 }

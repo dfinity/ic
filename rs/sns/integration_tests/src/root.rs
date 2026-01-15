@@ -3,7 +3,7 @@ use canister_test::Project;
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
@@ -13,15 +13,16 @@ use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
 use ic_sns_root::{
-    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{Extensions, SnsRootCanister},
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
+        SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet, set_up_root_canister,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
-        state_machine_builder_for_sns_tests, Scenario,
+        Scenario, sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -40,6 +41,9 @@ fn test_get_status() {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(43)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
+                extensions: Some(Extensions {
+                    extension_canister_ids: vec![],
+                }),
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
@@ -71,8 +75,7 @@ fn test_get_status() {
         assert_eq!(
             response.status,
             CanisterStatusType::Running,
-            "response: {:?}",
-            response
+            "response: {response:?}"
         );
 
         Ok(())
@@ -315,8 +318,7 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
+        chunked_canister_wasm: None,
     };
 
     let _: () = update_with_sender(
@@ -364,10 +366,7 @@ fn root_get_sns_canisters_summary(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_sns_canisters_summary was rejected by the swap canister: {:#?}",
-                reject
-            )
+            panic!("get_sns_canisters_summary was rejected by the swap canister: {reject:#?}")
         }
     };
     let response = Decode!(&result, GetSnsCanistersSummaryResponse).unwrap();

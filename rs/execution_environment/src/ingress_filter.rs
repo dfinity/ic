@@ -1,18 +1,18 @@
 use crate::query_handler::QueryScheduler;
-use crate::{metrics::IngressFilterMetrics, ExecutionEnvironment};
-use ic_error_types::UserError;
-use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
+use crate::{ExecutionEnvironment, metrics::IngressFilterMetrics};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, IngressFilterError, IngressFilterInput, IngressFilterResponse,
+    IngressFilterService,
+};
 use ic_interfaces_state_manager::StateReader;
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::ReplicatedState;
-use ic_types::messages::SignedIngressContent;
 use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{Service, util::BoxCloneService};
 
 #[derive(Clone)]
 pub(crate) struct IngressFilterServiceImpl {
@@ -38,8 +38,8 @@ impl IngressFilterServiceImpl {
     }
 }
 
-impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServiceImpl {
-    type Response = Result<(), UserError>;
+impl Service<IngressFilterInput> for IngressFilterServiceImpl {
+    type Response = IngressFilterResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -48,27 +48,30 @@ impl Service<(ProvisionalWhitelist, SignedIngressContent)> for IngressFilterServ
         Poll::Ready(Ok(()))
     }
 
-    fn call(
-        &mut self,
-        (provisional_whitelist, ingress): (ProvisionalWhitelist, SignedIngressContent),
-    ) -> Self::Future {
+    fn call(&mut self, (provisional_whitelist, raw_ingress): IngressFilterInput) -> Self::Future {
         let exec_env = Arc::clone(&self.exec_env);
         let metrics = Arc::clone(&self.metrics);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
-        let canister_id = ingress.canister_id();
+        let canister_id = raw_ingress.content().canister_id();
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
-                let state = state_reader.get_latest_state().take();
-                let v = exec_env.should_accept_ingress_message(
-                    state,
-                    &provisional_whitelist,
-                    &ingress,
-                    ExecutionMode::NonReplicated,
-                    &metrics,
-                );
-                let _ = tx.send(Ok(v));
+                let result = match state_reader.get_latest_certified_state() {
+                    Some(state) => {
+                        let v = exec_env.should_accept_ingress_message(
+                            state.take(),
+                            &provisional_whitelist,
+                            &raw_ingress,
+                            ExecutionMode::NonReplicated,
+                            &metrics,
+                        );
+                        Ok(v)
+                    }
+                    None => Err(IngressFilterError::CertifiedStateUnavailable),
+                };
+
+                let _ = tx.send(Ok(result));
             }
             start.elapsed()
         });

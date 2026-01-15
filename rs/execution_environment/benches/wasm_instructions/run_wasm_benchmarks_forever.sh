@@ -58,7 +58,7 @@ for i in $(seq 1000); do
     cat "${NEW_RES_FILE}" | while read test name ellipsis bench new_result rest; do
         min_result=$(rg -F " ${name} " "${MIN_RES_FILE}" | awk '{print $5}')
         if [ -n "${min_result}" ]; then
-            if [ -n "${new_result}" -a "${new_result}" -lt "${min_result}" ]; then
+            if [ "${new_result}" -lt "${min_result}" ]; then
                 echo "        ${name#*/} is improved from ${min_result}ns to ${new_result}ns"
                 min_result="${new_result}"
             fi

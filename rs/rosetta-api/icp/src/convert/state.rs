@@ -1,13 +1,15 @@
-use crate::errors::ApiError;
-use crate::models::seconds::Seconds;
-use crate::request::Request;
-use crate::request_types::{
-    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
-    StakeMaturity, StartDissolve, StopDissolve,
+use crate::{
+    errors::ApiError,
+    models::seconds::Seconds,
+    request::Request,
+    request_types::{
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
+        NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
+        SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    },
 };
 use ic_types::PrincipalId;
-use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{DEFAULT_TRANSFER_FEE, Operation, Tokens};
 
 /// Helper for `from_operations` that creates `Transfer`s from related
 /// debit/credit/fee operations.
@@ -40,7 +42,7 @@ impl State {
     /// previously.
     pub fn flush(&mut self) -> Result<(), ApiError> {
         let trans_err = |msg| {
-            let msg = format!("Bad transaction: {}", msg);
+            let msg = format!("Bad transaction: {msg}");
             let err = ApiError::InvalidTransaction(false, msg.into());
             Err(err)
         };
@@ -79,7 +81,7 @@ impl State {
             if cr_amount == Tokens::ZERO && fee_acc == to {
                 std::mem::swap(&mut from, &mut to);
             } else {
-                let msg = format!("Fee should be taken from {}", from);
+                let msg = format!("Fee should be taken from {from}");
                 return trans_err(msg);
             }
         }
@@ -256,6 +258,24 @@ impl State {
         Ok(())
     }
 
+    pub fn disburse_maturity(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+        percentage_to_disburse: u32,
+        recipient: Option<icp_ledger::AccountIdentifier>,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::DisburseMaturity(DisburseMaturity {
+                account,
+                percentage_to_disburse,
+                recipient,
+                neuron_index,
+            }));
+        Ok(())
+    }
+
     pub fn spawn(
         &mut self,
         account: icp_ledger::AccountIdentifier,
@@ -264,12 +284,12 @@ impl State {
         percentage_to_spawn: Option<u32>,
         controller: Option<PrincipalId>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_spawn {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to spawn: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
+        if let Some(pct) = percentage_to_spawn
+            && !(1..=100).contains(&pct)
+        {
+            let msg = format!("Invalid percentage to spawn: {pct}");
+            let err = ApiError::InvalidTransaction(false, msg.into());
+            return Err(err);
         }
         self.flush()?;
         self.actions.push(Request::Spawn(Spawn {
@@ -300,40 +320,18 @@ impl State {
         Ok(())
     }
 
-    pub fn merge_maturity(
-        &mut self,
-        account: icp_ledger::AccountIdentifier,
-        neuron_index: u64,
-        percentage_to_merge: Option<u32>,
-    ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_merge {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to merge: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
-        }
-        self.flush()?;
-        self.actions.push(Request::MergeMaturity(MergeMaturity {
-            account,
-            neuron_index,
-            percentage_to_merge: percentage_to_merge.unwrap_or(100),
-        }));
-        Ok(())
-    }
-
     pub fn stake_maturity(
         &mut self,
         account: icp_ledger::AccountIdentifier,
         neuron_index: u64,
         percentage_to_stake: Option<u32>,
     ) -> Result<(), ApiError> {
-        if let Some(pct) = percentage_to_stake {
-            if !(1..=100).contains(&pct) {
-                let msg = format!("Invalid percentage to stake: {}", pct);
-                let err = ApiError::InvalidTransaction(false, msg.into());
-                return Err(err);
-            }
+        if let Some(pct) = percentage_to_stake
+            && !(1..=100).contains(&pct)
+        {
+            let msg = format!("Invalid percentage to stake: {pct}");
+            let err = ApiError::InvalidTransaction(false, msg.into());
+            return Err(err);
         }
         self.flush()?;
         self.actions.push(Request::StakeMaturity(StakeMaturity {
@@ -359,10 +357,16 @@ impl State {
         Ok(())
     }
 
-    pub fn list_neurons(&mut self, account: icp_ledger::AccountIdentifier) -> Result<(), ApiError> {
+    pub fn list_neurons(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        page_number: Option<u64>,
+    ) -> Result<(), ApiError> {
         self.flush()?;
-        self.actions
-            .push(Request::ListNeurons(ListNeurons { account }));
+        self.actions.push(Request::ListNeurons(ListNeurons {
+            account,
+            page_number,
+        }));
         Ok(())
     }
 
@@ -382,6 +386,22 @@ impl State {
             controller,
             neuron_index,
         }));
+        Ok(())
+    }
+
+    pub fn refresh_voting_power(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+        controller: Option<PrincipalId>,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::RefreshVotingPower(RefreshVotingPower {
+                account,
+                neuron_index,
+                controller,
+            }));
         Ok(())
     }
 }

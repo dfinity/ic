@@ -1,6 +1,6 @@
 //! The file contains the synchronous interface used from P2P, to drive the StateSync protocol.  
 use ic_protobuf::p2p::v1 as p2p_pb;
-use ic_types::{crypto::CryptoHash, Height};
+use ic_types::{Height, crypto::CryptoHash};
 use phantom_newtype::Id;
 use thiserror::Error;
 

@@ -1,6 +1,6 @@
 use canister_test::Project;
 use ic_base_types::CanisterId;
-use ic_management_canister_types::{CanisterInstallMode, CanisterStatusType};
+use ic_management_canister_types_private::{CanisterInstallMode, CanisterStatusType};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
@@ -8,15 +8,15 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
+    InstallCodeRequest, MakeProposalRequest, ProposalActionRequest, ProposalStatus, Vote,
     install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
-    manage_neuron_response::Command as CommandResponse, InstallCodeRequest, MakeProposalRequest,
-    ProposalActionRequest, ProposalStatus, Vote,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        get_pending_proposals, get_root_canister_status, nns_cast_vote,
+        get_pending_proposals, get_root_canister_status, nns_cast_vote_or_panic,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
         nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
         update_with_sender,
@@ -95,10 +95,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals
@@ -106,7 +103,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {
@@ -121,10 +118,9 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
-        "{:#?}",
-        proposal_info
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.
@@ -197,10 +193,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals
@@ -208,7 +201,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {
@@ -222,10 +215,9 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
-        "{:#?}",
-        proposal_info
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.

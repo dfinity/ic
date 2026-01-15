@@ -1,5 +1,6 @@
 //! Calls the recovery library.
 use crate::{
+    DataLocation, NeuronArgs, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
     error::GracefulExpect,
@@ -11,17 +12,17 @@ use crate::{
     registry_helper::RegistryHelper,
     steps::Step,
     util,
+    util::data_location_from_str,
     util::subnet_id_from_str,
-    NeuronArgs, RecoveryArgs,
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use serde::{de::DeserializeOwned, Serialize};
-use slog::{info, warn, Logger};
+use serde::{Serialize, de::DeserializeOwned};
+use slog::{Logger, info, warn};
 use std::{
     convert::TryFrom,
     fmt::Display,
-    io::{stdin, stdout, Write},
+    io::{Write, stdin, stdout},
     str::FromStr,
 };
 use strum::EnumMessage;
@@ -237,12 +238,8 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
 /// Request and read input from the user with the given prompt. Convert empty
 /// input to `None`.
 fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
-    let input = read_input(logger, &format!("(Optional) {}", prompt));
-    if input.is_empty() {
-        None
-    } else {
-        Some(input)
-    }
+    let input = read_input(logger, &format!("(Optional) {prompt}"));
+    if input.is_empty() { None } else { Some(input) }
 }
 
 pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {
@@ -267,6 +264,10 @@ pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVer
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
     read_optional_type(logger, prompt, subnet_id_from_str)
+}
+
+pub fn read_optional_data_location(logger: &Logger, prompt: &str) -> Option<DataLocation> {
+    read_optional_type(logger, prompt, data_location_from_str)
 }
 
 /// Optionally read an input of the generic type by applying the given deserialization function.
@@ -309,7 +310,11 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
             serde_json::to_string_pretty(&state).expect("Failed to stringify the recovery state"),
         );
 
-        if consent_given(logger, "Resume previously started recovery?") {
+        // In system tests where `recovery_args.skip_prompts` is set, we want to execute the CLI
+        // arguments without making any assumptions on the saved state.
+        if !recovery_args.skip_prompts
+            && consent_given(logger, "Resume previously started recovery?")
+        {
             let state = maybe_update_state(logger, state, &recovery_args, &subcommand_args);
             // Immediately save the state with potentially new arguments
             if let Err(e) = state.save() {

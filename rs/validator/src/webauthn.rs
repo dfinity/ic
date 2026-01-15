@@ -20,7 +20,7 @@ pub(crate) fn validate_webauthn_sig(
     let envelope = match WebAuthnEnvelope::try_from(webauthn_sig) {
         Ok(envelope) => envelope,
         Err(err) => {
-            return Err(format!("WebAuthn envelope creation failed: {}", err));
+            return Err(format!("WebAuthn envelope creation failed: {err}"));
         }
     };
 
@@ -55,16 +55,15 @@ fn basic_sig_from_webauthn_sig(
         AlgorithmId::EcdsaP256 => {
             // ECDSA signatures are DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             ecdsa_p256_signature_from_der_bytes(&webauthn_sig.signature().0)
-                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {}", e))
+                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {e}"))
         }
         AlgorithmId::RsaSha256 => {
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             Ok(rsa_signature_from_bytes(&webauthn_sig.signature()))
         }
         _ => Err(format!(
-            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {:?}",
-            algorithm_id
-        ))
+            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {algorithm_id:?}"
+        )),
     }
 }
 
@@ -75,7 +74,7 @@ mod tests {
         ECDSA_P256_PK_COSE_DER_WRAPPED_HEX, ECDSA_WEBAUTHN_SIG_HELLO_HEX,
     };
     use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
-    use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
+    use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::{message_test_id, node_test_id};
     use ic_types::{
         crypto::SignableMock,
@@ -118,6 +117,111 @@ mod tests {
         }
 
         #[test]
+        fn should_verify_newly_generated_webauthn_ecdsa_signature() {
+            let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
+
+            let (sig_bytes, pk_bytes, msg) = {
+                let sk = ic_secp256r1::PrivateKey::generate();
+
+                let msg = "webauthn signature generation test";
+
+                let sig_bytes = {
+                    use serde::Serialize;
+
+                    #[derive(Debug, Serialize)]
+                    struct ClientData {
+                        r#type: String,
+                        challenge: String,
+                        origin: String,
+                    }
+
+                    let client_data = ClientData {
+                        r#type: "brunettes".to_string(),
+                        challenge: base64::encode(msg),
+                        origin: "https://localhost/".to_string(),
+                    };
+
+                    let authenticator_data = Blob(b"auth_data".to_vec());
+                    let client_data_json = serde_json::to_vec(&client_data).unwrap();
+
+                    let signed_message = {
+                        let mut sm = vec![];
+                        sm.extend_from_slice(&authenticator_data.0);
+                        sm.extend_from_slice(&ic_crypto_sha2::Sha256::hash(&client_data_json));
+                        sm
+                    };
+                    let signature = Blob(sk.sign_message_with_der_encoded_sig(&signed_message));
+                    let sig = WebAuthnSignature::new(
+                        authenticator_data,
+                        Blob(client_data_json),
+                        signature,
+                    );
+                    serde_cbor::to_vec(&sig).unwrap()
+                };
+
+                let pk_cose = {
+                    let mut map = std::collections::BTreeMap::new();
+
+                    use serde_cbor::Value;
+
+                    /*
+                    See RFC 8152 ("CBOR Object Signing and Encryption (COSE)"), sections 8.1
+                    and 13.1 for these constants
+                    */
+                    const COSE_PARAM_KTY: serde_cbor::Value = serde_cbor::Value::Integer(1);
+                    const COSE_PARAM_KTY_EC2: serde_cbor::Value = serde_cbor::Value::Integer(2);
+
+                    const COSE_PARAM_ALG: serde_cbor::Value = serde_cbor::Value::Integer(3);
+                    const COSE_PARAM_ALG_ES256: serde_cbor::Value = serde_cbor::Value::Integer(-7);
+
+                    const COSE_PARAM_EC2_CRV: serde_cbor::Value = serde_cbor::Value::Integer(-1);
+                    const COSE_PARAM_EC2_CRV_P256: serde_cbor::Value =
+                        serde_cbor::Value::Integer(1);
+
+                    const COSE_PARAM_EC2_X: serde_cbor::Value = serde_cbor::Value::Integer(-2);
+                    const COSE_PARAM_EC2_Y: serde_cbor::Value = serde_cbor::Value::Integer(-3);
+
+                    let sec1 = sk.public_key().serialize_sec1(false);
+                    let x = &sec1[1..33];
+                    let y = &sec1[33..];
+
+                    map.insert(COSE_PARAM_KTY, COSE_PARAM_KTY_EC2);
+                    map.insert(COSE_PARAM_EC2_CRV, COSE_PARAM_EC2_CRV_P256);
+                    map.insert(COSE_PARAM_ALG, COSE_PARAM_ALG_ES256);
+                    map.insert(COSE_PARAM_EC2_X, Value::Bytes(x.to_vec()));
+                    map.insert(COSE_PARAM_EC2_Y, Value::Bytes(y.to_vec()));
+
+                    serde_cbor::to_vec(&Value::Map(map)).expect("cbor encoding failed")
+                };
+
+                let pk_der = {
+                    use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
+                    use simple_asn1::oid;
+                    // OID 1.3.6.1.4.1.56387.1.1
+                    // See https://internetcomputer.org/docs/current/references/ic-interface-spec#signatures
+                    let webauthn_key_oid = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1);
+                    subject_public_key_info_der(webauthn_key_oid, &pk_cose).unwrap()
+                };
+
+                (sig_bytes, pk_der, msg.as_bytes().to_vec())
+            };
+
+            let sig = WebAuthnSignature::try_from(sig_bytes.as_slice()).unwrap();
+            let pk = user_public_key_from_bytes(&pk_bytes).unwrap().0;
+            assert_eq!(pk.algorithm_id, AlgorithmId::EcdsaP256);
+
+            let message = SignableMock {
+                domain: vec![],
+                signed_bytes_without_domain: msg.to_vec(),
+            };
+
+            assert_eq!(
+                validate_webauthn_sig(&verifier, &sig, &message, &pk),
+                Ok(())
+            );
+        }
+
+        #[test]
         fn should_return_error_on_valid_signature_but_wrong_message() {
             let verifier = temp_crypto_component_with_fake_registry(node_test_id(0));
             // The signature parsed here verifies the bytes b"hello".
@@ -151,10 +255,12 @@ mod tests {
 
             let result = validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Failed to parse EcdsaP256 signature"));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Failed to parse EcdsaP256 signature")
+            );
         }
 
         #[test]
@@ -169,10 +275,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 
@@ -238,7 +346,7 @@ mod tests {
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 RSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
             );
-            println!("{}", pk);
+            println!("{pk}");
             // Replace the correct signature with a malformed one.
             let sig = WebAuthnSignature::new(
                 sig.authenticator_data(),
@@ -264,10 +372,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 

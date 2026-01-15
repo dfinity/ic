@@ -57,6 +57,6 @@ fn should_debug_pretty_print_domain_separation_context() {
         "DomainSeparationContext{ domain: \"test\" }",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

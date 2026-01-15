@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{abridged_neuron::DissolveState, Vote},
+    pb::v1::Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -48,6 +48,8 @@ fn create_model_neuron(id: u64) -> Neuron {
     .with_known_neuron_data(Some(KnownNeuronData {
         name: "Fabulous".to_string(),
         description: Some("Follow MeEe for max rewards!".to_string()),
+        links: vec![],
+        committed_topics: vec![],
     }))
     .with_recent_ballots(vec![
         BallotInfo {
@@ -94,7 +96,9 @@ fn new_red_herring_neuron(seed: u64) -> Neuron {
         vote: Vote::No as i32,
     });
 
-    result.known_neuron_data.as_mut().unwrap().name = format!("Red Herring {}", seed,);
+    let mut new_known_neuron_data = result.known_neuron_data().unwrap().clone();
+    new_known_neuron_data.name = format!("Red Herring {seed}");
+    result.set_known_neuron_data(new_known_neuron_data);
 
     result.transfer.as_mut().unwrap().memo = seed;
 
@@ -175,15 +179,11 @@ fn test_store_simplest_nontrivial_case() {
                 assert_eq!(*neuron_id, NeuronId { id: 42 });
             }
             _ => panic!(
-                "create(evil_twin_neuron) resulted in an Err other than already exists: {:?}",
-                err
+                "create(evil_twin_neuron) resulted in an Err other than already exists: {err:?}"
             ),
         },
 
-        _ => panic!(
-            "create(evil_twin_neuron) did not result in an Err: {:?}",
-            bad_create_result
-        ),
+        _ => panic!("create(evil_twin_neuron) did not result in an Err: {bad_create_result:?}"),
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
@@ -199,13 +199,10 @@ fn test_store_simplest_nontrivial_case() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
             }
-            _ => panic!("read returns error other than not found: {:?}", err),
+            _ => panic!("read returns error other than not found: {err:?}"),
         },
 
-        _ => panic!(
-            "read(0xDEAD) did not result in an Err: {:?}",
-            bad_read_result
-        ),
+        _ => panic!("read(0xDEAD) did not result in an Err: {bad_read_result:?}"),
     }
 
     // 5. Update existing neuron.
@@ -233,8 +230,8 @@ fn test_store_simplest_nontrivial_case() {
             vote: Vote::Yes as i32,
         });
 
-        let mut known_neuron_data = neuron_1.known_neuron_data.clone();
-        known_neuron_data.as_mut().unwrap().name = "I changed my mind".to_string();
+        let mut known_neuron_data = neuron_1.known_neuron_data().unwrap().clone();
+        known_neuron_data.name = "I changed my mind".to_string();
 
         let mut transfer = neuron_1.transfer.clone();
         transfer.as_mut().unwrap().memo = 405_405;
@@ -246,7 +243,7 @@ fn test_store_simplest_nontrivial_case() {
         neuron.followees = followees;
         neuron.recent_ballots = recent_ballots;
 
-        neuron.known_neuron_data = known_neuron_data;
+        neuron.set_known_neuron_data(known_neuron_data);
         neuron.transfer = transfer;
 
         neuron
@@ -269,11 +266,11 @@ fn test_store_simplest_nontrivial_case() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
             }
-            _ => panic!("update returns Err other than not found {:?}", err),
+            _ => panic!("update returns Err other than not found {err:?}"),
         },
 
         // Any other result is bad.
-        _ => panic!("{:#?}", update_result),
+        _ => panic!("{update_result:#?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -287,16 +284,16 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 0xDEAD_BEEF });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("read did not return Err: {:?}", read_result),
+        _ => panic!("read did not return Err: {read_result:?}"),
     }
 
     // 9. Update again.
     let mut neuron_9 = neuron_5.clone();
-    neuron_9.known_neuron_data = None;
+    neuron_9.clear_known_neuron_data();
     neuron_9.transfer = None;
     assert_eq!(store.update(&neuron_5, neuron_9.clone()), Ok(()));
     assert_that_red_herring_neurons_are_untouched(&store);
@@ -321,11 +318,11 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 42 });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("second delete did not return Err: {:?}", delete_result),
+        _ => panic!("second delete did not return Err: {delete_result:?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -339,11 +336,11 @@ fn test_store_simplest_nontrivial_case() {
                 NeuronStoreError::NeuronNotFound { neuron_id } => {
                     assert_eq!(*neuron_id, NeuronId { id: 42 });
                 }
-                _ => panic!("read returns error other than not found: {:?}", err),
+                _ => panic!("read returns error other than not found: {err:?}"),
             }
         }
 
-        _ => panic!("read did not return Err: {:?}", read_result),
+        _ => panic!("read did not return Err: {read_result:?}"),
     }
     assert_that_red_herring_neurons_are_untouched(&store);
 
@@ -364,10 +361,7 @@ fn test_store_simplest_nontrivial_case() {
             assert_ne!(
                 key_value_to_neuron_id(key, value.clone()),
                 bad_neuron_id,
-                "{} {:?}: {:#?}",
-                map_name,
-                key,
-                value
+                "{map_name} {key:?}: {value:#?}"
             );
         }
     }
@@ -441,11 +435,11 @@ fn test_partial_read() {
 
         if sections.known_neuron_data {
             assert_eq!(
-                neuron_read_result.known_neuron_data,
-                neuron.known_neuron_data,
+                neuron_read_result.known_neuron_data(),
+                neuron.known_neuron_data(),
             );
         } else {
-            assert_eq!(neuron_read_result.known_neuron_data, None);
+            assert_eq!(neuron_read_result.known_neuron_data(), None);
         }
 
         if sections.transfer {
@@ -477,42 +471,6 @@ fn test_partial_read() {
         transfer: true,
         ..NeuronSections::NONE
     });
-}
-
-#[test]
-fn test_abridged_neuron_size() {
-    // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
-    // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for
-    // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
-    // realistic.
-    let abridged_neuron = AbridgedNeuron {
-        account: vec![u8::MAX; 32],
-        controller: Some(PrincipalId::new(
-            PrincipalId::MAX_LENGTH_IN_BYTES,
-            [u8::MAX; PrincipalId::MAX_LENGTH_IN_BYTES],
-        )),
-        cached_neuron_stake_e8s: u64::MAX,
-        neuron_fees_e8s: u64::MAX,
-        created_timestamp_seconds: u64::MAX,
-        aging_since_timestamp_seconds: u64::MAX,
-        spawn_at_timestamp_seconds: Some(u64::MAX),
-        kyc_verified: true,
-        maturity_e8s_equivalent: u64::MAX,
-        staked_maturity_e8s_equivalent: Some(u64::MAX),
-        auto_stake_maturity: Some(true),
-        not_for_profit: true,
-        joined_community_fund_timestamp_seconds: Some(u64::MAX),
-        neuron_type: Some(i32::MAX),
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
-        visibility: None,
-        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
-        recent_ballots_next_entry_index: Some(100),
-    };
-
-    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is here to make sure we are very aware of growth.
-    // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
-    assert_eq!(abridged_neuron.encoded_len(), 199);
 }
 
 #[test]
@@ -589,7 +547,7 @@ fn test_range_neurons_not_all_neuron_sections() {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -604,7 +562,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -618,7 +576,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.hot_keys.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -632,7 +590,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
                 neuron.transfer = None;
 
                 neuron
@@ -661,7 +619,7 @@ fn test_range_neurons_not_all_neuron_sections() {
                 neuron.hot_keys.clear();
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
 
                 neuron
             }),
@@ -676,7 +634,7 @@ fn test_range_neurons_not_all_neuron_sections() {
             Box::new(|mut neuron: Neuron| {
                 neuron.recent_ballots.clear();
                 neuron.followees.clear();
-                neuron.known_neuron_data = None;
+                neuron.clear_known_neuron_data();
 
                 neuron
             }),

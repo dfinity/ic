@@ -1,8 +1,8 @@
 mod csp_tests {
-    use crate::api::CspSigner;
     use crate::Csp;
     use crate::CspPublicKey;
     use crate::KeyId;
+    use crate::api::CspSigner;
     use ic_types::crypto::AlgorithmId;
 
     mod csp_public_key_store {
@@ -46,7 +46,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_node_signing_key_pair();
-        let key_id = KeyId::try_from(&public_key).unwrap();
+        let key_id = KeyId::from(&public_key);
         let message = "Hello world!".as_bytes();
 
         let signature = csp

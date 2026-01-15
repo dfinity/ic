@@ -1,0 +1,22 @@
+# Patch for determinism issues
+# https://github.com/alexcrichton/ssh2-rs/issues/340
+diff --git a/build.rs b/build.rs
+index c4425ee..f99f132 100644
+--- a/build.rs
++++ b/build.rs
+@@ -173,6 +173,7 @@ fn main() {
+         .unwrap();
+     let version = &version_line[version_line.find('"').unwrap() + 1..version_line.len() - 1];
+
++    /*
+     let pkgconfig = dst.join("lib/pkgconfig");
+     fs::create_dir_all(&pkgconfig).unwrap();
+     fs::write(
+@@ -188,6 +189,7 @@ fn main() {
+             .replace("@LIBSSH2VER@", version),
+     )
+     .unwrap();
++    */
+
+     cfg.warnings(false);
+     cfg.compile("ssh2");

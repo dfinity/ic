@@ -1,13 +1,12 @@
 use crate::{
-    catch_up_package_provider::CatchUpPackageProvider, process_manager::ProcessManager,
-    registry_helper::RegistryHelper, ssh_access_manager::SshAccessParameters,
-    upgrade::ReplicaProcess,
+    catch_up_package_provider::LocalCUPReader, orchestrator::SubnetAssignment,
+    process_manager::ProcessManager, registry_helper::RegistryHelper,
+    ssh_access_manager::SshAccessParameters, upgrade::ReplicaProcess,
 };
 pub use ic_dashboard::Dashboard;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
-    consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
-    SubnetId,
+    NodeId, RegistryVersion, ReplicaVersion, consensus::HasHeight, hostos_version::HostosVersion,
 };
 use std::{
     process::Command,
@@ -24,10 +23,10 @@ pub(crate) struct OrchestratorDashboard {
     last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
     last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    subnet_id: Arc<RwLock<Option<SubnetId>>>,
+    subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     hostos_version: Option<HostosVersion>,
-    cup_provider: Arc<CatchUpPackageProvider>,
+    local_cup_reader: LocalCUPReader,
     logger: ReplicaLogger,
 }
 
@@ -87,10 +86,10 @@ impl OrchestratorDashboard {
         last_applied_firewall_version: Arc<RwLock<RegistryVersion>>,
         last_applied_ipv4_config_version: Arc<RwLock<RegistryVersion>>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        subnet_id: Arc<RwLock<Option<SubnetId>>>,
+        subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         hostos_version: Option<HostosVersion>,
-        cup_provider: Arc<CatchUpPackageProvider>,
+        local_cup_reader: LocalCUPReader,
         logger: ReplicaLogger,
     ) -> Self {
         Self {
@@ -100,17 +99,17 @@ impl OrchestratorDashboard {
             last_applied_firewall_version,
             last_applied_ipv4_config_version,
             replica_process,
-            subnet_id,
+            subnet_assignment,
             replica_version,
             hostos_version,
-            cup_provider,
+            local_cup_reader,
             logger,
         }
     }
 
     fn get_authorized_keys(&self, account: &str) -> String {
         try_to_get_authorized_keys(account).unwrap_or_else(|e| {
-            let error = format!("Failed to read the keys of the account {}: {}", account, e);
+            let error = format!("Failed to read the keys of the account {account}: {e}");
             warn!(self.logger, "{}", error);
             error
         })
@@ -137,16 +136,18 @@ impl OrchestratorDashboard {
     }
 
     fn get_subnet_id(&self) -> String {
-        match *self.subnet_id.read().unwrap() {
-            Some(id) => id.to_string(),
-            None => "None".to_string(),
+        match *self.subnet_assignment.read().unwrap() {
+            SubnetAssignment::Assigned(id) => id.to_string(),
+            SubnetAssignment::Unassigned => "Unassigned".to_string(),
+            SubnetAssignment::Unknown => "Subnet not known yet".to_string(),
         }
     }
 
     fn get_scheduled_upgrade(&self) -> String {
-        let subnet_id = match *self.subnet_id.read().unwrap() {
-            Some(id) => id,
-            None => return "None".to_string(),
+        let subnet_id = match *self.subnet_assignment.read().unwrap() {
+            SubnetAssignment::Assigned(id) => id,
+            SubnetAssignment::Unassigned => return "None".to_string(),
+            SubnetAssignment::Unknown => return "Subnet not known yet".to_string(),
         };
 
         let expected_replica_version = match self.registry.get_expected_replica_version(subnet_id) {
@@ -162,8 +163,9 @@ impl OrchestratorDashboard {
     }
 
     fn get_local_cup_info(&self) -> String {
-        let (height, signed, hash) = match self.cup_provider.get_local_cup() {
+        let (height, signed, hash, timestamp) = match self.local_cup_reader.get_local_cup() {
             None => (
+                String::from("None"),
                 String::from("None"),
                 String::from("None"),
                 String::from("None"),
@@ -172,12 +174,20 @@ impl OrchestratorDashboard {
                 let height = cup.height().to_string();
                 let signed = cup.is_signed();
                 let hash = cup.content.state_hash.get().0;
-                (height, signed.to_string(), hex::encode(hash))
+
+                let unix_timestamp = cup.content.block.get_value().context.time;
+                // UNIX timestamp in nanoseconds followed by the human-readable representation
+                let timestamp_str = format!(
+                    "{} ({})",
+                    unix_timestamp.as_nanos_since_unix_epoch(),
+                    unix_timestamp
+                );
+
+                (height, signed.to_string(), hex::encode(hash), timestamp_str)
             }
         };
         format!(
-            "cup height: {}\ncup signed: {}\ncup state hash: {}",
-            height, signed, hash
+            "cup height: {height}\ncup signed: {signed}\ncup state hash: {hash}\ncup timestamp: {timestamp}"
         )
     }
 }
@@ -192,7 +202,7 @@ fn try_to_get_authorized_keys(account: &str) -> Result<String, String> {
     let output = Command::new("/opt/ic/bin/read-ssh-keys.sh")
         .arg(account)
         .output()
-        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {}", e))?;
+        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {e}"))?;
     match output.status.success() {
         true => Ok(stringify(&output.stdout)?),
         false => Err(stringify(&output.stderr)?),

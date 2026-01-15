@@ -1,0 +1,75 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/time_helpers",
+    "//rs/nervous_system/timers",
+    "@crate_index//:candid",
+    "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:serde",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/state_machine_tests",
+        "//rs/types/types",
+    ],
+})
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:async-trait",
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["src/**/*tests.rs"],
+)
+
+DEV_DATA = [
+    ":timer-task-canister",
+]
+
+DEV_ENV = {
+    "TIMER_TASK_CANISTER_WASM_PATH": "$(rootpath :timer-task-canister)",
+}
+
+rust_library(
+    name = "timer_task",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_timer_task",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_ic_test_suite(
+    name = "timer_task_test",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/test_canisters/*.rs"],
+    ),
+    data = DEV_DATA,
+    env = DEV_ENV,
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_canister(
+    name = "timer-task-canister",
+    testonly = True,
+    srcs = ["tests/test_canisters/timer_task_canister.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":tests/test_canisters/empty.did",
+    deps = DEV_DEPENDENCIES + [":timer_task"],
+)

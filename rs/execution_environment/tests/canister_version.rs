@@ -1,25 +1,37 @@
-use ic00::CanisterSettingsArgsBuilder;
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
-use ic_management_canister_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
-use ic_management_canister_types::{
+use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
+use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles};
+use ic_types::{CanisterId, Cycles, ingress::WasmResult};
 use ic_types_test_utils::ids::user_test_id;
+use ic00::CanisterSettingsArgsBuilder;
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
-fn get_canister_version(env: &StateMachine, canister_id: CanisterId) -> u64 {
-    env.get_latest_state()
+fn get_canister_version(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    controller: PrincipalId,
+) -> u64 {
+    let returned_version = env
+        .canister_status_as(controller, canister_id)
+        .unwrap()
+        .unwrap()
+        .version();
+    let system_version = env
+        .get_latest_state()
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version
+        .canister_version;
+    assert_eq!(returned_version, system_version);
+    system_version
 }
 
 /// This function implements the functionality of `StateMachine::execute_ingress_as`
@@ -52,10 +64,7 @@ fn execute_ingress_with_dts(
             }
         }
     }
-    panic!(
-        "Did not get answer to ingress {} after {} state machine ticks",
-        msg_id, MAX_TICKS,
-    )
+    panic!("Did not get answer to ingress {msg_id} after {MAX_TICKS} state machine ticks",)
 }
 
 /// Creates, installs, and possibly reinstall/upgrades (depends on `mode`) the canister code
@@ -107,10 +116,10 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister_version
-    assert_eq!(get_canister_version(&env, canister_id), 0);
+    assert_eq!(get_canister_version(&env, canister_id, user_id), 0);
 
     // install test_canister via ingress from user_id
     execute_ingress_with_dts(
@@ -118,20 +127,12 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         user_id,
         ic00::IC_00,
         Method::InstallCode,
-        InstallCodeArgs::new(
-            Install,
-            canister_id,
-            test_canister.clone(),
-            vec![],
-            None,
-            None,
-        )
-        .encode(),
+        InstallCodeArgs::new(Install, canister_id, test_canister.clone(), vec![]).encode(),
         dts_install,
     )
     .unwrap();
     // check canister_version
-    assert_eq!(get_canister_version(&env, canister_id), 1);
+    assert_eq!(get_canister_version(&env, canister_id, user_id), 1);
 
     if mode != CanisterInstallMode::Install {
         let dts = match mode {
@@ -145,12 +146,12 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
             user_id,
             ic00::IC_00,
             Method::InstallCode,
-            InstallCodeArgs::new(mode, canister_id, test_canister, vec![], None, None).encode(),
+            InstallCodeArgs::new(mode, canister_id, test_canister, vec![]).encode(),
             dts,
         )
         .unwrap();
         // check canister_version
-        assert_eq!(get_canister_version(&env, canister_id), 2);
+        assert_eq!(get_canister_version(&env, canister_id, user_id), 2);
     }
 }
 

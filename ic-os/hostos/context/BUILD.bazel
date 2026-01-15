@@ -4,7 +4,6 @@ exports_files(glob(["**"]))
 
 exports_files([
     "Dockerfile.base",
-    "extra_boot_args",
 ])
 
 filegroup(

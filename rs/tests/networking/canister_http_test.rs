@@ -14,16 +14,15 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types::{
-    BoundedHttpHeaders, CanisterHttpRequestArgs, HttpMethod, TransformContext, TransformFunc,
-};
+use ic_management_canister_types_private::{HttpMethod, TransformContext, TransformFunc};
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -31,8 +30,9 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
+use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -54,7 +54,7 @@ pub fn test(env: TestEnv) {
     block_on(async {
         test_proxy_canister(
             &proxy_canister,
-            format!("https://[{webserver_ipv6}]:20443"),
+            format!("https://[{webserver_ipv6}]"),
             logger,
         )
         .await;
@@ -81,9 +81,9 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                         RemoteHttpRequest,
                     >,
                     RemoteHttpRequest {
-                        request: CanisterHttpRequestArgs {
+                        request: UnvalidatedCanisterHttpRequestArgs {
                             url: url.to_string(),
-                            headers: BoundedHttpHeaders::new(vec![]),
+                            headers: vec![],
                             body: None,
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
@@ -94,6 +94,8 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

@@ -62,8 +62,7 @@ impl TryFrom<i32> for SubnetType {
             Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SubnetType",
                 err: format!(
-                    "Expected 1 (application), 2 (system), or 4 (VerifiedApplication), got {}",
-                    input
+                    "Expected 1 (application), 2 (system), or 4 (VerifiedApplication), got {input}"
                 ),
             })
         }
@@ -87,10 +86,7 @@ impl TryFrom<pb::SubnetType> for SubnetType {
         match src {
             pb::SubnetType::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SubnetType",
-                err: format!(
-                    "{:?} is not one of the expected variants of SubnetType.",
-                    src,
-                ),
+                err: format!("{src:?} is not one of the expected variants of SubnetType.",),
             }),
             pb::SubnetType::Application => Ok(SubnetType::Application),
             pb::SubnetType::System => Ok(SubnetType::System),

@@ -25,7 +25,7 @@ pub enum Lazy<'a, T> {
     Func(ArcFn<'a, T>),
 }
 
-impl<'a, T: Clone> Lazy<'a, T> {
+impl<T: Clone> Lazy<'_, T> {
     pub fn force(&self) -> T {
         match self {
             Self::Value(v) => v.clone(),

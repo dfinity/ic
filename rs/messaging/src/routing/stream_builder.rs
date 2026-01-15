@@ -1,28 +1,23 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
-use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    replicated_state::{
-        PeekableOutputIterator, ReplicatedStateMessageRouting, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-    },
-    ReplicatedState, Stream,
+use ic_replicated_state::replicated_state::{
+    MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
 };
-use ic_types::{
-    messages::{
-        Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
-    },
-    CountBytes, SubnetId,
+use ic_replicated_state::{ReplicatedState, Stream};
+use ic_types::messages::{
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
+    Request, RequestOrResponse, Response, StreamMessage,
 };
+use ic_types::{CountBytes, Cycles, SubnetId};
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -52,18 +47,6 @@ struct StreamBuilderMetrics {
     pub critical_error_induct_response_failed: IntCounter,
 }
 
-/// Desired byte size of an outgoing stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const TARGET_STREAM_SIZE_BYTES: usize = 10 * 1024 * 1024;
-
-/// Maximum number of messages in a stream.
-///
-/// At most `MAX_STREAM_MESSAGES` are enqueued into a stream; but only until its
-/// `count_bytes()` is greater than or equal to `TARGET_STREAM_SIZE_BYTES`.
-const MAX_STREAM_MESSAGES: usize = 10_000;
-
 const METRIC_STREAM_MESSAGES: &str = "mr_stream_messages";
 const METRIC_STREAM_BYTES: &str = "mr_stream_bytes";
 const METRIC_STREAM_BEGIN: &str = "mr_stream_begin";
@@ -77,6 +60,7 @@ const LABEL_REMOTE: &str = "remote";
 
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
+const LABEL_VALUE_TYPE_REFUND: &str = "refund";
 const LABEL_VALUE_STATUS_SUCCESS: &str = "success";
 const LABEL_VALUE_STATUS_CANISTER_NOT_FOUND: &str = "canister_not_found";
 const LABEL_VALUE_STATUS_PAYLOAD_TOO_LARGE: &str = "payload_too_large";
@@ -144,6 +128,11 @@ impl StreamBuilderMetrics {
                 LABEL_VALUE_TYPE_RESPONSE,
                 LABEL_VALUE_STATUS_CANISTER_NOT_FOUND,
             ),
+            (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_STATUS_SUCCESS),
+            (
+                LABEL_VALUE_TYPE_REFUND,
+                LABEL_VALUE_STATUS_CANISTER_NOT_FOUND,
+            ),
         ] {
             routed_messages.with_label_values(&[msg_type, status]);
         }
@@ -172,8 +161,15 @@ pub(crate) trait StreamBuilder: Send {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState;
 }
 
+/// Routes messages from canister output queues into streams, up to the specified limits.
+///
+/// At most `max_stream_messages` are enqueued into a stream; but only until its
+/// `count_bytes()` is greater than or equal to `target_stream_size_bytes`.
 pub(crate) struct StreamBuilderImpl {
     subnet_id: SubnetId,
+    max_stream_messages: usize,
+    target_stream_size_bytes: usize,
+    system_subnet_stream_msg_limit: usize,
     metrics: StreamBuilderMetrics,
     time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
     log: ReplicaLogger,
@@ -182,6 +178,9 @@ pub(crate) struct StreamBuilderImpl {
 impl StreamBuilderImpl {
     pub(crate) fn new(
         subnet_id: SubnetId,
+        max_stream_messages: usize,
+        target_stream_size_bytes: usize,
+        system_subnet_stream_msg_limit: usize,
         metrics_registry: &MetricsRegistry,
         message_routing_metrics: &MessageRoutingMetrics,
         time_in_stream_metrics: Arc<Mutex<LatencyMetrics>>,
@@ -189,6 +188,9 @@ impl StreamBuilderImpl {
     ) -> Self {
         Self {
             subnet_id,
+            max_stream_messages,
+            target_stream_size_bytes,
+            system_subnet_stream_msg_limit,
             metrics: StreamBuilderMetrics::new(metrics_registry, message_routing_metrics),
             time_in_stream_metrics,
             log,
@@ -224,6 +226,7 @@ impl StreamBuilderImpl {
                 // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
+            .map(|_| ())
             .unwrap_or_else(|(err, response)| {
                 // Local request, we should never get a `CanisterNotFound`, `CanisterStopped` or
                 // `NonMatchingResponse` error.
@@ -235,6 +238,7 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
+                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
             });
     }
 
@@ -262,15 +266,8 @@ impl StreamBuilderImpl {
             .observe(msg.payload_size_bytes().get() as f64);
     }
 
-    /// Implementation of `StreamBuilder::build_streams()` that takes a
-    /// `target_stream_size_bytes` argument to limit how many messages will be
-    /// routed into each stream.
-    fn build_streams_impl(
-        &self,
-        mut state: ReplicatedState,
-        max_stream_messages: usize,
-        target_stream_size_bytes: usize,
-    ) -> ReplicatedState {
+    /// Implementation of `StreamBuilder::build_streams()`.
+    fn build_streams_impl(&self, mut state: ReplicatedState) -> ReplicatedState {
         /// Pops the previously peeked message.
         ///
         /// Panics:
@@ -286,23 +283,19 @@ impl StreamBuilderImpl {
             message
         }
 
-        /// Tests whether a stream is over the message count limit, byte limit or (if
-        /// directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
-        fn is_at_limit(
-            stream: Option<&Stream>,
-            max_stream_messages: usize,
-            target_stream_size_bytes: usize,
-            is_local_message: bool,
-            destination_subnet_type: SubnetType,
-        ) -> bool {
+        // Tests whether a stream is over the message count limit, byte limit or (if
+        // directed at a system subnet) over `2 * system_subnet_stream_msg_limit`.
+        let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
+                           destination_subnet_type: SubnetType|
+         -> bool {
             let stream = match stream {
-                Some(stream) => stream,
-                None => return false,
+                btree_map::Entry::Occupied(occupied_entry) => occupied_entry.get(),
+                btree_map::Entry::Vacant(_) => return false,
             };
             let stream_messages_len = stream.messages().len();
 
-            if stream_messages_len >= max_stream_messages
-                || stream.count_bytes() >= target_stream_size_bytes
+            if stream_messages_len >= self.max_stream_messages
+                || stream.count_bytes() >= self.target_stream_size_bytes
             {
                 // At limit if message count or byte size limits (enforced across all outgoing
                 // streams) are hit.
@@ -311,21 +304,27 @@ impl StreamBuilderImpl {
 
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
-            // subnets).
-            !is_local_message
-                && destination_subnet_type == SubnetType::System
-                && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
-        }
+            // subnets). And only applies to canister messages, not refunds.
+            destination_subnet_type == SubnetType::System
+                && stream_messages_len - stream.refund_count()
+                    >= 2 * self.system_subnet_stream_msg_limit
+        };
 
         let mut streams = state.take_streams();
-        let routing_table = state.routing_table();
-        let subnet_types: BTreeMap<_, _> = state
-            .metadata
-            .network_topology
-            .subnets
-            .iter()
-            .map(|(subnet_id, topology)| (*subnet_id, topology.subnet_type))
-            .collect();
+        let network_topology = state.metadata.network_topology.clone();
+
+        // First, have up to `max_stream_messages / 2` refunds in each stream (including
+        // already routed ones) while respecting stream message and byte limits.
+        //
+        // Refunds are smaller than the smallest possible canister message, so it makes
+        // sense to prioritize routing a bounded number of refunds, leaving most of the
+        // stream capacity for canister messages (5k refunds are ~250 KB, so only around
+        // 2.5% of the 10 MB target stream size).
+        //
+        // Note that there is no need to enforce `system_subnet_stream_msg_limit` for
+        // anonymous refunds, as they get applied during induction, never enqueued.
+        let refund_limit = self.max_stream_messages / 2;
+        self.route_refunds(&mut state, refund_limit, &network_topology, &mut streams);
 
         let mut requests_to_reject = Vec::new();
         let mut oversized_requests = Vec::new();
@@ -355,18 +354,20 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(msg.receiver().get()) {
+            match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
-                    if is_at_limit(
-                        streams.get(&dst_subnet_id),
-                        max_stream_messages,
-                        target_stream_size_bytes,
-                        self.subnet_id == dst_subnet_id,
-                        *subnet_types
-                            .get(&dst_subnet_id)
-                            .unwrap_or(&SubnetType::Application),
-                    ) {
+                    let dst_stream_entry = streams.entry(dst_subnet_id);
+                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    if !is_loopback_stream
+                        && is_at_limit(
+                            &dst_stream_entry,
+                            network_topology
+                                .subnets
+                                .get(&dst_subnet_id)
+                                .map_or(SubnetType::Application, |topology| topology.subnet_type),
+                        )
+                    {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -422,24 +423,32 @@ impl StreamBuilderImpl {
                                         RejectCode::CanisterError,
                                         format!(
                                             "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
-                                            rep.respondent, rep.payload_size_bytes(), MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+                                            rep.respondent,
+                                            rep.payload_size_bytes(),
+                                            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                                         ),
                                     ))
                                 }
                                 // Truncate error messages of oversized reject payloads.
                                 &mut Payload::Reject(ref mut context @ RejectContext { .. }) => {
-                                    rep.response_payload = Payload::Reject(RejectContext::new_with_message_length_limit(context.code(), context.message(), MAX_REJECT_MESSAGE_LEN_BYTES));
+                                    rep.response_payload = Payload::Reject(
+                                        RejectContext::new_with_message_length_limit(
+                                            context.code(),
+                                            context.message(),
+                                            MAX_REJECT_MESSAGE_LEN_BYTES,
+                                        ),
+                                    );
                                 }
                             }
 
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            streams.push(dst_subnet_id, msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
                     };
                 }
@@ -477,7 +486,7 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", dst_canister_id),
+                format!("No route to canister {dst_canister_id}"),
             );
         }
 
@@ -543,10 +552,66 @@ impl StreamBuilderImpl {
         state.put_streams(streams);
         state
     }
+
+    /// Routes up to `refund_limit` refunds per stream from `state` into `streams`.
+    ///
+    /// Refunds that could not be routed due to reaching the per stream limit are
+    /// retained in `state`.
+    fn route_refunds(
+        &self,
+        state: &mut ReplicatedState,
+        refund_limit: usize,
+        network_topology: &ic_replicated_state::NetworkTopology,
+        streams: &mut BTreeMap<SubnetId, Stream>,
+    ) {
+        let mut cycles_lost = Cycles::zero();
+        state.take_refunds(|refund| {
+            match network_topology.route(refund.recipient().get()) {
+                Some(dst_subnet_id) => {
+                    let stream = streams.entry(dst_subnet_id).or_default();
+                    let is_loopback_stream = dst_subnet_id == self.subnet_id;
+                    if is_loopback_stream
+                        || (stream.refund_count() < refund_limit
+                            && stream.messages().len() < self.max_stream_messages
+                            && stream.count_bytes() < self.target_stream_size_bytes)
+                    {
+                        stream.push(StreamMessage::Refund((*refund).into()));
+                        self.observe_message_type_status(
+                            LABEL_VALUE_TYPE_REFUND,
+                            LABEL_VALUE_STATUS_SUCCESS,
+                        );
+                        true
+                    } else {
+                        // No more space for this refund in the stream, hold on to it.
+                        false
+                    }
+                }
+
+                None => {
+                    error!(
+                        self.log,
+                        "{}: Discarding refund, destination not found: {:?}",
+                        CRITICAL_ERROR_RESPONSE_DESTINATION_NOT_FOUND,
+                        refund
+                    );
+                    self.metrics
+                        .critical_error_response_destination_not_found
+                        .inc();
+                    cycles_lost += refund.amount();
+                    self.observe_message_type_status(
+                        LABEL_VALUE_TYPE_REFUND,
+                        LABEL_VALUE_STATUS_CANISTER_NOT_FOUND,
+                    );
+                    true
+                }
+            }
+        });
+        state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
+    }
 }
 
 impl StreamBuilder for StreamBuilderImpl {
     fn build_streams(&self, state: ReplicatedState) -> ReplicatedState {
-        self.build_streams_impl(state, MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES)
+        self.build_streams_impl(state)
     }
 }

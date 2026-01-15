@@ -1,8 +1,8 @@
 use super::test_helpers::{
+    DoNothingLedger, TEST_ARCHIVES_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+    TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
     basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID,
-    TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+    canister_status_from_management_canister_for_test,
 };
 use super::*;
 use crate::sns_upgrade::CanisterSummary;
@@ -12,18 +12,18 @@ use crate::sns_upgrade::SnsWasm;
 use crate::sns_upgrade::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use crate::{
     pb::v1::{
-        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
-        upgrade_journal_entry::Event,
         GetUpgradeJournalRequest, ProposalData, Tally, UpgradeJournal, UpgradeJournalEntry,
         UpgradeSnsToNextVersion,
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
+        upgrade_journal_entry::Event,
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
 };
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
-use ic_nervous_system_common::cmc::FakeCmc;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
@@ -61,7 +61,7 @@ async fn test_initiate_upgrade_blocked_by_upgrade_proposal() {
     let proposal = ProposalData {
         action: (&action).into(),
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -926,6 +926,84 @@ fn get_or_reset_upgrade_steps_leads_to_should_refresh_cached_upgrade_steps() {
     assert!(gov.should_refresh_cached_upgrade_steps());
 }
 
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_advances_target_version_automatically_is_required() {
+    let version_a = Version {
+        root_wasm_hash: vec![1, 2, 3],
+        governance_wasm_hash: vec![2, 3, 4],
+        ledger_wasm_hash: vec![3, 4, 5],
+        swap_wasm_hash: vec![4, 5, 6],
+        archive_wasm_hash: vec![5, 6, 7],
+        index_wasm_hash: vec![6, 7, 8],
+    };
+    let mut version_b = version_a.clone();
+    version_b.root_wasm_hash = vec![9, 9, 9];
+
+    // Smoke test.
+    assert_ne!(version_a, version_b);
+
+    let make_gov = || -> Governance {
+        let mut env = NativeEnvironment::new(Some(*TEST_GOVERNANCE_CANISTER_ID));
+        add_environment_mock_list_upgrade_steps_call(
+            &mut env,
+            vec![
+                SnsVersion::from(version_a.clone()),
+                SnsVersion::from(version_b.clone()),
+            ],
+        );
+        Governance::new(
+            GovernanceProto {
+                deployed_version: Some(version_a.clone()),
+                cached_upgrade_steps: None,
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
+        )
+    };
+
+    for (automatically_advance_target_version, expected_target_version) in [
+        (None, None),
+        (Some(false), None),
+        (Some(true), Some(version_b.clone())),
+    ] {
+        let mut gov = make_gov();
+
+        if let Some(parameters) = gov.proto.parameters.as_mut() {
+            parameters.automatically_advance_target_version = automatically_advance_target_version;
+        };
+
+        // Precondition
+        assert_eq!(gov.proto.cached_upgrade_steps, None);
+        assert_eq!(gov.proto.target_version, None);
+
+        // Run code under test and assert intermediate conditions.
+        let deployed_version = gov
+            .try_temporarily_lock_refresh_cached_upgrade_steps()
+            .unwrap();
+        gov.refresh_cached_upgrade_steps(deployed_version).await;
+
+        // Intermediate postcondition.
+        assert_eq!(
+            gov.proto
+                .cached_upgrade_steps
+                .clone()
+                .unwrap()
+                .upgrade_steps
+                .unwrap()
+                .versions,
+            vec![version_a.clone(), version_b.clone(),]
+        );
+
+        // Main postcondition.
+        assert_eq!(gov.proto.target_version, expected_target_version);
+    }
+}
+
 fn add_environment_mock_calls_for_initiate_upgrade(
     env: &mut NativeEnvironment,
     expected_wasm_hash_requested: Vec<u8>,
@@ -980,13 +1058,11 @@ fn add_environment_mock_calls_for_initiate_upgrade(
             env.require_call_canister_invocation(
                 root_canister_id,
                 "change_canister",
-                Encode!(&ChangeCanisterRequest::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_id
+                Encode!(
+                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                        .with_arg(Encode!().unwrap())
                 )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                .with_arg(Encode!().unwrap()))
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
                 Some(Ok(Encode!().unwrap())),
@@ -1020,13 +1096,11 @@ fn add_environment_mock_calls_for_initiate_upgrade(
             env.require_call_canister_invocation(
                 CanisterId::ic_00(),
                 "install_code",
-                Encode!(&ic_management_canister_types::InstallCodeArgs {
-                    mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
+                Encode!(&ic_management_canister_types_private::InstallCodeArgs {
+                    mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None,
                     sender_canister_version: None,
                 })
                 .unwrap(),
@@ -1336,14 +1410,16 @@ fn test_get_upgrade_journal_pagination() {
     });
     assert_eq!(
         response.upgrade_journal.unwrap().entries,
-        vec![governance
-            .proto
-            .upgrade_journal
-            .as_ref()
-            .unwrap()
-            .entries
-            .last()
-            .unwrap()
-            .clone()],
+        vec![
+            governance
+                .proto
+                .upgrade_journal
+                .as_ref()
+                .unwrap()
+                .entries
+                .last()
+                .unwrap()
+                .clone()
+        ],
     );
 }

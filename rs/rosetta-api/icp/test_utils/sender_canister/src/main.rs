@@ -1,9 +1,8 @@
-use candid::candid_method;
+#![allow(deprecated)]
 use ic_cdk::update;
 use ic_sender_canister_lib::{SendArg, SendResult};
 
 #[update]
-#[candid_method(update)]
 async fn send(calls: Vec<SendArg>) -> Vec<SendResult> {
     let mut futures = vec![];
     for SendArg {
@@ -25,7 +24,7 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

@@ -3,7 +3,7 @@ use std::{
     fmt,
     net::{IpAddr, SocketAddr},
     str::FromStr,
-    sync::Arc,
+    sync::{Arc, Mutex, atomic::AtomicU64},
     time::{Duration, Instant},
 };
 
@@ -11,8 +11,12 @@ use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use ic_registry_client::client::RegistryClient;
+use ethnum::u256;
+use ic_bn_lib_common::traits::Run;
+use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::{
+    api_boundary_node::ApiBoundaryNodeRegistry,
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
@@ -20,22 +24,22 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
+use rand::seq::SliceRandom;
 use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 use url::{ParseError, Url};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::{
-    core::Run,
-    firewall::{FirewallGenerator, SystemdReloader},
+    errors::ErrorCause,
+    http::RequestType,
     metrics::{MetricParamsSnapshot, WithMetricsSnapshot},
-    routes::RequestType,
+    persist::principal_to_u256,
 };
 
-// Some magical prefix that the public key should have
-const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
-
-#[derive(Clone, Debug)]
+/// IC node
+#[derive(Debug)]
 pub struct Node {
     pub id: Principal,
     pub subnet_id: Principal,
@@ -43,10 +47,11 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
-    pub avg_latency_secs: f64,
+    pub avg_latency_us: AtomicU64,
+    pub health_check_url: Url,
 }
 
-// Lightweight Eq, just compare principals
+// Lightweight Eq, just compare principals.
 // If one ever needs a deep comparison - this needs to be removed and #[derive(Eq)] used
 impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
@@ -62,6 +67,29 @@ impl fmt::Display for Node {
 }
 
 impl Node {
+    pub fn new(
+        id: Principal,
+        subnet_id: Principal,
+        subnet_type: SubnetType,
+        addr: IpAddr,
+        port: u16,
+        tls_certificate: Vec<u8>,
+    ) -> Result<Self, Error> {
+        let health_check_url = Url::from_str(&format!("https://{id}:{port}/api/v2/status"))
+            .context("unable to create health check URL")?;
+
+        Ok(Self {
+            id,
+            subnet_id,
+            subnet_type,
+            addr,
+            port,
+            tls_certificate,
+            health_check_url,
+            avg_latency_us: AtomicU64::new(u64::MAX),
+        })
+    }
+
     pub fn build_url(
         &self,
         request_type: RequestType,
@@ -70,29 +98,79 @@ impl Node {
         let node_id = &self.id;
         let node_port = &self.port;
         match request_type {
-            RequestType::Unknown => {
-                panic!("can't construct url for unknown request type")
-            }
-            RequestType::SyncCall => Url::from_str(&format!(
+            RequestType::QueryV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/query",
+            )),
+            RequestType::QueryV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/query",
+            )),
+            RequestType::CallV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/call",
+            )),
+            RequestType::CallV3 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v3/canister/{principal}/call",
             )),
-            RequestType::ReadStateSubnet => Url::from_str(&format!(
+            RequestType::CallV4 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v4/canister/{principal}/call",
+            )),
+            RequestType::ReadStateV2 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v2/canister/{principal}/read_state",
+            )),
+            RequestType::ReadStateV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/canister/{principal}/read_state",
+            )),
+            RequestType::ReadStateSubnetV2 => Url::from_str(&format!(
                 "https://{node_id}:{node_port}/api/v2/subnet/{principal}/read_state",
             )),
-            _ => Url::from_str(&format!(
-                "https://{node_id}:{node_port}/api/v2/canister/{principal}/{request_type}",
+            RequestType::ReadStateSubnetV3 => Url::from_str(&format!(
+                "https://{node_id}:{node_port}/api/v3/subnet/{principal}/read_state",
             )),
+            // Some generic error for the requests that shouldn't end up here
+            RequestType::Unknown | RequestType::Status => Err(ParseError::Overflow),
         }
     }
 }
 
+/// API Boundary Node.
+/// For now we only count them so the fields are unused.
 #[derive(Clone, Debug)]
+pub struct ApiBoundaryNode {
+    pub _id: Principal,
+    pub _addr: IpAddr,
+    pub _port: u16,
+}
+
+/// Range of canister IDs, ends inclusive
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct CanisterRange {
     pub start: Principal,
     pub end: Principal,
 }
 
-#[derive(Clone, Debug)]
+impl CanisterRange {
+    /// Calculates the length of the range
+    pub fn len(&self) -> u256 {
+        (principal_to_u256(&self.end) - principal_to_u256(&self.start)) + 1
+    }
+
+    /// Returns a list of canister IDs in this range in u256 format.
+    /// Do not use for large ranges since this would consume *a lot* of memory.
+    pub fn canisters(&self) -> Vec<u256> {
+        let mut x = principal_to_u256(&self.start);
+        let end = principal_to_u256(&self.end);
+
+        let mut r = Vec::with_capacity((end - x).as_usize() + 1);
+        while x <= end {
+            r.push(x);
+            x += 1;
+        }
+
+        r
+    }
+}
+
+/// IC Subnet
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Subnet {
     pub id: Principal,
     pub subnet_type: SubnetType,
@@ -107,30 +185,55 @@ impl fmt::Display for Subnet {
     }
 }
 
-// TODO remove after decentralization and clean up all loose ends
-pub struct SnapshotPersister {
-    generator: FirewallGenerator,
-    reloader: SystemdReloader,
-}
+impl Subnet {
+    /// Picks N random nodes from the subnet
+    pub fn pick_random_nodes(&self, n: usize) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        let nodes = self
+            .nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
 
-impl SnapshotPersister {
-    pub fn new(generator: FirewallGenerator, reloader: SystemdReloader) -> Self {
-        Self {
-            generator,
-            reloader,
+        if nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
         }
+
+        Ok(nodes)
     }
 
-    pub fn persist(&self, s: RegistrySnapshot) -> Result<(), Error> {
-        self.generator.generate(s)?;
-        self.reloader.reload()
+    /// Max acceptable number of malicious nodes in a subnet
+    pub fn fault_tolerance_factor(&self) -> usize {
+        (self.nodes.len() - 1) / 3
+    }
+
+    /// Pick up to N random nodes out of up to M closest (by latency)
+    pub fn pick_n_out_of_m_closest(
+        &self,
+        n: usize,
+        m: usize,
+    ) -> Result<Vec<Arc<Node>>, ErrorCause> {
+        // Nodes should already be sorted by latency after persist() invocation
+        let m = m.min(self.nodes.len());
+        let nodes = &self.nodes[0..m];
+
+        let picked_nodes = nodes
+            .choose_multiple(&mut rand::thread_rng(), n)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if picked_nodes.is_empty() {
+            return Err(ErrorCause::NoHealthyNodes);
+        }
+
+        Ok(picked_nodes)
     }
 }
 
 pub trait Snapshot: Send + Sync {
-    fn snapshot(&mut self) -> Result<SnapshotResult, Error>;
+    fn snapshot(&self) -> Result<SnapshotResult, Error>;
 }
 
+/// Preprocessed snapshot of the Registry
 #[derive(Clone, Debug)]
 pub struct RegistrySnapshot {
     pub version: u64,
@@ -138,61 +241,80 @@ pub struct RegistrySnapshot {
     pub nns_public_key: Vec<u8>,
     pub subnets: Vec<Subnet>,
     pub nodes: HashMap<String, Arc<Node>>,
+    pub api_bns: Vec<ApiBoundaryNode>,
 }
 
-pub struct Snapshotter {
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
-    registry_client: Arc<dyn RegistryClient>,
-    registry_version_available: Option<RegistryVersion>,
-    registry_version_published: Option<RegistryVersion>,
-    last_version_change: Instant,
-    min_version_age: Duration,
-    persister: Option<SnapshotPersister>,
-}
-
+/// Metadata about the RegistrySnapshot
 pub struct SnapshotInfo {
     pub version: u64,
     pub subnets: usize,
     pub nodes: usize,
 }
 
+/// Metadata about snapshot publication
 pub struct SnapshotInfoPublished {
     pub timestamp: u64,
     pub old: Option<SnapshotInfo>,
     pub new: SnapshotInfo,
 }
 
+/// Result of snapshot publication
 pub enum SnapshotResult {
     NoNewVersion,
     NotOldEnough(u64),
     Published(SnapshotInfoPublished),
 }
 
+/// Takes snapshots of the Registry, preprocesses & publishes them
+#[derive(derive_new::new)]
+pub struct Snapshotter {
+    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
+    registry_client: Arc<dyn RegistryClient>,
+    #[new(default)]
+    registry_version_available: Mutex<Option<RegistryVersion>>,
+    #[new(default)]
+    registry_version_published: Mutex<Option<RegistryVersion>>,
+    #[new(value = "Mutex::new(Instant::now())")]
+    last_version_change: Mutex<Instant>,
+    min_version_age: Duration,
+}
+
 impl Snapshotter {
-    pub fn new(
-        published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-        channel_notify: watch::Sender<Option<Arc<RegistrySnapshot>>>,
-        registry_client: Arc<dyn RegistryClient>,
-        min_version_age: Duration,
-    ) -> Self {
-        Self {
-            published_registry_snapshot,
-            channel_notify,
-            registry_client,
-            registry_version_published: None,
-            registry_version_available: None,
-            last_version_change: Instant::now(),
-            min_version_age,
-            persister: None,
-        }
+    /// Gets a list of API BNs from the Registry
+    fn get_api_boundary_nodes(
+        &self,
+        version: RegistryVersion,
+    ) -> Result<Vec<ApiBoundaryNode>, Error> {
+        let node_ids = self
+            .registry_client
+            .get_api_boundary_node_ids(version)
+            .context("unable to get API BN node ids")?;
+
+        let nodes = node_ids
+            .into_iter()
+            .map(|x| -> Result<_, Error> {
+                let node = self
+                    .registry_client
+                    .get_node_record(x, version)
+                    .context("unable to get node record")?
+                    .context("node not available")?;
+
+                let http_endpoint = node.http.context("http endpoint not available")?;
+
+                Ok(ApiBoundaryNode {
+                    _id: x.get().0,
+                    _addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                        .context("unable to parse IP address")?,
+                    _port: http_endpoint.port as u16,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(nodes)
     }
 
-    pub fn set_persister(&mut self, persister: SnapshotPersister) {
-        self.persister = Some(persister);
-    }
-
-    // Creates a snapshot of the registry for given version
+    /// Creates a snapshot of the registry for given version
     fn get_snapshot(&self, version: RegistryVersion) -> Result<RegistrySnapshot, Error> {
         // Get routing table with canister ranges
         let routing_table = self
@@ -243,6 +365,11 @@ impl Snapshotter {
             .context("failed to get subnet ids")? // Result
             .context("subnet ids not available")?; // Option
 
+        // Fetch a list of API BNs
+        let api_bns = self
+            .get_api_boundary_nodes(version)
+            .context("unable to get API BNs")?;
+
         let subnets = subnet_ids
             .into_iter()
             .map(|subnet_id| {
@@ -289,17 +416,19 @@ impl Snapshotter {
                         X509Certificate::from_der(cert.certificate_der.as_slice())
                             .context("Unable to parse TLS certificate")?;
 
-                        let node = Node {
-                            // init to max, this value is updated with running health checks
-                            avg_latency_secs: f64::MAX,
-                            id: node_id.as_ref().0,
-                            subnet_id: subnet_id.as_ref().0,
+                        let addr = IpAddr::from_str(http_endpoint.ip_addr.as_str())
+                            .context("unable to parse IP address")?;
+                        let port = http_endpoint.port as u16; // Port is u16 anyway
+
+                        let node = Node::new(
+                            node_id.as_ref().0,
+                            subnet_id.as_ref().0,
                             subnet_type,
-                            addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
-                                .context("unable to parse IP address")?,
-                            port: http_endpoint.port as u16, // Port is u16 anyway
-                            tls_certificate: cert.certificate_der,
-                        };
+                            addr,
+                            port,
+                            cert.certificate_der,
+                        )
+                        .context("unable to create Node")?;
                         let node = Arc::new(node);
 
                         nodes_map.insert(node.id.to_string(), node.clone());
@@ -328,27 +457,32 @@ impl Snapshotter {
             .collect::<Result<Vec<Subnet>, Error>>()
             .context("unable to get subnets")?;
 
-        let mut nns_key_with_prefix = DER_PREFIX.to_vec();
-        nns_key_with_prefix.extend_from_slice(&nns_public_key.into_bytes());
+        let der_encoded_nns_key = threshold_sig_public_key_to_der(nns_public_key)
+            .context("failed to convert NNS key to DER")?;
 
         Ok(RegistrySnapshot {
             version: version.get(),
             timestamp,
-            nns_public_key: nns_key_with_prefix,
+            nns_public_key: der_encoded_nns_key,
             subnets,
             nodes: nodes_map,
+            api_bns,
         })
     }
 }
 
 impl Snapshot for Snapshotter {
-    fn snapshot(&mut self) -> Result<SnapshotResult, Error> {
+    fn snapshot(&self) -> Result<SnapshotResult, Error> {
         // Fetch latest available registry version
         let version = self.registry_client.get_latest_version();
 
-        if self.registry_version_available != Some(version) {
-            self.registry_version_available = Some(version);
-            self.last_version_change = Instant::now();
+        let mut registry_version_available = self.registry_version_available.lock().unwrap();
+        let mut last_version_change = self.last_version_change.lock().unwrap();
+        let mut registry_version_published = self.registry_version_published.lock().unwrap();
+
+        if *registry_version_available != Some(version) {
+            *registry_version_available = Some(version);
+            *last_version_change = Instant::now();
         }
 
         // If we have just started and have no snapshot published then we
@@ -357,13 +491,13 @@ impl Snapshot for Snapshotter {
         if self.published_registry_snapshot.load().is_none() {
             // We check that the versions stop progressing for some period of time
             // and only then allow the initial publishing.
-            if self.last_version_change.elapsed() < self.min_version_age {
+            if last_version_change.elapsed() < self.min_version_age {
                 return Ok(SnapshotResult::NotOldEnough(version.get()));
             }
         }
 
         // Check if we already have this version published
-        if self.registry_version_published == Some(version) {
+        if *registry_version_published == Some(version) {
             return Ok(SnapshotResult::NoNewVersion);
         }
 
@@ -394,13 +528,8 @@ impl Snapshot for Snapshotter {
         let snapshot_arc = Arc::new(snapshot.clone());
         self.published_registry_snapshot
             .store(Some(snapshot_arc.clone()));
-        self.registry_version_published = Some(version);
+        *registry_version_published = Some(version);
         self.channel_notify.send_replace(Some(snapshot_arc));
-
-        // Persist the firewall rules if configured
-        if let Some(v) = &self.persister {
-            v.persist(snapshot)?;
-        }
 
         Ok(SnapshotResult::Published(result))
     }
@@ -408,7 +537,7 @@ impl Snapshot for Snapshotter {
 
 #[async_trait]
 impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
-    async fn run(&mut self) -> Result<(), Error> {
+    async fn run(&self, _: CancellationToken) -> Result<(), Error> {
         let r = self.0.snapshot()?;
 
         match r {
@@ -441,15 +570,17 @@ impl<T: Snapshot> Run for WithMetricsSnapshot<T> {
     }
 }
 
-// Forked functions from ic-test-utilities to avoid depending on that crate
+/// Forked functions from ic-test-utilities to avoid depending on that crate
 pub fn subnet_test_id(i: u64) -> SubnetId {
     SubnetId::from(PrincipalId::new_subnet_test_id(i))
 }
 
+/// Forked functions from ic-test-utilities to avoid depending on that crate
 pub fn node_test_id(i: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(i))
 }
 
+/// Generate a stub registry snapshot with given subnets
 pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
     let nodes = subnets
         .iter()
@@ -463,9 +594,11 @@ pub fn generate_stub_snapshot(subnets: Vec<Subnet>) -> RegistrySnapshot {
         nns_public_key: vec![],
         subnets,
         nodes,
+        api_bns: vec![],
     }
 }
 
+/// Generate a stub subnet with given addresses as the nodes
 pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
     let subnet_id = subnet_test_id(0).get().0;
 
@@ -473,16 +606,17 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
         .into_iter()
         .enumerate()
         .map(|(i, x)| {
-            Arc::new(Node {
-                // init to max, this value is updated with running health checks
-                avg_latency_secs: f64::MAX,
-                id: node_test_id(i as u64).get().0,
-                subnet_type: SubnetType::Application,
-                subnet_id,
-                addr: x.ip(),
-                port: x.port(),
-                tls_certificate: vec![],
-            })
+            Arc::new(
+                Node::new(
+                    node_test_id(i as u64).get().0,
+                    subnet_id,
+                    SubnetType::Application,
+                    x.ip(),
+                    x.port(),
+                    vec![],
+                )
+                .unwrap(),
+            )
         })
         .collect::<Vec<_>>();
 
@@ -502,4 +636,68 @@ pub fn generate_stub_subnet(nodes: Vec<SocketAddr>) -> Subnet {
 }
 
 #[cfg(test)]
-pub mod test;
+pub(crate) mod test {
+    use super::*;
+    use crate::test_utils::{
+        create_fake_registry_client, valid_tls_certificate_and_validation_time,
+    };
+    use ic_registry_routing_table::CanisterIdRange;
+
+    #[allow(clippy::type_complexity)]
+    pub fn test_registry_snapshot(
+        subnets: usize,
+        nodes_per_subnet: usize,
+    ) -> (
+        RegistrySnapshot,
+        Vec<(NodeId, String)>,
+        Vec<(SubnetId, CanisterIdRange)>,
+    ) {
+        let snapshot = Arc::new(ArcSwapOption::empty());
+
+        let (reg, nodes, ranges) = create_fake_registry_client(subnets, nodes_per_subnet, None);
+        let reg = Arc::new(reg);
+
+        let (channel_send, _) = watch::channel(None);
+        let snapshotter = Snapshotter::new(snapshot.clone(), channel_send, reg, Duration::ZERO);
+        snapshotter.snapshot().unwrap();
+
+        (
+            snapshot.load_full().unwrap().as_ref().clone(),
+            nodes,
+            ranges,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_routing_table() -> Result<(), Error> {
+        let (snapshot, nodes, ranges) = test_registry_snapshot(4, 1);
+
+        assert_eq!(snapshot.version, 1);
+        assert_eq!(snapshot.subnets.len(), 4);
+
+        for i in 0..snapshot.subnets.len() {
+            let sn = &snapshot.subnets[i];
+            assert_eq!(sn.id.to_string(), ranges[i].0.to_string());
+
+            assert_eq!(sn.ranges.len(), 1);
+            assert_eq!(
+                sn.ranges[0].start.to_string(),
+                ranges[i].1.start.to_string()
+            );
+            assert_eq!(sn.ranges[0].end.to_string(), ranges[i].1.end.to_string());
+
+            assert_eq!(sn.nodes.len(), 1);
+            assert_eq!(sn.nodes[0].id.to_string(), nodes[i].0.to_string());
+            assert_eq!(sn.nodes[0].addr.to_string(), nodes[i].1);
+
+            assert_eq!(
+                sn.nodes[0].tls_certificate,
+                valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
+            );
+        }
+
+        Ok(())
+    }
+}

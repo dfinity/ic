@@ -8,7 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../../types/base_types" }
-ic-crypto-ed25519 = { path = "../../ed25519" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-protobuf = { path = "../../../protobuf" }
 
 [dev-dependencies]

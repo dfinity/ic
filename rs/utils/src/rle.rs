@@ -39,7 +39,7 @@ impl fmt::Debug for DebugBlob<'_> {
         }
         let rle = display(self.0);
         if rle.len() < (self.0.len() + 1) * 2 {
-            write!(f, "{}", rle)
+            write!(f, "{rle}")
         } else {
             write!(f, "0x{}", hex::encode(self.0))
         }
@@ -70,7 +70,7 @@ pub fn display(bytes: &[u8]) -> String {
     let mut buf = String::new();
     let mut prefix = "";
     let mut emit = |count, byte| {
-        fmt::write(&mut buf, format_args!("{}{}×{:02x}", prefix, count, byte))
+        fmt::write(&mut buf, format_args!("{prefix}{count}×{byte:02x}"))
             .expect("Failed to write to string");
         prefix = " ";
     };

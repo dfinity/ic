@@ -3,7 +3,7 @@ use crate::state::{
 };
 use crate::storage::test_fixtures::empty_wasm_store;
 use crate::storage::{
-    wasm_store_try_get, wasm_store_try_insert, StorableWasm, WasmStore, WasmStoreError,
+    StorableWasm, WasmStore, WasmStoreError, wasm_store_try_get, wasm_store_try_insert,
 };
 use proptest::arbitrary::any;
 use proptest::array::uniform20;
@@ -89,7 +89,7 @@ mod validate_wasm_hashes {
     use crate::state::{GitCommitHash, WasmHash};
     use crate::storage::test_fixtures::{embedded_ledger_suite_version, empty_wasm_store};
     use crate::storage::{
-        record_icrc1_ledger_suite_wasms, validate_wasm_hashes, WasmHashError, WasmStore,
+        WasmHashError, WasmStore, record_icrc1_ledger_suite_wasms, validate_wasm_hashes,
     };
     use assert_matches::assert_matches;
     use proptest::array::uniform32;

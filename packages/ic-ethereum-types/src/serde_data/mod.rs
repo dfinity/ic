@@ -4,9 +4,9 @@
 mod tests;
 
 use hex::{FromHex, ToHex};
-use serde::de::{Error, Visitor};
 use serde::Deserializer;
 use serde::Serializer;
+use serde::de::{Error, Visitor};
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -30,7 +30,7 @@ where
 {
     struct HexStrVisitor<T>(PhantomData<T>);
 
-    impl<'de, T> Visitor<'de> for HexStrVisitor<T>
+    impl<T> Visitor<'_> for HexStrVisitor<T>
     where
         T: FromHex,
         <T as FromHex>::Error: fmt::Display,

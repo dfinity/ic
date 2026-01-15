@@ -16,10 +16,10 @@ impl fmt::Display for DkgCreateTranscriptError {
         let prefix = "Failed to create transcript: ";
         match self {
             DkgCreateTranscriptError::InsufficientDealings(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             DkgCreateTranscriptError::MalformedResharingTranscriptInConfig(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
         }
     }

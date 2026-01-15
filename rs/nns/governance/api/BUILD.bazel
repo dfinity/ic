@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
+    "@crate_index//:hex",
     "@crate_index//:itertools",
     "@crate_index//:prost",
     "@crate_index//:serde",

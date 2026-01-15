@@ -1,25 +1,25 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::common::PeerRestrictedTlsConfig;
-use axum::{http::Request, Router};
+use axum::{Router, http::Request};
 use bytes::Bytes;
 use futures::FutureExt;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_logger::info;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
-    create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
+    ConnectivityChecker, create_peer_manager_and_registry_handle,
+    temp_crypto_component_with_tls_keys,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout,
-        PeerManagerAction,
+        PeerManagerAction, add_peer_manager_to_sim, add_transport_to_sim, wait_for,
+        wait_for_timeout,
     },
-    ConnectivityChecker,
 };
-use ic_quic_transport::{create_udp_socket, QuicTransport, Transport};
+use ic_quic_transport::{QuicTransport, Transport, create_udp_socket};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use tokio::{
-    sync::{mpsc, Notify},
+    sync::{Notify, mpsc},
     time::timeout,
 };
 use turmoil::Builder;

@@ -2,10 +2,10 @@ use super::super::*;
 use ic_base_types::PrincipalId;
 
 mod batch_signed_idkg_dealings {
+    use crate::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealings;
     use crate::crypto::canister_threshold_sig::idkg::tests::batch_dealings::{
         dealer_id, dummy_batch_signed_idkg_dealing,
     };
-    use crate::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealings;
     use std::iter::zip;
 
     #[test]

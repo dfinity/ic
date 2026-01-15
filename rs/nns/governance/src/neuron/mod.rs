@@ -1,7 +1,3 @@
-use crate::pb::v1::{
-    neuron::DissolveState, Neuron as NeuronProto, NeuronInfo, NeuronState, NeuronType,
-};
-
 pub mod dissolve_state_and_age;
 pub use dissolve_state_and_age::*;
 pub mod types;
@@ -17,34 +13,6 @@ fn neuron_stake_e8s(
         .saturating_add(staked_maturity_e8s_equivalent.unwrap_or(0))
 }
 
-// The following methods are conceptually methods for the API type of the neuron.
-impl NeuronProto {
-    pub fn state(&self, now_seconds: u64) -> NeuronState {
-        if self.spawn_at_timestamp_seconds.is_some() {
-            return NeuronState::Spawning;
-        }
-        match self.dissolve_state {
-            Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)) => {
-                if dissolve_delay_seconds > 0 {
-                    NeuronState::NotDissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            Some(DissolveState::WhenDissolvedTimestampSeconds(
-                when_dissolved_timestamp_seconds,
-            )) => {
-                if when_dissolved_timestamp_seconds > now_seconds {
-                    NeuronState::Dissolving
-                } else {
-                    NeuronState::Dissolved
-                }
-            }
-            None => NeuronState::Dissolved,
-        }
-    }
-}
-
 /// Given two quantities of stake with possible associated age, return the
 /// combined stake and the combined age.
 pub fn combine_aged_stakes(
@@ -56,9 +24,10 @@ pub fn combine_aged_stakes(
     if x_stake_e8s == 0 && y_stake_e8s == 0 {
         (0, 0)
     } else {
-        let total_age_seconds: u128 = (x_stake_e8s as u128 * x_age_seconds as u128
-            + y_stake_e8s as u128 * y_age_seconds as u128)
-            / (x_stake_e8s as u128 + y_stake_e8s as u128);
+        let total_age_seconds: u128 = ((x_stake_e8s as u128)
+            .saturating_mul(x_age_seconds as u128)
+            .saturating_add((y_stake_e8s as u128).saturating_mul(y_age_seconds as u128)))
+            / ((x_stake_e8s as u128).saturating_add(y_stake_e8s as u128));
 
         // Note that age is adjusted in proportion to the stake, but due to the
         // discrete nature of u64 numbers, some resolution is lost due to the
@@ -66,17 +35,10 @@ pub fn combine_aged_stakes(
         // the age remain constant after this operation. However, in the end, the
         // most that can be lost due to rounding from the actual age, is always
         // less than 1 second, so this is not a problem.
-        (x_stake_e8s + y_stake_e8s, total_age_seconds as u64)
-    }
-}
-
-impl NeuronInfo {
-    pub fn is_seed_neuron(&self) -> bool {
-        self.neuron_type == Some(NeuronType::Seed as i32)
-    }
-
-    pub fn is_ect_neuron(&self) -> bool {
-        self.neuron_type == Some(NeuronType::Ect as i32)
+        (
+            x_stake_e8s.saturating_add(y_stake_e8s),
+            total_age_seconds as u64,
+        )
     }
 }
 

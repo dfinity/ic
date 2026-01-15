@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package attestation;
+
+// SEV attestation package that is shared by a node as evidence of its integrity
+message SevAttestationPackage {
+  // Opaque bytes containing the SEV attestation report. Can be parsed using
+  // sev::firmware::guest::AttestationReport::from_bytes.
+  optional bytes attestation_report = 1;
+  optional SevCertificateChain certificate_chain = 2;
+  // Description of the the custom data included in the attestation report.
+  // The custom data in the attestation report is 64 bytes, derived from some
+  // data. This field can be used to provide information about how the data
+  // was derived which can be useful for debugging purposes in case the verifier
+  // expects different data in the report.
+  optional string custom_data_debug_info = 3;
+}
+
+message SevCertificateChain {
+  // AMD Root Key (ARK) certificate in PEM encoding
+  optional string ark_pem = 1;
+  // AMD SEV Signing Key (ASK) certificate in PEM encoding
+  optional string ask_pem = 2;
+  // Versioned Chip Endorsement Key (VCEK) certificate in PEM encoding
+  optional string vcek_pem = 3;
+}
+
+/// Verification error when verifying an attestation package
+message VerificationError {
+  // Message describing the error
+  // The use of this field is to provide a human-readable description of the
+  // error which can be useful if the client cannot deserialize the error
+  // details (because it's running an older version).
+  string message = 1;
+
+  // Verification error information. New error types can be added in the future.
+  //
+  // Compatibility note: If one of the detail variants needs new fields in the
+  // future, a new message type compatible with VerificationErrorDescription can
+  // be added (i.e. the new message type fields should be a superset of the
+  // fields of VerificationErrorDescription) and then the type can be replaced
+  // with the new message type in the detail variant.
+  oneof detail {
+    // Generic internal error
+    VerificationErrorDescription internal = 2;
+    // The attestation report contains invalid data
+    VerificationErrorDescription invalid_attestation_report = 3;
+    // The provided certificate chain is invalid
+    VerificationErrorDescription invalid_certificate_chain = 4;
+    // The chip ID in the attestation report does not match the expected chip ID
+    VerificationErrorDescription invalid_chip_id = 5;
+    // The custom data in the attestation report does not match the expected custom data
+    VerificationErrorDescription invalid_custom_data = 6;
+    // The measurement in the attestation report does not match the expected measurement
+    VerificationErrorDescription invalid_measurement = 7;
+    // The signature in the attestation report is not by the VCEK
+    VerificationErrorDescription invalid_signature = 8;
+  }
+}
+
+message VerificationErrorDescription {
+  string message = 1;
+}

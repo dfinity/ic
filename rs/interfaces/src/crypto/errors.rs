@@ -1,15 +1,18 @@
 use crate::crypto::ErrorReproducibility;
+use ic_types::crypto::CryptoError;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
-    IDkgVerifyInitialDealingsError, IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
+    EcdsaPresignatureQuadrupleCreationError, IDkgParamsValidationError, IDkgVerifyComplaintError,
+    IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaSigInputsCreationError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
+    ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
     ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
-use ic_types::crypto::CryptoError;
+use ic_types::crypto::vetkd::{VetKdKeyShareVerificationError, VetKdKeyVerificationError};
 use ic_types::registry::RegistryClientError;
 
 #[cfg(test)]
@@ -343,6 +346,28 @@ impl ErrorReproducibility for ThresholdEcdsaVerifyCombinedSignatureError {
     }
 }
 
+impl ErrorReproducibility for ThresholdEcdsaSigInputsCreationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            ThresholdEcdsaSigInputsCreationError::InconsistentAlgorithmIds => true,
+            ThresholdEcdsaSigInputsCreationError::InconsistentReceivers => true,
+            ThresholdEcdsaSigInputsCreationError::InvalidHashLength => true,
+            ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(_) => true,
+            ThresholdEcdsaSigInputsCreationError::UnsupportedAlgorithm => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for EcdsaPresignatureQuadrupleCreationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            EcdsaPresignatureQuadrupleCreationError::InconsistentAlgorithmIds => true,
+            EcdsaPresignatureQuadrupleCreationError::InconsistentReceivers => true,
+            EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(_) => true,
+        }
+    }
+}
+
 impl ErrorReproducibility for ThresholdSchnorrVerifySigShareError {
     fn is_reproducible(&self) -> bool {
         // The match below is intentionally explicit on all possible values,
@@ -388,6 +413,43 @@ impl ErrorReproducibility for ThresholdSchnorrVerifyCombinedSigError {
     }
 }
 
+impl ErrorReproducibility for ThresholdSchnorrSigInputsCreationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(_, _) => true,
+            ThresholdSchnorrSigInputsCreationError::InconsistentReceivers => true,
+            ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(_) => true,
+            ThresholdSchnorrSigInputsCreationError::InvalidUseOfTaprootHash => true,
+            ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for ThresholdSchnorrPresignatureTranscriptCreationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            ThresholdSchnorrPresignatureTranscriptCreationError::InvalidTranscriptOrigin(_) => true,
+            ThresholdSchnorrPresignatureTranscriptCreationError::UnsupportedAlgorithm(_) => true,
+        }
+    }
+}
+
+impl ErrorReproducibility for IDkgParamsValidationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            IDkgParamsValidationError::TooManyReceivers { .. } => true,
+            IDkgParamsValidationError::TooManyDealers { .. } => true,
+            IDkgParamsValidationError::UnsatisfiedVerificationThreshold { .. } => true,
+            IDkgParamsValidationError::UnsatisfiedCollectionThreshold { .. } => true,
+            IDkgParamsValidationError::ReceiversEmpty => true,
+            IDkgParamsValidationError::DealersEmpty => true,
+            IDkgParamsValidationError::UnsupportedAlgorithmId { .. } => true,
+            IDkgParamsValidationError::WrongTypeForOriginalTranscript => true,
+            IDkgParamsValidationError::DealersNotContainedInPreviousReceivers => true,
+        }
+    }
+}
+
 impl ErrorReproducibility for IDkgVerifyOpeningError {
     fn is_reproducible(&self) -> bool {
         match self {
@@ -421,6 +483,40 @@ impl ErrorReproducibility for RegistryClientError {
             RegistryClientError::PollingLatestVersionFailed { .. } => false,
             // true, as the registry is guaranteed to be consistent across replicas
             RegistryClientError::DecodeError { .. } => true,
+            // false, as depends on the data available to the registry
+            RegistryClientError::NoVersionsBefore { .. } => false,
+        }
+    }
+}
+
+impl ErrorReproducibility for VetKdKeyShareVerificationError {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        match self {
+            Self::VerificationError(crypto_error) => crypto_error.is_reproducible(),
+            // false, as the result may change if the DKG transcript is reloaded.
+            Self::ThresholdSigDataNotFound(_) => false,
+        }
+    }
+}
+
+impl ErrorReproducibility for VetKdKeyVerificationError {
+    fn is_reproducible(&self) -> bool {
+        // The match below is intentionally explicit on all possible values,
+        // to avoid defaults, which might be error-prone.
+        // Upon addition of any new error this match has to be updated.
+
+        match self {
+            Self::InvalidArgumentEncryptedKey => true,
+            Self::InternalError(_) => true,
+            Self::InvalidArgumentMasterPublicKey => true,
+            Self::InvalidArgumentEncryptionPublicKey => true,
+            Self::VerificationError => true,
+            // false, as the result may change if the DKG transcript is reloaded.
+            Self::ThresholdSigDataNotFound(_) => false,
         }
     }
 }

@@ -1,7 +1,7 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
+use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, RngCore};
 use strum::IntoEnumIterator;
 
@@ -261,28 +261,32 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
         let shares = SecretShares::Random;
 
         // invalid threshold
-        assert!(create_dealing(
-            alg_for_curve(curve),
-            &associated_data,
-            dealer_index,
-            NumberOfNodes::from(private_keys.len() as u32 + 1),
-            &public_keys,
-            &shares,
-            Seed::from_rng(rng),
-        )
-        .is_err());
+        assert!(
+            create_dealing(
+                alg_for_curve(curve),
+                &associated_data,
+                dealer_index,
+                NumberOfNodes::from(private_keys.len() as u32 + 1),
+                &public_keys,
+                &shares,
+                Seed::from_rng(rng),
+            )
+            .is_err()
+        );
 
         // wrong algorithm id
-        assert!(create_dealing(
-            AlgorithmId::Groth20_Bls12_381,
-            &associated_data,
-            dealer_index,
-            NumberOfNodes::from(threshold),
-            &public_keys,
-            &shares,
-            Seed::from_rng(rng),
-        )
-        .is_err());
+        assert!(
+            create_dealing(
+                AlgorithmId::Groth20_Bls12_381,
+                &associated_data,
+                dealer_index,
+                NumberOfNodes::from(threshold),
+                &public_keys,
+                &shares,
+                Seed::from_rng(rng),
+            )
+            .is_err()
+        );
     }
 
     Ok(())
@@ -295,20 +299,20 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
 
     {
         let shares = SecretShares::Random;
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::Random", log);
     }
 
     {
         let shares = SecretShares::RandomUnmasked;
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::RandomUnmasked", log);
     }
 
     {
         let secret = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfUnmasked(secret);
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::ReshareOfUnmasked(K256) - REDACTED", log);
     }
 
@@ -316,7 +320,7 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
         let secret = EccScalar::random(curve, rng);
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfMasked(secret, mask);
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::ReshareOfMasked(K256) - REDACTED", log);
     }
 
@@ -325,7 +329,7 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
         let rhs = EccScalar::random(curve, rng);
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::UnmaskedTimesMasked(K256) - REDACTED", log);
     }
 

@@ -10,8 +10,11 @@
 # argument MUST be given by the build script, otherwise build will fail.
 ARG BASE_IMAGE=
 
+# We support prod and dev images
+ARG BUILD_TYPE=
 
-FROM $BASE_IMAGE
+
+FROM $BASE_IMAGE as output_prod
 
 USER root:root
 
@@ -67,7 +70,7 @@ RUN find /etc -type d -exec chmod 0755 {} \+ && \
 RUN RESUME=none update-initramfs -c -k all
 
 # Activate the NSS IC OS Name Service Switch plugin.
-# See ../../../rs/ic_os/nss_icos/README.md for context.
+# See ../../../rs/ic_os/networking/nss_icos/README.md for context.
 RUN sed -r -e 's/hosts:( *)files/hosts:\1files icos/' -i /etc/nsswitch.conf
 
 # Prepare for bind mount of authorized_keys
@@ -111,12 +114,6 @@ RUN systemctl disable \
 # Divert symbolic link for dynamically generated nftables
 # ruleset.
 RUN ln -sf /run/ic-node/nftables-ruleset/nftables.conf /etc/nftables.conf
-
-ARG ROOT_PASSWORD=
-RUN \
-    if [ "${ROOT_PASSWORD}" != "" ]; then \
-        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
-    fi
 
 # Clear additional files that may lead to indeterministic build.
 RUN rm -rf \
@@ -168,6 +165,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
+# The "limited-console" account for restricted console access
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
+    chown limited-console:nogroup /var/lib/limited-console && \
+    adduser limited-console systemd-journal
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -197,4 +199,31 @@ RUN chown root:root /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
+    chmod 0755 /opt/ic/bin/rbash/bash && \
     chmod 0644 /opt/ic/share/*
+
+
+# ------ DEV VARIANT ---------------------------------------------
+
+# The following steps apply conditionally to the dev image ONLY
+# https://www.docker.com/blog/advanced-dockerfiles-faster-builds-and-smaller-images-using-buildkit-and-multistage-builds/#4374
+FROM output_prod as output_dev
+
+USER root:root
+
+# Set a root password if specified
+ARG ROOT_PASSWORD=
+RUN \
+    if [ "${ROOT_PASSWORD}" != "" ]; then \
+        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
+    fi
+
+# Include the dev root CA cert
+COPY dev-certs/canister_http_test_ca.cert /usr/local/share/ca-certificates/dev-root-ca.crt
+RUN chmod 0644 /usr/local/share/ca-certificates/dev-root-ca.crt
+RUN update-ca-certificates
+
+
+FROM output_${BUILD_TYPE}
+
+USER root:root

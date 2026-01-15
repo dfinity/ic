@@ -1,11 +1,16 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType,
+};
 use ic_protobuf::types::v1 as pb_types;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// A crypto component set up in a temporary directory and using [`OsRng`]. The
@@ -26,10 +31,12 @@ pub mod internal {
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
     use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-    use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-    use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-    use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
     use ic_crypto_internal_csp::LocalCspVault;
+    use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+    use ic_crypto_internal_csp::secret_key_store::memory_secret_key_store::InMemorySecretKeyStore;
+    use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
+    use ic_crypto_internal_csp::vault::api::CspVault;
+    use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
     use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_node_key_generation::{
@@ -47,12 +54,12 @@ pub mod internal {
         LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSchnorrSigVerifier,
         ThresholdSchnorrSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey,
-        ThresholdSigner,
+        ThresholdSigner, VetKdProtocol,
     };
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_logger::{new_logger, ReplicaLogger};
+    use ic_logger::{ReplicaLogger, new_logger};
     use ic_protobuf::registry::subnet::v1::SubnetListRecord;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
@@ -78,6 +85,7 @@ pub mod internal {
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
         ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
+    use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::{
         create_dealing_error::DkgCreateDealingError,
@@ -85,7 +93,10 @@ pub mod internal {
         load_transcript_error::DkgLoadTranscriptError, verify_dealing_error::DkgVerifyDealingError,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
-    use ic_types::crypto::threshold_sig::IcRootOfTrust;
+    use ic_types::crypto::vetkd::{
+        VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
+        VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
+    };
     use ic_types::crypto::{
         BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
         CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
@@ -116,7 +127,7 @@ pub mod internal {
         crypto_component: CryptoComponentImpl<C>,
         remote_vault_environment: Option<
             RemoteVaultEnvironment<
-                LocalCspVault<R, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>,
+                LocalCspVault<R, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>,
             >,
         >,
         temp_dir: TempDir,
@@ -280,33 +291,29 @@ pub mod internal {
                     ),
                 }
             });
-
-            let csp = if let Some(env) = &opt_remote_vault_environment {
-                let vault_client = env
+            let vault: Arc<dyn CspVault> = if let Some(env) = &opt_remote_vault_environment {
+                let remote_vault = env
                     .new_vault_client_builder()
                     .with_logger(new_logger!(logger))
                     .with_metrics(Arc::clone(&metrics))
                     .build()
                     .expect("Failed to build a vault client");
-                Csp::new_from_vault(
-                    Arc::new(vault_client),
-                    new_logger!(logger),
-                    Arc::clone(&metrics),
-                )
+                Arc::new(remote_vault)
             } else {
-                Csp::new_from_vault(
-                    Arc::clone(&local_vault) as _,
-                    new_logger!(logger),
-                    Arc::clone(&metrics),
-                )
+                local_vault
             };
+            let csp = Csp::new_from_vault(
+                Arc::clone(&vault),
+                new_logger!(logger),
+                Arc::clone(&metrics),
+            );
 
             let node_keys_to_generate = self
                 .node_keys_to_generate
                 .unwrap_or_else(NodeKeysToGenerate::none);
             let node_signing_pk = node_keys_to_generate
                 .generate_node_signing_keys
-                .then(|| generate_node_signing_keys(local_vault.as_ref()));
+                .then(|| generate_node_signing_keys(vault.as_ref()));
             let node_id = self
                 .node_id
                 .unwrap_or_else(|| match node_signing_pk.as_ref() {
@@ -316,20 +323,20 @@ pub mod internal {
                 });
             let committee_signing_pk = node_keys_to_generate
                 .generate_committee_signing_keys
-                .then(|| generate_committee_signing_keys(local_vault.as_ref()));
+                .then(|| generate_committee_signing_keys(vault.as_ref()));
             let dkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_dkg_dealing_encryption_keys
-                .then(|| generate_dkg_dealing_encryption_keys(local_vault.as_ref(), node_id));
+                .then(|| generate_dkg_dealing_encryption_keys(vault.as_ref(), node_id));
             let idkg_dealing_encryption_pk = node_keys_to_generate
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
-                    generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
-                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
-                    )
+                    generate_idkg_dealing_encryption_keys(vault.as_ref()).unwrap_or_else(|e| {
+                        panic!("Error generating I-DKG dealing encryption keys: {e:?}")
+                    })
                 });
             let tls_certificate = node_keys_to_generate
                 .generate_tls_keys_and_certificate
-                .then(|| generate_tls_keys(local_vault.as_ref(), node_id).to_proto());
+                .then(|| generate_tls_keys(vault.as_ref(), node_id).to_proto());
 
             let is_registry_data_provided = self.registry_data.is_some();
             let registry_data = self
@@ -414,7 +421,7 @@ pub mod internal {
 
             let crypto_component = CryptoComponent::new_for_test(
                 csp,
-                local_vault,
+                vault,
                 logger,
                 registry_client,
                 node_id,
@@ -478,17 +485,11 @@ pub mod internal {
         }
     }
 
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigner<T>
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, T: Signable> BasicSigner<T>
         for TempCryptoComponentGeneric<C, R>
     {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -733,6 +734,47 @@ pub mod internal {
                 inputs,
                 signature,
             )
+        }
+    }
+
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> VetKdProtocol
+        for TempCryptoComponentGeneric<C, R>
+    {
+        fn create_encrypted_key_share(
+            &self,
+            args: VetKdArgs,
+        ) -> Result<VetKdEncryptedKeyShare, VetKdKeyShareCreationError> {
+            VetKdProtocol::create_encrypted_key_share(&self.crypto_component, args)
+        }
+
+        fn verify_encrypted_key_share(
+            &self,
+            signer: NodeId,
+            key_share: &VetKdEncryptedKeyShare,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyShareVerificationError> {
+            VetKdProtocol::verify_encrypted_key_share(
+                &self.crypto_component,
+                signer,
+                key_share,
+                args,
+            )
+        }
+
+        fn combine_encrypted_key_shares(
+            &self,
+            shares: &BTreeMap<NodeId, VetKdEncryptedKeyShare>,
+            args: &VetKdArgs,
+        ) -> Result<VetKdEncryptedKey, VetKdKeyShareCombinationError> {
+            VetKdProtocol::combine_encrypted_key_shares(&self.crypto_component, shares, args)
+        }
+
+        fn verify_encrypted_key(
+            &self,
+            key: &VetKdEncryptedKey,
+            args: &VetKdArgs,
+        ) -> Result<(), VetKdKeyVerificationError> {
+            VetKdProtocol::verify_encrypted_key(&self.crypto_component, key, args)
         }
     }
 
@@ -1050,7 +1092,6 @@ impl EcdsaSubnetConfig {
                 max_number_of_canisters: 0,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: Some(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
                         key_id: Some(ic_protobuf::types::v1::MasterPublicKeyId {
@@ -1067,14 +1108,16 @@ impl EcdsaSubnetConfig {
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             },
         }
     }
 
-    pub fn new_without_ecdsa_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
+    pub fn new_without_chain_key_config(subnet_id: SubnetId, node_id: Option<NodeId>) -> Self {
         let mut subnet_config = Self::new(subnet_id, node_id, None);
-        subnet_config.subnet_record.ecdsa_config = None;
+        subnet_config.subnet_record.chain_key_config = None;
         subnet_config
     }
 
@@ -1173,4 +1216,14 @@ impl NodeKeysToGenerate {
             ..Self::none()
         }
     }
+}
+
+pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
+    let empty_fake_registry = Arc::new(FakeRegistryClient::new(Arc::new(
+        ProtoRegistryDataProvider::new(),
+    )));
+    TempCryptoComponent::builder()
+        .with_registry(empty_fake_registry)
+        .with_node_id(node_id)
+        .build()
 }

@@ -2,21 +2,25 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
+use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
+    wasmtime_embedder::system_api::sandbox_safe_system_state::{
+        RequestMetadataStats, SystemStateModifications,
+    },
+};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, warn, ReplicaLogger};
-use ic_management_canister_types::CanisterStatusType;
+use ic_logger::{ReplicaLogger, error, fatal, info, warn};
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
     SystemState,
 };
-use ic_system_api::sandbox_safe_system_state::{RequestMetadataStats, SystemStateChanges};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
@@ -49,7 +53,7 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
             CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
             CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
         };
-        let err_msg = format!("Canister {} is not running", canister_id);
+        let err_msg = format!("Canister {canister_id} is not running");
         return Err(UserError::new(err_code, err_msg));
     }
     Ok(())
@@ -64,7 +68,7 @@ pub(crate) fn action_to_response(
     ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
+        CallOrigin::Ingress(user_id, message_id, _method_name) => action_to_ingress_response(
             &canister.canister_id(),
             user_id,
             action,
@@ -73,10 +77,10 @@ pub(crate) fn action_to_response(
             log,
             ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => fatal!(
             log,
             "The update path should not have created a callback with a query origin",
         ),
@@ -99,7 +103,7 @@ pub(crate) fn action_to_request_response(
 ) -> ExecutionResponse {
     let (response_payload, refund) = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
-            return ExecutionResponse::Empty
+            return ExecutionResponse::Empty;
         }
 
         CallContextAction::NoResponse { refund } => (
@@ -153,7 +157,7 @@ pub(crate) fn action_to_ingress_response(
                 time,
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not reply to the call", canister_id),
+                    format!("Canister {canister_id} did not reply to the call"),
                 )),
             })
         }
@@ -198,7 +202,9 @@ pub(crate) fn action_to_ingress_response(
         warn!(
             log,
             "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-            user_id, canister_id, message_id
+            user_id,
+            canister_id,
+            message_id
         );
     }
     match ingress_status {
@@ -237,10 +243,10 @@ pub(crate) fn wasm_result_to_query_response(
     refund: Cycles,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => {
+        CallOrigin::Ingress(user_id, message_id, _method_name) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
@@ -251,7 +257,7 @@ pub(crate) fn wasm_result_to_query_response(
             };
             ExecutionResponse::Request(response)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             fatal!(log, "The update path should not have a query origin",)
         }
         CallOrigin::SystemTask => {
@@ -408,24 +414,32 @@ pub fn update_round_limits(round_limits: &mut RoundLimits, slice: &SliceExecutio
 /// subnet available memory. In case of an error, the partially applied changes
 /// are not undone.
 fn try_apply_canister_state_changes(
-    system_state_changes: SystemStateChanges,
+    system_state_modifications: SystemStateModifications,
     output: &WasmExecutionOutput,
     system_state: &mut SystemState,
     subnet_available_memory: &mut SubnetAvailableMemory,
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    is_composite_query: bool,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
         .try_decrement(
             output.allocated_bytes,
-            output.allocated_message_bytes,
+            output.allocated_guaranteed_response_message_bytes,
             NumBytes::from(0),
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
+    system_state_modifications.apply_changes(
+        time,
+        system_state,
+        network_topology,
+        subnet_id,
+        is_composite_query,
+        log,
+    )
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -437,8 +451,9 @@ fn try_apply_canister_state_changes(
 /// - A mismatch between checks dones by the Wasm executor and checks done when
 ///   applying the changes due to a bug.
 /// - An escape from the Wasm sandbox that corrupts the execution output.
+#[allow(clippy::too_many_arguments)]
 pub fn apply_canister_state_changes(
-    canister_state_changes: Option<CanisterStateChanges>,
+    canister_state_changes: CanisterStateChanges,
     execution_state: &mut ExecutionState,
     system_state: &mut SystemState,
     output: &mut WasmExecutionOutput,
@@ -450,67 +465,72 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
+    is_composite_query: bool,
+    deallocate: &dyn Fn(SystemState),
 ) {
-    if let Some(CanisterStateChanges {
-        globals,
-        wasm_memory,
-        stable_memory,
-        system_state_changes,
-    }) = canister_state_changes
-    {
-        let clean_system_state = system_state.clone();
-        let clean_subnet_available_memory = round_limits.subnet_available_memory;
-        let callbacks_created = system_state_changes.callbacks_created();
-        // Everything that is passed via a mutable reference in this function
-        // should be cloned and restored in case of an error.
-        match try_apply_canister_state_changes(
-            system_state_changes,
-            output,
-            system_state,
-            &mut round_limits.subnet_available_memory,
-            time,
-            network_topology,
-            subnet_id,
-            log,
-        ) {
-            Ok(request_stats) => {
+    let CanisterStateChanges {
+        execution_state_changes,
+        system_state_modifications,
+    } = canister_state_changes;
+
+    let clean_system_state = system_state.clone();
+    let clean_subnet_available_memory = round_limits.subnet_available_memory;
+    let callbacks_created = system_state_modifications.callbacks_created();
+    // Everything that is passed via a mutable reference in this function
+    // should be cloned and restored in case of an error.
+    match try_apply_canister_state_changes(
+        system_state_modifications,
+        output,
+        system_state,
+        &mut round_limits.subnet_available_memory,
+        time,
+        network_topology,
+        subnet_id,
+        is_composite_query,
+        log,
+    ) {
+        Ok(request_stats) => {
+            if let Some(ExecutionStateChanges {
+                globals,
+                wasm_memory,
+                stable_memory,
+            }) = execution_state_changes
+            {
                 execution_state.wasm_memory = wasm_memory;
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
-                // We increment the canister version here, as all the message execution
-                // functions (except messages executed during `install_code`,
-                // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
-                // call this `apply_canister_state_change` to finish execution.
-                system_state.canister_version += 1;
-                round_limits.subnet_available_callbacks -= callbacks_created as i64;
+            }
+            round_limits.subnet_available_callbacks -= callbacks_created as i64;
+            deallocate(clean_system_state);
 
-                call_tree_metrics.observe(request_stats, call_context_creation_time, time);
-            }
-            Err(err) => {
-                debug_assert_eq!(err, HypervisorError::OutOfMemory);
-                match &err {
-                    HypervisorError::WasmEngineError(err) => {
-                        state_changes_error.inc();
-                        error!(
-                            log,
-                            "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
-                        )
-                    }
-                    HypervisorError::OutOfMemory => {
-                        warn!(log, "Failed to apply state changes due to DTS: {}", err)
-                    }
-                    _ => {
-                        state_changes_error.inc();
-                        error!(
-                            log,
-                            "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}", err
-                        )
-                    }
+            call_tree_metrics.observe(request_stats, call_context_creation_time, time);
+        }
+        Err(err) => {
+            debug_assert_eq!(err, HypervisorError::OutOfMemory);
+            match &err {
+                HypervisorError::WasmEngineError(err) => {
+                    state_changes_error.inc();
+                    error!(
+                        log,
+                        "[EXC-BUG]: Failed to apply state changes due to a bug: {}", err
+                    )
                 }
-                *system_state = clean_system_state;
-                round_limits.subnet_available_memory = clean_subnet_available_memory;
-                output.wasm_result = Err(err);
+                HypervisorError::OutOfMemory => {
+                    warn!(log, "Failed to apply state changes due to DTS: {}", err)
+                }
+                _ => {
+                    state_changes_error.inc();
+                    error!(
+                        log,
+                        "[EXC-BUG]: Failed to apply state changes due to an unexpected error: {}",
+                        err
+                    )
+                }
             }
+            let old_system_state = std::mem::replace(system_state, clean_system_state);
+            deallocate(old_system_state);
+            round_limits.subnet_available_memory = clean_subnet_available_memory;
+            output.wasm_result = Err(err);
         }
     }
 }
@@ -525,7 +545,8 @@ pub(crate) fn finish_call_with_error(
     log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
     let response = match call_or_task {
-        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
+        CanisterCallOrTask::Update(CanisterCall::Request(request))
+        | CanisterCallOrTask::Query(CanisterCall::Request(request)) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -536,7 +557,8 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        CanisterCallOrTask::Call(CanisterCall::Ingress(ingress)) => {
+        CanisterCallOrTask::Update(CanisterCall::Ingress(ingress))
+        | CanisterCallOrTask::Query(CanisterCall::Ingress(ingress)) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,
@@ -552,7 +574,7 @@ pub(crate) fn finish_call_with_error(
                 // We could improve the rate limiting using some kind of exponential backoff.
                 let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
                 if log_count < LOG_FIRST_N_SYSTEM_TASKS
-                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                    || log_count.is_multiple_of(LOG_ONE_SYSTEM_TASK_OUT_OF)
                 {
                     warn!(
                         log,
@@ -576,6 +598,21 @@ pub(crate) fn finish_call_with_error(
     }
 }
 
+/// Helper method for logging dirty pages.
+pub fn log_dirty_pages(
+    log: &ReplicaLogger,
+    canister_id: &CanisterId,
+    method_name: &str,
+    dirty_pages: usize,
+    instructions: NumInstructions,
+) {
+    let output_message = format!(
+        "Executed {canister_id}::{method_name}: dirty_4kb_pages = {dirty_pages}, instructions = {instructions}"
+    );
+    info!(log, "{}", output_message.as_str());
+    eprintln!("{output_message}");
+}
+
 #[cfg(test)]
 mod test {
     use super::wasm_result_to_query_response;
@@ -585,10 +622,10 @@ mod test {
     use ic_logger::LoggerImpl;
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-    use ic_types::messages::CallbackId;
-    use ic_types::messages::NO_DEADLINE;
     use ic_types::Cycles;
     use ic_types::Time;
+    use ic_types::messages::CallbackId;
+    use ic_types::messages::NO_DEADLINE;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
@@ -614,6 +651,7 @@ mod test {
                 CanisterId::from(123u64),
                 CallbackId::new(2),
                 NO_DEADLINE,
+                String::from(""),
             ),
             &log,
             Cycles::from(1000u128),

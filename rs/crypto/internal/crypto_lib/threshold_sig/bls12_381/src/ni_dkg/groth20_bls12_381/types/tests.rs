@@ -12,7 +12,7 @@ fn should_redact_bte_node_debug() {
         e: G2Bytes([1; G2Bytes::SIZE]),
     };
 
-    let full_str = format!("{:?}", node);
+    let full_str = format!("{node:?}");
     assert!(
         full_str.contains("a: REDACTED, b: REDACTED, d_t: REDACTED, d_h: REDACTED, e: REDACTED")
     );
@@ -35,7 +35,7 @@ fn should_redact_fs_encryption_secret_key_debug() {
         bte_nodes: vec![node; 3],
     };
 
-    let full_str = format!("{:?}", sk);
+    let full_str = format!("{sk:?}");
 
     for node in &sk.bte_nodes {
         assert_bte_node_components_are_redacted(node, &full_str);

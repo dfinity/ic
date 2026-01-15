@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
 use crate::driver::event::TaskId;
@@ -150,10 +150,7 @@ impl Task for DebugKeepaliveTask {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             let mut mins = 1;
             loop {
-                info!(
-                    logger,
-                    "Keeping alive system under test due to `ict -k` flag. Ctrl-c to stop."
-                );
+                info!(logger, "Keeping alive system under test. Ctrl-c to stop.");
                 tokio::time::sleep(std::time::Duration::from_secs(60 * mins)).await;
                 if mins < 5 {
                     mins += 1;

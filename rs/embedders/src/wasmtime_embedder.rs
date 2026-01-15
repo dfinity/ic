@@ -1,22 +1,16 @@
-pub mod host_memory;
-mod signal_stack;
-/// pub for usage in fuzzing
-#[doc(hidden)]
-pub mod system_api;
-pub mod system_api_complexity;
-
 use std::{
-    cell::Ref,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::TryFrom,
+    fs::File,
     mem::size_of,
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex, atomic::Ordering},
+    time::Duration,
 };
 
-use ic_system_api::{ModificationTracking, SystemApiImpl};
+use ic_management_canister_types_private::Global;
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
-    StoreLimits, StoreLimitsBuilder, Val, ValType,
+    Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, StoreLimits,
+    StoreLimitsBuilder, Val, ValType, unix::StoreExt,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -24,23 +18,23 @@ use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
-use ic_logger::{debug, error, fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, fatal};
 use ic_replicated_state::{
-    canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
-    EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+    EmbedderCache, NumWasmPages, PageIndex, PageMap,
+    canister_state::{WASM_PAGE_SIZE_IN_BYTES, execution_state},
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
+    CanisterId, NumBytes, NumInstructions, NumOsPages,
     methods::{FuncRef, WasmMethod},
-    CanisterId, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{DirtyPageTracking, MemoryLimits, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, WasmMemoryType,
 };
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
@@ -50,12 +44,22 @@ use super::InstanceRunResult;
 
 use self::host_memory::{MemoryPageSize, MemoryStart};
 
+pub mod host_memory;
+/// pub for usage in fuzzing
+#[doc(hidden)]
+pub mod linker;
+mod signal_handler;
+mod signal_stack;
+pub mod system_api;
+pub mod system_api_complexity;
+
+use system_api::{ModificationTracking, SystemApiImpl};
+
 #[cfg(test)]
-mod wasmtime_embedder_tests;
+mod tests;
 
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
 pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
-pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 pub(crate) const STABLE_MEMORY_NAME: &str = "stable_memory";
 pub(crate) const STABLE_BYTEMAP_MEMORY_NAME: &str = "stable_bytemap_memory";
 
@@ -64,25 +68,33 @@ pub(crate) const MAX_STORE_TABLE_ELEMENTS: usize = 1_000_000;
 
 fn demangle(func_name: &str) -> String {
     if let Ok(name) = rustc_demangle::try_demangle(func_name) {
-        format!("{:#}", name)
+        format!("{name:#}")
     } else {
         func_name.to_string()
     }
 }
 
-fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> CanisterBacktrace {
+/// Convert a backtrace to our internal representation. Returns `None` if we
+/// can't get function names for any of the frames. This likely indicates that
+/// the `name` section is not present and the user won't want an error
+/// cluttered with a useless backtrace anyway.
+fn convert_backtrace(wasm: &wasmtime::WasmBacktrace) -> Option<CanisterBacktrace> {
     let funcs: Vec<_> = wasm
         .frames()
         .iter()
         .map(|f| (f.func_index(), f.func_name().map(demangle)))
         .collect();
-    CanisterBacktrace(funcs)
+    if funcs.iter().all(|(_, name)| name.is_none()) {
+        None
+    } else {
+        Some(CanisterBacktrace(funcs))
+    }
 }
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     let backtrace = err
         .downcast_ref::<wasmtime::WasmBacktrace>()
-        .map(convert_backtrace);
+        .and_then(convert_backtrace);
     match err.downcast::<wasmtime::Trap>() {
         Ok(trap) => trap_code_to_hypervisor_error(trap, backtrace),
         Err(err) => {
@@ -145,24 +157,16 @@ fn trap_code_to_hypervisor_error(
     }
 }
 
-fn get_exported_globals<T>(
-    wasm_native_stable_memory: FlagStatus,
-    instance: &Instance,
-    store: &mut Store<T>,
-) -> Vec<wasmtime::Global> {
+fn get_exported_globals<T>(instance: &Instance, store: &mut Store<T>) -> Vec<wasmtime::Global> {
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     ];
-    let globals_to_ignore = match wasm_native_stable_memory {
-        FlagStatus::Enabled => TO_IGNORE,
-        FlagStatus::Disabled => &[],
-    };
 
     instance
         .exports(store)
         .filter_map(|e| {
-            if globals_to_ignore.contains(&e.name()) {
+            if TO_IGNORE.contains(&e.name()) {
                 None
             } else {
                 e.into_global()
@@ -179,7 +183,7 @@ pub enum CanisterMemoryType {
 
 impl std::fmt::Display for CanisterMemoryType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -223,17 +227,8 @@ impl WasmtimeEmbedder {
     pub fn wasmtime_execution_config(embedder_config: &EmbeddersConfig) -> wasmtime::Config {
         let mut config = wasmtime_validation_config(embedder_config);
 
-        // Wasmtime features that differ between Wasm validation and execution.
-        // Currently these are multi-memories and the 64-bit memory needed for
-        // the Wasm-native stable memory implementation.
-        if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
-            || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
-        {
-            config.wasm_multi_memory(true);
-        }
-        if embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
-            config.wasm_memory64(true);
-        }
+        config.wasm_multi_memory(true);
+        config.wasm_memory64(true);
         config
     }
 
@@ -253,7 +248,7 @@ impl WasmtimeEmbedder {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
             .map_err(|e| {
                 HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                    format!("{:?}", e),
+                    format!("{e:?}"),
                 ))
             })?;
         Ok(module)
@@ -263,17 +258,16 @@ impl WasmtimeEmbedder {
         let mut linker: wasmtime::Linker<StoreData> = Linker::new(module.engine());
         let mut main_memory_type = WasmMemoryType::Wasm32;
 
-        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME) {
-            if let Some(mem) = export.memory() {
-                if mem.is_64() {
-                    main_memory_type = WasmMemoryType::Wasm64;
-                }
-            }
+        if let Some(export) = module.get_export(WASM_HEAP_MEMORY_NAME)
+            && let Some(mem) = export.memory()
+            && mem.is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
 
         match main_memory_type {
             WasmMemoryType::Wasm32 => {
-                system_api::syscalls::<u32>(
+                linker::syscalls::<u32>(
                     &mut linker,
                     self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
@@ -282,7 +276,7 @@ impl WasmtimeEmbedder {
                 );
             }
             WasmMemoryType::Wasm64 => {
-                system_api::syscalls::<u64>(
+                linker::syscalls::<u64>(
                     &mut linker,
                     self.config.feature_flags,
                     self.config.stable_memory_dirty_page_limit,
@@ -294,8 +288,7 @@ impl WasmtimeEmbedder {
 
         let instance_pre = linker.instantiate_pre(module).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(format!(
-                "{:?}",
-                e
+                "{e:?}"
             )))
         })?;
 
@@ -317,7 +310,7 @@ impl WasmtimeEmbedder {
             Module::deserialize(&self.create_engine()?, serialized_module.as_slice()).map_err(
                 |err| {
                     HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
-                        format!("{:?}", err),
+                        format!("{err:?}"),
                     ))
                 },
             )
@@ -332,49 +325,63 @@ impl WasmtimeEmbedder {
         self.pre_instantiate(&module)
     }
 
+    fn deserialize_from_file(&self, serialized_module: File) -> HypervisorResult<Module> {
+        // SAFETY: The compilation cache setup guarantees that this file is a
+        // valid serialized module and will not be modified after initial
+        // creation.
+        unsafe {
+            Module::deserialize_open_file(&self.create_engine()?, serialized_module).map_err(
+                |err| {
+                    HypervisorError::WasmEngineError(WasmEngineError::FailedToDeserializeModule(
+                        format!("{err:?}"),
+                    ))
+                },
+            )
+        }
+    }
+
+    pub fn read_file_and_pre_instantiate(
+        &self,
+        serialized_module: File,
+    ) -> HypervisorResult<InstancePre<StoreData>> {
+        let module = self.deserialize_from_file(serialized_module)?;
+        self.pre_instantiate(&module)
+    }
+
     fn list_memory_infos(
         &self,
         modification_tracking: ModificationTracking,
         heap_memory: &execution_state::Memory,
         stable_memory: &execution_state::Memory,
     ) -> Vec<WasmMemoryInfo> {
-        let dirty_page_tracking = match (
-            modification_tracking,
-            self.config.feature_flags.write_barrier,
-        ) {
-            (ModificationTracking::Ignore, _) | (_, FlagStatus::Enabled) => {
-                DirtyPageTracking::Ignore
-            }
-            (ModificationTracking::Track, FlagStatus::Disabled) => DirtyPageTracking::Track,
+        let dirty_page_tracking = match modification_tracking {
+            ModificationTracking::Ignore => DirtyPageTracking::Ignore,
+            ModificationTracking::Track => DirtyPageTracking::Track,
         };
 
         let mut result = vec![WasmMemoryInfo {
             name: WASM_HEAP_MEMORY_NAME,
-            bytemap_name: if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
-                Some(WASM_HEAP_BYTEMAP_MEMORY_NAME)
-            } else {
-                None
-            },
+            bytemap_name: None,
             memory: heap_memory.clone(),
             memory_type: CanisterMemoryType::Heap,
             dirty_page_tracking,
         }];
 
-        if self.config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
-            result.push(WasmMemoryInfo {
-                name: STABLE_MEMORY_NAME,
-                bytemap_name: Some(STABLE_BYTEMAP_MEMORY_NAME),
-                memory: stable_memory.clone(),
-                memory_type: CanisterMemoryType::Stable,
-                // Wasm native stable memory will always be tracked by a
-                // bytemap within the wasm module.
-                dirty_page_tracking: DirtyPageTracking::Ignore,
-            });
-        }
+        result.push(WasmMemoryInfo {
+            name: STABLE_MEMORY_NAME,
+            bytemap_name: Some(STABLE_BYTEMAP_MEMORY_NAME),
+            memory: stable_memory.clone(),
+            memory_type: CanisterMemoryType::Stable,
+            // Wasm native stable memory will always be tracked by a
+            // bytemap within the wasm module.
+            dirty_page_tracking: DirtyPageTracking::Ignore,
+        });
+
         result
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::result_large_err)]
     pub fn new_instance(
         &self,
         canister_id: CanisterId,
@@ -409,15 +416,29 @@ impl WasmtimeEmbedder {
             ),
         };
 
+        let stable_memory_limits = MemoryLimits {
+            max_memory_size: self.config.max_stable_memory_size,
+            max_accessed_pages: current_accessed_limit,
+            max_dirty_pages: current_dirty_page_limit,
+        };
+        let max_heap_memory_size = self
+            .config
+            .max_wasm_memory_size
+            .max(self.config.max_wasm64_memory_size);
+        let heap_memory_limits = MemoryLimits {
+            max_memory_size: max_heap_memory_size,
+            max_accessed_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+            max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+        };
+
         let mut store = Store::new(
             instance_pre.module().engine(),
             StoreData {
                 system_api,
                 num_instructions_global: None,
                 log: self.log.clone(),
-                num_stable_dirty_pages_from_non_native_writes: NumOsPages::from(0),
                 limits: StoreLimitsBuilder::new()
-                    .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
+                    .memory_size(self.config.max_stable_memory_size.get() as usize)
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
@@ -435,7 +456,7 @@ impl WasmtimeEmbedder {
                 );
                 return Err((
                     HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
-                        format!("{:?}", err),
+                        format!("{err:?}"),
                     )),
                     store.into_data().system_api,
                 ));
@@ -446,19 +467,15 @@ impl WasmtimeEmbedder {
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
 
         if let Some(exported_globals) = exported_globals {
-            let instance_globals = get_exported_globals(
-                self.config.feature_flags.wasm_native_stable_memory,
-                &instance,
-                &mut store,
-            );
+            let instance_globals = get_exported_globals(&instance, &mut store);
 
             if exported_globals.len() != instance_globals.len() {
                 fatal!(
-                self.log,
-                "Given number of exported globals {} is not equal to the number of instance exported globals {}",
-                exported_globals.len(),
-                instance_globals.len()
-            );
+                    self.log,
+                    "Given number of exported globals {} is not equal to the number of instance exported globals {}",
+                    exported_globals.len(),
+                    instance_globals.len()
+                );
             }
 
             // set the globals to persisted values
@@ -504,22 +521,37 @@ impl WasmtimeEmbedder {
             }
         }
 
-        if self.config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
-            instance.get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
-                .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(current_dirty_page_limit.get() as i64))
-                .expect("Couldn't set dirty page counter global");
-            instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
-                .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
-                .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
-                .expect("Couldn't set dirty page counter global");
-        }
+        instance
+            .get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
+            .expect(
+                "Counter for dirty pages global should have been added \
+                with native stable memory enabled.",
+            )
+            .set(&mut store, Val::I64(current_dirty_page_limit.get() as i64))
+            .expect("Couldn't set dirty page counter global");
+        instance
+            .get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+            .expect(
+                "Counter for accessed pages global should have been added \
+                with native stable memory enabled.",
+            )
+            .set(&mut store, Val::I64(current_accessed_limit.get() as i64))
+            .expect("Couldn't set dirty page counter global");
 
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
-            if let Err(e) =
-                self.instantiate_memory(mem_info, &instance, &mut store, &mut memories, canister_id)
-            {
+            let memory_limits = match mem_info.memory_type {
+                CanisterMemoryType::Heap => &heap_memory_limits,
+                CanisterMemoryType::Stable => &stable_memory_limits,
+            };
+            if let Err(e) = self.instantiate_memory(
+                mem_info,
+                &instance,
+                &mut store,
+                &mut memories,
+                canister_id,
+                memory_limits,
+            ) {
                 return Err((e, store.into_data().system_api));
             }
         }
@@ -528,10 +560,10 @@ impl WasmtimeEmbedder {
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
-        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME) {
-            if mem.ty(&store).is_64() {
-                main_memory_type = WasmMemoryType::Wasm64;
-            }
+        if let Some(mem) = instance.get_memory(&mut store, WASM_HEAP_MEMORY_NAME)
+            && mem.ty(&store).is_64()
+        {
+            main_memory_type = WasmMemoryType::Wasm64;
         }
         let dirty_page_overhead = match main_memory_type {
             WasmMemoryType::Wasm32 => self.config.dirty_page_overhead,
@@ -548,8 +580,6 @@ impl WasmtimeEmbedder {
             log: self.log.clone(),
             instance_stats: InstanceStats::default(),
             store,
-            write_barrier: self.config.feature_flags.write_barrier,
-            wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             canister_backtrace: self.config.feature_flags.canister_backtrace,
             modification_tracking,
             dirty_page_overhead,
@@ -567,6 +597,7 @@ impl WasmtimeEmbedder {
         mut store: &mut Store<StoreData>,
         memories_to_track: &mut HashMap<CanisterMemoryType, MemorySigSegvInfo>,
         canister_id: CanisterId,
+        memory_limits: &MemoryLimits,
     ) -> HypervisorResult<()> {
         if let Some(instance_memory) = instance.get_memory(&mut store, memory_info.name) {
             let current_size = instance_memory.size(&store);
@@ -601,6 +632,7 @@ impl WasmtimeEmbedder {
                     current_memory_size_in_pages: current_size,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
+                    memory_limits: *memory_limits,
                 },
             );
 
@@ -678,6 +710,7 @@ pub struct MemorySigSegvInfo {
     current_memory_size_in_pages: MemoryPageSize,
     page_map: PageMap,
     dirty_page_tracking: DirtyPageTracking,
+    memory_limits: MemoryLimits,
 }
 
 fn sigsegv_memory_tracker<S>(
@@ -694,6 +727,7 @@ fn sigsegv_memory_tracker<S>(
             current_memory_size_in_pages,
             page_map,
             dirty_page_tracking,
+            memory_limits,
         },
     ) in memories
     {
@@ -704,10 +738,10 @@ fn sigsegv_memory_tracker<S>(
             // For both SIGSEGV and in the future UFFD memory tracking we need
             // the base address of the heap and its size
             let base = base as *mut libc::c_void;
-            if base as usize % PAGE_SIZE != 0 {
+            if !(base as usize).is_multiple_of(PAGE_SIZE) {
                 fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
             }
-            if size % PAGE_SIZE != 0 {
+            if !size.is_multiple_of(PAGE_SIZE) {
                 fatal!(
                     log,
                     "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
@@ -715,15 +749,22 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(Mutex::new(
-                SigsegvMemoryTracker::new(base, size, log.clone(), dirty_page_tracking, page_map)
-                    .expect("failed to instantiate SIGSEGV memory tracker"),
+                memory_tracker::new(
+                    base,
+                    NumBytes::new(size as u64),
+                    log.clone(),
+                    dirty_page_tracking,
+                    page_map,
+                    memory_limits,
+                )
+                .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
         };
         result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
         tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
     }
 
-    let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
+    let handler = signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
     // http://man7.org/linux/man-pages/man7/signal-safety.7.html
     unsafe {
         store.set_signal_handler(handler);
@@ -736,8 +777,6 @@ pub struct StoreData {
     pub system_api: Option<SystemApiImpl>,
     pub num_instructions_global: Option<wasmtime::Global>,
     pub log: ReplicaLogger,
-    /// Tracks the number of dirty pages in stable memory in non-native stable mode
-    pub num_stable_dirty_pages_from_non_native_writes: NumOsPages,
     pub limits: StoreLimits,
     pub canister_backtrace: FlagStatus,
 }
@@ -769,16 +808,25 @@ impl StoreData {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct PageAccessResults {
     pub wasm_dirty_pages: Vec<PageIndex>,
     pub wasm_num_accessed_pages: usize,
+    /// Non-deterministic number of dirty OS (4 KiB) pages (write).
+    pub wasm_dirty_os_pages_count: usize,
+    /// Non-deterministic number of dirty Wasm (64 KiB) pages (write).
+    pub wasm_dirty_wasm_pages_count: usize,
+    /// Non-deterministic number of accessed OS (4 KiB) pages (read + write).
+    pub wasm_accessed_os_pages_count: usize,
+    /// Non-deterministic number of accessed Wasm (64 KiB) pages (read + write).
+    pub wasm_accessed_wasm_pages_count: usize,
     pub wasm_read_before_write_count: usize,
     pub wasm_direct_write_count: usize,
     pub wasm_sigsegv_count: usize,
     pub wasm_mmap_count: usize,
     pub wasm_mprotect_count: usize,
     pub wasm_copy_page_count: usize,
+    pub wasm_sigsegv_handler_duration: Duration,
     pub stable_dirty_pages: Vec<PageIndex>,
     pub stable_accessed_pages: usize,
     pub stable_read_before_write_count: usize,
@@ -787,6 +835,7 @@ pub struct PageAccessResults {
     pub stable_mmap_count: usize,
     pub stable_mprotect_count: usize,
     pub stable_copy_page_count: usize,
+    pub stable_sigsegv_handler_duration: Duration,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -797,8 +846,6 @@ pub struct WasmtimeInstance {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData>,
-    write_barrier: FlagStatus,
-    wasm_native_stable_memory: FlagStatus,
     #[allow(unused)]
     canister_backtrace: FlagStatus,
     modification_tracking: ModificationTracking,
@@ -838,36 +885,17 @@ impl WasmtimeInstance {
     }
 
     fn page_accesses(&mut self) -> HypervisorResult<PageAccessResults> {
-        let (stable_dirty_pages, stable_accessed_pages) = if self.wasm_native_stable_memory
-            == FlagStatus::Enabled
-        {
-            let stable_dirty_pages = self.dirty_pages_from_bytemap(CanisterMemoryType::Stable)?;
+        let stable_dirty_pages = self.stable_dirty_pages_from_bytemap()?;
 
-            // Get stable accessed pages from the global counter.
-            let stable_accessed_pages = self.stable_memory_page_access_limit.get() as i64
-                - self
-                    .instance
-                    .get_global(&mut self.store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
-                    .unwrap()
-                    .get(&mut self.store)
-                    .i64()
-                    .unwrap();
-            (stable_dirty_pages, stable_accessed_pages as usize)
-        } else {
-            let stable_dirty_pages = self
-                .store
-                .data()
-                .system_api()
-                .map(|sys_api| {
-                    sys_api
-                        .stable_memory_dirty_pages()
-                        .into_iter()
-                        .map(|(i, _p)| i)
-                        .collect()
-                })
-                .unwrap_or_else(|_| Vec::new());
-            (stable_dirty_pages, 0)
-        };
+        // Get stable accessed pages from the global counter.
+        let stable_accessed_pages = (self.stable_memory_page_access_limit.get() as i64
+            - self
+                .instance
+                .get_global(&mut self.store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+                .unwrap()
+                .get(&mut self.store)
+                .i64()
+                .unwrap()) as usize;
 
         if !self.memory_trackers.contains_key(&CanisterMemoryType::Heap) {
             debug!(
@@ -875,56 +903,37 @@ impl WasmtimeInstance {
                 "Memory tracking disabled. Returning empty list of dirty pages"
             );
             Ok(PageAccessResults {
-                wasm_dirty_pages: vec![],
-                wasm_num_accessed_pages: 0,
-                wasm_read_before_write_count: 0,
-                wasm_direct_write_count: 0,
-                wasm_sigsegv_count: 0,
-                wasm_mmap_count: 0,
-                wasm_mprotect_count: 0,
-                wasm_copy_page_count: 0,
                 stable_dirty_pages,
-                stable_accessed_pages: 0,
-                stable_read_before_write_count: 0,
-                stable_direct_write_count: 0,
-                stable_sigsegv_count: 0,
-                stable_mmap_count: 0,
-                stable_mprotect_count: 0,
-                stable_copy_page_count: 0,
+                stable_accessed_pages,
+                ..PageAccessResults::default()
             })
         } else {
-            let wasm_dirty_pages = match self.modification_tracking {
-                ModificationTracking::Track => match self.write_barrier {
-                    FlagStatus::Enabled => {
-                        self.dirty_pages_from_bytemap(CanisterMemoryType::Heap)?
-                    }
-                    FlagStatus::Disabled => {
-                        let tracker = self
-                            .memory_trackers
-                            .get(&CanisterMemoryType::Heap)
-                            .unwrap()
-                            .lock()
-                            .unwrap();
-                        let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
-                        let dirty_pages = tracker.take_dirty_pages();
-                        dirty_pages
-                            .into_iter()
-                            .chain(speculatively_dirty_pages)
-                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
-                            .collect::<Vec<PageIndex>>()
-                    }
-                },
-                ModificationTracking::Ignore => {
-                    vec![]
-                }
-            };
-
             let wasm_tracker = self
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
                 .lock()
                 .unwrap();
+
+            let speculatively_dirty_pages = wasm_tracker.take_speculatively_dirty_pages();
+            let dirty_pages = wasm_tracker.take_dirty_pages();
+            let (wasm_dirty_os_pages_count, wasm_dirty_wasm_pages_count) =
+                dirty_os_and_wasm_pages(&speculatively_dirty_pages, &dirty_pages);
+
+            let accessed_pages = wasm_tracker.take_accessed_pages();
+            let (wasm_accessed_os_pages_count, wasm_accessed_wasm_pages_count) =
+                accessed_os_and_wasm_pages(&accessed_pages);
+
+            let wasm_dirty_pages = match self.modification_tracking {
+                ModificationTracking::Track => dirty_pages
+                    .into_iter()
+                    .chain(speculatively_dirty_pages)
+                    .filter_map(|p| wasm_tracker.validate_speculatively_dirty_page(p))
+                    .collect::<Vec<PageIndex>>(),
+                ModificationTracking::Ignore => vec![],
+            };
+
+            let wasm_sigsegv_handler_duration = wasm_tracker.metrics().sigsegv_handler_duration();
 
             // We don't have a tracker for stable memory.
             if !self
@@ -934,12 +943,17 @@ impl WasmtimeInstance {
                 return Ok(PageAccessResults {
                     wasm_dirty_pages,
                     wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
-                    wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                    wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                    wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                    wasm_mmap_count: wasm_tracker.mmap_count(),
-                    wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                    wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                    wasm_dirty_os_pages_count,
+                    wasm_dirty_wasm_pages_count,
+                    wasm_accessed_os_pages_count,
+                    wasm_accessed_wasm_pages_count,
+                    wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
+                    wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
+                    wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
+                    wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
+                    wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
+                    wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
+                    wasm_sigsegv_handler_duration,
                     stable_dirty_pages,
                     stable_accessed_pages,
                     ..Default::default()
@@ -953,23 +967,32 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
+            let stable_sigsegv_handler_duration =
+                stable_tracker.metrics().sigsegv_handler_duration();
+
             Ok(PageAccessResults {
                 wasm_dirty_pages,
                 wasm_num_accessed_pages: wasm_tracker.num_accessed_pages(),
-                wasm_read_before_write_count: wasm_tracker.read_before_write_count(),
-                wasm_direct_write_count: wasm_tracker.direct_write_count(),
-                wasm_sigsegv_count: wasm_tracker.sigsegv_count(),
-                wasm_mmap_count: wasm_tracker.mmap_count(),
-                wasm_mprotect_count: wasm_tracker.mprotect_count(),
-                wasm_copy_page_count: wasm_tracker.copy_page_count(),
+                wasm_dirty_os_pages_count,
+                wasm_dirty_wasm_pages_count,
+                wasm_accessed_os_pages_count,
+                wasm_accessed_wasm_pages_count,
+                wasm_read_before_write_count: wasm_tracker.metrics().read_before_write_count(),
+                wasm_direct_write_count: wasm_tracker.metrics().direct_write_count(),
+                wasm_sigsegv_count: wasm_tracker.metrics().sigsegv_count(),
+                wasm_mmap_count: wasm_tracker.metrics().mmap_count(),
+                wasm_mprotect_count: wasm_tracker.metrics().mprotect_count(),
+                wasm_copy_page_count: wasm_tracker.metrics().copy_page_count(),
+                wasm_sigsegv_handler_duration,
                 stable_dirty_pages,
                 stable_accessed_pages,
-                stable_read_before_write_count: stable_tracker.read_before_write_count(),
-                stable_direct_write_count: stable_tracker.direct_write_count(),
-                stable_sigsegv_count: stable_tracker.sigsegv_count(),
-                stable_mmap_count: stable_tracker.mmap_count(),
-                stable_mprotect_count: stable_tracker.mprotect_count(),
-                stable_copy_page_count: stable_tracker.copy_page_count(),
+                stable_read_before_write_count: stable_tracker.metrics().read_before_write_count(),
+                stable_direct_write_count: stable_tracker.metrics().direct_write_count(),
+                stable_sigsegv_count: stable_tracker.metrics().sigsegv_count(),
+                stable_mmap_count: stable_tracker.metrics().mmap_count(),
+                stable_mprotect_count: stable_tracker.metrics().mprotect_count(),
+                stable_copy_page_count: stable_tracker.metrics().copy_page_count(),
+                stable_sigsegv_handler_duration,
             })
         }
     }
@@ -980,36 +1003,40 @@ impl WasmtimeInstance {
                 export
                     .into_memory()
                     .ok_or_else(|| HypervisorError::ToolchainContractViolation {
-                        error: format!("export '{}' is not a memory", name),
+                        error: format!("export '{name}' is not a memory"),
                     })
             }
             None => Err(HypervisorError::ToolchainContractViolation {
-                error: format!("export '{}' not found", name),
+                error: format!("export '{name}' not found"),
             }),
         }
     }
 
-    fn set_instance_stats(&mut self, access_results: &PageAccessResults) {
-        // Wasm stats.
-        self.instance_stats.wasm_accessed_pages += access_results.wasm_num_accessed_pages;
-        self.instance_stats.wasm_dirty_pages += access_results.wasm_dirty_pages.len();
-        self.instance_stats.wasm_read_before_write_count +=
-            access_results.wasm_read_before_write_count;
-        self.instance_stats.wasm_direct_write_count += access_results.wasm_direct_write_count;
-        self.instance_stats.wasm_sigsegv_count += access_results.wasm_sigsegv_count;
-        self.instance_stats.wasm_mmap_count += access_results.wasm_mmap_count;
-        self.instance_stats.wasm_mprotect_count += access_results.wasm_mprotect_count;
-        self.instance_stats.wasm_copy_page_count += access_results.wasm_copy_page_count;
-        // Stable stats.
-        self.instance_stats.stable_accessed_pages += access_results.stable_accessed_pages;
-        self.instance_stats.stable_dirty_pages += access_results.stable_dirty_pages.len();
-        self.instance_stats.stable_read_before_write_count +=
-            access_results.stable_read_before_write_count;
-        self.instance_stats.stable_direct_write_count += access_results.stable_direct_write_count;
-        self.instance_stats.stable_sigsegv_count += access_results.stable_sigsegv_count;
-        self.instance_stats.stable_mmap_count += access_results.stable_mmap_count;
-        self.instance_stats.stable_mprotect_count += access_results.stable_mprotect_count;
-        self.instance_stats.stable_copy_page_count += access_results.stable_copy_page_count;
+    fn set_instance_stats(&mut self, res: &PageAccessResults) {
+        self.instance_stats = InstanceStats {
+            wasm_accessed_pages: res.wasm_num_accessed_pages,
+            wasm_accessed_os_pages_count: res.wasm_accessed_os_pages_count,
+            wasm_accessed_wasm_pages_count: res.wasm_accessed_wasm_pages_count,
+            wasm_dirty_pages: res.wasm_dirty_pages.len(),
+            wasm_dirty_os_pages_count: res.wasm_dirty_os_pages_count,
+            wasm_dirty_wasm_pages_count: res.wasm_dirty_wasm_pages_count,
+            wasm_read_before_write_count: res.wasm_read_before_write_count,
+            wasm_direct_write_count: res.wasm_direct_write_count,
+            wasm_sigsegv_count: res.wasm_sigsegv_count,
+            wasm_mmap_count: res.wasm_mmap_count,
+            wasm_mprotect_count: res.wasm_mprotect_count,
+            wasm_copy_page_count: res.wasm_copy_page_count,
+            wasm_sigsegv_handler_duration: res.wasm_sigsegv_handler_duration,
+            stable_accessed_pages: res.stable_accessed_pages,
+            stable_dirty_pages: res.stable_dirty_pages.len(),
+            stable_read_before_write_count: res.stable_read_before_write_count,
+            stable_direct_write_count: res.stable_direct_write_count,
+            stable_sigsegv_count: res.stable_sigsegv_count,
+            stable_mmap_count: res.stable_mmap_count,
+            stable_mprotect_count: res.stable_mprotect_count,
+            stable_copy_page_count: res.stable_copy_page_count,
+            stable_sigsegv_handler_duration: res.stable_sigsegv_handler_duration,
+        };
     }
 
     /// Executes first exported method on an embedder instance, whose name
@@ -1105,25 +1132,19 @@ impl WasmtimeInstance {
         }
     }
 
-    fn dirty_pages_from_bytemap(
-        &mut self,
-        memory_type: CanisterMemoryType,
-    ) -> HypervisorResult<Vec<PageIndex>> {
-        let (memory_name, bytemap_name) = match memory_type {
-            CanisterMemoryType::Heap => (WASM_HEAP_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME),
-            CanisterMemoryType::Stable => (STABLE_MEMORY_NAME, STABLE_BYTEMAP_MEMORY_NAME),
-        };
+    fn stable_dirty_pages_from_bytemap(&mut self) -> HypervisorResult<Vec<PageIndex>> {
         let mut result = vec![];
-        if let Ok(heap_memory) = self.get_memory(memory_name) {
-            let bytemap = self.get_memory(bytemap_name)?.data(&self.store);
-            let tracker = self.memory_trackers.get(&memory_type).ok_or_else(|| {
-                HypervisorError::ToolchainContractViolation {
-                    error: format!("No {} memory tracker", memory_type),
-                }
-            })?;
+        if let Ok(heap_memory) = self.get_memory(STABLE_MEMORY_NAME) {
+            let bytemap = self
+                .get_memory(STABLE_BYTEMAP_MEMORY_NAME)?
+                .data(&self.store);
+            let tracker = self
+                .memory_trackers
+                .get(&CanisterMemoryType::Stable)
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                    error: "No memory tracker for stable memory".to_string(),
+                })?;
             let tracker = tracker.lock().unwrap();
-            let page_map = tracker.page_map();
-            let accessed_pages = tracker.accessed_pages().borrow();
             let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(
@@ -1131,8 +1152,7 @@ impl WasmtimeInstance {
                 result: &mut Vec<PageIndex>,
                 page_index: usize,
                 heap_memory: &[u8],
-                page_map: &PageMap,
-                accessed_pages: &Ref<PageBitmap>,
+                tracker: &SigsegvMemoryTracker,
                 written: u8,
             ) -> HypervisorResult<()> {
                 let index = PageIndex::new(page_index as u64);
@@ -1147,7 +1167,7 @@ impl WasmtimeInstance {
                         // execution before trying to read it because if it
                         // wasn't accessed then it will still be mapped
                         // `PROT_NONE` and trying to read it will segfault.
-                        if *previous_page_marked_written && accessed_pages.is_marked(index) {
+                        if *previous_page_marked_written && tracker.is_accessed(index) {
                             // An unaligned V128 write to the previous page may
                             // have written as many as 15 bytes into this page.
                             // So even if we didn't see a write here we need to
@@ -1155,8 +1175,7 @@ impl WasmtimeInstance {
                             // modified to be sure it isn't dirty.
                             let first_bytes = &heap_memory[PAGE_SIZE * page_index
                                 ..PAGE_SIZE * page_index + size_of::<u128>() - 1];
-                            let previous_bytes =
-                                &page_map.get_page(index)[0..size_of::<u128>() - 1];
+                            let previous_bytes = &tracker.get_page(index)[0..size_of::<u128>() - 1];
                             if first_bytes != previous_bytes {
                                 result.push(index);
                             }
@@ -1165,7 +1184,7 @@ impl WasmtimeInstance {
                         Ok(())
                     }
                     _ => Err(HypervisorError::ToolchainContractViolation {
-                        error: format!("Bytemap contains invalid value {}", written),
+                        error: format!("Bytemap contains invalid value {written}"),
                     }),
                 }
             }
@@ -1186,8 +1205,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;
@@ -1200,8 +1218,7 @@ impl WasmtimeInstance {
                             &mut result,
                             page_index + group_index,
                             heap_memory,
-                            page_map,
-                            &accessed_pages,
+                            &tracker,
                             *written,
                         )?;
                     }
@@ -1214,8 +1231,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;
@@ -1230,7 +1246,7 @@ impl WasmtimeInstance {
             Some(num_instructions_global) => {
                 match num_instructions_global.set(&mut self.store, Val::I64(instruction_counter)) {
                     Ok(_) => (),
-                    Err(e) => panic!("couldn't set the instruction counter: {:?}", e),
+                    Err(e) => panic!("couldn't set the instruction counter: {e:?}"),
                 }
             }
             None => panic!("couldn't find the instruction counter in the canister globals"),
@@ -1265,11 +1281,7 @@ impl WasmtimeInstance {
 
     /// Returns a list of exported globals.
     pub fn get_exported_globals(&mut self) -> HypervisorResult<Vec<Global>> {
-        let globals = get_exported_globals(
-            self.wasm_native_stable_memory,
-            &self.instance,
-            &mut self.store,
-        );
+        let globals = get_exported_globals(&self.instance, &mut self.store);
 
         globals
             .iter()
@@ -1318,4 +1330,28 @@ impl WasmtimeInstance {
     pub fn get_stats(&self) -> InstanceStats {
         self.instance_stats.clone()
     }
+}
+
+const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE;
+fn accessed_os_and_wasm_pages(accessed_pages: &[PageIndex]) -> (usize, usize) {
+    let wasm_pages: HashSet<u64> = accessed_pages
+        .iter()
+        .map(|&os_index| os_index.get() / OS_PAGES_PER_WASM_PAGE as u64)
+        .collect();
+    (accessed_pages.len(), wasm_pages.len())
+}
+
+fn dirty_os_and_wasm_pages(
+    speculatively_dirty_pages: &[PageIndex],
+    dirty_pages: &[PageIndex],
+) -> (usize, usize) {
+    let wasm_pages: HashSet<u64> = speculatively_dirty_pages
+        .iter()
+        .chain(dirty_pages.iter())
+        .map(|&os_index| os_index.get() / OS_PAGES_PER_WASM_PAGE as u64)
+        .collect();
+    (
+        dirty_pages.len() + speculatively_dirty_pages.len(),
+        wasm_pages.len(),
+    )
 }

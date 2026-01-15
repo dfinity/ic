@@ -81,16 +81,14 @@ impl ProposalsAmountTotalUpperBound {
                 // Overflow should not be possible, since fraction is supposed to be at most 1.0.
                 .ok_or_else(|| {
                     ProposalsAmountTotalLimitError::new_arithmetic(format!(
-                        "Unable to perform {} * {}.",
-                        balance_tokens, fraction,
+                        "Unable to perform {balance_tokens} * {fraction}.",
                     ))
                 })?,
 
             Self::Xdr(max_xdr) => {
                 let xdrs_per_token = xdrs_per_icp.checked_mul(icps_per_token).ok_or_else(|| {
                     ProposalsAmountTotalLimitError::new_arithmetic(format!(
-                        "XDRs per token could not be calculated from valuation: {:?}",
-                        valuation
+                        "XDRs per token could not be calculated from valuation: {valuation:?}"
                     ))
                 })?;
 
@@ -99,16 +97,14 @@ impl ProposalsAmountTotalUpperBound {
                     // This is not reachable, because in this case, valuation.to_xdr() would return
                     // 0, and in that case, we would have taken the NoLimit branch.
                     return Err(ProposalsAmountTotalLimitError::new_arithmetic(format!(
-                        "It appears that the tokens have zero value in XDR. valuation = {:?}",
-                        valuation
+                        "It appears that the tokens have zero value in XDR. valuation = {valuation:?}"
                     )));
                 }
                 let tokens_per_xdr = xdrs_per_token.inv();
 
                 max_xdr.checked_mul(tokens_per_xdr).ok_or_else(|| {
                     ProposalsAmountTotalLimitError::new_arithmetic(format!(
-                        "Max tokens could not be calculated with valuation: {:?}",
-                        valuation,
+                        "Max tokens could not be calculated with valuation: {valuation:?}",
                     ))
                 })?
             }

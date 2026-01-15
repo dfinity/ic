@@ -3,11 +3,11 @@ use crate::frame_decoder::FrameDecoder;
 use crate::rpc::MessageSink;
 
 use bytes::{
-    buf::{Buf, BufMut},
     BytesMut,
+    buf::{Buf, BufMut},
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use std::marker::PhantomData;
 use std::os::unix::{io::AsRawFd, io::RawFd, net::UnixStream};
@@ -137,9 +137,12 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
             trigger_background_sending: Condvar::new(),
         });
         let copy_instance = Arc::clone(&instance);
-        std::thread::spawn(move || {
-            copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
-        });
+        std::thread::Builder::new()
+            .name("IPCBackgroundSend".to_string())
+            .spawn(move || {
+                copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
+            })
+            .unwrap();
         instance
     }
 
@@ -232,9 +235,9 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
 }
 
 impl<
-        Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors,
-        M: MuxInto<Message> + 'static + Send,
-    > MessageSink<M> for UnixStreamMessageWriter<Message>
+    Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors,
+    M: MuxInto<Message> + 'static + Send,
+> MessageSink<M> for UnixStreamMessageWriter<Message>
 {
     fn handle(&self, cookie: u64, msg: M) {
         let mut msg: Message = msg.wrap(cookie);
@@ -351,7 +354,7 @@ impl SocketReaderWithTimeout {
             // We didn't manage to update the timeout. Since timeout is used
             // for optimization and not for correctness, we can continue
             // without crashing and let `recvmsg` handle `EWOULDBLOCK`.
-            eprintln!("Failed to update sandbox IPC socket timeout: {}", err);
+            eprintln!("Failed to update sandbox IPC socket timeout: {err}");
         }
         let num_bytes_received = receive_message(&self.socket, buf, fds, flags);
         if num_bytes_received == -1
@@ -468,7 +471,7 @@ pub fn socket_read_messages<
                     // updating the socket timeout.
                     loop {
                         if let Some(bytes) = reader.receive_message(&mut buf, &mut fds, 0, None) {
-                            break (bytes);
+                            break bytes;
                         }
                     }
                 }
@@ -829,9 +832,9 @@ mod tests {
                 .read(true)
                 .write(true)
                 .create_new(true)
-                .open(temp_dir().join(format!("file-{}", i)))
+                .open(temp_dir().join(format!("file-{i}")))
                 .unwrap();
-            file.write_all(format!("msg-{}", i).as_bytes()).unwrap();
+            file.write_all(format!("msg-{i}").as_bytes()).unwrap();
             files.push(file);
         }
 
@@ -862,7 +865,7 @@ mod tests {
             file.seek(SeekFrom::Start(0)).unwrap();
             let mut s = String::new();
             file.read_to_string(&mut s).unwrap();
-            assert_eq!(s, format!("msg-{}", i));
+            assert_eq!(s, format!("msg-{i}"));
         }
     }
 

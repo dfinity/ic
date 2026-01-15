@@ -7,7 +7,7 @@ use ic_recovery::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
-use ic_types::{consensus::CatchUpPackage, Time};
+use ic_types::{Time, consensus::CatchUpPackage};
 
 use std::{fmt::Display, path::Path};
 
@@ -84,10 +84,10 @@ pub(crate) fn find_expected_state_hash_for_subnet_id(
             is_the_right_section = subnet_id == subnet_id_from_str(subnet_id_str)?;
         }
 
-        if let Some(root_hash) = line.strip_prefix("ROOT HASH: ") {
-            if is_the_right_section {
-                return Ok(root_hash.to_string());
-            }
+        if let Some(root_hash) = line.strip_prefix("ROOT HASH: ")
+            && is_the_right_section
+        {
+            return Ok(root_hash.to_string());
         }
     }
 

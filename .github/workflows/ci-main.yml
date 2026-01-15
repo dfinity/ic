@@ -1,309 +1,457 @@
 name: CI Main
+
 on:
-  merge_group:
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-  push:
-    branches:
-      - master
-      - 'dev-gh-*'
-  pull_request:
-    branches-ignore:
-      - hotfix-* # This is to ensure that this workflow is not triggered twice on ic-private, as it's already triggered from release-testing
-  # Used as reusable workflow within release-testing workflow
   workflow_call:
-# runs for the same workflow are cancelled on PRs but not on master
-# explanation: on push to master head_ref is not set, so we want it to fall back to run_id so it is not cancelled
-concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
-  cancel-in-progress: true
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
-  CI_COMMIT_SHA: ${{ github.sha }}
+  CI_COMMIT_SHA: ${{ inputs.commit-sha }}
   CI_JOB_NAME: ${{ github.job }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
-  RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-  BUILDEVENT_DATASET: "github-ci-dfinity"
+
 jobs:
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
+    runs-on: &dind-large-setup
+      labels: dind-large
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:4a80139e1172d1eb886db6511ac4ce8bc151c8904ce06606595f15f18e163faf
+      options: >-
+         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
+    timeout-minutes: 90
+    steps:
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          ref: ${{ inputs.commit-sha }}
+      - name: Run Libfuzzer targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: libfuzzer
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: afl
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
+
+  config:
+    name: Set Config
+    runs-on: ubuntu-latest
+    outputs:
+      release-build: ${{ steps.config.outputs.release-build }}
+      diff_only: ${{ steps.config.outputs.diff_only }}
+      skip_long_tests: ${{ steps.config.outputs.skip_long_tests }}
+      full_macos_build: ${{ steps.config.outputs.full_macos_build }}
+    steps:
+      - name: Infer build config
+        id: config
+        run: |
+          set -euo pipefail
+
+          # List of "protected" branches, i.e. branches (not necessarily "protected" in the GitHub sense) where we need
+          # the full build to occur (including versioning)
+          protected_branches=("^master$" "^rc--" "^hotfix-" "^master-private$")
+          for pattern in "${protected_branches[@]}"; do
+              if [[ "$BRANCH_NAME" =~ $pattern ]]; then
+                  is_protected_branch="true"
+                  break
+              fi
+          done
+
+          if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
+              # if we are on a "protected" branch, targeting an rc branch or master we
+              # upload all artifacts and run a release build (with versioning)
+              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
+              release_build="true"
+              diff_only="false"
+              skip_long_tests="false"
+          elif [[ '${{ github.event_name }}' == "merge_group" ]]; then
+              # on a merge group, we don't upload the artifacts (i.e. no release
+              # build) but we ensure all targets are built (no diff)
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
+          elif [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}' == 'true' ]]; then
+              # "CI_ALL_BAZEL_TARGETS" is set and act as if we're on a protected
+              # branch
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
+          elif [[ '${{ github.event_name == 'push' }}' == 'true' && "$BRANCH_NAME" =~ '^dev-gh-' ]]; then
+              # On pushes to dev-gh-* branches don't do a release, build all targets except long_tests.
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
+          elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="false"
+          else
+              # default behavior is to not release, only build targets with modified inputs and skip long_tests.
+              release_build="false"
+              diff_only="true"
+              skip_long_tests="true"
+          fi
+
+          if [[ $release_build == 'true' ]] || [[ '${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'CI_MACOS_INTEL') }}' == 'true' ]]; then
+              full_macos_build="true"
+          else
+              full_macos_build="false"
+          fi
+
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              skip_buf_checks="true"
+          else
+              skip_buf_checks="false"
+          fi
+
+
+          echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "release-build: $release_build"
+          echo "release-build=$release_build" >> "$GITHUB_OUTPUT"
+          echo "| \`release-build\` | \`$release_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "diff_only: $diff_only"
+          echo "diff_only=$diff_only" >> "$GITHUB_OUTPUT"
+          echo "| \`diff_only\` | \`$diff_only\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_long_tests: $skip_long_tests"
+          echo "skip_long_tests=$skip_long_tests" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_long_tests\` | \`$skip_long_tests\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "full_macos_build: $full_macos_build"
+          echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
+          echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
+
   bazel-test-all:
     name: Bazel Test All
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
-    runs-on:
-      group: zh1
-      labels: dind-large
-    env:
-      AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
-      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
-      RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
+    needs: [config]
+    environment:
+      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
+      # when `release-build == 'true'` but not otherwise.
+      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 150
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Set BAZEL_EXTRA_ARGS
-        shell: bash
+      - *checkout
+      - name: "Node Name"
         run: |
-          set -xeuo pipefail
-          # Determine which tests to skip and append 'long_test' for pull requests, merge groups or push on dev-gh-*
-          EXCLUDED_TEST_TAGS=(
-              system_test_hourly
-              system_test_nightly
-              system_test_nightly_nns
-              system_test_staging
-              system_test_hotfix
-              system_test_benchmark
-              fuzz_test
-              fi_tests_nightly
-              nns_tests_nightly
-          )
-          if [[ "$CI_EVENT_NAME" =~ ^(pull_request|merge_group)$ ]]; then
-              if [[ "$CI_EVENT_NAME" == "merge_group" || "${RUN_ON_DIFF_ONLY:-}" == "true" ]]; then
-                  EXCLUDED_TEST_TAGS+=(long_test)
+          echo "::notice::Node Name: ${NODE_NAME}"
+
+      - name: Run Bazel Commands
+        uses: ./.github/actions/bazel
+        with:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          execlogs-artifact-name: execlogs-bazel-test-all
+          invocation-names: |
+            build
+            test
+          run: |
+            set -euo pipefail
+
+            echo "Building as user: $(whoami)"
+            echo "Bazel version: $(bazel version)"
+
+            # Determine bazel_args based on event type or branch name
+            bazel_args=(
+              --config=lint # enable lint checks
+              --config=flaky_retry # auto retry eg systests
+              )
+            if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
+                bazel_args+=( --test_timeout_filters=short,moderate --flaky_test_attempts=3 )
+            elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
+                bazel_args+=( --test_timeout_filters=short,moderate )
+            else
+                bazel_args+=( --keep_going )
+            fi
+
+            if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+              # make sure the version is stamped in
+              bazel_args+=( --config=stamped )
+            fi
+
+            # If there are targets to test, pass them as a file to bazel to avoid bash & the OS
+            # complaining about the argument list being too long.
+            target_pattern_file=$(mktemp)
+            trap "rm $target_pattern_file" INT TERM EXIT
+            targets_args=()
+            if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+              targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--exclude_tags=buf")
+            fi
+            if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+              targets_args+=(
+                '--base=${{ github.event.pull_request.base.sha }}'
+                '--head=${{ github.event.pull_request.head.sha }}'
+                )
+            fi
+
+            bazel_do() {
+              bazel_cmd="$1"
+
+              "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
+                    "${targets_args[@]}" >"$target_pattern_file"
+
+              num_targets=$(wc <"$target_pattern_file" -l)
+              # if bazel targets is empty we don't need to run any tests
+              if [ "$num_targets" -eq 0 ]; then
+                echo "No bazel targets to $bazel_cmd"
+                return
               fi
-          elif [[ "$CI_EVENT_NAME" == "push" ]] && [[ "$BRANCH_NAME" =~ ^dev-gh-.* ]]; then
-              EXCLUDED_TEST_TAGS+=(long_test)
-          fi
-          # Export excluded tags as environment variable for ci/bazel-scripts/diff.sh
-          echo "EXCLUDED_TEST_TAGS=${EXCLUDED_TEST_TAGS[*]}" >> $GITHUB_ENV
-          # Prepend tags with '-' and join them with commas for Bazel
-          TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
-          # Determine BAZEL_EXTRA_ARGS based on event type or branch name
-          BAZEL_EXTRA_ARGS="--test_tag_filters=$TEST_TAG_FILTERS"
-          if [[ "$CI_EVENT_NAME" == 'merge_group' ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate --flaky_test_attempts=3"
-          elif [[ $BRANCH_NAME =~ ^hotfix-.* ]]; then
-              BAZEL_EXTRA_ARGS+=" --test_timeout_filters=short,moderate"
-          else
-              BAZEL_EXTRA_ARGS+=" --keep_going"
-          fi
-          # Export BAZEL_EXTRA_ARGS to environment
-          echo "BAZEL_EXTRA_ARGS=$BAZEL_EXTRA_ARGS" >> $GITHUB_ENV
-      - name: Run Bazel Test All
-        id: bazel-test-all
-        uses: ./.github/actions/bazel-test-all/
+
+              echo "${bazel_cmd}ing $num_targets targets ..."
+              # the target list can get quite big, so we wrap it in details/summary
+              {
+                echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
+                echo
+                echo '```'
+                cat "$target_pattern_file"
+                echo '```'
+                echo
+                echo '</details>';
+              } >>"$GITHUB_STEP_SUMMARY"
+
+              echo "Running bazel command: $bazel_cmd"
+
+              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+            }
+
+            bazel_do build
+            bazel_do test
+
+      - name: Upload artifacts
+        uses: ./.github/actions/upload-artifacts
+        if: needs.config.outputs.release-build == 'true'
         with:
-          BAZEL_COMMAND: "test"
-          BAZEL_TARGETS: "//..."
-          BAZEL_CI_CONFIG: "--config=ci --repository_cache=/cache/bazel"
-          # check if PR title contains release and set timeout filters accordingly
-          BAZEL_EXTRA_ARGS: ${{ env.BAZEL_EXTRA_ARGS }}
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
-      - name: Upload bazel-targets
-        uses: actions/upload-artifact@v4
-        with:
-          name: bazel-targets
-          retention-days: 14
-          if-no-files-found: error
-          path: |
-            bazel-targets
-  bazel-build-all-config-check:
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
-    name: Bazel Build All Config Check
-    if: ${{ contains(github.event.pull_request.labels.*.name, 'CI_BUILD_CHECK') }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run bazel build --config=check //rs/...
-        id: bazel-build-config-check
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_CI_CONFIG: "--config=check --config=ci --keep_going"
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+          name: Bazel Test All
+          # with --check_up_to_date Bazel will error out if the artifacts
+          # to be uploaded were not built in the build step above
+          # (this ensures that the exact artifacts built above are uploaded)
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+
   bazel-test-macos-intel:
     name: Bazel Test macOS Intel
-    timeout-minutes: 130
+    needs: [config]
+    environment:
+      # The `Upload artifacts` step below only executes if `release-build == 'true'` which is the case on protected branches.
+      # It also requires the CLOUD_CREDENTIALS_CONTENT secret which is only available in the `upload-artifacts` environment.
+      # This environment is also only active on protected branches. That's why we require the `upload-artifacts` environment
+      # when `release-build == 'true'` but not otherwise.
+      name: ${{ needs.config.outputs.release-build == 'true' && 'upload-artifacts' || ''}}
+    timeout-minutes: 180
     runs-on:
       labels: macOS
     # Run on protected branches, but only on public repo
-    if: ${{ github.ref_protected && github.repository == 'dfinity/ic' }}
+    if: github.repository == 'dfinity/ic'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - *checkout
+        # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
+        # wanna make sure bazel evaluates successfully.
+      - name: Evaluate workspace
+        uses: ./.github/actions/bazel
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Set PATH
-        run: |
-          echo "/usr/local/bin" >> $GITHUB_PATH
-          echo "$HOME/.cargo/bin:" >> $GITHUB_PATH
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run Bazel Test Darwin x86-64
-        id: bazel-test-darwin-x86-64
-        uses: ./.github/actions/bazel-test-all/
-        env:
-          AWS_SHARED_CREDENTIALS_CONTENT: ${{ secrets.AWS_SHARED_CREDENTIALS_FILE }}
+          invocation-names: eval
+          run: |
+            bazel build \
+              --config=stamped \
+              --build_tag_filters=test_all_platforms \
+              //... --nobuild
+
+            # make sure the artifacts always evaluate successfully even if we don't
+            # upload them
+            bazel build \
+              --config=stamped \
+              //:upload-artifacts --nobuild
+
+      - name: Build & Test
+        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
+        uses: ./.github/actions/bazel
         with:
-          BAZEL_CI_CONFIG: "--config=ci --config macos_ci"
-          BAZEL_COMMAND: test
-          BAZEL_EXTRA_ARGS: '--test_tag_filters=test_macos'
-          BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output/${CI_RUN_ID}"
-          BAZEL_TARGETS: "//rs/... //publish/binaries/..."
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
+          invocation-names: build
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=test_all_platforms \
+              //...
+
+      - name: Upload artifacts
+        # NOTE: GHA output quirk, 'true' is a string
+        if: ${{ needs.config.outputs.full_macos_build == 'true' && needs.config.outputs.release-build == 'true' }}
+        uses: ./.github/actions/upload-artifacts
         with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+          name: macOS Intel artifacts
+          upload-command: bazel run --check_up_to_date //:upload-artifacts
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+
       - name: Purge Bazel Output
         if: always()
         shell: bash
         run: |
-          sudo rm -rf /private/var/tmp/bazel-output
-  bazel-build-fuzzers:
-    name: Bazel Build Fuzzers
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
-    timeout-minutes: 90
+          # Clean up the output base for the next run
+          sudo rm -rf /var/tmp/bazel-output
+
+  # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
+  # build the entire codebase on arm64-darwin,
+  # and run tests tagged to run on all platforms.
+  # NOTE: uses 'namespace.so' runners.
+  bazel-test-arm64:
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            profile: namespace-profile-arm64-linux # profile created in namespace console
+          - os: darwin
+            profile: namespace-profile-darwin # profile created in namespace console
+    name: Bazel Test arm64-${{ matrix.os }}
+    runs-on: ${{ matrix.profile }}
+    timeout-minutes: 120
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Run Bazel Build Fuzzers
-        id: bazel-build-fuzzers
-        uses: ./.github/actions/bazel-test-all/
-        with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_EXTRA_ARGS: "--keep_going --config=fuzzing --build_tag_filters=libfuzzer"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - uses: actions/checkout@v4
+      - name: Build and Test
+        run: |
+          mkdir -p /tmp/zig-cache
+
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            //publish/binaries:pocket-ic.gz
+
+          mkdir -p build
+          cp \
+            ./bazel-bin/publish/binaries/pocket-ic.gz \
+            ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+
+      # Ensures that local development works on arm64-darwin.
+      - name: Build the entire codebase on darwin
+        if: ${{ matrix.os == 'darwin' }}
+        run: |
+          # We do not use `//...` here to exclude `//publish/...` which is not required for local development.
+          bazel_build_targets=(
+            //rs/...
+            //packages/...
+          )
+
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            build \
+            "${bazel_build_targets[@]}"
+
+      - name: Run tests tagged to run on all platforms
+        run: |
+          # We do not use `//...` here to exclude `//publish/...` which does not build on arm64-linux.
+          bazel_test_targets=(
+            //rs/...
+            //packages/...
+          )
+
+          bazel \
+            --noworkspace_rc \
+            --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
+            test \
+            --test_tag_filters="test_all_platforms,test_all_platforms_slow" \
+            --build_tests_only \
+            "${bazel_test_targets[@]}"
+
+      - name: Upload pocket-ic-server
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
-  bazel-build-fuzzers-afl:
-    name: Bazel Build Fuzzers AFL
-    runs-on:
-      labels: dind-large
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+          name: pocket-ic-server-arm64-${{ matrix.os }}.gz
+          path: ./build/pocket-ic-server-arm64-${{ matrix.os }}.gz
+
+  # Upload external artifacts, retrieved from non-DFINITY runner builds.
+  upload-external-artifacts:
+    name: Upload external artifacts
+    needs: [bazel-test-arm64, config]
+    if: ${{ needs.config.outputs.release-build == 'true' }} # GHA output quirk, 'true' is a string
+    # The `Upload artifacts` step below requires the CLOUD_CREDENTIALS_CONTENT secret
+    # which is only available in the `upload-artifacts` environment.
+    environment: upload-artifacts
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 90
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - name: Download pocket-ic-server (arm64-linux)
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Run Bazel Build Fuzzers AFL
-        id: bazel-build-fuzzers-afl
-        uses: ./.github/actions/bazel-test-all/
+          name: pocket-ic-server-arm64-linux.gz
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-linux
+
+      - name: Download pocket-ic-server (arm64-darwin)
+        uses: actions/download-artifact@v4
         with:
-          BAZEL_COMMAND: "build"
-          BAZEL_TARGETS: "//rs/..."
-          BAZEL_EXTRA_ARGS: "--keep_going --config=afl"
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
-      - name: Upload bazel-bep
-        # runs only if previous step succeeded or failed;
-        # we avoid collecting artifacts of jobs that were cancelled
-        if: success() || failure()
-        uses: actions/upload-artifact@v4
+          name: pocket-ic-server-arm64-darwin.gz
+          # avoid downloading to workspace to avoid version being marked as dirty
+          path: ~/.cache/pocket-ic-server-arm64-darwin
+
+      - name: Prepare bundle
+        id: prepare-bundle
+        run: |
+          bundledir=$(mktemp -d)
+
+          # Create a "bundle" that the uploader can digest
+          mkdir -p "$bundledir/binaries/arm64-linux/"
+          cp ~/.cache/pocket-ic-server-arm64-linux/pocket-ic-server-arm64-linux.gz "$bundledir/binaries/arm64-linux/pocket-ic.gz"
+
+          mkdir -p "$bundledir/binaries/arm64-darwin/"
+          cp ~/.cache/pocket-ic-server-arm64-darwin/pocket-ic-server-arm64-darwin.gz "$bundledir/binaries/arm64-darwin/pocket-ic.gz"
+
+          echo bundledir="$bundledir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: ./.github/actions/upload-artifacts
         with:
-          name: ${{ github.job }}-bep
-          retention-days: 14
-          if-no-files-found: ignore
-          compression-level: 9
-          path: |
-            bazel-bep.pb
-            profile.json
+          name: arm64 artifacts
+          upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
+          credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
+
   python-ci-tests:
     name: Python CI Tests
-    runs-on:
-      labels: dind-small
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - name: Run Python CI Tests
-        id: python-ci-tests
         shell: bash
         run: |
           set -xeuo pipefail
@@ -318,180 +466,210 @@ jobs:
           CI_COMMIT_REF_PROTECTED: ${{ github.ref_protected }}
           CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REPO_NAME: ${{ github.repository }}
+
   build-ic:
+    needs: [config]
     name: Build IC
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-      options: >-
-        -e NODE_NAME --privileged --cgroupns host -v /cache:/cache -v /var/sysimage:/var/sysimage -v /var/tmp:/var/tmp -v /ceph-s3-info:/ceph-s3-info
+    runs-on: *dind-large-setup
+    container: *container-setup
     timeout-minutes: 90
-    # keep options from dind-large-setup but run on dind-small-setup
-    runs-on:
-      group: ch1
-      labels: dind-small
     if: ${{ github.event_name != 'merge_group' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Login to Dockerhub
-        shell: bash
-        run: ./ci/scripts/docker-login.sh
-        env:
-          DOCKER_HUB_USER: ${{ vars.DOCKER_HUB_USER }}
-          DOCKER_HUB_PASSWORD_RO: ${{ secrets.DOCKER_HUB_PASSWORD_RO }}
-      - name: Run Build IC
-        id: build-ic
-        shell: bash
+      - *checkout
+      - name: "Node Name"
         run: |
-          set -eExuo pipefail
-          [ -n "${NODE_NAME:-}" ] && echo "Run on node: $NODE_NAME" >>$GITHUB_STEP_SUMMARY
-          REPO_NAME="${GITHUB_REPOSITORY##*/}"
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-          mkdir -p "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts"
-          ln -s "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}/artifacts" /__w/$REPO_NAME/$REPO_NAME/artifacts
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/run-build-ic.sh
-          rm -rf "/cache/job/${CI_JOB_NAME}/${CI_RUN_ID}"
-        env:
-          BAZEL_COMMAND: "build"
-          MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          BUILDEVENT_APIKEY: ${{ secrets.HONEYCOMB_API_TOKEN }}
-          BRANCH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          RUN_ON_DIFF_ONLY: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'CI_ALL_BAZEL_TARGETS') }}
-      - name: Upload build-ic.tar
-        uses: actions/upload-artifact@v4
+          echo "::notice::Node Name: ${NODE_NAME}"
+      - name: Run Build IC
+        uses: ./.github/actions/bazel
         with:
-          name: build-ic
-          retention-days: 1
-          if-no-files-found: error
-          path: |
-            build-ic.tar
+          execlogs-artifact-name: execlogs-build-ic
+          run: |
+            set -euo pipefail
+
+            RELEASE_BUILD='${{ needs.config.outputs.release-build }}'
+            DIFF_ONLY='${{ needs.config.outputs.diff_only }}'
+            BASE_SHA='${{ github.event.pull_request.base.sha }}'
+            HEAD_SHA='${{ github.event.pull_request.head.sha }}'
+
+            cd "$CI_PROJECT_DIR"
+
+            # run full release build on "protected" branches
+            if [[ "$RELEASE_BUILD" == 'true' ]]; then
+                ci/container/build-ic.sh -i -c -b
+                exit 0
+            fi
+
+            # run full non-release build if not asked to diff
+            if ! [ "$DIFF_ONLY" == 'true' ]; then
+                ci/container/build-ic.sh -i -c -b --no-release
+                exit 0
+            fi
+
+            # otherwise, infer targets to build
+            target_pattern_file=$(mktemp)
+            trap "rm $target_pattern_file" INT TERM EXIT
+            targets_args=()
+            commit_range_arg=""
+            if [[ "$DIFF_ONLY" == 'true' ]]; then
+              targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
+            fi
+            ci/scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
+            num_targets=$(wc <"$target_pattern_file" -l)
+            echo "Considering $num_targets targets ..."
+            # the target list can get quite big, so we wrap it in details/summary
+            {
+              echo '<details><summary>Considered '"$num_targets"' targets</summary>';
+              echo
+              echo '```'
+              cat "$target_pattern_file"
+              echo '```'
+              echo
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            ARGS=()
+
+            if grep -q '^//ic-os' <"$target_pattern_file"; then
+                ARGS+=(-i)
+            fi
+            if grep -q '^//publish/canisters' <"$target_pattern_file"; then
+                ARGS+=(-c)
+            fi
+            if grep -q '^//publish/binaries' <"$target_pattern_file"; then
+                ARGS+=(-b)
+            fi
+
+            if [[ ${#ARGS[@]} -eq 0 ]]; then
+                echo "No changes that require building IC-OS, binaries or canisters."
+                exit 0
+            fi
+
+            ci/container/build-ic.sh "${ARGS[@]}" --no-release
+
   build-determinism:
     name: Build Determinism
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     needs: [build-ic, bazel-test-all]
+    steps:
+      - name: Download execution logs (cache)
+        uses: actions/download-artifact@v4
+        with:
+          name: execlogs-bazel-test-all
+          path: execlogs-cache
+      - name: Download execution logs (nocache)
+        uses: actions/download-artifact@v4
+        with:
+          name: execlogs-build-ic
+          path: execlogs-nocache
+      - name: Build Determinism Test
+        run: |
+          set -euo pipefail
+
+          n_lines_cache=$(cat execlogs-cache/execlogs.csv | wc -l)
+          n_lines_nocache=$(cat execlogs-nocache/execlogs.csv | wc -l)
+          echo "comparing $n_lines_cache (cache) and $n_lines_nocache (nocache) lines"
+
+          # running tests may not pull all targets locally. If that's the case,
+          # there will be 0 lines and nothing to compare.
+          if [ "$n_lines_cache" -eq 0 ] || [ "$n_lines_nocache" -eq 0 ]; then
+            echo "No lines to compare"
+            exit 0
+          fi
+
+          # sort the files by the field we join on (artifact path), see below
+          sponge=$(mktemp)
+
+          sort -t, -k2 <execlogs-cache/execlogs.csv >"$sponge"
+          cp "$sponge" execlogs-cache/execlogs.csv
+
+          sort -t, -k2 <execlogs-nocache/execlogs.csv >"$sponge"
+          cp "$sponge" execlogs-nocache/execlogs.csv
+
+          rm "$sponge"
+
+          # join the CSVs (separator ',') and compare the hashes. This creates a table with the following columns:
+          #   //rs/foo,bazel-out/path/to-artifact,deadbeef,deafb33f
+          # target label (1.1), artifact path (1.2), and hashes (1.3 & 2.3). The join is done
+          # on the artifact path, second field on input one (-1) and input two (-2) :'-12 -22'
+          # The output is then compared with awk, printing mismatches, and keeping track of how many mismatches we
+          # encountered.
+          join \
+            -t, -o 1.1,1.2,1.3,2.3 -12 -22 \
+            execlogs-cache/execlogs.csv \
+            execlogs-nocache/execlogs.csv \
+            | awk -F, 'BEGIN { N_BAD=0; } $3 != $4 { print $1 " " $2 ": " $3 " != " $4; N_BAD++; } END { if (N_BAD) { print N_BAD " mismatches found"; exit 1; } else { print "No mismatches"; }; }' \
+            | column -t | sort
+
+  bazel-build-all-no-cache:
+    name: Bazel Build All No Cache
+    needs: [config]
+    if: ${{ needs.config.outputs.skip_long_tests != 'true' }} # GHA output quirk, 'true' is a string
+    runs-on: *dind-large-setup
+    container: *container-setup
+    timeout-minutes: 90
+    steps:
+      - *checkout
+      - name: Run Bazel Build All No Cache
+        uses: ./.github/actions/bazel
+        with:
+          run: bazel build --config=stamped --config=local //...
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  cargo-linux:
     strategy:
       matrix:
         include:
-          - TARGET: "//publish/binaries:upload"
-            PATH0: "release"
-            PATH1: "build-ic/release"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//publish/canisters:upload"
-            PATH0: "canisters"
-            PATH1: "build-ic/canisters"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/guestos/envs/prod:upload_disk-img"
-            PATH0: "guest-os/update-img"
-            PATH1: "build-ic/icos/guestos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/hostos/envs/prod:upload_update-img"
-            PATH0: "host-os/update-img"
-            PATH1: "build-ic/icos/hostos"
-            SETUPOS_FLAG: "false"
-          - TARGET: "//ic-os/setupos/envs/prod:upload_disk-img"
-            PATH0: "setup-os/disk-img"
-            PATH1: "build-ic/icos/setupos"
-            SETUPOS_FLAG: "true"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Download bazel-targets [bazel-test-all]
-        uses: actions/download-artifact@v4
-        with:
-          name: bazel-targets
-      - name: Download build-ic.tar [build-ic]
-        uses: actions/download-artifact@v4
-        with:
-          name: build-ic
-      - name: Build Determinism Test
-        id: build-determinism
-        shell: bash
-        run: |
-          set -eExuo pipefail
-          sudo apt update && sudo apt install -y curl
-          "$CI_PROJECT_DIR"/ci/scripts/build-determinism.sh
-        env:
-          TARGET: ${{ matrix.TARGET }}
-          PATH0: ${{ matrix.PATH0 }}
-          PATH1: ${{ matrix.PATH1 }}
-          SETUPOS_FLAG: ${{ matrix.SETUPOS_FLAG }}
-  cargo-clippy-linux:
-    name: Cargo Clippy Linux
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
-    timeout-minutes: 30
+          - name: Lint
+          - name: Build
+    name: Cargo  ${{ matrix.name }} Linux
     runs-on:
-      group: ch1
+      labels: dind-small
+    container: *container-setup
+    timeout-minutes: 30
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Filter Rust Files [*.{rs,toml,lock}]
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'merge_group'
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             cargo:
               - "**/*.rs"
               - "**/*.toml"
               - "**/*.lock"
-      - name: Run Cargo Clippy Linux
-        id: cargo-clippy-linux
+              - "ci/scripts/rust-lint.sh"
+      - name: Run Cargo ${{ matrix.name }} Linux
         if: |
           steps.filter.outputs.cargo == 'true' ||
-          github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
+          contains(github.event.pull_request.labels.*.name, 'CI_RUN_CARGO_JOBS') ||
+          env.BRANCH_NAME == 'master' ||
+          startsWith(env.BRANCH_NAME, 'rc--') ||
+          startsWith(env.BRANCH_NAME, 'hotfix-')
         shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
         run: |
           set -eExuo pipefail
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
-  cargo-build-release-linux:
-    name: Cargo Build Release Linux
-    container:
-      image: ghcr.io/dfinity/ic-build@sha256:4fd13b47285e783c3a6f35aadd9559d097c0de162a1cf221ead66ab1598d5d45
+          export CARGO_TERM_COLOR=always # ensure output has colors
+
+          if [[ "${{ matrix.name }}" == "Lint" ]]; then
+            "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+          else
+            cargo build --release --locked
+          fi
+
+  check-pull-request-bazel-targets:
+    name: Check PULL_REQUEST_BAZEL_TARGETS
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    runs-on:
-      group: ch1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
-      - name: Filter Rust Files [*.{rs,toml,lock}]
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
-        id: filter
-        if: |
-          github.event_name == 'pull_request' ||
-          github.event_name == 'merge_group'
-        with:
-          filters: |
-            cargo:
-              - "**/*.rs"
-              - "**/*.toml"
-              - "**/*.lock"
-      - name: Run Cargo Build Release Linux
-        id: cargo-build-release-linux
-        if: |
-          steps.filter.outputs.cargo == 'true' ||
-          github.event_name == 'schedule' ||
-          github.event_name == 'workflow_dispatch'
-        shell: bash
-        env:
-          BUILDEVENT_APIKEY: ${{ secrets. HONEYCOMB_API_TOKEN }}
-        run: |
-          set -eExuo pipefail
-          buildevents cmd "$CI_RUN_ID" "$CI_JOB_NAME" build-command -- \
-              cargo build --release --locked
+      - name: Check PULL_REQUEST_BAZEL_TARGETS
+        run: ./ci/scripts/targets.py check
+
+# only run on pull-request event - they are also triggered from schedule-daily.yml
+  pocket-ic-tests-windows:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

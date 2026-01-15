@@ -22,11 +22,15 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
-use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, test_env_api::*};
+use ic_system_test_driver::driver::test_env_api::{
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path,
+    get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
+};
+use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -102,34 +106,37 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 /// 1. It is possible to declare a dependency that can download and extract
 ///    g-zipped archives, and make them executable.
 /// 2. There is a way to automatically update the version of this dependency,
-///    Ideally such that it is in sync with testnet/mainnet_revisions.json
-fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> PathBuf {
+///    Ideally such that it is in sync with mainnet-icos-revisions.json
+fn download_mainnet_binary(version: &ReplicaVersion, log: &Logger, target_dir: &Path) -> PathBuf {
     block_on(ic_system_test_driver::retry_with_msg_async!(
         "download mainnet binary",
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || async {
-            Ok(download_binary(
-                log,
-                ReplicaVersion::try_from(version.clone()).unwrap(),
-                "types-test".into(),
-                target_dir,
-            )
-            .await?)
-        }
+        || async { Ok(download_binary(log, version, "types-test".into(), target_dir,).await?) }
     ))
     .expect("Failed to Download")
 }
 
-fn test(env: TestEnv) {
+fn nns_version_test(env: TestEnv) {
+    test(env, &get_mainnet_nns_revision().unwrap())
+}
+
+fn application_subnet_version_test(env: TestEnv) {
+    test(env, &get_mainnet_application_subnet_revision().unwrap())
+}
+
+fn test(env: TestEnv, mainnet_version: &ReplicaVersion) {
     let log = env.logger();
 
-    let mainnet_version =
-        read_dependency_to_string("testnet/mainnet_nns_revision.txt").expect("mainnet IC version");
     info!(log, "Continuing with mainnet version {mainnet_version}");
 
     let output_dir = PathBuf::from("cup_compatibility_test");
+    if output_dir.exists() {
+        // Remove potential left-overs from the other test runs
+        fs::remove_dir_all(&output_dir)
+            .expect("Should have all the permissions to remove the existing directory");
+    }
     let branch_test = get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
     let tmp_dir = tempfile::tempdir().unwrap();
     let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
@@ -176,7 +183,8 @@ fn test(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(|_| ())
-        .add_test(systest!(test))
+        .add_test(systest!(nns_version_test))
+        .add_test(systest!(application_subnet_version_test))
         .execute_from_args()?;
     Ok(())
 }

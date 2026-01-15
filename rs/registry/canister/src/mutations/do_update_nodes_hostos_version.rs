@@ -16,10 +16,7 @@ impl Registry {
     }
 
     pub fn do_deploy_hostos_to_some_nodes(&mut self, payload: DeployHostosToSomeNodes) {
-        println!(
-            "{}do_deploy_hostos_to_some_nodes: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_deploy_hostos_to_some_nodes: {payload:?}");
 
         let mut mutations = Vec::new();
         for node_id in payload.node_ids {

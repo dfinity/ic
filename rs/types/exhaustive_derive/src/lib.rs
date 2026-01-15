@@ -3,8 +3,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, parse_quote, Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed,
-    FieldsUnnamed, Generics, Ident, Index, Type,
+    Data, DataEnum, DataStruct, DeriveInput, Fields, FieldsNamed, FieldsUnnamed, Generics, Ident,
+    Index, Type, parse_macro_input, parse_quote,
 };
 
 /// NOTE: Do not derive this implementation for types that have some special invariants

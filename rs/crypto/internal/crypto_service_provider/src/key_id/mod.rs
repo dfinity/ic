@@ -5,13 +5,14 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{AlgorithmId, CryptoError};
+use ic_types::crypto::AlgorithmId;
 use std::fmt;
 use std::fmt::Formatter;
 
 const KEY_ID_DOMAIN: &str = "ic-key-id";
+const KEY_ID_LARGE_DOMAIN: &str = "ic-key-id-large";
 const COMMITMENT_KEY_ID_DOMAIN: &str = "ic-key-id-idkg-commitment";
 const THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN: &str =
     "KeyId from threshold public coefficients";
@@ -52,7 +53,7 @@ impl fmt::Debug for KeyId {
 
 impl fmt::Display for KeyId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -67,67 +68,57 @@ pub enum KeyIdInstantiationError {
     InvalidArguments(String),
 }
 
-impl From<KeyIdInstantiationError> for CryptoError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        CryptoError::InvalidArgument {
-            message: format!("Cannot instantiate KeyId: {:?}", error),
-        }
-    }
-}
-
 /// Compute a KeyId from an `AlgorithmId` and a slice of bytes.
-///
-/// The computed KeyId is the result of applying SHA256 to the bytes:
-/// `domain_separator | algorithm_id | size(bytes) | bytes`
-/// where  domain_separator is DomainSeparationContext(KEY_ID_DOMAIN),
-/// algorithm_id is a 1-byte value, and size(pk_bytes) is the size of
-/// pk_bytes as u32 in BigEndian format.
-///
-/// # Errors
-/// * `KeyIdInstantiationError::InvalidArgument`: if the slice of bytes is too large and its size does not fit in a `u32`.
-impl<B> TryFrom<(AlgorithmId, &B)> for KeyId
-where
-    B: AsRef<[u8]>,
-{
-    type Error = KeyIdInstantiationError;
-
-    fn try_from((alg_id, bytes): (AlgorithmId, &B)) -> Result<Self, Self::Error> {
+impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
+    fn from((alg_id, bytes): (AlgorithmId, &B)) -> Self {
         let bytes = bytes.as_ref();
-        let bytes_size = u32::try_from(bytes.len()).map_err(|_error| {
-            KeyIdInstantiationError::InvalidArguments(format!(
-                "Bytes array is too large (number of bytes {} does not fit in a u32)",
-                bytes.len()
-            ))
-        })?;
-        let mut hash =
-            Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
-        hash.write(&[u8::from(alg_id)]);
-        hash.write(&bytes_size.to_be_bytes());
-        hash.write(bytes);
-        Ok(KeyId::from(hash.finish()))
-    }
-}
-
-impl TryFrom<&CspPublicKey> for KeyId {
-    type Error = KeyIdInstantiationError;
-
-    fn try_from(public_key: &CspPublicKey) -> Result<Self, Self::Error> {
-        KeyId::try_from((public_key.algorithm_id(), &public_key.pk_bytes()))
-    }
-}
-
-impl TryFrom<&MEGaPublicKey> for KeyId {
-    type Error = String;
-
-    fn try_from(public_key: &MEGaPublicKey) -> Result<Self, Self::Error> {
-        match public_key.curve_type() {
-            EccCurveType::K256 => KeyId::try_from((
-                AlgorithmId::ThresholdEcdsaSecp256k1,
-                &public_key.serialize(),
-            ))
-            .map_err(|error| format!("cannot instantiate KeyId: {:?}", error)),
-            c => Err(format!("unsupported curve: {:?}", c)),
+        match u32::try_from(bytes.len()) {
+            Ok(bytes_size_u32) => {
+                // bytes < 4 GiB (==u32::MAX==2^32-1)
+                let dom_sep = DomainSeparationContext::new(KEY_ID_DOMAIN.to_string());
+                let mut hash = Sha256::new_with_context(&dom_sep);
+                hash.write(&[u8::from(alg_id)]); // 1 byte
+                hash.write(&bytes_size_u32.to_be_bytes()); // 4 bytes
+                hash.write(bytes);
+                KeyId::from(hash.finish())
+            }
+            Err(_) => {
+                match u64::try_from(bytes.len()) {
+                    Ok(bytes_size_u64) => {
+                        // 4 GiB <= bytes < 16384 PiB (==u64::MAX==2^64-1)
+                        let dom_sep = DomainSeparationContext::new(KEY_ID_LARGE_DOMAIN.to_string());
+                        let mut hash = Sha256::new_with_context(&dom_sep);
+                        hash.write(&[u8::from(alg_id)]); // 1 byte
+                        hash.write(&bytes_size_u64.to_be_bytes()); // 8 bytes
+                        hash.write(bytes);
+                        KeyId::from(hash.finish())
+                    }
+                    Err(_) => {
+                        // bytes >= 16384 PiB (==u64::MAX==2^64-1)
+                        // It is very reasonable to panic here
+                        panic!("bytes >= 16384 PiB (=2^64-1)")
+                    }
+                }
+            }
         }
+    }
+}
+
+impl From<&CspPublicKey> for KeyId {
+    fn from(public_key: &CspPublicKey) -> Self {
+        KeyId::from((AlgorithmId::from(public_key), public_key))
+    }
+}
+
+impl From<&MEGaPublicKey> for KeyId {
+    fn from(public_key: &MEGaPublicKey) -> Self {
+        let alg = match public_key.curve_type() {
+            EccCurveType::K256 => AlgorithmId::ThresholdEcdsaSecp256k1,
+            EccCurveType::P256 => AlgorithmId::ThresholdEcdsaSecp256r1,
+            EccCurveType::Ed25519 => AlgorithmId::ThresholdEd25519,
+        };
+
+        KeyId::from((alg, &public_key.serialize()))
     }
 }
 
@@ -158,11 +149,9 @@ impl From<&PolynomialCommitment> for KeyId {
     }
 }
 
-impl TryFrom<&TlsPublicKeyCert> for KeyId {
-    type Error = KeyIdInstantiationError;
-
-    fn try_from(cert: &TlsPublicKeyCert) -> Result<Self, Self::Error> {
-        KeyId::try_from((AlgorithmId::Tls, cert.as_der()))
+impl From<&TlsPublicKeyCert> for KeyId {
+    fn from(cert: &TlsPublicKeyCert) -> Self {
+        KeyId::from((AlgorithmId::Tls, cert.as_der()))
     }
 }
 
@@ -174,10 +163,7 @@ impl TryFrom<&CspPublicCoefficients> for KeyId {
             THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN,
         ));
         hash.write(&serde_cbor::to_vec(&coefficients).map_err(|err| {
-            Self::Error::InvalidArguments(format!(
-                "Failed to serialize public coefficients: {}",
-                err
-            ))
+            Self::Error::InvalidArguments(format!("Failed to serialize public coefficients: {err}"))
         })?);
         Ok(KeyId::from(hash.finish()))
     }
@@ -188,7 +174,7 @@ impl FromHex for KeyId {
 
     fn from_hex<T: AsRef<[u8]>>(data: T) -> Result<Self, Self::Error> {
         let bytes: [u8; 32] = hex::decode(data)
-            .map_err(|err| format!("Error decoding hex: {}", err))?
+            .map_err(|err| format!("Error decoding hex: {err}"))?
             .try_into()
             .map_err(|_err| "wrong size of array: expected 32 bytes")?;
         Ok(KeyId::from(bytes))

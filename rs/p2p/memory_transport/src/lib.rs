@@ -33,15 +33,14 @@
 /// ┌──────┐   │                  │    ┌──────┐
 /// │ Node ├───┘                  └────┤ Node │
 /// └──────┘                           └──────┘
-use anyhow::anyhow;
 use async_trait::async_trait;
 use axum::{
+    Router,
     body::Body,
     http::{Request, Response},
-    Router,
 };
 use bytes::Bytes;
-use ic_quic_transport::{ConnId, Transport};
+use ic_quic_transport::{ConnId, P2PError, Transport};
 use ic_types::NodeId;
 use std::{
     collections::HashMap,
@@ -51,8 +50,9 @@ use std::{
 use tokio::{
     select,
     sync::{
-        mpsc::{unbounded_channel, UnboundedSender},
-        oneshot, Semaphore,
+        Semaphore,
+        mpsc::{UnboundedSender, unbounded_channel},
+        oneshot,
     },
 };
 use tower::ServiceExt;
@@ -280,9 +280,9 @@ impl Transport for PeerTransport {
         &self,
         peer_id: &NodeId,
         mut request: Request<Bytes>,
-    ) -> Result<Response<Bytes>, anyhow::Error> {
+    ) -> Result<Response<Bytes>, P2PError> {
         if peer_id == &self.node_id {
-            return Err(anyhow!("Can't connect to self"));
+            return Err(P2PError::from("Can't connect to self".to_string()));
         }
 
         let (oneshot_tx, oneshot_rx) = oneshot::channel();
@@ -292,11 +292,11 @@ impl Transport for PeerTransport {
             .send((request, *peer_id, oneshot_tx))
             .is_err()
         {
-            return Err(anyhow!("router channel closed"));
+            return Err(P2PError::from("router channel closed".to_string()));
         }
         match oneshot_rx.await {
             Ok(r) => Ok(r),
-            Err(_) => Err(anyhow!("channel closed")),
+            Err(_) => Err(P2PError::from("channel closed".to_string())),
         }
     }
 
@@ -306,7 +306,7 @@ impl Transport for PeerTransport {
             .read()
             .unwrap()
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
             .collect()
     }

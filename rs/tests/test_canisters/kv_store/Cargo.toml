@@ -15,7 +15,6 @@ base64 = { workspace = true }
 candid = { workspace = true }
 flate2 = { workspace = true }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3"
 serde = { workspace = true }
 serde_cbor = { workspace = true }

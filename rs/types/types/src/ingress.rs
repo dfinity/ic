@@ -1,12 +1,13 @@
 //! Ingress types.
 
 use crate::artifact::IngressMessageId;
-use crate::{CanisterId, CountBytes, PrincipalId, Time, UserId};
+use crate::{CanisterId, PrincipalId, Time, UserId};
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
@@ -107,8 +108,8 @@ impl IngressStatus {
     pub fn payload_bytes(&self) -> usize {
         match self {
             IngressStatus::Known { state, .. } => match state {
-                IngressState::Completed(result) => result.count_bytes(),
-                IngressState::Failed(error) => error.description().as_bytes().len(),
+                IngressState::Completed(result) => result.deterministic_heap_bytes(),
+                IngressState::Failed(error) => error.description().len(),
                 _ => 0,
             },
             IngressStatus::Unknown => 0,
@@ -166,7 +167,18 @@ impl IngressSets {
 
 /// This struct describes the different types that executing a Wasm function in
 /// a canister can produce
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmResult {
     /// Raw response, returned in a "happy" case
@@ -174,15 +186,6 @@ pub enum WasmResult {
     /// Returned with an error message when the canister decides to reject the
     /// message
     Reject(String),
-}
-
-impl CountBytes for WasmResult {
-    fn count_bytes(&self) -> usize {
-        match self {
-            WasmResult::Reply(bytes) => bytes.len(),
-            WasmResult::Reject(string) => string.as_bytes().len(),
-        }
-    }
 }
 
 impl WasmResult {
@@ -214,7 +217,7 @@ impl fmt::Display for WasmResult {
         match &self {
             WasmResult::Reply(_) => write!(f, "reply"),
             WasmResult::Reject(reject_str) => {
-                write!(f, "reject with error message => [{}]", reject_str)
+                write!(f, "reject with error message => [{reject_str}]")
             }
         }
     }
@@ -319,10 +322,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Received::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(r.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         r.user_id,
                         "IngressStatus::Received::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Received,
                 },
                 Status::Completed(c) => IngressStatus::Known {
@@ -331,10 +334,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Completed::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(c.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         c.user_id,
                         "IngressStatus::Completed::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Completed(try_from_option_field(
                         c.wasm_result,
                         "IngressStatus::Completed::wasm_result",
@@ -343,10 +346,10 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                 Status::Failed(f) => IngressStatus::Known {
                     receiver: try_from_option_field(f.receiver, "IngressStatus::Failed::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(f.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         f.user_id,
                         "IngressStatus::Failed::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Failed(UserError::from_proto(
                         ErrorCode::try_from(pb_ingress::ErrorCode::try_from(f.err_code).map_err(
                             |_| ProxyDecodeError::ValueOutOfRange {
@@ -363,19 +366,19 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         "IngressStatus::Processing::receiver",
                     )?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         p.user_id,
                         "IngressStatus::Processing::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Processing,
                 },
                 Status::Done(p) => IngressStatus::Known {
                     receiver: try_from_option_field(p.receiver, "IngressStatus::Done::receiver")?,
                     time: Time::from_nanos_since_unix_epoch(p.time_nanos),
-                    user_id: crate::user_id_try_from_protobuf(try_from_option_field(
+                    user_id: crate::user_id_try_from_option(
                         p.user_id,
                         "IngressStatus::Done::user_id",
-                    )?)?,
+                    )?,
                     state: IngressState::Done,
                 },
                 Status::Unknown(_) => IngressStatus::Unknown,

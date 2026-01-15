@@ -4,30 +4,37 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
+use ic_crypto_sha2::Sha256;
+use ic_nervous_system_canisters::cmc::CMC;
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
 use ic_nns_governance::{
     governance::{
-        Environment, Governance, HeapGrowthPotential, RngError,
-        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+        Environment, Governance, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, HeapGrowthPotential,
     },
     pb::v1::{
+        GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
         governance_error::ErrorType,
         install_code::CanisterInstallMode,
         manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
             ClaimOrRefresh, Command,
+            claim_or_refresh::{By, MemoAndController},
         },
-        manage_neuron_response::Command as CommandResponse,
-        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-        InstallCode, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
-        Proposal,
+        proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
+};
+use ic_nns_governance_api::{
+    self as api, ManageNeuronResponse, manage_neuron_response::Command as CommandResponse,
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use maplit::btreemap;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 struct DegradedEnv {}
 #[async_trait]
@@ -36,23 +43,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn random_u64(&mut self) -> Result<u64, RngError> {
-        Ok(4) // https://xkcd.com/221
-    }
-
-    fn random_byte_array(&mut self) -> Result<[u8; 32], RngError> {
-        unimplemented!()
-    }
-
-    fn seed_rng(&mut self, _seed: [u8; 32]) {
-        todo!()
-    }
-
-    fn get_rng_seed(&self) -> Option<[u8; 32]> {
-        todo!()
-    }
-
-    fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 
@@ -94,11 +89,30 @@ impl IcpLedger for DegradedEnv {
     fn canister_id(&self) -> CanisterId {
         unimplemented!()
     }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]
 impl CMC for DegradedEnv {
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+    async fn neuron_maturity_modulation(&self) -> Result<i32, String> {
         unimplemented!()
     }
 }
@@ -106,31 +120,31 @@ impl CMC for DegradedEnv {
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a fixture with 2 neurons of different stakes and no
 /// following. Neuron 2 has a greater stake.
-fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
-    GovernanceProto {
-        economics: Some(NetworkEconomics::default()),
+fn fixture_two_neurons_second_is_bigger() -> api::Governance {
+    api::Governance {
+        economics: Some(api::NetworkEconomics::default()),
         neurons: btreemap! {
-            1 => Neuron {
+            1 => api::Neuron {
                 id: Some(NeuronId {id: 1}),
                 controller: Some(principal(1)),
                 cached_neuron_stake_e8s: 23,
                 account: b"a__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
             },
-            2 => Neuron {
+            2 => api::Neuron {
                 id: Some(NeuronId {id: 2}),
                 controller: Some(principal(2)),
                 cached_neuron_stake_e8s: 5100,
                 account:  b"b__4___8__12__16__20__24__28__32".to_vec(),
                 // One year
-                dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(31557600)),
                 ..Default::default()
              },
         },
@@ -141,9 +155,10 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
 fn degraded_governance() -> Governance {
     Governance::new(
         fixture_two_neurons_second_is_bigger(),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
-        Box::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Arc::new(DegradedEnv {}),
+        Box::new(CanisterRandomnessGenerator::new()),
     )
 }
 
@@ -196,6 +211,8 @@ async fn test_can_submit_nns_canister_upgrade_in_degraded_mode() {
                     install_mode: Some(CanisterInstallMode::Upgrade as i32),
                     arg: Some(vec![4, 5, 6]),
                     skip_stopping_before_installing: None,
+                    wasm_module_hash: Some(Sha256::hash(&[1, 2, 3]).to_vec()),
+                    arg_hash: Some(Sha256::hash(&[4, 5, 6]).to_vec()),
                 })),
                 ..Default::default()
             },

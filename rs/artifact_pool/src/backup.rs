@@ -19,16 +19,16 @@ use ic_interfaces::{
     consensus_pool::{ConsensusPool, HeightRange},
     time_source::TimeSource,
 };
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
+    Height,
     consensus::{
         BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
         RandomTape,
     },
     time::{Time, UNIX_EPOCH},
-    Height,
 };
 use prometheus::IntCounter;
 use prost::Message;
@@ -37,8 +37,8 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
         Arc, RwLock,
+        mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -472,13 +472,11 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
             get_leaves(&path, leaves)?;
         }
     }
-    if !sub_directory_found {
-        if let Some(path_name) = dir.to_str() {
-            // We skip the folder lost+found, which is currently present on the backup
-            // volume.
-            if !path_name.contains("lost+found") {
-                leaves.push(dir.to_path_buf());
-            }
+    if !sub_directory_found && let Some(path_name) = dir.to_str() {
+        // We skip the folder lost+found, which is currently present on the backup
+        // volume.
+        if !path_name.contains("lost+found") {
+            leaves.push(dir.to_path_buf());
         }
     }
     Ok(())
@@ -597,7 +595,7 @@ impl BackupArtifact {
             RandomBeacon(artifact) => pb::RandomBeacon::from(artifact).encode(&mut buf),
             CatchUpPackage((_, artifact)) => artifact.encode(&mut buf),
         }
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err.to_string()))?;
+        .map_err(|err| io::Error::other(err.to_string()))?;
         Ok(buf)
     }
 
@@ -636,10 +634,10 @@ mod tests {
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
+        RegistryVersion,
         batch::*,
         consensus::*,
         crypto::{CryptoHash, CryptoHashOf},
-        RegistryVersion,
     };
     use std::convert::TryFrom;
 

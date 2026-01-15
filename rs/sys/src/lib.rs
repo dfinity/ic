@@ -47,12 +47,12 @@ pub type PageBytes = [u8; PAGE_SIZE];
 /// should be a reference to a container owning or borrowing the page: an array,
 /// a vector, a slice, a memory mapping, etc.
 pub unsafe fn page_bytes_from_ptr<T>(_owner: &T, ptr: *const u8) -> &PageBytes {
-    &*(ptr as *const PageBytes)
+    unsafe { &*(ptr as *const PageBytes) }
 }
 
 /// Size of an OS memory page in bytes.
 pub fn sysconf_page_size() -> usize {
-    use nix::unistd::{sysconf, SysconfVar};
+    use nix::unistd::{SysconfVar, sysconf};
     sysconf(SysconfVar::PAGE_SIZE)
         .expect("sysconf PAGE_SIZE succeeds")
         .expect("PAGE_SIZE is not none") as usize

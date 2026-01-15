@@ -24,7 +24,7 @@ impl LabeledTreeVisitor {
 
         let entry = self.value_stack.pop().expect("unbalanced tree traversal");
 
-        if let LabeledTree::SubTree(ref mut map) =
+        if let LabeledTree::SubTree(map) =
             self.value_stack.last_mut().expect("label without a root")
         {
             map.try_append(label, entry).unwrap();

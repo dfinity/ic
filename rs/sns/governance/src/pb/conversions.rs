@@ -1,4 +1,8 @@
-use crate::pb::v1 as pb;
+use crate::{
+    pb::v1::{self as pb},
+    topics,
+};
+use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -26,6 +30,23 @@ impl From<pb::NeuronId> for pb_api::NeuronId {
 impl From<pb_api::NeuronId> for pb::NeuronId {
     fn from(item: pb_api::NeuronId) -> Self {
         Self { id: item.id }
+    }
+}
+
+impl From<pb::Followee> for pb_api::Followee {
+    fn from(item: pb::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb_api::NeuronId::from),
+            alias: item.alias,
+        }
+    }
+}
+impl From<pb_api::Followee> for pb::Followee {
+    fn from(item: pb_api::Followee) -> Self {
+        Self {
+            neuron_id: item.neuron_id.map(pb::NeuronId::from),
+            alias: item.alias,
+        }
     }
 }
 
@@ -76,6 +97,46 @@ impl From<pb_api::DisburseMaturityInProgress> for pb::DisburseMaturityInProgress
     }
 }
 
+impl From<pb::neuron::TopicFollowees> for pb_api::neuron::TopicFollowees {
+    fn from(value: pb::neuron::TopicFollowees) -> Self {
+        let pb::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb_api::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
+impl From<pb_api::neuron::TopicFollowees> for pb::neuron::TopicFollowees {
+    fn from(value: pb_api::neuron::TopicFollowees) -> Self {
+        let pb_api::neuron::TopicFollowees {
+            topic_id_to_followees,
+        } = value;
+
+        let topic_id_to_followees = topic_id_to_followees
+            .into_iter()
+            .map(|(topic, followees)| {
+                let followees = pb::neuron::FolloweesForTopic::from(followees);
+                (topic, followees)
+            })
+            .collect();
+
+        Self {
+            topic_id_to_followees,
+        }
+    }
+}
+
 impl From<pb::Neuron> for pb_api::Neuron {
     fn from(item: pb::Neuron) -> Self {
         Self {
@@ -90,6 +151,9 @@ impl From<pb::Neuron> for pb_api::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees: item
+                .topic_followees
+                .map(pb_api::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -119,6 +183,7 @@ impl From<pb_api::Neuron> for pb::Neuron {
                 .into_iter()
                 .map(|(k, v)| (k, v.into()))
                 .collect(),
+            topic_followees: item.topic_followees.map(pb::neuron::TopicFollowees::from),
             maturity_e8s_equivalent: item.maturity_e8s_equivalent,
             voting_power_percentage_multiplier: item.voting_power_percentage_multiplier,
             source_nns_neuron_id: item.source_nns_neuron_id,
@@ -146,6 +211,23 @@ impl From<pb_api::neuron::Followees> for pb::neuron::Followees {
     fn from(item: pb_api::neuron::Followees) -> Self {
         Self {
             followees: item.followees.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
+
+impl From<pb::neuron::FolloweesForTopic> for pb_api::neuron::FolloweesForTopic {
+    fn from(item: pb::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.and_then(topic_id_to_api),
+        }
+    }
+}
+impl From<pb_api::neuron::FolloweesForTopic> for pb::neuron::FolloweesForTopic {
+    fn from(item: pb_api::neuron::FolloweesForTopic) -> Self {
+        Self {
+            followees: item.followees.into_iter().map(|x| x.into()).collect(),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
@@ -181,10 +263,13 @@ impl From<pb::NervousSystemFunction> for pb_api::NervousSystemFunction {
             id: item.id,
             name: item.name,
             description: item.description,
-            function_type: item.function_type.map(|x| x.into()),
+            function_type: item
+                .function_type
+                .map(|x: pb::nervous_system_function::FunctionType| x.into()),
         }
     }
 }
+
 impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
     fn from(item: pb_api::NervousSystemFunction) -> Self {
         Self {
@@ -196,11 +281,29 @@ impl From<pb_api::NervousSystemFunction> for pb::NervousSystemFunction {
     }
 }
 
+/// Converts an internal encoding of a topic into an optional `pb_api::Topic` instance.
+fn topic_id_to_api(topic_id: i32) -> Option<pb_api::topics::Topic> {
+    let Ok(topic) = pb::Topic::try_from(topic_id) else {
+        // The topic ID is invalid; this could happen in a highly unexpected situation, e.g.,
+        // if Governance is downgraded from a version that had new topics to an older version
+        // with fewer topics.
+        return None;
+    };
+    let Ok(topic) = pb_api::topics::Topic::try_from(topic) else {
+        // This is `pb::Topic::Unspecified`, which should be a forbidden value throughout
+        // the implementation of Governance. This case is there because of Prost's encoding
+        // of enumerations, which always starts with a special `0_i32` value.
+        return None;
+    };
+    Some(topic)
+}
+
 impl From<pb::nervous_system_function::GenericNervousSystemFunction>
     for pb_api::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.and_then(topic_id_to_api),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -208,11 +311,13 @@ impl From<pb::nervous_system_function::GenericNervousSystemFunction>
         }
     }
 }
+
 impl From<pb_api::nervous_system_function::GenericNervousSystemFunction>
     for pb::nervous_system_function::GenericNervousSystemFunction
 {
     fn from(item: pb_api::nervous_system_function::GenericNervousSystemFunction) -> Self {
         Self {
+            topic: item.topic.map(pb::Topic::from).map(i32::from),
             target_canister_id: item.target_canister_id,
             target_method_name: item.target_method_name,
             validator_canister_id: item.validator_canister_id,
@@ -291,9 +396,33 @@ impl From<pb::UpgradeSnsControlledCanister> for pb_api::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb_api::ChunkedCanisterWasm::from),
         }
     }
 }
+
+impl From<pb_api::ChunkedCanisterWasm> for pb::ChunkedCanisterWasm {
+    fn from(item: pb_api::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
+impl From<pb::ChunkedCanisterWasm> for pb_api::ChunkedCanisterWasm {
+    fn from(item: pb::ChunkedCanisterWasm) -> Self {
+        Self {
+            wasm_module_hash: item.wasm_module_hash,
+            store_canister_id: item.store_canister_id,
+            chunk_hashes_list: item.chunk_hashes_list,
+        }
+    }
+}
+
 impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCanister {
     fn from(item: pb_api::UpgradeSnsControlledCanister) -> Self {
         Self {
@@ -301,6 +430,9 @@ impl From<pb_api::UpgradeSnsControlledCanister> for pb::UpgradeSnsControlledCani
             new_canister_wasm: item.new_canister_wasm,
             canister_upgrade_arg: item.canister_upgrade_arg,
             mode: item.mode,
+            chunked_canister_wasm: item
+                .chunked_canister_wasm
+                .map(pb::ChunkedCanisterWasm::from),
         }
     }
 }
@@ -452,6 +584,200 @@ impl From<pb_api::RegisterDappCanisters> for pb::RegisterDappCanisters {
     }
 }
 
+impl From<pb::precise::Value> for pb_api::PreciseValue {
+    fn from(item: pb::precise::Value) -> Self {
+        match item {
+            pb::precise::Value::Bool(v) => Self::Bool(v),
+            pb::precise::Value::Blob(v) => Self::Blob(v),
+            pb::precise::Value::Text(v) => Self::Text(v),
+            pb::precise::Value::Nat(v) => Self::Nat(v),
+            pb::precise::Value::Int(v) => Self::Int(v),
+            pb::precise::Value::Array(pb::PreciseArray { array }) => {
+                let api_array = array
+                    .into_iter()
+                    .filter_map(|pb::Precise { value }| value.map(Self::from))
+                    .collect();
+
+                Self::Array(api_array)
+            }
+            pb::precise::Value::Map(pb::PreciseMap { map }) => {
+                let api_map = map
+                    .into_iter()
+                    .filter_map(|(key, pb::Precise { value })| {
+                        value.map(|value| (key, Self::from(value)))
+                    })
+                    .collect();
+
+                Self::Map(api_map)
+            }
+        }
+    }
+}
+
+impl From<pb_api::PreciseValue> for pb::Precise {
+    fn from(item: pb_api::PreciseValue) -> Self {
+        let value = Some(match item {
+            pb_api::PreciseValue::Bool(v) => pb::precise::Value::Bool(v),
+            pb_api::PreciseValue::Blob(v) => pb::precise::Value::Blob(v),
+            pb_api::PreciseValue::Text(v) => pb::precise::Value::Text(v),
+            pb_api::PreciseValue::Nat(v) => pb::precise::Value::Nat(v),
+            pb_api::PreciseValue::Int(v) => pb::precise::Value::Int(v),
+            pb_api::PreciseValue::Array(array) => {
+                let array = array.into_iter().map(Self::from).collect();
+                let array = pb::PreciseArray { array };
+                pb::precise::Value::Array(array)
+            }
+            pb_api::PreciseValue::Map(map) => {
+                let map = map
+                    .into_iter()
+                    .map(|(key, value)| {
+                        let value = Self::from(value);
+                        (key, value)
+                    })
+                    .collect();
+
+                let map = pb::PreciseMap { map };
+
+                pb::precise::Value::Map(map)
+            }
+        });
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExtensionInit> for pb_api::ExtensionInit {
+    fn from(item: pb::ExtensionInit) -> Self {
+        let pb::ExtensionInit { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionInit> for pb::ExtensionInit {
+    fn from(item: pb_api::ExtensionInit) -> Self {
+        let pb_api::ExtensionInit { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExtensionUpgradeArg> for pb_api::ExtensionUpgradeArg {
+    fn from(item: pb::ExtensionUpgradeArg) -> Self {
+        let pb::ExtensionUpgradeArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionUpgradeArg> for pb::ExtensionUpgradeArg {
+    fn from(item: pb_api::ExtensionUpgradeArg) -> Self {
+        let pb_api::ExtensionUpgradeArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::RegisterExtension> for pb_api::RegisterExtension {
+    fn from(item: pb::RegisterExtension) -> Self {
+        let pb::RegisterExtension {
+            chunked_canister_wasm,
+            extension_init,
+        } = item;
+
+        let chunked_canister_wasm = chunked_canister_wasm.map(pb_api::ChunkedCanisterWasm::from);
+
+        let extension_init = extension_init.map(pb_api::ExtensionInit::from);
+
+        Self {
+            chunked_canister_wasm,
+            extension_init,
+        }
+    }
+}
+
+impl From<pb_api::RegisterExtension> for pb::RegisterExtension {
+    fn from(item: pb_api::RegisterExtension) -> Self {
+        let pb_api::RegisterExtension {
+            chunked_canister_wasm,
+            extension_init,
+        } = item;
+
+        let chunked_canister_wasm = chunked_canister_wasm.map(pb::ChunkedCanisterWasm::from);
+
+        let extension_init = extension_init.map(pb::ExtensionInit::from);
+
+        Self {
+            chunked_canister_wasm,
+            extension_init,
+        }
+    }
+}
+
+impl From<pb::ExtensionOperationArg> for pb_api::ExtensionOperationArg {
+    fn from(item: pb::ExtensionOperationArg) -> Self {
+        let pb::ExtensionOperationArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionOperationArg> for pb::ExtensionOperationArg {
+    fn from(item: pb_api::ExtensionOperationArg) -> Self {
+        let pb_api::ExtensionOperationArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExecuteExtensionOperation> for pb_api::ExecuteExtensionOperation {
+    fn from(item: pb::ExecuteExtensionOperation) -> Self {
+        let pb::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb_api::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
+impl From<pb_api::ExecuteExtensionOperation> for pb::ExecuteExtensionOperation {
+    fn from(item: pb_api::ExecuteExtensionOperation) -> Self {
+        let pb_api::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
 impl From<pb::DeregisterDappCanisters> for pb_api::DeregisterDappCanisters {
     fn from(item: pb::DeregisterDappCanisters) -> Self {
         Self {
@@ -479,6 +805,7 @@ impl From<pb::ManageDappCanisterSettings> for pb_api::ManageDappCanisterSettings
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -492,6 +819,7 @@ impl From<pb_api::ManageDappCanisterSettings> for pb::ManageDappCanisterSettings
             reserved_cycles_limit: item.reserved_cycles_limit,
             log_visibility: item.log_visibility,
             wasm_memory_limit: item.wasm_memory_limit,
+            wasm_memory_threshold: item.wasm_memory_threshold,
         }
     }
 }
@@ -532,6 +860,36 @@ impl From<pb::AdvanceSnsTargetVersion> for pb_api::AdvanceSnsTargetVersion {
     fn from(item: pb::AdvanceSnsTargetVersion) -> Self {
         Self {
             new_target: item.new_target.map(pb_api::SnsVersion::from),
+        }
+    }
+}
+
+impl From<pb_api::SetTopicsForCustomProposals> for pb::SetTopicsForCustomProposals {
+    fn from(item: pb_api::SetTopicsForCustomProposals) -> Self {
+        Self {
+            custom_function_id_to_topic: item
+                .custom_function_id_to_topic
+                .into_iter()
+                .map(|(custom_function_id, topic)| {
+                    let topic = i32::from(pb::Topic::from(topic));
+                    (custom_function_id, topic)
+                })
+                .collect(),
+        }
+    }
+}
+impl From<pb::SetTopicsForCustomProposals> for pb_api::SetTopicsForCustomProposals {
+    fn from(item: pb::SetTopicsForCustomProposals) -> Self {
+        let custom_function_id_to_topic = item
+            .custom_function_id_to_topic
+            .into_iter()
+            .filter_map(|(custom_function_id, topic_id)| {
+                topic_id_to_api(topic_id).map(|topic| (custom_function_id, topic))
+            })
+            .collect();
+
+        Self {
+            custom_function_id_to_topic,
         }
     }
 }
@@ -577,6 +935,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb_api::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb_api::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -589,6 +950,7 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::RegisterDappCanisters(v) => {
                 pb_api::proposal::Action::RegisterDappCanisters(v.into())
             }
+
             pb::proposal::Action::DeregisterDappCanisters(v) => {
                 pb_api::proposal::Action::DeregisterDappCanisters(v.into())
             }
@@ -603,6 +965,15 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             }
             pb::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb_api::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
+            pb::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb_api::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
+            pb::proposal::Action::RegisterExtension(v) => {
+                pb_api::proposal::Action::RegisterExtension(v.into())
+            }
+            pb::proposal::Action::UpgradeExtension(v) => {
+                pb_api::proposal::Action::UpgradeExtension(v.into())
             }
         }
     }
@@ -627,6 +998,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb_api::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb_api::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -639,6 +1013,7 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::RegisterDappCanisters(v) => {
                 pb::proposal::Action::RegisterDappCanisters(v.into())
             }
+
             pb_api::proposal::Action::DeregisterDappCanisters(v) => {
                 pb::proposal::Action::DeregisterDappCanisters(v.into())
             }
@@ -653,6 +1028,15 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::AdvanceSnsTargetVersion(v) => {
                 pb::proposal::Action::AdvanceSnsTargetVersion(v.into())
+            }
+            pb_api::proposal::Action::SetTopicsForCustomProposals(v) => {
+                pb::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
+            pb_api::proposal::Action::RegisterExtension(v) => {
+                pb::proposal::Action::RegisterExtension(v.into())
+            }
+            pb_api::proposal::Action::UpgradeExtension(v) => {
+                pb::proposal::Action::UpgradeExtension(v.into())
             }
         }
     }
@@ -886,6 +1270,7 @@ impl From<pb::ProposalData> for pb_api::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.and_then(topic_id_to_api),
         }
     }
 }
@@ -918,6 +1303,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             minimum_yes_proportion_of_total: item.minimum_yes_proportion_of_total,
             minimum_yes_proportion_of_exercised: item.minimum_yes_proportion_of_exercised,
             action_auxiliary: item.action_auxiliary.map(|x| x.into()),
+            topic: item.topic.map(|topic| i32::from(pb::Topic::from(topic))),
         }
     }
 }
@@ -1094,6 +1480,7 @@ impl From<pb::NervousSystemParameters> for pb_api::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1121,6 +1508,7 @@ impl From<pb_api::NervousSystemParameters> for pb::NervousSystemParameters {
             max_dissolve_delay_bonus_percentage: item.max_dissolve_delay_bonus_percentage,
             max_age_bonus_percentage: item.max_age_bonus_percentage,
             maturity_modulation_disabled: item.maturity_modulation_disabled,
+            automatically_advance_target_version: item.automatically_advance_target_version,
         }
     }
 }
@@ -1378,6 +1766,9 @@ impl From<pb::governance::neuron_in_flight_command::Command>
             pb::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
+            pb::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
+            }
             pb::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
             }
@@ -1427,6 +1818,9 @@ impl From<pb_api::governance::neuron_in_flight_command::Command>
             pb_api::governance::neuron_in_flight_command::Command::Follow(v) => {
                 pb::governance::neuron_in_flight_command::Command::Follow(v.into())
             }
+            pb_api::governance::neuron_in_flight_command::Command::SetFollowing(v) => {
+                pb::governance::neuron_in_flight_command::Command::SetFollowing(v.into())
+            }
             pb_api::governance::neuron_in_flight_command::Command::MakeProposal(v) => {
                 pb::governance::neuron_in_flight_command::Command::MakeProposal(v.into())
             }
@@ -1465,6 +1859,12 @@ impl From<pb::governance::GovernanceCachedMetrics> for pb_api::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -1488,6 +1888,12 @@ impl From<pb_api::governance::GovernanceCachedMetrics> for pb::governance::Gover
                 .neurons_with_less_than_6_months_dissolve_delay_count,
             neurons_with_less_than_6_months_dissolve_delay_e8s: item
                 .neurons_with_less_than_6_months_dissolve_delay_e8s,
+            treasury_metrics: item
+                .treasury_metrics
+                .into_iter()
+                .map(|metrics| metrics.into())
+                .collect(),
+            voting_power_metrics: item.voting_power_metrics.map(|metrics| metrics.into()),
         }
     }
 }
@@ -1641,6 +2047,160 @@ impl From<pb::GetMetadataRequest> for pb_api::GetMetadataRequest {
 impl From<pb_api::GetMetadataRequest> for pb::GetMetadataRequest {
     fn from(_: pb_api::GetMetadataRequest) -> Self {
         Self {}
+    }
+}
+
+impl From<pb_api::TreasuryMetrics> for pb::TreasuryMetrics {
+    fn from(item: pb_api::TreasuryMetrics) -> Self {
+        let pb_api::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        } = item;
+
+        let account = account.map(pb::Account::from);
+        let amount_e8s = amount_e8s.unwrap_or_default();
+        let original_amount_e8s = original_amount_e8s.unwrap_or_default();
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb::TreasuryMetrics> for pb_api::TreasuryMetrics {
+    fn from(item: pb::TreasuryMetrics) -> Self {
+        let pb::TreasuryMetrics {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        } = item;
+
+        let account = account.map(pb_api::Account::from);
+        let amount_e8s = Some(amount_e8s);
+        let original_amount_e8s = Some(original_amount_e8s);
+        let timestamp_seconds = Some(timestamp_seconds);
+
+        Self {
+            treasury,
+            name,
+            ledger_canister_id,
+            account,
+            amount_e8s,
+            original_amount_e8s,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb::VotingPowerMetrics> for pb_api::VotingPowerMetrics {
+    fn from(item: pb::VotingPowerMetrics) -> Self {
+        let pb::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power = Some(governance_total_potential_voting_power);
+        let timestamp_seconds = Some(timestamp_seconds);
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb_api::VotingPowerMetrics> for pb::VotingPowerMetrics {
+    fn from(item: pb_api::VotingPowerMetrics) -> Self {
+        let pb_api::VotingPowerMetrics {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        } = item;
+
+        let governance_total_potential_voting_power =
+            governance_total_potential_voting_power.unwrap_or_default();
+
+        let timestamp_seconds = timestamp_seconds.unwrap_or_default();
+
+        Self {
+            governance_total_potential_voting_power,
+            timestamp_seconds,
+        }
+    }
+}
+
+impl From<pb::Metrics> for pb_api::get_metrics_response::Metrics {
+    fn from(item: pb::Metrics) -> Self {
+        let pb::Metrics {
+            num_recently_submitted_proposals,
+            last_ledger_block_timestamp,
+            num_recently_executed_proposals,
+            treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
+        } = item;
+
+        let num_recently_submitted_proposals = Some(num_recently_submitted_proposals);
+        let num_recently_executed_proposals = Some(num_recently_executed_proposals);
+
+        let last_ledger_block_timestamp = if last_ledger_block_timestamp == 0 {
+            None
+        } else {
+            Some(last_ledger_block_timestamp)
+        };
+
+        let treasury_metrics = Some(
+            treasury_metrics
+                .into_iter()
+                .map(pb_api::TreasuryMetrics::from)
+                .collect(),
+        );
+
+        let voting_power_metrics = voting_power_metrics.map(pb_api::VotingPowerMetrics::from);
+
+        let genesis_timestamp_seconds = Some(genesis_timestamp_seconds);
+
+        Self {
+            num_recently_submitted_proposals,
+            num_recently_executed_proposals,
+            last_ledger_block_timestamp,
+            treasury_metrics,
+            voting_power_metrics,
+            genesis_timestamp_seconds,
+        }
+    }
+}
+
+impl TryFrom<pb_api::GetMetricsRequest> for pb::GetMetricsRequest {
+    type Error = String;
+
+    fn try_from(value: pb_api::GetMetricsRequest) -> Result<Self, Self::Error> {
+        let pb_api::GetMetricsRequest {
+            time_window_seconds,
+        } = value;
+
+        let Some(time_window_seconds) = time_window_seconds else {
+            return Err("field time_window_seconds must be specified.".to_string());
+        };
+
+        Ok(Self {
+            time_window_seconds,
+        })
     }
 }
 
@@ -2058,6 +2618,31 @@ impl From<pb::manage_neuron::Follow> for pb_api::manage_neuron::Follow {
         }
     }
 }
+
+impl From<pb_api::manage_neuron::SetFollowing> for pb::manage_neuron::SetFollowing {
+    fn from(item: pb_api::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb::neuron::FolloweesForTopic::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<pb::manage_neuron::SetFollowing> for pb_api::manage_neuron::SetFollowing {
+    fn from(item: pb::manage_neuron::SetFollowing) -> Self {
+        Self {
+            topic_following: item
+                .topic_following
+                .into_iter()
+                .map(pb_api::neuron::FolloweesForTopic::from)
+                .collect(),
+        }
+    }
+}
+
 impl From<pb_api::manage_neuron::Follow> for pb::manage_neuron::Follow {
     fn from(item: pb_api::manage_neuron::Follow) -> Self {
         Self {
@@ -2195,6 +2780,9 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
             pb::manage_neuron::Command::Follow(v) => {
                 pb_api::manage_neuron::Command::Follow(v.into())
             }
+            pb::manage_neuron::Command::SetFollowing(v) => {
+                pb_api::manage_neuron::Command::SetFollowing(v.into())
+            }
             pb::manage_neuron::Command::MakeProposal(v) => {
                 pb_api::manage_neuron::Command::MakeProposal(v.into())
             }
@@ -2234,6 +2822,9 @@ impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
             }
             pb_api::manage_neuron::Command::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron::Command::SetFollowing(v) => {
+                pb::manage_neuron::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron::Command::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(v.into())
@@ -2391,6 +2982,21 @@ impl From<pb_api::manage_neuron_response::FollowResponse>
     }
 }
 
+impl From<pb::manage_neuron_response::SetFollowingResponse>
+    for pb_api::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+impl From<pb_api::manage_neuron_response::SetFollowingResponse>
+    for pb::manage_neuron_response::SetFollowingResponse
+{
+    fn from(_: pb_api::manage_neuron_response::SetFollowingResponse) -> Self {
+        Self {}
+    }
+}
+
 impl From<pb::manage_neuron_response::MakeProposalResponse>
     for pb_api::manage_neuron_response::MakeProposalResponse
 {
@@ -2508,6 +3114,9 @@ impl From<pb::manage_neuron_response::Command> for pb_api::manage_neuron_respons
             pb::manage_neuron_response::Command::Follow(v) => {
                 pb_api::manage_neuron_response::Command::Follow(v.into())
             }
+            pb::manage_neuron_response::Command::SetFollowing(v) => {
+                pb_api::manage_neuron_response::Command::SetFollowing(v.into())
+            }
             pb::manage_neuron_response::Command::MakeProposal(v) => {
                 pb_api::manage_neuron_response::Command::MakeProposal(v.into())
             }
@@ -2552,6 +3161,9 @@ impl From<pb_api::manage_neuron_response::Command> for pb::manage_neuron_respons
             }
             pb_api::manage_neuron_response::Command::Follow(v) => {
                 pb::manage_neuron_response::Command::Follow(v.into())
+            }
+            pb_api::manage_neuron_response::Command::SetFollowing(v) => {
+                pb::manage_neuron_response::Command::SetFollowing(v.into())
             }
             pb_api::manage_neuron_response::Command::MakeProposal(v) => {
                 pb::manage_neuron_response::Command::MakeProposal(v.into())
@@ -2694,6 +3306,26 @@ impl From<pb_api::get_proposal_response::Result> for pb::get_proposal_response::
     }
 }
 
+impl From<pb::TopicSelector> for pb_api::TopicSelector {
+    fn from(item: pb::TopicSelector) -> Self {
+        let pb::TopicSelector { topic } = item;
+
+        let topic = topic.and_then(topic_id_to_api);
+
+        Self { topic }
+    }
+}
+
+impl From<pb_api::TopicSelector> for pb::TopicSelector {
+    fn from(item: pb_api::TopicSelector) -> Self {
+        let pb_api::TopicSelector { topic } = item;
+
+        let topic = topic.map(|topic| i32::from(pb::Topic::from(topic)));
+
+        Self { topic }
+    }
+}
+
 impl From<pb::ListProposals> for pb_api::ListProposals {
     fn from(item: pb::ListProposals) -> Self {
         Self {
@@ -2702,6 +3334,12 @@ impl From<pb::ListProposals> for pb_api::ListProposals {
             exclude_type: item.exclude_type,
             include_reward_status: item.include_reward_status,
             include_status: item.include_status,
+            include_topics: Some(
+                item.include_topics
+                    .into_iter()
+                    .map(|topic_selector| topic_selector.into())
+                    .collect(),
+            ),
         }
     }
 }
@@ -2713,6 +3351,14 @@ impl From<pb_api::ListProposals> for pb::ListProposals {
             exclude_type: item.exclude_type,
             include_reward_status: item.include_reward_status,
             include_status: item.include_status,
+            include_topics: if let Some(include_topics) = item.include_topics {
+                include_topics
+                    .into_iter()
+                    .map(|topic_selector| topic_selector.into())
+                    .collect()
+            } else {
+                vec![]
+            },
         }
     }
 }
@@ -2722,6 +3368,7 @@ impl From<pb::ListProposalsResponse> for pb_api::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }
@@ -2730,6 +3377,7 @@ impl From<pb_api::ListProposalsResponse> for pb::ListProposalsResponse {
         Self {
             proposals: item.proposals.into_iter().map(|x| x.into()).collect(),
             include_ballots_by_caller: item.include_ballots_by_caller,
+            include_topic_filtering: item.include_topic_filtering,
         }
     }
 }
@@ -3193,6 +3841,7 @@ impl From<pb::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3203,6 +3852,7 @@ impl From<pb_api::upgrade_journal_entry::TargetVersionSet>
         Self {
             old_target_version: item.old_target_version.map(|x| x.into()),
             new_target_version: item.new_target_version.map(|x| x.into()),
+            is_advanced_automatically: item.is_advanced_automatically,
         }
     }
 }
@@ -3706,6 +4356,235 @@ impl From<pb_api::ClaimSwapNeuronsError> for pb::ClaimSwapNeuronsError {
             pb_api::ClaimSwapNeuronsError::Unspecified => pb::ClaimSwapNeuronsError::Unspecified,
             pb_api::ClaimSwapNeuronsError::Unauthorized => pb::ClaimSwapNeuronsError::Unauthorized,
             pb_api::ClaimSwapNeuronsError::Internal => pb::ClaimSwapNeuronsError::Internal,
+        }
+    }
+}
+
+impl From<pb_api::RefreshCachedUpgradeStepsRequest> for pb::RefreshCachedUpgradeStepsRequest {
+    fn from(_: pb_api::RefreshCachedUpgradeStepsRequest) -> Self {
+        Self {}
+    }
+}
+
+impl From<pb::RefreshCachedUpgradeStepsResponse> for pb_api::RefreshCachedUpgradeStepsResponse {
+    fn from(_: pb::RefreshCachedUpgradeStepsResponse) -> Self {
+        Self {}
+    }
+}
+
+impl From<pb_api::topics::Topic> for pb::Topic {
+    fn from(value: pb_api::topics::Topic) -> Self {
+        match value {
+            pb_api::topics::Topic::DaoCommunitySettings => pb::Topic::DaoCommunitySettings,
+            pb_api::topics::Topic::SnsFrameworkManagement => pb::Topic::SnsFrameworkManagement,
+            pb_api::topics::Topic::DappCanisterManagement => pb::Topic::DappCanisterManagement,
+            pb_api::topics::Topic::ApplicationBusinessLogic => pb::Topic::ApplicationBusinessLogic,
+            pb_api::topics::Topic::Governance => pb::Topic::Governance,
+            pb_api::topics::Topic::TreasuryAssetManagement => pb::Topic::TreasuryAssetManagement,
+            pb_api::topics::Topic::CriticalDappOperations => pb::Topic::CriticalDappOperations,
+        }
+    }
+}
+
+impl TryFrom<pb::Topic> for pb_api::topics::Topic {
+    type Error = String;
+
+    fn try_from(value: pb::Topic) -> Result<Self, Self::Error> {
+        match value {
+            pb::Topic::DaoCommunitySettings => Ok(pb_api::topics::Topic::DaoCommunitySettings),
+            pb::Topic::SnsFrameworkManagement => Ok(pb_api::topics::Topic::SnsFrameworkManagement),
+            pb::Topic::DappCanisterManagement => Ok(pb_api::topics::Topic::DappCanisterManagement),
+            pb::Topic::ApplicationBusinessLogic => {
+                Ok(pb_api::topics::Topic::ApplicationBusinessLogic)
+            }
+            pb::Topic::Governance => Ok(pb_api::topics::Topic::Governance),
+            pb::Topic::TreasuryAssetManagement => {
+                Ok(pb_api::topics::Topic::TreasuryAssetManagement)
+            }
+            pb::Topic::CriticalDappOperations => Ok(pb_api::topics::Topic::CriticalDappOperations),
+            pb::Topic::Unspecified => Err("Unspecified topic".to_string()),
+        }
+    }
+}
+
+impl From<pb_api::topics::ListTopicsRequest> for topics::ListTopicsRequest {
+    fn from(value: pb_api::topics::ListTopicsRequest) -> Self {
+        let pb_api::topics::ListTopicsRequest {} = value;
+        topics::ListTopicsRequest {}
+    }
+}
+
+impl From<topics::ListTopicsResponse> for pb_api::topics::ListTopicsResponse {
+    fn from(value: topics::ListTopicsResponse) -> Self {
+        pb_api::topics::ListTopicsResponse {
+            topics: Some(value.topics.into_iter().map(|x| x.into()).collect()),
+            uncategorized_functions: Some(
+                value
+                    .uncategorized_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics::TopicInfo {
+    fn from(value: topics::TopicInfo<topics::NervousSystemFunctions>) -> Self {
+        let topics::TopicInfo {
+            topic,
+            name,
+            description,
+            functions:
+                topics::NervousSystemFunctions {
+                    native_functions,
+                    custom_functions,
+                },
+            extension_operations,
+            is_critical,
+        } = value;
+
+        let extension_operations = extension_operations
+            .into_iter()
+            .map(pb_api::topics::RegisteredExtensionOperationSpec::from)
+            .collect();
+
+        pb_api::topics::TopicInfo {
+            topic: Some(topic),
+            name: Some(name),
+            description: Some(description),
+            native_functions: Some(
+                native_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            custom_functions: Some(
+                custom_functions
+                    .into_iter()
+                    .map(pb_api::NervousSystemFunction::from)
+                    .collect(),
+            ),
+            extension_operations: Some(extension_operations),
+            is_critical: Some(is_critical),
+        }
+    }
+}
+
+// Conversions for ExtensionOperationType
+impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
+    fn from(value: crate::extensions::OperationType) -> Self {
+        match value {
+            crate::extensions::OperationType::TreasuryManagerDeposit => {
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit
+            }
+            crate::extensions::OperationType::TreasuryManagerWithdraw => {
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionType
+impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
+    fn from(value: crate::extensions::ExtensionType) -> Self {
+        match value {
+            crate::extensions::ExtensionType::TreasuryManager => {
+                pb_api::ExtensionType::TreasuryManager
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionOperationSpec
+impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperationSpec {
+    fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
+        pb_api::ExtensionOperationSpec {
+            operation_type: Some(pb_api::ExtensionOperationType::from(value.operation_type)),
+            description: Some(value.description),
+            extension_type: Some(pb_api::ExtensionType::from(value.extension_type)),
+            topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
+        }
+    }
+}
+
+// Conversions for RegisteredExtensionOperationSpec
+impl From<crate::topics::RegisteredExtensionOperationSpec>
+    for pb_api::topics::RegisteredExtensionOperationSpec
+{
+    fn from(value: crate::topics::RegisteredExtensionOperationSpec) -> Self {
+        pb_api::topics::RegisteredExtensionOperationSpec {
+            canister_id: Some(value.canister_id.get()),
+            spec: Some(pb_api::ExtensionOperationSpec::from(value.spec)),
+        }
+    }
+}
+
+// RegisterExtension conversions already exist above - removed duplicates
+
+// Conversions for API Wasm -> internal protobuf Wasm
+impl From<pb_api::Wasm> for crate::pb::v1::Wasm {
+    fn from(value: pb_api::Wasm) -> Self {
+        let wasm = match value {
+            pb_api::Wasm::Bytes(bytes) => crate::pb::v1::wasm::Wasm::Bytes(bytes),
+            pb_api::Wasm::Chunked(chunked) => crate::pb::v1::wasm::Wasm::Chunked(chunked.into()),
+        };
+        crate::pb::v1::Wasm { wasm: Some(wasm) }
+    }
+}
+
+// Conversions for internal protobuf Wasm -> API Wasm
+impl From<crate::pb::v1::Wasm> for pb_api::Wasm {
+    fn from(value: crate::pb::v1::Wasm) -> Self {
+        let wasm = value.wasm.expect("wasm field is required");
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => pb_api::Wasm::Bytes(bytes),
+            crate::pb::v1::wasm::Wasm::Chunked(chunked) => pb_api::Wasm::Chunked(chunked.into()),
+        }
+    }
+}
+
+// Conversions for internal protobuf Wasm -> crate::types::Wasm
+impl From<crate::pb::v1::wasm::Wasm> for crate::types::Wasm {
+    fn from(value: crate::pb::v1::wasm::Wasm) -> Self {
+        match value {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => crate::types::Wasm::Bytes(bytes),
+            crate::pb::v1::wasm::Wasm::Chunked(chunked) => {
+                use ic_base_types::CanisterId;
+                let store_canister_id = chunked
+                    .store_canister_id
+                    .expect("store_canister_id is required for chunked WASM");
+                crate::types::Wasm::Chunked {
+                    wasm_module_hash: chunked.wasm_module_hash,
+                    store_canister_id: CanisterId::try_from_principal_id(store_canister_id)
+                        .expect("Invalid store_canister_id"),
+                    chunk_hashes_list: chunked.chunk_hashes_list,
+                }
+            }
+        }
+    }
+}
+
+impl From<pb_api::UpgradeExtension> for crate::pb::v1::UpgradeExtension {
+    fn from(value: pb_api::UpgradeExtension) -> Self {
+        crate::pb::v1::UpgradeExtension {
+            extension_canister_id: value.extension_canister_id,
+            canister_upgrade_arg: value
+                .canister_upgrade_arg
+                .map(crate::pb::v1::ExtensionUpgradeArg::from),
+            wasm: value.wasm.map(crate::pb::v1::Wasm::from),
+        }
+    }
+}
+
+impl From<crate::pb::v1::UpgradeExtension> for pb_api::UpgradeExtension {
+    fn from(value: crate::pb::v1::UpgradeExtension) -> Self {
+        pb_api::UpgradeExtension {
+            extension_canister_id: value.extension_canister_id,
+            wasm: value.wasm.map(pb_api::Wasm::from),
+            canister_upgrade_arg: value
+                .canister_upgrade_arg
+                .map(pb_api::ExtensionUpgradeArg::from),
         }
     }
 }

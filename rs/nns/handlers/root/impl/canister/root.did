@@ -30,6 +30,18 @@ type CanisterSettings = record {
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
+  wasm_memory_threshold : opt nat;
+};
+
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
 };
 
 type CanisterStatusResult = record {
@@ -40,6 +52,8 @@ type CanisterStatusResult = record {
   idle_cycles_burned_per_day : opt nat;
   module_hash : opt blob;
   reserved_cycles : opt nat;
+  query_stats : opt QueryStats;
+  memory_metrics : opt MemoryMetrics;
 };
 
 type CanisterStatusType = variant {
@@ -67,29 +81,48 @@ type ChangeCanisterControllersResult = variant {
   Err : ChangeCanisterControllersError;
 };
 
+type ChunkedCanisterWasm = record {
+  wasm_module_hash : blob;
+  store_canister_id : principal;
+  chunk_hashes_list : vec blob;
+};
+
 type ChangeCanisterRequest = record {
   arg : blob;
   wasm_module : blob;
+  chunked_canister_wasm : opt ChunkedCanisterWasm;
   stop_before_installing : bool;
   mode : CanisterInstallMode;
   canister_id : principal;
-  memory_allocation : opt nat;
-  compute_allocation : opt nat;
 };
 
 type DefiniteCanisterSettings = record {
   freezing_threshold : opt nat;
   controllers : vec principal;
   reserved_cycles_limit : opt nat;
-  log_visibility : opt LogVisibility;
+  log_visibility : opt CanisterStatusLogVisibility;
   wasm_memory_limit : opt nat;
   memory_allocation : opt nat;
   compute_allocation : opt nat;
+  wasm_memory_threshold : opt nat;
 };
 
 type LogVisibility = variant {
   controllers;
   public;
+};
+
+type CanisterStatusLogVisibility = variant {
+  controllers;
+  public;
+  allowed_viewers : vec principal;
+};
+
+type QueryStats = record {
+  num_calls_total : opt nat;
+  num_instructions_total : opt nat;
+  request_payload_bytes_total : opt nat;
+  response_payload_bytes_total : opt nat;
 };
 
 type StopOrStartCanisterRequest = record {
@@ -112,16 +145,72 @@ type UpdateCanisterSettingsResponse = variant {
   Err : UpdateCanisterSettingsError;
 };
 
-service : {
-  add_nns_canister : (AddCanisterRequest) -> ();
+type CallCanisterRequest = record {
+  canister_id : principal;
+  method_name : text;
+  payload : blob;
+};
+
+type TakeCanisterSnapshotArgs = record {
+  canister_id : principal;
+  replace_snapshot : opt blob;
+};
+
+type TakeCanisterSnapshotResponse = variant {
+  Ok : TakeCanisterSnapshotOk;
+  Err : TakeCanisterSnapshotError;
+};
+
+type TakeCanisterSnapshotOk = record {
+  id : blob;
+  taken_at_timestamp : nat64;
+  total_size : nat64;
+};
+
+type TakeCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
+type LoadCanisterSnapshotRequest = record {
+  canister_id : principal;
+  snapshot_id : blob;
+};
+
+type LoadCanisterSnapshotResponse = variant {
+  Ok : LoadCanisterSnapshotOk;
+  Err : LoadCanisterSnapshotError;
+};
+
+type LoadCanisterSnapshotOk = record {
+  // This intentionally left empty. It is nevertheless here for
+  // a) consistency, and b) in case of future expansion.
+};
+
+type LoadCanisterSnapshotError = record {
+  code : opt int32;
+  description : text;
+};
+
+service : () -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+  get_build_metadata : () -> (text) query;
+
+  // Below are methods that can only be called by other NNS canisters.
+  add_nns_canister : (AddCanisterRequest) -> ();
   change_canister_controllers : (ChangeCanisterControllersRequest) -> (
       ChangeCanisterControllersResponse,
     );
   change_nns_canister : (ChangeCanisterRequest) -> ();
-  get_build_metadata : () -> (text) query;
   stop_or_start_nns_canister : (StopOrStartCanisterRequest) -> ();
   update_canister_settings : (UpdateCanisterSettingsRequest) -> (
       UpdateCanisterSettingsResponse,
+    );
+  call_canister : (CallCanisterRequest) -> ();
+  take_canister_snapshot : (TakeCanisterSnapshotArgs) -> (
+      TakeCanisterSnapshotResponse,
+    );
+  load_canister_snapshot : (LoadCanisterSnapshotRequest) -> (
+      LoadCanisterSnapshotResponse,
     );
 }

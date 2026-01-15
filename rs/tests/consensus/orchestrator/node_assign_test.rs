@@ -31,7 +31,7 @@ use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -43,8 +43,8 @@ use ic_system_test_driver::{
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     util::{
-        assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
-        MessageCanister,
+        MessageCanister, assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node,
+        runtime_from_url,
     },
 };
 use ic_types::Height;
@@ -169,7 +169,7 @@ fn test(env: TestEnv) {
     let kill_nodes_count = UNASSIGNED_NODES_COUNT / 3;
     info!(logger, "Kill {} of the new nodes", kill_nodes_count);
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
-        n.vm().kill();
+        block_on(async { n.vm().await.kill().await });
     }
 
     // Second loop to paralelize the effects of the previous one
@@ -191,7 +191,13 @@ fn test(env: TestEnv) {
 
     // Kill one more node and break consensus.
     info!(logger, "Kill one more node and break consensus");
-    newly_assigned_nodes[kill_nodes_count].vm().kill();
+    block_on(async {
+        newly_assigned_nodes[kill_nodes_count]
+            .vm()
+            .await
+            .kill()
+            .await
+    });
     info!(logger, "Wait for it to become unavailable");
     newly_assigned_nodes[kill_nodes_count]
         .await_status_is_unavailable()
@@ -206,12 +212,18 @@ fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     // Restart node to start consensus.
     info!(logger, "Restart node to start consensus");
-    newly_assigned_nodes[kill_nodes_count].vm().start();
+    block_on(async {
+        newly_assigned_nodes[kill_nodes_count]
+            .vm()
+            .await
+            .start()
+            .await
+    });
     info!(logger, "Wait for subnet to restart");
     // Wait for 1 DKG interval to ensure that subnet makes progress again.
     let target_height =

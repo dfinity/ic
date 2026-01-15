@@ -3,7 +3,7 @@ use on_wire::bytes;
 
 fn main() {}
 
-#[export_name = "canister_update call_nonexistent_method"]
+#[unsafe(export_name = "canister_update call_nonexistent_method")]
 fn call_nonexistent_method() {
     over_async(bytes, |_: Vec<u8>| async move {
         let res = call(

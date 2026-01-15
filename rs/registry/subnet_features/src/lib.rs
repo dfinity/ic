@@ -1,8 +1,8 @@
 use candid::CandidType;
-use ic_management_canister_types::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ impl FromStr for SubnetFeatures {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "sev_enabled" => features.sev_enabled = true,
-                _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
+                _ => return Err(format!("Unknown feature {feature:?} in {string:?}")),
             }
         }
 
@@ -88,49 +88,10 @@ impl FromStr for SubnetFeatures {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct EcdsaConfig {
-    pub quadruples_to_create_in_advance: u32,
-    pub key_ids: Vec<EcdsaKeyId>,
-    pub max_queue_size: Option<u32>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-impl From<EcdsaConfig> for pb::EcdsaConfig {
-    fn from(item: EcdsaConfig) -> Self {
-        pb::EcdsaConfig {
-            quadruples_to_create_in_advance: item.quadruples_to_create_in_advance,
-            key_ids: item.key_ids.iter().map(|key| key.into()).collect(),
-            max_queue_size: item.max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            signature_request_timeout_ns: item.signature_request_timeout_ns,
-            idkg_key_rotation_period_ms: item.idkg_key_rotation_period_ms,
-        }
-    }
-}
-
-impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::EcdsaConfig) -> Result<Self, Self::Error> {
-        let mut key_ids = vec![];
-        for key in value.key_ids {
-            key_ids.push(EcdsaKeyId::try_from(key)?);
-        }
-        Ok(EcdsaConfig {
-            quadruples_to_create_in_advance: value.quadruples_to_create_in_advance,
-            key_ids,
-            max_queue_size: Some(value.max_queue_size),
-            signature_request_timeout_ns: value.signature_request_timeout_ns,
-            idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
-        })
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub struct KeyConfig {
     pub key_id: MasterPublicKeyId,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
     pub max_queue_size: u32,
 }
 
@@ -144,8 +105,6 @@ impl From<KeyConfig> for pb::KeyConfig {
 
         let key_id = Some(pb_types::MasterPublicKeyId::from(&key_id));
 
-        let pre_signatures_to_create_in_advance = Some(pre_signatures_to_create_in_advance);
-
         Self {
             key_id,
             pre_signatures_to_create_in_advance,
@@ -158,12 +117,15 @@ impl TryFrom<pb::KeyConfig> for KeyConfig {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb::KeyConfig) -> Result<Self, Self::Error> {
-        Ok(KeyConfig {
-            pre_signatures_to_create_in_advance: try_from_option_field(
-                value.pre_signatures_to_create_in_advance,
+        let key_id: MasterPublicKeyId = try_from_option_field(value.key_id, "KeyConfig::key_id")?;
+        if key_id.requires_pre_signatures() && value.pre_signatures_to_create_in_advance.is_none() {
+            return Err(ProxyDecodeError::MissingField(
                 "KeyConfig::pre_signatures_to_create_in_advance",
-            )?,
-            key_id: try_from_option_field(value.key_id, "KeyConfig::key_id")?,
+            ));
+        }
+        Ok(KeyConfig {
+            pre_signatures_to_create_in_advance: value.pre_signatures_to_create_in_advance,
+            key_id,
             max_queue_size: try_from_option_field(
                 value.max_queue_size,
                 "KeyConfig::max_queue_size",
@@ -177,14 +139,25 @@ pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl ChainKeyConfig {
+    /// Returns the list of key IDs for which there are key configs.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
     pub fn key_ids(&self) -> Vec<MasterPublicKeyId> {
         self.key_configs
             .iter()
             .map(|key_config| key_config.key_id.clone())
             .collect()
+    }
+
+    /// Returns the key config for the given key ID, if it exists.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
+    pub fn key_config(&self, key_id: &MasterPublicKeyId) -> Option<&KeyConfig> {
+        self.key_configs
+            .iter()
+            .find(|config| config.key_id == *key_id)
     }
 }
 
@@ -194,6 +167,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs.into_iter().map(pb::KeyConfig::from).collect();
@@ -202,6 +176,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -218,46 +193,15 @@ impl TryFrom<pb::ChainKeyConfig> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns: value.signature_request_timeout_ns,
             idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation: value
+                .max_parallel_pre_signature_transcripts_in_creation,
         })
-    }
-}
-
-/// This code is part of the data migration from `EcdsaConfig` to `ChainKeyConfig`.
-///
-/// Use this implementation to retrofit the values from an existing `EcdsaConfig` instance in places
-/// where we now need a `ChainKeyConfig` instance.
-///
-/// TODO[NNS1-2986]: Remove this code.
-impl From<EcdsaConfig> for ChainKeyConfig {
-    fn from(src: EcdsaConfig) -> Self {
-        let EcdsaConfig {
-            key_ids,
-            quadruples_to_create_in_advance,
-            max_queue_size,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        } = src;
-
-        let key_configs = key_ids
-            .into_iter()
-            .map(|key_id| KeyConfig {
-                key_id: MasterPublicKeyId::Ecdsa(key_id),
-                pre_signatures_to_create_in_advance: quadruples_to_create_in_advance,
-                max_queue_size: max_queue_size.unwrap_or(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
-            })
-            .collect();
-
-        Self {
-            key_configs,
-            signature_request_timeout_ns,
-            idkg_key_rotation_period_ms,
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types::EcdsaCurve;
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
 
     use super::*;
     use std::str::FromStr;
@@ -281,105 +225,65 @@ mod tests {
     }
 
     #[test]
-    fn test_chain_key_config_from_ecdsa_config() {
-        // Run code under test.
-        let chain_key_config = ChainKeyConfig::from(EcdsaConfig {
-            quadruples_to_create_in_advance: 77,
-            key_ids: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test_curve".to_string(),
-            }],
-            max_queue_size: Some(30),
-            signature_request_timeout_ns: Some(123_456),
-            idkg_key_rotation_period_ms: Some(321_654),
-        });
-        // Assert expected result value.
-        assert_eq!(
-            chain_key_config,
-            ChainKeyConfig {
-                key_configs: vec![KeyConfig {
-                    key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                        curve: EcdsaCurve::Secp256k1,
-                        name: "test_curve".to_string(),
-                    }),
-                    pre_signatures_to_create_in_advance: 77,
-                    max_queue_size: 30,
-                }],
-                signature_request_timeout_ns: Some(123_456),
-                idkg_key_rotation_period_ms: Some(321_654),
-            }
-        );
-    }
-
-    #[test]
-    fn test_chain_key_config_pb_from_ecdsa_config_pb() {
-        // Run code under test.
-        let chain_key_config_pb = pb::ChainKeyConfig::from(pb::EcdsaConfig {
-            quadruples_to_create_in_advance: 77,
-            key_ids: vec![pb_types::EcdsaKeyId {
-                curve: 1,
-                name: "test_curve".to_string(),
-            }],
-            max_queue_size: 30,
-            signature_request_timeout_ns: Some(123_456),
-            idkg_key_rotation_period_ms: Some(321_654),
-        });
-        // Assert expected result value.
-        assert_eq!(
-            chain_key_config_pb,
-            pb::ChainKeyConfig {
-                key_configs: vec![pb::KeyConfig {
-                    key_id: Some(pb_types::MasterPublicKeyId {
-                        key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
-                            pb_types::EcdsaKeyId {
-                                curve: 1,
-                                name: "test_curve".to_string(),
-                            }
-                        )),
-                    }),
-                    pre_signatures_to_create_in_advance: Some(77),
-                    max_queue_size: Some(30),
-                }],
-                signature_request_timeout_ns: Some(123_456),
-                idkg_key_rotation_period_ms: Some(321_654),
-            }
-        );
-    }
-
-    #[test]
     fn test_chain_key_config_round_trip() {
         // Run code under test.
         let chain_key_config = ChainKeyConfig {
-            key_configs: vec![KeyConfig {
-                key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                    curve: EcdsaCurve::Secp256k1,
-                    name: "test_curve".to_string(),
-                }),
-                pre_signatures_to_create_in_advance: 77,
-                max_queue_size: 30,
-            }],
+            key_configs: vec![
+                KeyConfig {
+                    key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                        curve: EcdsaCurve::Secp256k1,
+                        name: "test_key1".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(77),
+                    max_queue_size: 30,
+                },
+                KeyConfig {
+                    key_id: MasterPublicKeyId::VetKd(VetKdKeyId {
+                        curve: VetKdCurve::Bls12_381_G2,
+                        name: "test_key2".to_string(),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(0),
+                    max_queue_size: 30,
+                },
+            ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         let chain_key_config_pb = pb::ChainKeyConfig::from(chain_key_config.clone());
 
         // Assert expected result value.
         let expected_chain_key_config_pb = pb::ChainKeyConfig {
-            key_configs: vec![pb::KeyConfig {
-                key_id: Some(pb_types::MasterPublicKeyId {
-                    key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
-                        pb_types::EcdsaKeyId {
-                            curve: 1,
-                            name: "test_curve".to_string(),
-                        },
-                    )),
-                }),
-                pre_signatures_to_create_in_advance: Some(77),
-                max_queue_size: Some(30),
-            }],
+            key_configs: vec![
+                pb::KeyConfig {
+                    key_id: Some(pb_types::MasterPublicKeyId {
+                        key_id: Some(pb_types::master_public_key_id::KeyId::Ecdsa(
+                            pb_types::EcdsaKeyId {
+                                curve: 1,
+                                name: "test_key1".to_string(),
+                            },
+                        )),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(77),
+                    max_queue_size: Some(30),
+                },
+                pb::KeyConfig {
+                    key_id: Some(pb_types::MasterPublicKeyId {
+                        key_id: Some(pb_types::master_public_key_id::KeyId::Vetkd(
+                            pb_types::VetKdKeyId {
+                                curve: 1,
+                                name: "test_key2".to_string(),
+                            },
+                        )),
+                    }),
+                    pre_signatures_to_create_in_advance: Some(0),
+                    max_queue_size: Some(30),
+                },
+            ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         assert_eq!(chain_key_config_pb, expected_chain_key_config_pb,);
@@ -388,27 +292,5 @@ mod tests {
             ChainKeyConfig::try_from(chain_key_config_pb).expect("Deserialization should succeed.");
 
         assert_eq!(chain_key_config, chain_key_config_after_deser,);
-    }
-
-    #[test]
-    fn test_chain_key_config_pb_from_ecdsa_config() {
-        let ecdsa_config = EcdsaConfig {
-            quadruples_to_create_in_advance: 77,
-            key_ids: vec![EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: "test_curve".to_string(),
-            }],
-            max_queue_size: Some(30),
-            signature_request_timeout_ns: Some(123_456),
-            idkg_key_rotation_period_ms: Some(321_654),
-        };
-
-        let chain_key_config = ChainKeyConfig::from(ecdsa_config.clone());
-        let chain_key_config_pb_a = pb::ChainKeyConfig::from(chain_key_config);
-
-        let ecdsa_config_pb = pb::EcdsaConfig::from(ecdsa_config);
-        let chain_key_config_pb_b = pb::ChainKeyConfig::from(ecdsa_config_pb);
-
-        assert_eq!(chain_key_config_pb_a, chain_key_config_pb_b);
     }
 }

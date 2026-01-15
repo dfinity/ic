@@ -1,4 +1,5 @@
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cdk::println;
 use std::{
     cell::RefCell,
     collections::BTreeMap,

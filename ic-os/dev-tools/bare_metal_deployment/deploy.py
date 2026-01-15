@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import configparser
 import functools
 import os
+import re
 import site
+import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from ipaddress import IPv6Address
-from multiprocessing import Pool
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -27,7 +30,7 @@ NEWER_IDRAC_VERSION_THRESHOLD = 6000000
 
 DEFAULT_SETUPOS_WAIT_TIME_MINS = 20
 
-BMC_INFO_ENV_VAR = "BMC_INFO_CSV_FILENAME"
+BMC_INFO_ENV_VAR = "BMC_INFO_INI_FILENAME"
 
 DISABLE_PROGRESS_BAR = True
 
@@ -49,9 +52,12 @@ class Args:
     # SetupOS image filename on the remote file share to be mounted. Must have extension '.img'. E.g. setupos.img.
     file_share_image_filename: str = field(alias="-i")
 
-    csv_filename: Optional[str] = field(alias="-c")
+    # Path to the deterministic-ips binary.
+    deterministic_ips_tool: str
+
+    ini_filename: Optional[str] = field(alias="-c")
     """
-    CSV file with each row containing 'bmc_ip_address,bmc_username,bmc_password[,guestos_ipv6_address]'. If not supplied, the environment variable "BMC_INFO_CSV_FILENAME" will be checked. If neither are found, error. If guestos_ipv6_address is present, the guestos endpoint will be checked for connectivity to determine deployment success. Otherwise deployment will be considered successful after the timeout.
+    INI file containing BMC connection info with keys: ipmi_addr, username, password, mgmt_mac, addr_prefix. If not supplied, the environment variable "BMC_INFO_INI_FILENAME" will be checked. If neither are found, error.
     """
 
     # Username for SSH/SCP access to file share. Defaults to the current username
@@ -94,10 +100,13 @@ class Args:
     # If present - decompress `upload_img` and inject this into config.ini
     inject_image_verbose: Optional[str] = None
 
+    # If present - decompress `upload_img` and inject this into config.ini
+    inject_enable_trusted_execution_environment: Optional[str] = None
+
     # If present - decompress `upload_img` and inject this into ssh_authorized_keys/admin
     inject_image_pub_key: Optional[str] = None
 
-    # Path to the setupos-inject-configuration tool. Necessary if any inject* args are present
+    # Path to the setupos-inject-config tool. Necessary if any inject* args are present
     inject_configuration_tool: Optional[str] = None
 
     # Time to wait between each remote deployment, in minutes
@@ -114,6 +123,9 @@ class Args:
 
     # Run benchmarks if True
     benchmark: bool = flag(default=False)
+
+    # Run HostOS metrics check if True
+    check_hostos_metrics: bool = flag(default=False)
 
     # Check HSM capability if True
     hsm: bool = flag(default=False)
@@ -134,17 +146,17 @@ class Args:
             ".tar.zst"
         ), "`upload_img` must be a zstd compressed tar file. Use the build artifact."
 
-        csv_filename_env_var = os.environ.get(BMC_INFO_ENV_VAR)
+        ini_filename_env_var = os.environ.get(BMC_INFO_ENV_VAR)
         assert (
-            csv_filename_env_var or self.csv_filename
-        ), f"csv file must be specified via CLI or environment variable {BMC_INFO_ENV_VAR}"
-        self.csv_filename = self.csv_filename or csv_filename_env_var
+            ini_filename_env_var or self.ini_filename
+        ), f"ini file must be specified via CLI or environment variable {BMC_INFO_ENV_VAR}"
+        self.ini_filename = self.ini_filename or ini_filename_env_var
 
         assert (self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway) or not (
-            self.inject_image_ipv6_prefix and self.inject_image_ipv6_gateway
+            self.inject_image_ipv6_prefix or self.inject_image_ipv6_gateway
         ), "Both ipv6_prefix and ipv6_gateway flags must be present or none"
         if self.inject_image_ipv6_prefix:
-            assert self.inject_configuration_tool, "setupos_inject_configuration tool required to modify image"
+            assert self.inject_configuration_tool, "setupos_inject_config tool required to modify image"
         ipv4_args = [
             self.inject_image_ipv4_address,
             self.inject_image_ipv4_gateway,
@@ -163,7 +175,10 @@ class BMCInfo:
     username: str
     password: str
     network_image_url: str
-    guestos_ipv6_address: Optional[IPv6Address] = None
+    mgmt_mac: str
+    addr_prefix: str
+    guestos_ipv6_address: IPv6Address
+    hostos_ipv6_address: IPv6Address
 
     def __post_init__(self):
         def assert_not_empty(name: str, x: Any) -> None:
@@ -172,10 +187,12 @@ class BMCInfo:
         assert_not_empty("Username", self.username)
         assert_not_empty("Password", self.password)
         assert_not_empty("Network image url", self.network_image_url)
+        assert_not_empty("Management MAC", self.mgmt_mac)
+        assert_not_empty("Address prefix", self.addr_prefix)
 
     # Don't print secrets
     def __str__(self):
-        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, guestos_ipv6_address={self.guestos_ipv6_address})"
+        return f"BMCInfo(ip_address={self.ip_address}, username={self.username}, password=<redacted>, network_image_url={self.network_image_url}, mgmt_mac={self.mgmt_mac}, addr_prefix={self.addr_prefix}, hostos_ipv6_address={self.hostos_ipv6_address}, guestos_ipv6_address={self.guestos_ipv6_address})"
 
     def __repr__(self):
         return self.__str__()
@@ -199,28 +216,53 @@ class Ipv4Args:
     domain: str
 
 
-def parse_from_row(row: List[str], network_image_url: str) -> BMCInfo:
-    if len(row) == 3:
-        ip_address, username, password = row
-        return BMCInfo(ip_address, username, password, network_image_url)
-
-    if len(row) == 4:
-        ip_address, username, password, guestos_ipv6_address = row
-        return BMCInfo(
-            ip_address,
-            username,
-            password,
-            network_image_url,
-            IPv6Address(guestos_ipv6_address),
-        )
-
-    assert False, f"Invalid csv row found. Must be 3 or 4 items: {row}"
+def calculate_ip(mgmt_mac: str, addr_prefix: str, node_type: str, deterministic_ips_tool: str) -> IPv6Address:
+    cmd = [
+        deterministic_ips_tool,
+        "--mac",
+        mgmt_mac,
+        "--prefix",
+        addr_prefix,
+        "--deployment-environment",
+        "Testnet",
+        "--node-type",
+        node_type,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout.strip()
+    return IPv6Address(result)
 
 
-def parse_from_csv_file(csv_filename: str, network_image_url: str) -> List["BMCInfo"]:
-    with open(csv_filename, "r") as csv_file:
-        rows = [line.strip().split(",") for line in csv_file]
-        return [parse_from_row(row, network_image_url) for row in rows]
+def parse_from_ini_file(ini_filename: str, network_image_url: str, deterministic_ips_tool: str) -> BMCInfo:
+    config = configparser.ConfigParser()
+    config.read(ini_filename)
+
+    if "host" not in config:
+        raise ValueError("No [host] section found in INI file")
+
+    host_section = config["host"]
+
+    ip_address = host_section.get("ipmi_addr")
+    username = host_section.get("username")
+    password = host_section.get("password")
+    mgmt_mac = host_section.get("mgmt_mac")
+    addr_prefix = host_section.get("addr_prefix")
+
+    if not all([ip_address, username, password, mgmt_mac, addr_prefix]):
+        raise ValueError("INI file [host] section must contain: ipmi_addr, username, password, mgmt_mac, addr_prefix")
+
+    guestos_ipv6 = calculate_ip(mgmt_mac, addr_prefix, "GuestOS", deterministic_ips_tool)
+    hostos_ipv6 = calculate_ip(mgmt_mac, addr_prefix, "HostOS", deterministic_ips_tool)
+
+    return BMCInfo(
+        ip_address=ip_address,
+        username=username,
+        password=password,
+        network_image_url=network_image_url,
+        mgmt_mac=mgmt_mac,
+        addr_prefix=addr_prefix,
+        guestos_ipv6_address=guestos_ipv6,
+        hostos_ipv6_address=hostos_ipv6,
+    )
 
 
 def assert_ssh_connectivity(target_url: str, ssh_key_file: Optional[Path]):
@@ -242,14 +284,65 @@ def get_url_content(url: str, timeout_secs: int = 1) -> Optional[str]:
         return None
 
 
+def check_hostos_power_metrics(metrics_output: str) -> bool:
+    try:
+        power_metric_line = next(
+            line
+            for line in metrics_output.splitlines()
+            if not line.startswith("#") and re.fullmatch(r"power_average_watts \d+", line)
+        )
+        log.info(f"power consumption metric: {power_metric_line}")
+        return True
+    except StopIteration:
+        log.warning("power_average_watts metric in HostOS metrics not found or invalid")
+        return False
+
+
+def check_hostos_version_metrics(metrics_output: str) -> bool:
+    for metric in ["hostos_version", "hostos_config_version"]:
+        try:
+            pattern_template = rf"{re.escape(metric)}\{{version=\".*\"\}} 1"
+            version_metric_line = next(
+                line
+                for line in metrics_output.splitlines()
+                if not line.startswith("#") and re.fullmatch(pattern_template, line)
+            )
+            log.info(f"{metric} metric: {version_metric_line}")
+        except StopIteration:
+            log.warning(f"{metric} metric in HostOS metrics not found or invalid")
+            return False
+    return True
+
+
+def check_hostos_hw_generation_metrics(metrics_output: str) -> bool:
+    try:
+        expected_line = 'node_hardware_generation{gen="Gen2"} 1'
+        version_metric_line = next(
+            line for line in metrics_output.splitlines() if not line.startswith("#") and line == expected_line
+        )
+        log.info(f"node_hardware_generation metric: {version_metric_line}")
+        return True
+    except StopIteration:
+        log.warning("node_hardware_generation metric in HostOS metrics not found or invalid")
+        return False
+
+
 def check_guestos_ping_connectivity(ip_address: IPv6Address, timeout_secs: int) -> bool:
     # Ping target with count of 1, STRICT timeout of `timeout_secs`.
     # This will break if latency is > `timeout_secs`.
     result = invoke.run(f"ping6 -c1 -w{timeout_secs} {ip_address}", warn=True, hide=True)
-    if not result or not result.ok:
+
+    if result.failed:
+        # Check if the error is because ping6 is missing (Exit code 127)
+        if result.exited == 127:
+            log.error("Execution failed: 'ping6' command not found on this system.")
+        else:
+            # Log the actual stderr from the ping command (e.g., Network unreachable)
+            log.warning(f"Ping failed for {ip_address}. Error: {result.stderr.strip()}")
+
         return False
 
-    log.info("Ping success.")
+    log.info(f"Ping success for {ip_address}.")
     return True
 
 
@@ -262,24 +355,45 @@ def check_guestos_metrics_version(ip_address: IPv6Address, timeout_secs: int) ->
         return False
 
     log.info("Got metrics result from GuestOS")
-    guestos_version_line = next(
-        line for line in metrics_output.splitlines() if not line.startswith("#") and "guestos_version{" in line
-    )
-    log.info(f"GuestOS version metric: {guestos_version_line}")
-    return True
+    try:
+        guestos_version_line = next(
+            line for line in metrics_output.splitlines() if not line.startswith("#") and "guestos_version{" in line
+        )
+        log.info(f"GuestOS version metric: {guestos_version_line}")
+        return True
+    except StopIteration:
+        log.warning("guestos_version metric not found in GuestOS metrics")
+        return False
 
 
 def check_guestos_hsm_capability(ip_address: IPv6Address, ssh_key_file: Optional[str] = None) -> bool:
     # Check that the HSM is working correctly, over an SSH session with the node.
+    log.info(f"Starting HSM capability check for {ip_address}")
+
     ssh_key_arg = f"-i {ssh_key_file}" if ssh_key_file else ""
     ssh_opts = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+
+    # Execute the HSM command
+    log.info(f"Executing HSM command on {ip_address}")
+    hsm_command = "/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep 'Nitrokey HSM'"
     result = invoke.run(
-        f"ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} '/opt/ic/bin/vsock_guest --attach-hsm && sleep 5 && pkcs11-tool --list-slots | grep \"Nitrokey HSM\"'",
+        f'ssh {ssh_opts} {ssh_key_arg} admin@{ip_address} "{hsm_command}"',
         warn=True,
     )
+
     if not result or not result.ok:
+        log.error(f"HSM command failed on {ip_address}")
+        if result:
+            log.error(f"HSM command stderr: {result.stderr.strip()}")
+            log.error(f"HSM command stdout: {result.stdout.strip()}")
+            # Check if it's an SSH connectivity issue vs HSM-specific issue
+            if result.returncode == 255 or "Connection refused" in result.stderr or "No route to host" in result.stderr:
+                log.error(f"SSH connectivity issue detected for {ip_address}")
+            else:
+                log.error(f"HSM-specific issue detected for {ip_address}")
         return False
 
+    log.info(f"HSM command executed successfully on {ip_address}")
     log.info("HSM check success.")
     return True
 
@@ -308,7 +422,7 @@ class DeploymentError(Exception):
 
 
 def gen_failure(result: invoke.Result, bmc_info: BMCInfo) -> DeploymentError:
-    error_msg = f"Failed on {result.command}: {result.stderr}"
+    error_msg = f"Failure: {result.stderr}"
     return DeploymentError(OperationResult(bmc_info, success=False, error_msg=error_msg))
 
 
@@ -396,16 +510,10 @@ def deploy_server(
             f"GetSetPowerStateREDFISH.py {cli_creds} -p {bmc_info.password} --set On",
         )
 
-        # If guestos ipv6 address is present, loop on checking connectivity.
-        # Otherwise, just wait.
         timeout_secs = 5
 
-        def wait_func() -> bool:
-            wait(timeout_secs)
-            return False
-
         def check_connectivity_func() -> bool:
-            assert bmc_info.guestos_ipv6_address is not None, "Logic error"
+            log.info(f"Checking guestos ({bmc_info.guestos_ipv6_address}) connectivity...")
 
             result = check_guestos_ping_connectivity(bmc_info.guestos_ipv6_address, timeout_secs)
             result = result and check_guestos_metrics_version(bmc_info.guestos_ipv6_address, timeout_secs)
@@ -415,13 +523,11 @@ def deploy_server(
 
             return result
 
-        iterate_func = check_connectivity_func if bmc_info.guestos_ipv6_address else wait_func
-
         log.info(f"Machine booting. Checking on SetupOS completion periodically. Timeout (mins): {wait_time_mins}")
         start_time = time.time()
         end_time = start_time + wait_time_mins * 60
         while time.time() < end_time:
-            if iterate_func():
+            if check_connectivity_func():
                 log.info("*** Deployment SUCCESS!")
                 return OperationResult(bmc_info, success=True)
             time.sleep(timeout_secs)
@@ -449,33 +555,23 @@ def deploy_server(
                 return e.args[0]
 
 
-def boot_images(
-    bmc_infos: List[BMCInfo],
-    parallelism: int,
+def boot_image(
+    bmc_info: BMCInfo,
     wait_time_mins: int,
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
 ):
-    results: List[OperationResult] = []
-
-    arg_tuples = ((bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm) for bmc_info in bmc_infos)
-
-    with Pool(parallelism) as p:
-        results = p.starmap(deploy_server, arg_tuples)
+    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm)
 
     log.info("Deployment summary:")
-    deployment_failure = False
-    for res in results:
-        log.info(res)
-        if not res.success:
-            deployment_failure = True
+    log.info(result)
 
-    if deployment_failure:
-        log.error("One or more node deployments failed")
+    if not result.success:
+        log.error("Node deployment failed")
         return False
     else:
-        log.info("All deployments completed successfully.")
+        log.info("Deployment completed successfully.")
         return True
 
 
@@ -501,35 +597,59 @@ def benchmark_node(
 
 
 def benchmark_nodes(
-    bmc_infos: List[BMCInfo],
-    parallelism: int,
+    bmc_info: BMCInfo,
     benchmark_driver_script: str,
     benchmark_runner_script: str,
     benchmark_tools: List[str],
     file_share_ssh_key: Optional[str] = None,
 ):
-    results: List[OperationResult] = []
-
-    arg_tuples = (
-        (bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key)
-        for bmc_info in bmc_infos
+    result = benchmark_node(
+        bmc_info, benchmark_driver_script, benchmark_runner_script, benchmark_tools, file_share_ssh_key
     )
 
-    with Pool(parallelism) as p:
-        results = p.starmap(benchmark_node, arg_tuples)
-
     log.info("Benchmark summary:")
-    benchmark_failure = False
-    for res in results:
-        log.info(res)
-        if not res.success:
-            benchmark_failure = True
+    log.info(result)
 
-    if benchmark_failure:
-        log.error("One or more node benchmarks failed")
+    if not result.success:
+        log.error("Node benchmark failed")
         return False
     else:
-        log.info("All benchmarks completed successfully.")
+        log.info("Benchmark completed successfully.")
+        return True
+
+
+def check_node_hostos_metrics(bmc_info: BMCInfo):
+    log.info("Checking HostOS metrics.")
+
+    metrics_endpoint = f"https://[{bmc_info.hostos_ipv6_address.exploded}]:9100/metrics"
+    log.info(f"Attempting GET on metrics at {metrics_endpoint}...")
+    metrics_output = get_url_content(metrics_endpoint, 5)
+    if not metrics_output:
+        log.warning(f"Request to {metrics_endpoint} failed.")
+        return OperationResult(bmc_info, success=False)
+
+    result = (
+        check_hostos_power_metrics(metrics_output)
+        and check_hostos_version_metrics(metrics_output)
+        and check_hostos_hw_generation_metrics(metrics_output)
+    )
+
+    return OperationResult(bmc_info, success=result)
+
+
+def check_nodes_hostos_metrics(
+    bmc_info: BMCInfo,
+):
+    result = check_node_hostos_metrics(bmc_info)
+
+    log.info("HostOS metrics check summary:")
+    log.info(result)
+
+    if not result.success:
+        log.error("The metrics check failed.")
+        return False
+    else:
+        log.info("Node correctly exports the hostOS metrics.")
         return True
 
 
@@ -575,12 +695,13 @@ def upload_to_file_share(
 
 
 def inject_config_into_image(
-    setupos_inject_configuration_path: Path,
+    setupos_inject_config_path: Path,
     working_dir: Path,
     compressed_image_path: Path,
     node_reward_type: str,
     ipv6_prefix: str,
     ipv6_gateway: str,
+    inject_enable_trusted_execution_environment: Optional[str],
     ipv4_args: Optional[Ipv4Args],
     verbose: Optional[str],
     pub_key: Optional[str],
@@ -599,7 +720,7 @@ def inject_config_into_image(
     def is_executable(p: Path) -> bool:
         return os.access(p, os.X_OK)
 
-    assert setupos_inject_configuration_path.exists() and is_executable(setupos_inject_configuration_path)
+    assert setupos_inject_config_path.exists() and is_executable(setupos_inject_config_path)
 
     invoke.run(f"tar --extract --zstd --file {compressed_image_path} --directory {working_dir}", echo=True)
 
@@ -608,25 +729,30 @@ def inject_config_into_image(
 
     image_part = f"--image-path {img_path}"
     reward_part = f"--node-reward-type {node_reward_type}"
-    prefix_part = f"--ipv6-prefix {ipv6_prefix}"
+    prefix_part = f"--ipv6-prefix {ipv6_prefix} "
+    prefix_part += "--ipv6-prefix-length 64"
     gateway_part = f"--ipv6-gateway {ipv6_gateway}"
     ipv4_part = ""
     if ipv4_args:
         ipv4_part = f"--ipv4-address {ipv4_args.address} "
         ipv4_part += f"--ipv4-gateway {ipv4_args.gateway} "
         ipv4_part += f"--ipv4-prefix-length {ipv4_args.prefix_length} "
-        ipv4_part += f"--domain {ipv4_args.domain} "
+        ipv4_part += f"--domain-name {ipv4_args.domain} "
+
+    enable_trusted_execution_environment_part = ""
+    if inject_enable_trusted_execution_environment:
+        enable_trusted_execution_environment_part = "--enable-trusted-execution-environment "
 
     verbose_part = ""
     if verbose:
-        verbose_part = f"--verbose {verbose} "
+        verbose_part = "--verbose "
 
     admin_key_part = ""
     if pub_key:
         admin_key_part = f'--public-keys "{pub_key}"'
 
     invoke.run(
-        f"{setupos_inject_configuration_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {verbose_part} {admin_key_part}",
+        f"{setupos_inject_config_path} {image_part} {reward_part} {prefix_part} {gateway_part} {ipv4_part} {enable_trusted_execution_environment_part} {verbose_part} {admin_key_part}",
         echo=True,
     )
 
@@ -650,8 +776,8 @@ def main():
     idrac_script_dir = Path(args.idrac_script).parent if args.idrac_script else Path(DEFAULT_IDRAC_SCRIPT_DIR)
     log.info(f"Using idrac script dir: {idrac_script_dir}")
 
-    csv_filename: str = args.csv_filename
-    bmc_infos = parse_from_csv_file(csv_filename, network_image_url)
+    ini_filename: str = args.ini_filename
+    bmc_info = parse_from_ini_file(ini_filename, network_image_url, args.deterministic_ips_tool)
 
     ipv4_args = None
     if args.inject_image_ipv4_address:
@@ -662,15 +788,29 @@ def main():
             args.inject_image_domain,
         )
 
-    # Benchmark these nodes, rather than deploy them.
+    if args.benchmark and args.check_hostos_metrics:
+        log.error("Cannot run both benchmark and check_hostos_metrics at the same time. Please choose one.")
+        sys.exit(1)
+
+    # Benchmark the node (no deployment)
     if args.benchmark:
         success = benchmark_nodes(
-            bmc_infos=bmc_infos,
-            parallelism=args.parallel,
+            bmc_info=bmc_info,
             benchmark_driver_script=args.benchmark_driver_script,
             benchmark_runner_script=args.benchmark_runner_script,
             benchmark_tools=args.benchmark_tools,
             file_share_ssh_key=args.file_share_ssh_key,
+        )
+
+        if not success:
+            sys.exit(1)
+
+        sys.exit(0)
+
+    # Check that all important hostos metrics are available (no deployment)
+    if args.check_hostos_metrics:
+        success = check_nodes_hostos_metrics(
+            bmc_info=bmc_info,
         )
 
         if not success:
@@ -683,9 +823,7 @@ def main():
         assert_ssh_connectivity(file_share_endpoint, args.file_share_ssh_key)
 
         if args.inject_image_ipv6_prefix:
-            tmpdir = os.getenv("ICOS_TMPDIR")
-            if not tmpdir:
-                raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+            tmpdir = tempfile.mkdtemp()
             modified_image_path = inject_config_into_image(
                 Path(args.inject_configuration_tool),
                 Path(tmpdir),
@@ -693,6 +831,7 @@ def main():
                 args.inject_image_node_reward_type,
                 args.inject_image_ipv6_prefix,
                 args.inject_image_ipv6_gateway,
+                args.inject_enable_trusted_execution_environment,
                 ipv4_args,
                 args.inject_image_verbose,
                 args.inject_image_pub_key,
@@ -716,10 +855,8 @@ def main():
             )
 
     wait_time_mins = args.wait_time
-    parallelism = args.parallel
-    success = boot_images(
-        bmc_infos=bmc_infos,
-        parallelism=parallelism,
+    success = boot_image(
+        bmc_info=bmc_info,
         wait_time_mins=wait_time_mins,
         idrac_script_dir=idrac_script_dir,
         file_share_ssh_key=args.file_share_ssh_key,

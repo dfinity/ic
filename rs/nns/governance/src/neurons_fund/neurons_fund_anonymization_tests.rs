@@ -1,11 +1,11 @@
 use crate::{
     neurons_fund::*,
     pb::v1::{
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
         SwapParticipationLimits as SwapParticipationLimitsPb,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
     },
 };
 use ic_base_types::PrincipalId;
@@ -69,8 +69,7 @@ fn test_neurons_fund_participation_anonymization() {
     let participation_validation_result = participation.validate();
     assert!(
         participation_validation_result.is_ok(),
-        "expected Ok result, got {:#?}",
-        participation_validation_result
+        "expected Ok result, got {participation_validation_result:#?}"
     );
     let anonymized_participation = participation.anonymized();
     assert_eq!(

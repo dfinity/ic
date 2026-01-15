@@ -1,7 +1,7 @@
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{batch::Batch, Height};
+use ic_types::{Height, batch::Batch};
 use std::sync::{Arc, RwLock};
 
 pub struct FakeMessageRouting {
@@ -45,7 +45,7 @@ impl MessageRouting for FakeMessageRouting {
         let mut next_batch_height = self.next_batch_height.write().unwrap();
 
         let expected_height = *next_batch_height;
-        let scope = if batch.requires_full_state_hash {
+        let scope = if batch.requires_full_state_hash() {
             CertificationScope::Full
         } else {
             CertificationScope::Metadata

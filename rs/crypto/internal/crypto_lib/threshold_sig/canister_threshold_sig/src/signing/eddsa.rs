@@ -266,11 +266,11 @@ impl ThresholdEd25519CombinedSignatureInternal {
         let (point_bytes, scalar_bytes) = bytes.split_at(ED25519.point_bytes());
 
         let r = EccPoint::deserialize(ED25519, point_bytes).map_err(|e| {
-            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid r: {:?}", e))
+            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid r: {e:?}"))
         })?;
 
         let s = EccScalar::deserialize(ED25519, scalar_bytes).map_err(|e| {
-            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid s: {:?}", e))
+            ThresholdEd25519SignatureShareInternalSerializationError(format!("Invalid s: {e:?}"))
         })?;
 
         Ok(Self { r, s })

@@ -1,8 +1,14 @@
 use candid::{CandidType, Nat};
+use ic_stable_structures::{Storable, storable::Bound};
+use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
+
+#[cfg(test)]
+mod tests;
 
 /// Performs addition that returns `None` instead of wrapping around on
 /// overflow.
@@ -116,10 +122,13 @@ impl<T> TokensType for T where
     CandidType,
     Deserialize,
     Serialize,
+    Decode,
+    Encode,
 )]
 pub struct Tokens {
     /// Number of 10^-8 Tokens.
     /// Named because the equivalent part of a Bitcoin is called a Satoshi
+    #[n(0)]
     e8s: u64,
 }
 
@@ -143,8 +152,7 @@ impl Tokens {
             .ok_or_else(|| CONSTRUCTION_FAILED.to_string())?;
         if e8s >= TOKEN_SUBDIVIDABLE_BY {
             return Err(format!(
-                "You've added too many E8s, make sure there are less than {}",
-                TOKEN_SUBDIVIDABLE_BY
+                "You've added too many E8s, make sure there are less than {TOKEN_SUBDIVIDABLE_BY}"
             ));
         }
         let e8s = token_part
@@ -222,6 +230,10 @@ impl Tokens {
     pub fn saturating_sub(self, other: Tokens) -> Tokens {
         Tokens::from_e8s(self.e8s.saturating_sub(other.e8s))
     }
+
+    pub fn checked_div(self, other: u64) -> Option<Tokens> {
+        self.e8s.checked_div(other).map(Tokens::from_e8s)
+    }
 }
 
 impl CheckedAdd for Tokens {
@@ -279,10 +291,7 @@ impl TryFrom<Nat> for Tokens {
     fn try_from(value: Nat) -> Result<Self, Self::Error> {
         match value.0.to_u64() {
             Some(e8s) => Ok(Self { e8s }),
-            None => Err(format!(
-                "value {} is bigger than Tokens::max_value()",
-                value
-            )),
+            None => Err(format!("value {value} is bigger than Tokens::max_value()")),
         }
     }
 }
@@ -297,4 +306,21 @@ impl From<Tokens> for Nat {
     fn from(value: Tokens) -> Self {
         Nat::from(value.e8s)
     }
+}
+
+impl Storable for Tokens {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::Owned(self.e8s.to_le_bytes().to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self {
+            e8s: u64::from_le_bytes(bytes.into_owned().as_slice().try_into().unwrap()),
+        }
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 8,
+        is_fixed_size: true,
+    };
 }

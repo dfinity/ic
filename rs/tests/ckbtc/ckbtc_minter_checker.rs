@@ -1,6 +1,4 @@
 use anyhow::Result;
-
-use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::CheckMode as NewCheckMode;
@@ -17,18 +15,18 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-        start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
-        wait_for_mempool_change, BTC_BLOCK_REWARD,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD, assert_account_balance,
+        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction, generate_blocks,
+        get_btc_address, get_rpc_client, send_to_btc_address, start_canister, stop_canister,
+        upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -41,34 +39,35 @@ use slog::debug;
 pub fn test_btc_checker(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
+    let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
+    let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
-    // Create wallet if required.
-    ensure_wallet(&btc_rpc, &logger);
-
-    let default_btc_address = btc_rpc.get_new_address(None, None).unwrap();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger).await;
+        let sys_runtime =
+            runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+        install_bitcoin_canister(&sys_runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         let minter_id =
@@ -77,9 +76,8 @@ pub fn test_btc_checker(env: TestEnv) {
 
         let ledger = Principal::from(ledger_id.get());
         let universal_canister =
-            UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
+            UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
@@ -114,7 +112,6 @@ pub fn test_btc_checker(env: TestEnv) {
 
         // Mint block to the first sub-account (with single utxo).
         let first_transfer_amount = 100_000_000;
-        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
         send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
@@ -167,10 +164,7 @@ pub fn test_btc_checker(env: TestEnv) {
         match update_balance_checker_unavailable {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
-                panic!(
-                    "Expected the Bitcoin checker canister to be unavailable, got {:?}",
-                    other
-                );
+                panic!("Expected the Bitcoin checker canister to be unavailable, got {other:?}");
             }
         }
         start_canister(&btc_checker_canister).await;
@@ -189,8 +183,7 @@ pub fn test_btc_checker(env: TestEnv) {
         assert_eq!(
             update_balance_new_utxos.len(),
             2,
-            "BUG: should re-evaluate all UTXOs {:?}",
-            update_balance_new_utxos
+            "BUG: should re-evaluate all UTXOs {update_balance_new_utxos:?}"
         );
 
         for utxo_status in update_balance_new_utxos {
@@ -201,7 +194,7 @@ pub fn test_btc_checker(env: TestEnv) {
                         &logger,
                         block_index,
                         &account1,
-                        first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                        first_transfer_amount - CHECK_FEE,
                     )
                     .await;
                 }
@@ -253,7 +246,7 @@ pub fn test_btc_checker(env: TestEnv) {
                 &logger,
                 *block_index,
                 &account1,
-                first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                first_transfer_amount - CHECK_FEE,
             )
             .await;
         } else {
@@ -335,7 +328,10 @@ pub fn test_btc_checker(env: TestEnv) {
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
+        let fee = minter_agent
+            .estimate_withdrawal_fee(retrieve_amount)
+            .await
+            .unwrap();
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.
@@ -344,7 +340,7 @@ pub fn test_btc_checker(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            retrieve_amount - minters_fee - bitcoin_network_fee,
+            retrieve_amount - fee.minter_fee - bitcoin_network_fee,
             &btc_address2,
         )
         .await;
@@ -361,7 +357,9 @@ pub fn test_btc_checker(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_btc_checker))
         .execute_from_args()?;
     Ok(())

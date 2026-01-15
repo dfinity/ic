@@ -5,7 +5,7 @@ use bytes::{Bytes, BytesMut};
 use core::marker::PhantomData;
 use educe::Educe;
 use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use serde::{Deserialize, Serialize};
 use std::io;
 use std::pin::Pin;
@@ -295,6 +295,7 @@ enum CspVaultMethod {
     GenDealingEncryptionKeyPair,
     UpdateForwardSecureEpoch,
     CreateDealing,
+    CreateResharingDealing,
     LoadThresholdSigningKey,
     RetainThresholdKeysIfPresent,
     SksContains,
@@ -314,6 +315,7 @@ enum CspVaultMethod {
     IdkgOpenDealing,
     CreateEcdsaSigShare,
     CreateSchnorrSigShare,
+    CreateEncryptedVetKdKeyShare,
     NewPublicSeed,
 }
 
@@ -338,6 +340,9 @@ impl CspVaultMethod {
                 (MetricsDomain::NiDkgAlgorithm, "update_forward_secure_epoch")
             }
             CspVaultMethod::CreateDealing => (MetricsDomain::NiDkgAlgorithm, "create_dealing"),
+            CspVaultMethod::CreateResharingDealing => {
+                (MetricsDomain::NiDkgAlgorithm, "create_resharing_dealing")
+            }
             CspVaultMethod::LoadThresholdSigningKey => {
                 (MetricsDomain::NiDkgAlgorithm, "load_threshold_signing_key")
             }
@@ -389,6 +394,9 @@ impl CspVaultMethod {
             CspVaultMethod::CreateSchnorrSigShare => {
                 (MetricsDomain::ThresholdSchnorr, "create_schnorr_sig_share")
             }
+            CspVaultMethod::CreateEncryptedVetKdKeyShare => {
+                (MetricsDomain::VetKd, "create_encrypted_vetkd_key_share")
+            }
             CspVaultMethod::NewPublicSeed => (MetricsDomain::PublicSeed, "new_public_seed"),
         }
     }
@@ -407,6 +415,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
             Req::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
             Req::CreateDealing { .. } => Method::CreateDealing,
+            Req::CreateResharingDealing { .. } => Method::CreateResharingDealing,
             Req::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Req::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Req::SksContains { .. } => Method::SksContains,
@@ -428,6 +437,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
             Req::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Req::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
+            Req::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Req::NewPublicSeed { .. } => Method::NewPublicSeed,
         }
     }
@@ -446,6 +456,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
             Resp::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
             Resp::CreateDealing { .. } => Method::CreateDealing,
+            Resp::CreateResharingDealing { .. } => Method::CreateResharingDealing,
             Resp::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Resp::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Resp::SksContains { .. } => Method::SksContains,
@@ -467,6 +478,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
             Resp::CreateEcdsaSigShare { .. } => Method::CreateEcdsaSigShare,
             Resp::CreateSchnorrSigShare { .. } => Method::CreateSchnorrSigShare,
+            Resp::CreateEncryptedVetkdKeyShare { .. } => Method::CreateEncryptedVetKdKeyShare,
             Resp::NewPublicSeed { .. } => Method::NewPublicSeed,
         }
     }

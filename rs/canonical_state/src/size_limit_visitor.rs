@@ -109,7 +109,7 @@ where
     fn enter_edge(&mut self, label: &[u8]) -> Result<Control, V::Output> {
         self.path_match
             .pop()
-            .unwrap_or_else(|| panic!("edge outside subtree: {:?}", label));
+            .unwrap_or_else(|| panic!("edge outside subtree: {label:?}"));
 
         self.path_match.push(if self.is_partial_match() {
             let matcher = self.pattern.get(self.path_match.len()).unwrap();

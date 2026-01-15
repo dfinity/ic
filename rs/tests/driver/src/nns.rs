@@ -8,7 +8,7 @@ use registry_canister::mutations::{
 };
 
 use crate::{
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    driver::test_env_api::{HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, TopologySnapshot},
     util::{create_agent, runtime_from_url},
 };
 use candid::CandidType;
@@ -23,31 +23,39 @@ use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-    ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalInfo, ProposalStatus, Vote,
+use ic_nns_governance_api::{
+    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, Vote,
+    manage_neuron::{NeuronIdOrSubaccount, RegisterVote},
+    manage_neuron_response,
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
 use ic_nns_test_utils::governance::{
     get_proposal_info, submit_external_update_proposal,
     submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::{
+    replica_version::v1::GuestLaunchMeasurements,
+    subnet::v1::{SubnetListRecord, SubnetRecord},
+};
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_keys::make_subnet_list_record_key;
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload,
+    do_create_subnet::{CanisterCyclesCostSchedule, CreateSubnetPayload},
     do_deploy_guestos_to_all_subnet_nodes::DeployGuestosToAllSubnetNodesPayload,
     do_deploy_guestos_to_all_unassigned_nodes::DeployGuestosToAllUnassignedNodesPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
+    do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
@@ -58,6 +66,7 @@ pub enum UpgradeContent {
     Orchestrator,
     Replica,
 }
+
 /// Detect whether a proposal is executed within `timeout`.
 ///
 /// # Arguments
@@ -89,7 +98,7 @@ pub async fn await_proposal_execution(
             .await
             .unwrap_or_else(|| panic!("could not obtain proposal status"));
 
-        match ProposalStatus::try_from(proposal_info.status).unwrap() {
+        match ProposalStatus::from_repr(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
                 info!(log, "{:?} is open...", proposal_id,)
@@ -150,30 +159,6 @@ pub async fn get_software_version_from_snapshot(
             .map(|v| ReplicaVersion::try_from(v).unwrap()),
         Err(_) => None,
     }
-}
-
-pub async fn update_xdr_per_icp(
-    nns_api: &'_ Runtime,
-    timestamp_seconds: u64,
-    xdr_permyriad_per_icp: u64,
-) -> Result<(), String> {
-    let governance_canister = get_governance_canister(nns_api);
-    let proposal_payload = ic_nns_common::types::UpdateIcpXdrConversionRatePayload {
-        data_source: "".to_string(),
-        timestamp_seconds,
-        xdr_permyriad_per_icp,
-        reason: None,
-    };
-
-    let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
-        NnsFunction::IcpXdrConversionRate,
-        proposal_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    Ok(())
 }
 
 pub async fn set_authorized_subnetwork_list(
@@ -364,8 +349,8 @@ pub async fn vote_execute_proposal_assert_executed(
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
     assert_eq!(
-        proposal_info.status(),
-        ProposalStatus::Executed,
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
         "proposal {proposal_id} did not execute: {proposal_info:?}"
     );
 }
@@ -384,33 +369,27 @@ pub async fn vote_execute_proposal_assert_failed(
     let expected_message_substring = expected_message_substring.to_string();
     // Wait for the proposal to be accepted and executed.
     let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
-    assert_eq!(proposal_info.status(), ProposalStatus::Failed);
+    assert_eq!(proposal_info.status, ProposalStatus::Failed as i32);
     let reason = proposal_info.failure_reason.unwrap_or_default();
     assert!(
-       reason
+        reason
             .error_message
             .to_lowercase()
             .contains(expected_message_substring.to_lowercase().as_str()),
-        "Rejection error for proposal {}, which is '{}', does not contain the expected substring '{}'",
-        proposal_id,
-        reason,
-        expected_message_substring
+        "Rejection error for proposal {proposal_id}, which is '{reason}', does not contain the expected substring '{expected_message_substring}'"
     );
 }
 
-pub async fn vote_and_execute_proposal(
-    governance_canister: &Canister<'_>,
-    proposal_id: ProposalId,
-) -> ProposalInfo {
+pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: ProposalId) {
     // Cast votes.
-    let input = ManageNeuron {
+    let input = ManageNeuronRequest {
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
             ic_nns_common::pb::v1::NeuronId {
                 id: TEST_NEURON_1_ID,
             },
         )),
         id: None,
-        command: Some(Command::RegisterVote(RegisterVote {
+        command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
             vote: Vote::Yes as i32,
             proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id.0 }),
         })),
@@ -424,6 +403,14 @@ pub async fn vote_and_execute_proposal(
         )
         .await
         .expect("Vote failed");
+}
+
+pub async fn vote_and_execute_proposal(
+    governance_canister: &Canister<'_>,
+    proposal_id: ProposalId,
+) -> ProposalInfo {
+    // Cast votes.
+    vote_on_proposal(governance_canister, proposal_id).await;
     wait_for_final_state(governance_canister, proposal_id).await
 }
 
@@ -454,6 +441,155 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
     .await
 }
 
+/// Does the following:
+///
+///   1. Submits an ExecuteNnsFunction proposal (in some places, this is weirdly
+///      called an "external" proposal for no discernable good reason).
+///
+///   2. Votes on it so that it gets adopted.
+///
+///   3. Waits for execution to complete.
+///
+///   4. Asserts that the proposal is marked as "successful".
+pub async fn execute_nns_function(
+    topology_snapshot: &TopologySnapshot,
+    nns_function: NnsFunction,
+    payload: impl CandidType,
+) -> ProposalId {
+    // Construct Governance canister client.
+    let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
+    let nns_subnet = runtime_from_url(
+        an_nns_subnet_node.get_public_url(),
+        // ID of a canister in the subnet that the node belongs to.
+        an_nns_subnet_node.effective_canister_id(),
+    );
+    let governance = get_governance_canister(&nns_subnet);
+
+    let proposal_id =
+        submit_external_proposal_with_test_id(&governance, nns_function, payload).await;
+    vote_on_proposal(&governance, proposal_id).await;
+    let proposal_info = wait_for_final_state(&governance, proposal_id).await;
+
+    assert_eq!(
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "Execution of proposal {proposal_id} was NOT successful: {proposal_info:?}"
+    );
+
+    proposal_id
+}
+
+pub async fn execute_subnet_rental_request(
+    topology_snapshot: &TopologySnapshot,
+    user: PrincipalId,
+) {
+    execute_nns_function(
+        topology_snapshot,
+        NnsFunction::SubnetRentalRequest,
+        SubnetRentalRequest {
+            user,
+            rental_condition_id: RentalConditionId::App13CH,
+        },
+    )
+    .await;
+}
+
+pub async fn execute_fulfill_subnet_rental_request(
+    an_nns_subnet_node: &IcNodeSnapshot,
+    user: PrincipalId,
+    node_ids: Vec<PrincipalId>,
+    replica_version_id: String,
+) -> ProposalId {
+    // Gather the various pieces needed to assemble a request to
+    // make/create/submit the new proposal.
+
+    let user = Some(user);
+    let node_ids = Some(node_ids);
+    let replica_version_id = Some(replica_version_id);
+
+    let proposal = MakeProposalRequest {
+        title: Some("Fulfill the Subnet Rental Request".to_string()),
+        summary: "Turn the rental request into a rental agreement. \
+                  What this really means is that the subnet is finally \
+                  created, and the user of the subnet (the 'tenant', \
+                  if you will) is able to create canisters in it. \
+                  (And nobody else is allowed to do that.) Secondarily, \
+                  this also means that all of the remaining ICP is \
+                  converted into cycles, and those cycles slowly get \
+                  burned down over time."
+            .to_string(),
+        url: "https://forum.dfinity.org/wer-subnet".to_string(),
+        action: Some(ProposalActionRequest::FulfillSubnetRentalRequest(
+            FulfillSubnetRentalRequest {
+                user,
+                node_ids,
+                replica_version_id,
+            },
+        )),
+    };
+
+    let command = Some(ManageNeuronCommandRequest::MakeProposal(Box::new(proposal)));
+    let neuron_id_or_subaccount = Some(NeuronIdOrSubaccount::NeuronId(
+        ic_nns_common::pb::v1::NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
+    ));
+
+    // Final request assembly.
+    let request = ManageNeuronRequest {
+        neuron_id_or_subaccount,
+        command,
+        id: None,
+    };
+
+    // Send the make proposal request.
+    let nns_subnet = runtime_from_url(
+        an_nns_subnet_node.get_public_url(),
+        // ID of a canister in the subnet that the node belongs to.
+        an_nns_subnet_node.effective_canister_id(),
+    );
+    let governance = get_governance_canister(&nns_subnet);
+    let response: ManageNeuronResponse = governance
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            request,
+            &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        )
+        .await
+        .unwrap();
+
+    // Handle the make proposal response;
+    let response = match response
+        .panic_if_error("Error making proposal")
+        .command
+        .unwrap()
+    {
+        manage_neuron_response::Command::MakeProposal(ok) => ok,
+        other => panic!("Unexpected response: {other:?}"),
+    };
+    let proposal_id = ProposalId::from(response.proposal_id.unwrap());
+    println!("Submitted FulfillSubnetRentalRequest proposal {proposal_id}.");
+
+    // Vote the proposal in...
+    vote_on_proposal(&governance, proposal_id).await;
+    println!("Voted on FulfillSubnetRentalRequest proposal {proposal_id}.");
+
+    let proposal_info = wait_for_final_state(&governance, proposal_id).await;
+    println!(
+        "Final state on FulfillSubnetRentalRequest proposal {} reached: {}",
+        proposal_id, proposal_info.status,
+    );
+
+    assert_eq!(
+        proposal_info.status,
+        ProposalStatus::Executed as i32,
+        "Execution of proposal {proposal_id} was NOT successful: {proposal_info:?}"
+    );
+
+    proposal_id
+}
+
 /// Submits a proposal for electing or unelecting a replica software versions.
 ///
 /// # Arguments
@@ -480,10 +616,11 @@ pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: Option<ReplicaVersion>,
+    version: Option<&ReplicaVersion>,
     sha256: Option<String>,
     upgrade_urls: Vec<String>,
-    versions_to_unelect: Vec<String>,
+    guest_launch_measurements: Option<GuestLaunchMeasurements>,
+    versions_to_unelect: Vec<ReplicaVersion>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -491,11 +628,11 @@ pub async fn submit_update_elected_replica_versions_proposal(
         neuron_id,
         NnsFunction::ReviseElectedGuestosVersions,
         ReviseElectedGuestosVersionsPayload {
-            replica_version_to_elect: version.clone().map(String::from),
+            replica_version_to_elect: version.map(String::from),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: upgrade_urls,
-            replica_versions_to_unelect: versions_to_unelect.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            replica_versions_to_unelect: versions_to_unelect.iter().map(String::from).collect(),
+            guest_launch_measurements,
         },
         match (version, sha256, versions_to_unelect.is_empty()) {
             (Some(v), Some(sha), _) => format!(
@@ -573,6 +710,7 @@ pub async fn submit_create_application_subnet_proposal(
     governance: &Canister<'_>,
     node_ids: Vec<NodeId>,
     replica_version: ReplicaVersion,
+    cost_schedule: Option<CanisterCyclesCostSchedule>,
 ) -> ProposalId {
     let config =
         subnet_configuration::get_default_config_params(SubnetType::Application, node_ids.len());
@@ -594,8 +732,9 @@ pub async fn submit_create_application_subnet_proposal(
         max_number_of_canisters: 4,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
-        ecdsa_config: None,
         chain_key_config: None,
+        canister_cycles_cost_schedule: cost_schedule,
+
         // Unused section follows
         ingress_bytes_per_block_soft_cap: Default::default(),
         gossip_max_artifact_streams_per_peer: Default::default(),
@@ -628,6 +767,21 @@ pub async fn get_subnet_list_from_registry(client: &RegistryCanister) -> Vec<Sub
         .collect::<Vec<SubnetId>>()
 }
 
+// Fetches the SubnetRecord from the Registry canister (by ID).
+pub async fn get_subnet_from_registry(
+    client: &RegistryCanister,
+    subnet_id: SubnetId,
+) -> SubnetRecord {
+    // Fetch blob.
+    let key = make_subnet_record_key(subnet_id).as_bytes().to_vec();
+    let (blob, _) = client.get_value(key, None).await.unwrap();
+
+    // Interpret it.
+    deserialize_registry_value::<SubnetRecord>(Ok(Some(blob)))
+        .expect("could not decode subnet list record")
+        .unwrap()
+}
+
 /// Submits a proposal for updating replica software version of unassigned
 /// nodes.
 ///
@@ -646,7 +800,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
-    version: String,
+    version: &ReplicaVersion,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
@@ -654,9 +808,9 @@ pub async fn submit_update_unassigned_node_version_proposal(
         neuron_id,
         NnsFunction::DeployGuestosToAllUnassignedNodes,
         DeployGuestosToAllUnassignedNodesPayload {
-            elected_replica_version: version.clone(),
+            elected_replica_version: version.to_string(),
         },
-        format!("Update unassigned nodes version to: {}", version.clone()),
+        format!("Update unassigned nodes version to: {version}"),
         "".to_string(),
     )
     .await
@@ -745,4 +899,44 @@ pub async fn submit_update_nodes_hostos_version_proposal(
     )
     .await
     .expect("submit_update_nodes_hostos_version_proposal failed")
+}
+
+/// Submits a proposal for updating replica software version of the specified
+/// API boundary nodes.
+///
+/// # Arguments
+///
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron will
+///   automatically vote in favor of the proposal.
+/// * `node_ids`            - Node IDs of the API BNs that should be upgraded.
+/// * `version`             - Replica software version
+///
+/// Eventually returns the identifier of the newly submitted proposal.
+pub async fn submit_update_api_boundary_node_version_proposal(
+    governance: &Canister<'_>,
+    sender: Sender,
+    neuron_id: NeuronId,
+    node_ids: Vec<NodeId>,
+    version: &ReplicaVersion,
+) -> ProposalId {
+    submit_external_update_proposal_allowing_error(
+        governance,
+        sender,
+        neuron_id,
+        NnsFunction::DeployGuestosToSomeApiBoundaryNodes,
+        UpdateApiBoundaryNodesVersionPayload {
+            node_ids: node_ids.clone(),
+            version: version.to_string(),
+        },
+        format!(
+            "Update API boundary nodes ({}) to version {}",
+            node_ids.into_iter().join(", "),
+            version.clone()
+        ),
+        "".to_string(),
+    )
+    .await
+    .expect("submit_update_api_boundary_node_version_proposal failed")
 }

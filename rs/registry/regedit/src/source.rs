@@ -1,13 +1,13 @@
 use crate::args::SourceSpec;
 use anyhow::Result;
 use ic_registry_client::client::{
-    RegistryDataProvider, RegistryTransportRecord, RegistryVersion, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider, RegistryRecord, RegistryVersion, ZERO_REGISTRY_VERSION,
 };
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider_wrappers::create_nns_data_provider;
 use std::sync::Arc;
 
-pub type Changelog = (Vec<RegistryTransportRecord>, RegistryVersion);
+pub type Changelog = (Vec<RegistryRecord>, RegistryVersion);
 
 pub fn get_changelog(source_spec: SourceSpec) -> Result<Changelog> {
     let data_provider = source_to_dataprovider(source_spec);

@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+
 package(default_visibility = ["//visibility:public"])
 
 cc_binary(
@@ -8,12 +10,10 @@ cc_binary(
         "infogetty-cpp/network_info.h",
     ],
     copts = ["-std=c++17"],
-    linkopts = [
-        "-lsystemd",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    deps = ["@libsystemd"],
 )
 
 genrule(

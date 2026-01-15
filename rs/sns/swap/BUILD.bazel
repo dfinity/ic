@@ -14,6 +14,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
@@ -24,7 +25,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/governance",
     "//rs/types/base_types",
     "//rs/utils",
@@ -48,7 +48,6 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
     "@crate_index//:rust_decimal_macros",
 ]
 

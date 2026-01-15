@@ -13,26 +13,27 @@ use crate::{
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
-use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
+use ic_crypto_utils_threshold_sig_der::{KeyConversionError, threshold_sig_public_key_to_der};
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetRecord,
+        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig,
+        InitialNiDkgTranscriptRecord, SubnetRecord,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
-    crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgTag, NiDkgTargetId},
-            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
-        },
-        CryptoError,
-    },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    crypto::{
+        CryptoError,
+        threshold_sig::{
+            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
+            ni_dkg::{NiDkgTag, NiDkgTargetId},
+        },
+    },
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -138,6 +139,12 @@ pub enum InitializeSubnetError {
         source: CryptoError,
     },
 
+    #[error("key conversion error: {source}")]
+    KeyConversion {
+        #[from]
+        source: KeyConversionError,
+    },
+
     #[error("saving node id to {path:?} failed: {source}")]
     SavingNodeId { source: io::Error, path: PathBuf },
 
@@ -169,7 +176,6 @@ pub fn duration_to_millis(unit_delay: Duration) -> u64 {
 /// The configuration for app subnets is used for new app subnets with at most
 /// 13 nodes. App subnets with more than 13 nodes will be deployed with the NNS
 /// subnet configs.
-
 pub fn get_default_config_params(subnet_type: SubnetType, nodes_num: usize) -> SubnetConfigParams {
     let use_app_config =
         subnet_type == SubnetType::Application && nodes_num <= ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -315,8 +321,8 @@ impl SubnetConfig {
             max_number_of_canisters: self.max_number_of_canisters,
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
-            ecdsa_config: None,
             chain_key_config: self.chain_key_config,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes

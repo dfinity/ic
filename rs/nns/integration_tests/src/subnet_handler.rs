@@ -6,14 +6,14 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
-use ic_nns_governance_api::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
+use ic_nns_governance_api::{ManageNeuronResponse, NnsFunction, ProposalStatus, Vote};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value_or_panic,
 };
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::registry::subnet::v1::{CanisterCyclesCostSchedule, SubnetRecord};
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
@@ -50,8 +50,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 max_number_of_canisters: 100,
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
-                ecdsa_config: None,
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             };
 
             let key = make_subnet_record_key(subnet_id);
@@ -87,9 +87,6 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 is_halted: Some(true),
                 halt_at_cup_height: Some(true),
                 features: None,
-                ecdsa_config: None,
-                ecdsa_key_signing_enable: None,
-                ecdsa_key_signing_disable: None,
                 max_number_of_canisters: Some(200),
                 ssh_readonly_access: Some(vec!["pub_key_0".to_string()]),
                 ssh_backup_access: Some(vec!["pub_key_1".to_string()]),
@@ -140,8 +137,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
             assert_eq!(
                 wait_for_final_state(&nns_canisters.governance, proposal_id)
                     .await
-                    .status(),
-                ProposalStatus::Executed
+                    .status,
+                ProposalStatus::Executed as i32
             );
 
             // No proposals should be pending now.
@@ -171,8 +168,8 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     max_number_of_canisters: 200,
                     ssh_readonly_access: vec!["pub_key_0".to_string()],
                     ssh_backup_access: vec!["pub_key_1".to_string()],
-                    ecdsa_config: None,
                     chain_key_config: None,
+                    canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
                 }
             );
             Ok(())

@@ -97,7 +97,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPop {
         serde_cbor::from_slice::<CspFsEncryptionPop>(proof_bytes).map_err(|e| {
             CspFsEncryptionPopFromPublicKeyProtoError::MalformedPop {
                 pop_bytes: proof_bytes.clone(),
-                internal_error: format!("{}", e),
+                internal_error: format!("{e}"),
             }
         })
     }
@@ -144,8 +144,8 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
 pub mod groth20_bls12_381 {
     //! The forward secure encryption keys used in Groth20.
 
-    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use crate::NodeIndex;
+    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use serde::{Deserialize, Serialize};
     use std::convert::TryFrom;
 
@@ -171,7 +171,7 @@ pub mod groth20_bls12_381 {
     }
 
     pub const CHUNK_BYTES: usize = 2;
-    pub const NUM_CHUNKS: usize = (FrBytes::SIZE + CHUNK_BYTES - 1) / CHUNK_BYTES;
+    pub const NUM_CHUNKS: usize = FrBytes::SIZE.div_ceil(CHUNK_BYTES);
 
     // Note: the spec currently has: Vec<(r,s,z)>; this could be represented more
     // strongly as [(G1,G1,G2);NUM_CHUNKS], which is equivalent to the below.

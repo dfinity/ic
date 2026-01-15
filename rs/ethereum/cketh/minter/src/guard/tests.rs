@@ -2,7 +2,7 @@ use crate::test_fixtures::initial_state;
 
 mod retrieve_eth_guard {
     use crate::guard::tests::init_state;
-    use crate::guard::{retrieve_withdraw_guard, GuardError, MAX_CONCURRENT, MAX_PENDING};
+    use crate::guard::{GuardError, MAX_CONCURRENT, MAX_PENDING, retrieve_withdraw_guard};
     use crate::numeric::{LedgerBurnIndex, Wei};
     use crate::state::mutate_state;
     use crate::state::transactions::EthWithdrawalRequest;

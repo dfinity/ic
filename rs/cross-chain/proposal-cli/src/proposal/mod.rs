@@ -1,6 +1,6 @@
+use crate::TargetCanister;
 use crate::candid::UpgradeArgs;
 use crate::git::{CompressedWasmHash, GitCommitHash, ReleaseNotes};
-use crate::TargetCanister;
 use askama::Template;
 use candid::Principal;
 use std::io::Write;
@@ -21,7 +21,7 @@ pub struct UpgradeProposalTemplate {
 impl UpgradeProposalTemplate {
     pub fn previous_upgrade_proposal_url(&self) -> String {
         self.last_upgrade_proposal_id
-            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{}", id))
+            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{id}"))
             .unwrap_or_else(|| "None".to_string())
     }
 }

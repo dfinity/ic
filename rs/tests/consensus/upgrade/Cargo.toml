@@ -15,13 +15,15 @@ ic-canister-client = { path = "../../../canister_client" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-ic-management-canister-types = { path = "../../../types/management_canister_types" }
+ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
 ic-registry-nns-data-provider = { path = "../../../registry/nns_data_provider" }
 ic-registry-subnet-features = { path = "../../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
+ic-utils = { workspace = true }
+regex = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 
@@ -40,10 +42,6 @@ path = "upgrade_with_alternative_urls.rs"
 [[bin]]
 name = "ic-systest-upgrade-app-subnet"
 path = "upgrade_app_subnet_test.rs"
-
-[[bin]]
-name = "ic-systest-downgrade-app-subnet"
-path = "downgrade_app_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-downgrade-app-subnet"

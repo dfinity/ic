@@ -70,10 +70,7 @@ mod creation {
             .collect();
         if !dealing_node_ids_not_in_dealers.is_empty() {
             // panic because this is a precondition violation:
-            panic!(
-                "Missing node ids in dealers: {:?}",
-                dealing_node_ids_not_in_dealers
-            );
+            panic!("Missing node ids in dealers: {dealing_node_ids_not_in_dealers:?}");
         }
     }
 
@@ -122,10 +119,7 @@ mod creation {
             .committee
             .position(dealer)
             .unwrap_or_else(|| {
-                panic!(
-                    "This operation requires node ({}) to be a dealer, but it is not.",
-                    dealer
-                )
+                panic!("This operation requires node ({dealer}) to be a dealer, but it is not.")
             })
     }
 
@@ -216,8 +210,8 @@ mod loading {
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_interfaces::crypto::LoadTranscriptResult;
     use ic_logger::info;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 
     pub fn load_transcript<C: NiDkgCspClient>(
         self_node_id: &NodeId,
@@ -240,6 +234,7 @@ mod loading {
             lockable_threshold_sig_data_store,
             &csp_transcript,
             &transcript.dkg_id,
+            transcript.registry_version,
             &transcript.committee,
         );
         let epoch = epoch(transcript.registry_version);
@@ -321,6 +316,7 @@ mod loading {
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
         csp_transcript: &CspNiDkgTranscript,
         dkg_id: &NiDkgId,
+        registry_version: RegistryVersion,
         committee: &NiDkgReceivers,
     ) {
         lockable_threshold_sig_data_store
@@ -329,6 +325,7 @@ mod loading {
                 dkg_id,
                 CspPublicCoefficients::from(csp_transcript),
                 indices(committee),
+                registry_version,
             );
     }
 

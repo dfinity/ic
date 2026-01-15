@@ -146,28 +146,6 @@ impl CspPublicKey {
             _ => None,
         }
     }
-
-    /// Return the algorithm identifier of this public key
-    pub fn algorithm_id(&self) -> AlgorithmId {
-        match self {
-            CspPublicKey::EcdsaSecp256k1(_) => AlgorithmId::EcdsaSecp256k1,
-            CspPublicKey::EcdsaP256(_) => AlgorithmId::EcdsaP256,
-            CspPublicKey::Ed25519(_) => AlgorithmId::Ed25519,
-            CspPublicKey::MultiBls12_381(_) => AlgorithmId::MultiBls12_381,
-            CspPublicKey::RsaSha256(_) => AlgorithmId::RsaSha256,
-        }
-    }
-
-    /// Return the binary encoding of this public key
-    pub fn pk_bytes(&self) -> &[u8] {
-        match self {
-            CspPublicKey::EcdsaSecp256k1(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::EcdsaP256(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::Ed25519(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::MultiBls12_381(pk_bytes) => &pk_bytes.0,
-            CspPublicKey::RsaSha256(pk_bytes) => pk_bytes.as_der(),
-        }
-    }
 }
 
 /// A Proof of Possession (PoP)
@@ -196,11 +174,11 @@ impl std::fmt::Debug for CspSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use CspSignature::*;
         match self {
-            EcdsaP256(data) => write!(f, "CspSignature::EcdsaP256({:?})", data),
-            EcdsaSecp256k1(data) => write!(f, "CspSignature::EcdsaSecp256k1({:?})", data),
-            Ed25519(data) => write!(f, "CspSignature::Ed25519({:?})", data),
-            MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({:?})", data),
-            ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({:?})", data),
+            EcdsaP256(data) => write!(f, "CspSignature::EcdsaP256({data:?})"),
+            EcdsaSecp256k1(data) => write!(f, "CspSignature::EcdsaSecp256k1({data:?})"),
+            Ed25519(data) => write!(f, "CspSignature::Ed25519({data:?})"),
+            MultiBls12_381(data) => write!(f, "CspSignature::MultiBls12_381({data:?})"),
+            ThresBls12_381(data) => write!(f, "CspSignature::ThresBls12_381({data:?})"),
             RsaSha256(data) => write!(f, "CspSignature::RsaSha256({:?})", base64::encode(data)),
         }
     }

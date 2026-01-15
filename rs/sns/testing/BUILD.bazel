@@ -1,0 +1,193 @@
+load("@rules_pkg//:pkg.bzl", "pkg_tar")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted
+    "//packages/icrc-ledger-types",
+    "//packages/pocket-ic",
+    "//rs/canister_client/sender",
+    "//rs/ledger_suite/icp:icp_ledger",
+    "//rs/nervous_system/agent",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nervous_system/proto",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/governance/api",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/test_utils",
+    "//rs/rust_canisters/canister_test",
+    "//rs/sns/cli",
+    "//rs/sns/governance/api",
+    "//rs/sns/swap:swap",
+    "//rs/types/base_types",
+    "//rs/types/management_canister_types",
+    "@crate_index//:anyhow",
+    "@crate_index//:candid",
+    "@crate_index//:clap",
+    "@crate_index//:dfx-core",
+    "@crate_index//:futures",
+    "@crate_index//:hex",
+    "@crate_index//:ic-agent",
+    "@crate_index//:ic-management-canister-types",
+    "@crate_index//:k256",
+    "@crate_index//:lazy_static",
+    "@crate_index//:rand",
+    "@crate_index//:rand_chacha",
+    "@crate_index//:reqwest",
+    "@crate_index//:rust_decimal",
+    "@crate_index//:slog",
+    "@crate_index//:tempfile",
+    "@crate_index//:thiserror",
+    "@crate_index//:tokio",
+    "@crate_index//:url",
+]
+
+HEAD_NNS_DEV_DATA = [
+    # Keep sorted
+    ":sns_testing_canister",
+    "//rs/pocket_ic_server:pocket-ic-server-head-nns",
+]
+
+HEAD_NNS_DEV_ENV = {
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
+    "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
+}
+
+MAINNET_NNS_DEV_DATA = [
+    # Keep sorted
+    ":sns_testing_canister",
+    "//rs/pocket_ic_server:pocket-ic-server",
+]
+
+MAINNET_NNS_DEV_ENV = {
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
+}
+
+rust_binary(
+    name = "sns-testing",
+    testonly = True,
+    srcs = ["src/bin/main.rs"],
+    deps = DEPENDENCIES + [
+        ":sns_testing",
+    ],
+)
+
+[
+    rust_binary(
+        name = "sns-testing-init" + name_suffix,
+        testonly = True,
+        srcs = ["src/bin/init.rs"],
+        data = dev_data,
+        env = dev_env,
+        deps = DEPENDENCIES + [
+            ":sns_testing",
+        ],
+    )
+    for (name_suffix, dev_data, dev_env) in [
+        ("-head-nns", HEAD_NNS_DEV_DATA, HEAD_NNS_DEV_ENV),
+        ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
+    ]
+]
+
+rust_library(
+    name = "sns_testing",
+    testonly = True,
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "ic_sns_testing",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sns_testing_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES,
+)
+
+[
+    rust_test(
+        name = "sns_testing_ci" + name_suffix,
+        # the test sometimes times out on CI with default timeout
+        # of "moderate" (5 minutes) - 2025-07-01
+        timeout = "long",
+        srcs = ["tests/sns_testing_ci.rs"],
+        data = dev_data,
+        env = dev_env,
+        deps = DEPENDENCIES + [
+            ":sns_testing",
+        ],
+    )
+    for (name_suffix, dev_data, dev_env) in [
+        ("-head-nns", HEAD_NNS_DEV_DATA, HEAD_NNS_DEV_ENV),
+        ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
+    ]
+]
+
+rust_canister(
+    name = "sns_testing_canister",
+    testonly = True,
+    srcs = ["canister/canister.rs"],
+    service_file = ":canister/test.did",
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+    ],
+)
+
+genrule(
+    name = "_sns_testing_env",
+    testonly = True,
+    srcs = MAINNET_NNS_DEV_DATA,  # Include the dependencies to be resolved by rootpath in MAINNET_NNS_DEV_ENV.
+    outs = ["sns_testing_env.sh"],
+    cmd = "\n".join([
+        'echo \'export %s="%s"\' >> $@' % (key, value)
+        for key, value in MAINNET_NNS_DEV_ENV.items()
+    ]),
+)
+
+pkg_tar(
+    name = "sns_testing_env",
+    testonly = True,
+    srcs = ["_sns_testing_env"],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_dependencies",
+    testonly = True,
+    srcs = MAINNET_NNS_DEV_DATA,
+    extension = "tar",
+    strip_prefix = "/",
+)
+
+pkg_tar(
+    name = "sns_testing_bin",
+    testonly = True,
+    srcs = [
+        ":sns-testing",
+        ":sns-testing-init",
+        "dfx.json",
+        # TODO: Add the README.md file to the tarball once if is re-written in terms of the bundle.
+        # "README.md",
+    ],
+    extension = "tar",
+)
+
+pkg_tar(
+    name = "sns_testing_bundle",
+    testonly = True,
+    extension = "tar.gz",
+    strip_prefix = "/",
+    deps = [
+        ":sns_testing_bin",
+        ":sns_testing_dependencies",
+        ":sns_testing_env",
+    ],
+)

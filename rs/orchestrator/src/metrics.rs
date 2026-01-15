@@ -1,26 +1,28 @@
 use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
-use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, IntoStaticStr};
+use strum::{AsRefStr, IntoEnumIterator};
+use strum_macros::EnumIter;
 
-pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
+pub(crate) const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
 #[derive(Clone)]
-pub struct OrchestratorMetrics {
-    pub ssh_access_registry_version: IntGauge,
-    pub firewall_registry_version: IntGauge,
-    pub ipv4_registry_version: IntGauge,
-    pub reboot_duration: IntGauge,
-    pub orchestrator_info: IntGaugeVec,
-    pub key_rotation_status: IntGaugeVec,
-    pub master_public_key_changed_errors: IntCounterVec,
-    pub failed_consecutive_upgrade_checks: IntCounter,
-    pub critical_error_cup_deserialization_failed: IntCounter,
-    pub critical_error_state_removal_failed: IntCounter,
-    pub fstrim_duration: IntGauge,
+pub(crate) struct OrchestratorMetrics {
+    pub(crate) ssh_access_registry_version: IntGauge,
+    pub(crate) firewall_registry_version: IntGauge,
+    pub(crate) ipv4_registry_version: IntGauge,
+    pub(crate) reboot_duration: IntGauge,
+    pub(crate) orchestrator_info: IntGaugeVec,
+    pub(crate) key_rotation_status: IntGaugeVec,
+    pub(crate) master_public_key_changed_errors: IntCounterVec,
+    pub(crate) failed_consecutive_upgrade_checks: IntCounter,
+    pub(crate) critical_error_cup_deserialization_failed: IntCounter,
+    pub(crate) critical_error_state_removal_failed: IntCounter,
+    pub(crate) fstrim_duration: IntGauge,
+    pub(crate) critical_error_task_failed: IntCounterVec,
+    pub(crate) replica_process_start_attempts: IntCounter,
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, IntoStaticStr)]
-pub enum KeyRotationStatus {
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumIter, AsRefStr)]
+pub(crate) enum KeyRotationStatus {
     Disabled,
     TooRecent,
     Rotating,
@@ -92,6 +94,16 @@ impl OrchestratorMetrics {
                 "orchestrator_fstrim_duration_milliseconds",
                 "The duration of the last fstrim call, in milliseconds",
             ),
+            critical_error_task_failed: metrics_registry.int_counter_vec(
+                "orchestrator_tasks_failed_total",
+                "Number of times a task failed, \
+                grouped by the task name and the reason of the failure",
+                &["task_name", "reason"],
+            ),
+            replica_process_start_attempts: metrics_registry.int_counter(
+                "orchestrator_replica_process_start_attempts_total",
+                "Number of times the replica process was attempted to be started",
+            ),
         }
     }
 
@@ -103,7 +115,7 @@ impl OrchestratorMetrics {
             .filter(|s| !status.is_transient() || !s.is_error())
             .for_each(|s| {
                 self.key_rotation_status
-                    .with_label_values(&[s.into()])
+                    .with_label_values(&[s.as_ref()])
                     .set((s == status) as i64);
             });
     }
@@ -111,7 +123,7 @@ impl OrchestratorMetrics {
     /// Set the error status to '1'.
     pub fn observe_key_rotation_error(&self) {
         self.key_rotation_status
-            .with_label_values(&[KeyRotationStatus::Error.into()])
+            .with_label_values(&[KeyRotationStatus::Error.as_ref()])
             .set(1);
     }
 }

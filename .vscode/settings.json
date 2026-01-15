@@ -9,4 +9,11 @@
         "editor.formatOnSave": true
     },
     "bazel.buildifierExecutable": "@buildifier",
+    "cSpell.words": [
+        "followee",
+        "followees"
+    ],
+    "files.associations": {
+        "PULL_REQUEST_BAZEL_TARGETS": "ignore"
+    }
 }

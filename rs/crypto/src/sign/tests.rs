@@ -1,8 +1,6 @@
 use super::*;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
-use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_sha2::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -10,10 +8,10 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, KeyPurpose, DOMAIN_IC_REQUEST};
+use ic_types::RegistryVersion;
+use ic_types::crypto::{AlgorithmId, DOMAIN_IC_REQUEST, KeyPurpose};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
-use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
 
 pub const KEY_ID_1: [u8; 32] = [0u8; 32];
@@ -221,21 +219,20 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     let (pk_vec, signature_bytes_vec) = {
         match algorithm_id {
             AlgorithmId::EcdsaP256 => {
-                let (sk, pk) = ecdsa_secp256r1::test_utils::new_keypair(rng).unwrap();
-                let msg_hash = Sha256::hash(&bytes_to_sign);
+                let signing_key = ic_secp256r1::PrivateKey::generate_using_rng(rng);
                 (
-                    pk.0,
-                    ecdsa_secp256r1::sign(&msg_hash, &sk).unwrap().0.to_vec(),
+                    signing_key.public_key().serialize_sec1(false).to_vec(),
+                    signing_key.sign_message(&bytes_to_sign).to_vec(),
                 )
             }
             AlgorithmId::Ed25519 => {
-                let signing_key = ic_crypto_ed25519::PrivateKey::generate_using_rng(rng);
+                let signing_key = ic_ed25519::PrivateKey::generate_using_rng(rng);
                 (
                     signing_key.public_key().serialize_raw().to_vec(),
                     signing_key.sign_message(&bytes_to_sign).to_vec(),
                 )
             }
-            _ => panic!["unexpected algorithm id {:?}", algorithm_id],
+            _ => panic!["unexpected algorithm id {algorithm_id:?}"],
         }
     };
     let signature: BasicSigOf<MessageId> = BasicSigOf::new(BasicSig(signature_bytes_vec));

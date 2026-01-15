@@ -10,12 +10,6 @@ enum Request {
     AdvanceTime(Duration),
 }
 
-#[derive(Eq, PartialEq, Debug, Deserialize)]
-enum Response {
-    Ok,
-    Time(SystemTime),
-}
-
 #[test]
 fn test() {
     let state_machine_binary =
@@ -40,6 +34,10 @@ fn test() {
         time.duration_since(SystemTime::UNIX_EPOCH).unwrap(),
         Duration::from_nanos(1_620_329_630_000_000_000)
     );
+
+    // Kill the task to avoid zombie process.
+    child.kill().unwrap();
+    child.wait().unwrap();
 }
 
 fn call_state_machine<T: DeserializeOwned>(

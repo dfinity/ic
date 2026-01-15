@@ -1,9 +1,10 @@
 /* tag::catalog[]
 end::catalog[] */
 
-use ic_agent::{agent::RejectCode, Agent};
+use candid::Decode;
+use ic_agent::{Agent, agent::RejectCode};
 use ic_base_types::PrincipalId;
-use ic_management_canister_types::{self as ic00, EmptyBlob, Method, Payload};
+use ic_management_canister_types_private::{self as ic00, EmptyBlob, Method, Payload};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
@@ -11,6 +12,14 @@ use ic_system_test_driver::driver::test_env_api::IcNodeSnapshot;
 use ic_system_test_driver::util::*;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
+use slog::Logger;
+
+/// Helper function to setup an NNS node and an agent.
+fn setup_nns_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    (nns_node, agent)
+}
 
 /// Helper function to setup an application node and an agent.
 fn setup_app_node_and_agent(env: &TestEnv) -> (IcNodeSnapshot, Agent) {
@@ -31,26 +40,30 @@ pub fn test_raw_rand_api(env: TestEnv) {
             )
             .await;
 
-            // Calling raw_rand as a query fails.
-            let result_query = canister
-                .query(wasm().call_simple(
-                    ic00::IC_00,
-                    Method::RawRand,
-                    call_args().other_side(EmptyBlob.encode()),
-                ))
-                .await;
+            let call_raw_rand_payload = wasm().call_simple(
+                ic00::IC_00,
+                Method::RawRand,
+                call_args().other_side(EmptyBlob.encode()),
+            );
+
+            // Calling raw_rand in a query fails.
+            let result_query = canister.query(call_raw_rand_payload.clone()).await;
 
             assert_reject(result_query, RejectCode::CanisterError);
 
-            // Calling raw_rand as an update succeeds.
-            canister
-                .update(wasm().call_simple(
-                    ic00::IC_00,
-                    Method::RawRand,
-                    call_args().other_side(EmptyBlob.encode()),
-                ))
-                .await
-                .unwrap();
+            // Calling raw_rand in an update succeeds and returns different blobs (of length 32 bytes) every time.
+            let raw_rand_bytes = || async {
+                let res = canister
+                    .update(call_raw_rand_payload.clone())
+                    .await
+                    .unwrap();
+                let bytes = Decode!(&res, Vec<u8>).unwrap();
+                assert_eq!(bytes.len(), 32);
+                bytes
+            };
+            let bytes = raw_rand_bytes().await;
+            let other_bytes = raw_rand_bytes().await;
+            assert_ne!(bytes, other_bytes);
         }
     })
 }
@@ -318,4 +331,26 @@ pub fn node_metrics_history_non_existing_subnet_fails(env: TestEnv) {
             assert_reject(result, RejectCode::CanisterReject);
         }
     })
+}
+
+fn root_key_test(agent: &Agent, effective_canister_id: PrincipalId, logger: &Logger) {
+    block_on({
+        async move {
+            let canister =
+                UniversalCanister::new_with_retries(agent, effective_canister_id, logger).await;
+            let result = canister.update(wasm().root_key().append_and_reply()).await;
+            let root_key = result.unwrap();
+            assert_eq!(root_key, agent.read_root_key());
+        }
+    })
+}
+
+pub fn root_key_on_nns_subnet(env: TestEnv) {
+    let (nns_node, agent) = setup_nns_node_and_agent(&env);
+    root_key_test(&agent, nns_node.effective_canister_id(), &env.logger());
+}
+
+pub fn root_key_on_non_nns_subnet(env: TestEnv) {
+    let (app_node, agent) = setup_app_node_and_agent(&env);
+    root_key_test(&agent, app_node.effective_canister_id(), &env.logger());
 }

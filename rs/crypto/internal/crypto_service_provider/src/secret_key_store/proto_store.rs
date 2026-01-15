@@ -8,10 +8,8 @@ use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
-use parking_lot::RwLock;
+use ic_logger::{ReplicaLogger, debug, info, replica_logger::no_op_logger, warn};
 use prost::Message;
-use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{ErrorKind, Write};
@@ -26,7 +24,7 @@ mod tests;
 const CURRENT_SKS_VERSION: u32 = 3;
 
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
-    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
+    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {key_id_hex}"))
 }
 
 /// The secret key store protobuf definitions
@@ -42,22 +40,22 @@ type SecretKeys = HashMap<KeyId, (CspSecretKey, Option<Scope>)>;
 pub struct ProtoSecretKeyStore {
     proto_file: PathBuf,
     old_proto_file_to_zeroize: PathBuf,
-    keys: Arc<RwLock<SecretKeys>>,
+    keys: SecretKeys,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
 }
 
 #[derive(Debug, Error)]
 enum CleanupError {
-    #[error("error determining the existence of the old secret key store file '{old_sks_file}': {source:?}")]
+    #[error(
+        "error determining the existence of the old secret key store file '{old_sks_file}': {source:?}"
+    )]
     OldFileExistenceDetermination {
         old_sks_file: String,
         #[source]
         source: std::io::Error,
     },
-    #[error(
-        "error determining the existence of the current file '{current_sks_file}': {source:?}"
-    )]
+    #[error("error determining the existence of the current file '{current_sks_file}': {source:?}")]
     CurrentFileExistenceDetermination {
         current_sks_file: String,
         #[source]
@@ -69,14 +67,18 @@ enum CleanupError {
         #[source]
         source: std::io::Error,
     },
-    #[error("error determining if secret key store file '{current_sks_file}' and old secret key store '{old_sks_file}' are the same file: {source:?}")]
+    #[error(
+        "error determining if secret key store file '{current_sks_file}' and old secret key store '{old_sks_file}' are the same file: {source:?}"
+    )]
     InodesComparison {
         old_sks_file: String,
         current_sks_file: String,
         #[source]
         source: std::io::Error,
     },
-    #[error("inconsistent state - the old file '{old_sks_file}' exists but the current file '{current_sks_file}' does not")]
+    #[error(
+        "inconsistent state - the old file '{old_sks_file}' exists but the current file '{current_sks_file}' does not"
+    )]
     OldFileExistsButCurrentFileDoesNot {
         old_sks_file: String,
         current_sks_file: String,
@@ -87,7 +89,9 @@ enum CleanupError {
     OldFileMetadataRetrieval(#[source] std::io::Error),
     #[error("error opening file for writing: {0:?}")]
     OpeningFileForWriting(#[source] std::io::Error),
-    #[error("error creating hard link to existing file (original: '{original}', link: '{link}'): {source:?}")]
+    #[error(
+        "error creating hard link to existing file (original: '{original}', link: '{link}'): {source:?}"
+    )]
     HardLinkCreation {
         original: String,
         link: String,
@@ -121,13 +125,13 @@ impl ProtoSecretKeyStore {
         if let Ok(true) = proto_file.try_exists() {
             Self::check_proto_file_is_regular_file_or_panic(&proto_file);
         }
-        let old_proto_file_to_zeroize = dir.join(format!("{}.old", file_name));
+        let old_proto_file_to_zeroize = dir.join(format!("{file_name}.old"));
         let secret_keys = Self::sks_data_from_disk_or_new(&proto_file);
         let logger = logger.unwrap_or_else(no_op_logger);
         let sks = ProtoSecretKeyStore {
             proto_file,
             old_proto_file_to_zeroize,
-            keys: Arc::new(RwLock::new(secret_keys)),
+            keys: secret_keys,
             logger,
             metrics,
         };
@@ -205,7 +209,7 @@ impl ProtoSecretKeyStore {
                 "error(s) cleaning up old secret key store file: [{}]",
                 cleanup_error
                     .iter()
-                    .map(|e| format!("{}", e))
+                    .map(|e| format!("{e}"))
                     .collect::<Vec<String>>()
                     .join(", ")
             );
@@ -280,8 +284,7 @@ impl ProtoSecretKeyStore {
                 Ok(())
             }
             Err(e) => Err(SecretKeyStoreWriteError::TransientError(format!(
-                "Secret key store internal error writing protobuf using tmp file: {}",
-                e
+                "Secret key store internal error writing protobuf using tmp file: {e}"
             ))),
         }
     }
@@ -310,7 +313,7 @@ impl ProtoSecretKeyStore {
                 if err.kind() == ErrorKind::NotFound {
                     None
                 } else {
-                    panic!("Error reading SKS data: {}", err)
+                    panic!("Error reading SKS data: {err}")
                 }
             }
         };
@@ -346,7 +349,7 @@ impl ProtoSecretKeyStore {
 
     fn parse_csp_secret_key(key_bytes: &[u8], key_id: &KeyId) -> CspSecretKey {
         serde_cbor::from_slice(key_bytes).unwrap_or_else(|_ignored_so_that_no_data_is_leaked| {
-            panic!("Error deserializing key with ID {}", key_id)
+            panic!("Error deserializing key with ID {key_id}")
         })
     }
 
@@ -356,7 +359,7 @@ impl ProtoSecretKeyStore {
         } else {
             Some(
                 Scope::from_str(scope_proto)
-                    .unwrap_or_else(|_| panic!("Unknown scope: {}", scope_proto)),
+                    .unwrap_or_else(|_| panic!("Unknown scope: {scope_proto}")),
             )
         }
     }
@@ -376,7 +379,7 @@ impl ProtoSecretKeyStore {
     fn ensure_version_is_supported(version: u32) {
         let supported_versions = [1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
-            panic!("Unexpected SecretKeyStore-proto version: {}", version)
+            panic!("Unexpected SecretKeyStore-proto version: {version}")
         }
     }
 
@@ -392,8 +395,7 @@ impl ProtoSecretKeyStore {
             let key_as_cbor =
                 serde_cbor::to_vec(&csp_key).map_err(|_ignored_so_that_no_data_is_leaked| {
                     SecretKeyStoreWriteError::SerializationError(format!(
-                        "Error serializing key with ID {}",
-                        key_id
+                        "Error serializing key with ID {key_id}"
                     ))
                 })?;
             let sk_pb = match maybe_scope {
@@ -419,19 +421,14 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         key: CspSecretKey,
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreInsertionError> {
-        let inserted = with_write_lock(&self.keys, |keys| match keys.get(&id) {
-            Some(_) => Ok(false),
+        match self.keys.get(&id) {
+            Some(_) => Err(SecretKeyStoreInsertionError::DuplicateKeyId(id)),
             None => {
-                keys.insert(id, (key, scope));
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
+                self.keys.insert(id, (key, scope));
+                self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
                 debug!(self.logger, "Inserted new secret key {}", id);
-                Ok(true)
+                Ok(())
             }
-        })?;
-        if inserted {
-            Ok(())
-        } else {
-            Err(SecretKeyStoreInsertionError::DuplicateKeyId(id))
         }
     }
 
@@ -441,21 +438,17 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         key: CspSecretKey,
         scope: Option<Scope>,
     ) -> Result<(), SecretKeyStoreWriteError> {
-        with_write_lock(&self.keys, |keys| {
-            let previous_key = keys.insert(id, (key, scope));
-            self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
-            match previous_key {
-                None => debug!(self.logger, "Inserted new secret key {}", id),
-                Some(_) => debug!(self.logger, "Replaced existing secret key {}", id),
-            };
-            Ok(())
-        })
+        let previous_key = self.keys.insert(id, (key, scope));
+        self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
+        match previous_key {
+            None => debug!(self.logger, "Inserted new secret key {}", id),
+            Some(_) => debug!(self.logger, "Replaced existing secret key {}", id),
+        };
+        Ok(())
     }
 
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
-        with_read_lock(&self.keys, |keys| {
-            keys.get(id).map(|(csp_key, _)| csp_key.to_owned())
-        })
+        self.keys.get(id).map(|(csp_key, _)| csp_key.to_owned())
     }
 
     fn contains(&self, id: &KeyId) -> bool {
@@ -463,47 +456,45 @@ impl SecretKeyStore for ProtoSecretKeyStore {
     }
 
     fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStoreWriteError> {
-        with_write_lock(&self.keys, |keys| match keys.get(id) {
+        match self.keys.get(id) {
             Some(_) => {
-                keys.remove(id);
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
+                self.keys.remove(id);
+                self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
                 debug!(self.logger, "Removed secret key {}", id);
                 Ok(true)
             }
             None => Ok(false),
-        })
+        }
     }
 
     fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
-        with_write_lock(&self.keys, |keys| {
-            let mut all_keys = SecretKeys::new();
-            core::mem::swap(&mut all_keys, keys);
-            let orig_keys_count = all_keys.len();
-            for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
-                if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
-                    keys.insert(key_id, (csp_key, maybe_scope));
-                } else {
-                    info!(
-                        self.logger,
-                        "Deleting key with ID {} with scope {}", key_id, scope
-                    );
-                }
+        let mut all_keys = SecretKeys::new();
+        core::mem::swap(&mut all_keys, &mut self.keys);
+        let orig_keys_count = all_keys.len();
+        for (key_id, (csp_key, maybe_scope)) in all_keys.drain() {
+            if maybe_scope != Some(scope) || filter(&key_id, &csp_key) {
+                self.keys.insert(key_id, (csp_key, maybe_scope));
+            } else {
+                info!(
+                    self.logger,
+                    "Deleting key with ID {} with scope {}", key_id, scope
+                );
             }
-            if keys.len() < orig_keys_count {
-                self.write_secret_keys_to_disk_and_cleanup_old_file(keys)?;
-            }
-            Ok(())
-        })
+        }
+        if self.keys.len() < orig_keys_count {
+            self.write_secret_keys_to_disk_and_cleanup_old_file(&self.keys)?;
+        }
+        Ok(())
     }
 
     fn retain_would_modify_keystore<F>(&self, filter: F, scope: Scope) -> bool
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
-        for (key_id, (csp_key, maybe_scope)) in self.keys.read().iter() {
+        for (key_id, (csp_key, maybe_scope)) in self.keys.iter() {
             if maybe_scope == &Some(scope) && !filter(key_id, csp_key) {
                 // Key is to be deleted, i.e., the keystore will be modified.
                 return true;
@@ -555,24 +546,6 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
         );
     }
     result
-}
-
-fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStoreWriteError>
-where
-    T: AsRef<RwLock<I>>,
-    F: FnOnce(&mut I) -> Result<R, SecretKeyStoreWriteError>,
-{
-    let mut lock_result = v.as_ref().write();
-    f(lock_result.borrow_mut())
-}
-
-fn with_read_lock<T, I, R, F>(v: T, f: F) -> Option<R>
-where
-    T: AsRef<RwLock<I>>,
-    F: FnOnce(&I) -> Option<R>,
-{
-    let lock_result = v.as_ref().read();
-    f(&lock_result)
 }
 
 fn combine_cleanup_results(

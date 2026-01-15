@@ -22,7 +22,6 @@ mod tests;
 pub struct ThresholdSignerInternal {}
 
 impl ThresholdSignerInternal {
-    // TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
     #[allow(clippy::result_large_err)]
     pub fn sign_threshold<C: ThresholdSignatureCspClient, H: Signable>(
         lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
@@ -37,7 +36,7 @@ impl ThresholdSignerInternal {
                 message.as_signed_bytes(),
                 pub_coeffs,
             )
-            .map_err(|error| map_threshold_sign_error_or_panic(error, dkg_id.clone()))?;
+            .map_err(|error| map_threshold_sign_error(error, dkg_id.clone()))?;
         threshold_sig_share_or_panic(csp_signature)
     }
 }
@@ -72,7 +71,6 @@ fn sig_data_not_found_error(dkg_id: NiDkgId) -> ThresholdSigDataNotFoundError {
     ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id }
 }
 
-// TODO(CRP-2639): Adapt ThresholdSignError so that clippy exception is no longer needed
 #[allow(clippy::result_large_err)]
 fn threshold_sig_share_or_panic<H: Signable>(
     csp_signature: CspSignature,
@@ -81,16 +79,13 @@ fn threshold_sig_share_or_panic<H: Signable>(
         "This case cannot occur because `CryptoError::MalformedSignature` is returned only \
             if the signature returned by the CSP is not a \
             `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual)`, but this must \
-            be guaranteed by the CSP.", /* TODO (DFN-1186) */
+            be guaranteed by the CSP.",
     ))
 }
 
 // Normally we implement a `From` conversion. But since this conversion takes
 // the dkg_id as parameter, this cannot be done in this case.
-fn map_threshold_sign_error_or_panic(
-    error: CspThresholdSignError,
-    dkg_id: NiDkgId,
-) -> ThresholdSignError {
+fn map_threshold_sign_error(error: CspThresholdSignError, dkg_id: NiDkgId) -> ThresholdSignError {
     match error {
         CspThresholdSignError::SecretKeyNotFound { algorithm, key_id } => {
             // If the secret key was not found, reloading the transcript will not generally help
@@ -99,7 +94,7 @@ fn map_threshold_sign_error_or_panic(
             // if a call to `load_transcript`, which inserts a key in the secret key store,
             // runs concurrently with an invocation of `retain_active_keys`, which removes keys
             // associated with past epochs, it could happen that the inserted key is immediately
-            // removed after insertion, even though it releates to a future epoch. In this case
+            // removed after insertion, even though it relates to a future epoch. In this case
             // calling again `load_transcript` may help reinserting the key in the key store.
             // Note that this is unexpected since consensus waits for past calls to
             // `retain_active_keys` to terminate before loading new transcripts.
@@ -110,16 +105,15 @@ fn map_threshold_sign_error_or_panic(
             }
         }
         CspThresholdSignError::TransientInternalError { internal_error } => {
-            ThresholdSignError::TransientInternalError { internal_error }
+            ThresholdSignError::TransientInternalError(internal_error)
         }
         CspThresholdSignError::KeyIdInstantiationError(internal_error) => {
             ThresholdSignError::KeyIdInstantiationError(internal_error)
         }
-        // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
         | CspThresholdSignError::WrongSecretKeyType { .. } => {
-            panic!("Illegal state: {}", error)
+            ThresholdSignError::InternalError(error.to_string())
         }
     }
 }
@@ -192,7 +186,7 @@ impl ThresholdSigVerifierInternal {
 /// Given that both cases indicate that the implementations of DKG and threshold
 /// signatures are not aligned and also a caller could not recover from this, we
 /// panic.
-fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
+pub(crate) fn lazily_calculated_public_key_from_store<C: ThresholdSignatureCspClient>(
     lockable_threshold_sig_data_store: &LockableThresholdSigDataStore,
     threshold_sig_csp_client: &C,
     dkg_id: &NiDkgId,
@@ -236,10 +230,9 @@ fn calculate_and_store_public_key_or_panic<C: ThresholdSignatureCspClient>(
         )
         .unwrap_or_else(|error| {
             panic!(
-                "Calculation of individual threshold public key for DKG ID {:?} \
-                for node ID {} failed because the threshold signature data \
-                store contained malformed data: {:?}",
-                dkg_id, node_id, error
+                "Calculation of individual threshold public key for DKG ID {dkg_id:?} \
+                for node ID {node_id} failed because the threshold signature data \
+                store contained malformed data: {error:?}"
             )
         });
     lockable_threshold_sig_data_store
@@ -266,15 +259,14 @@ fn panic_on_illegal_individual_sig_verification_state(error: CryptoError) -> Cry
         CryptoError::InvalidArgument { .. } | CryptoError::MalformedPublicKey { .. } => panic!(
             "Illegal state: the algorithm of the public key from the threshold signature data \
             store (which is based on the algorithm of the public coefficients in the store) is \
-            not supported: {}",
-            error
+            not supported: {error}"
         ),
         CryptoError::MalformedSignature { .. } => unreachable!(
             "This case cannot occur because `CryptoError::MalformedSignature` is returned only \
             if the given signature was not a \
             `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual)`, but we know \
             for sure that it has this type because this is the type returned by \
-            `CspSignature::try_from(ThresholdSigShareOf)`." /* TODO (DFN-1186) */
+            `CspSignature::try_from(ThresholdSigShareOf)`."
         ),
         _ => error,
     }
@@ -358,7 +350,7 @@ fn combined_threshold_sig_or_panic<H: Signable>(
 ) -> CryptoResult<CombinedThresholdSigOf<H>> {
     Ok(CombinedThresholdSigOf::try_from(csp_signature).expect(
         "The CSP must return a signature of type \
-        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.", /* TODO (DFN-1186) */
+        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.",
     ))
 }
 
@@ -368,11 +360,11 @@ fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
         _ => {
             if error.is_reproducible() {
                 CryptoError::InternalError {
-                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                    internal_error: format!("Unexpected error from the CSP: {error}"),
                 }
             } else {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Transient internal error: {}", error),
+                    internal_error: format!("Transient internal error: {error}"),
                 }
             }
         }
@@ -382,8 +374,7 @@ fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
 fn node_id_missing_error(node_id: NodeId, dkg_id: &NiDkgId) -> CryptoError {
     CryptoError::InvalidArgument {
         message: format!(
-            "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-            dkg_id, node_id
+            "There is no node index for dkg id \"{dkg_id:?}\" and node id \"{node_id}\" in the transcript data."
         ),
     }
 }
@@ -409,8 +400,6 @@ impl ThresholdSigVerifierInternal {
     }
 }
 
-// TODO (DFN-1186): improve the error handling by introducing more specific
-// errors on CSP level.
 fn map_verify_combined_error(error: CryptoError) -> CryptoError {
     match error {
         CryptoError::SignatureVerification { .. }
@@ -420,11 +409,11 @@ fn map_verify_combined_error(error: CryptoError) -> CryptoError {
         _ => {
             if error.is_reproducible() {
                 CryptoError::InternalError {
-                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                    internal_error: format!("Unexpected error from the CSP: {error}"),
                 }
             } else {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Transient internal error: {}", error),
+                    internal_error: format!("Transient internal error: {error}"),
                 }
             }
         }

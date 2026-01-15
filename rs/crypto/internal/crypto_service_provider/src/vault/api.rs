@@ -1,12 +1,14 @@
-use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::key_id::{KeyId, KeyIdInstantiationError};
-use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::ExternalPublicKeys;
+use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
+use crate::key_id::KeyId;
+use crate::types::{CspPop, CspPublicKey, CspSignature};
 use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
+    CanisterThresholdSerializationError, CommitmentOpening, IDkgComplaintInternal,
+    IDkgTranscriptInternal, IDkgTranscriptOperationInternal, MEGaPublicKey,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
@@ -18,6 +20,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey};
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
@@ -25,7 +28,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgTranscriptOperation,
 };
-use ic_types::crypto::ExtendedDerivationPath;
+use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -36,23 +39,11 @@ mod tests;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum CspBasicSignatureError {
-    SecretKeyNotFound {
-        algorithm: AlgorithmId,
-        key_id: KeyId,
-    },
-    UnsupportedAlgorithm {
-        algorithm: AlgorithmId,
-    },
-    WrongSecretKeyType {
-        algorithm: AlgorithmId,
-        secret_key_variant: String,
-    },
-    MalformedSecretKey {
-        algorithm: AlgorithmId,
-    },
-    TransientInternalError {
-        internal_error: String,
-    },
+    PublicKeyNotFound,
+    MalformedPublicKey(String),
+    SecretKeyNotFound(KeyId),
+    WrongSecretKeyType { secret_key_variant: String },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -120,7 +111,7 @@ impl From<CspPublicKeyStoreError> for CryptoError {
         match e {
             CspPublicKeyStoreError::TransientInternalError(details) => {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Error retrieving public keys: {:?}", details),
+                    internal_error: format!("Error retrieving public keys: {details:?}"),
                 }
             }
         }
@@ -157,9 +148,6 @@ pub enum CspTlsSignError {
     MalformedSecretKey {
         error: String,
     },
-    SigningFailed {
-        error: String,
-    },
     TransientInternalError {
         internal_error: String,
     },
@@ -186,31 +174,31 @@ impl NodeKeysErrors {
     }
 
     pub fn keys_in_registry_missing_locally(&self) -> bool {
-        self.node_signing_key_error.as_ref().map_or(false, |err| {
+        self.node_signing_key_error.as_ref().is_some_and(|err| {
             err.external_public_key_error.is_none()
                 && err.contains_local_public_or_secret_key_error()
         }) || self
             .committee_signing_key_error
             .as_ref()
-            .map_or(false, |err| {
+            .is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
-            || self.tls_certificate_error.as_ref().map_or(false, |err| {
+            || self.tls_certificate_error.as_ref().is_some_and(|err| {
                 err.external_public_key_error.is_none()
                     && err.contains_local_public_or_secret_key_error()
             })
             || self
                 .dkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
             || self
                 .idkg_dealing_encryption_key_error
                 .as_ref()
-                .map_or(false, |err| {
+                .is_some_and(|err| {
                     err.external_public_key_error.is_none()
                         && err.contains_local_public_or_secret_key_error()
                 })
@@ -317,12 +305,6 @@ impl From<&NodeKeysError> for KeyCounts {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct ExternalPublicKeyError(pub Box<String>);
 
-impl From<KeyIdInstantiationError> for ExternalPublicKeyError {
-    fn from(error: KeyIdInstantiationError) -> Self {
-        ExternalPublicKeyError(Box::new(format!("Cannot instantiate KeyId: {:?}", error)))
-    }
-}
-
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub enum LocalPublicKeyError {
     /// No local public key exists.
@@ -386,6 +368,7 @@ pub trait CspVault:
     + IDkgProtocolCspVault
     + ThresholdEcdsaSignerCspVault
     + ThresholdSchnorrSignerCspVault
+    + VetKdCspVault
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
@@ -404,6 +387,7 @@ impl<T> CspVault for T where
         + IDkgProtocolCspVault
         + ThresholdEcdsaSignerCspVault
         + ThresholdSchnorrSignerCspVault
+        + VetKdCspVault
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
@@ -418,9 +402,7 @@ pub trait BasicSignatureCspVault {
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments
-    /// * `algorithm_id` specifies the signature algorithm
     /// * `message` is the message to be signed
-    /// * `key_id` determines the private key to sign with
     /// # Returns
     /// The computed signature.
     /// # Note
@@ -431,12 +413,7 @@ pub trait BasicSignatureCspVault {
     /// of the message digest uses secret key data as an input, and so
     /// cannot be computed outside of the CspVault (cf. PureEdDSA in
     /// [RFC 8032](https://tools.ietf.org/html/rfc8032#section-5.1.6))
-    fn sign(
-        &self,
-        algorithm_id: AlgorithmId,
-        message: Vec<u8>,
-        key_id: KeyId,
-    ) -> Result<CspSignature, CspBasicSignatureError>;
+    fn sign(&self, message: Vec<u8>) -> Result<CspSignature, CspBasicSignatureError>;
 
     /// Generates a node signing public/private key pair.
     ///
@@ -556,9 +533,7 @@ pub trait NiDkgCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError>;
 
     /// Generates a dealing which contains a share for each eligible receiver.
-    /// If `reshared_secret` is `None`, then the dealing is a sharing of a
-    /// fresh random value, otherwise it is a re-sharing of the secret
-    /// identified by `reshared_secret`.
+    /// The dealing is a sharing of a fresh random value.
     ///
     /// # Arguments
     /// * `algorithm_id` selects the algorithm suite to use for the scheme.
@@ -569,8 +544,6 @@ pub trait NiDkgCspVault {
     ///   secure keys.
     /// * `receiver_keys` is a map storing a forward-secure public key for each
     ///   receiver, indexed by their corresponding NodeIndex.
-    /// * 'maybe_resharing_secret' if `Some`, identifies the secret to be
-    ///   reshared.
     /// # Returns
     /// A new dealing.
     fn create_dealing(
@@ -580,7 +553,31 @@ pub trait NiDkgCspVault {
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateDealingError>;
+
+    /// Generates a dealing which contains a share for each eligible receiver.
+    /// The dealing is a re-sharing of the secret identified by `resharing_secret`.
+    ///
+    /// # Arguments
+    /// * `algorithm_id` selects the algorithm suite to use for the scheme.
+    /// * `dealer_index` the index associated with the dealer.
+    /// * `threshold` is the minimum number of nodes required to generate a
+    ///   valid threshold signature.
+    /// * `epoch` is a monotonic increasing counter used to select forward
+    ///   secure keys.
+    /// * `receiver_keys` is a map storing a forward-secure public key for each
+    ///   receiver, indexed by their corresponding NodeIndex.
+    /// * `resharing_secret` identifies the secret to be reshared.
+    /// # Returns
+    /// A new dealing.
+    fn create_resharing_dealing(
+        &self,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError>;
 
     /// Computes a threshold signing key and stores it in the secret key store.
@@ -753,7 +750,7 @@ pub trait IDkgProtocolCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
     /// See [`CspIDkgProtocol::idkg_verify_dealing_private`].
@@ -772,7 +769,7 @@ pub trait IDkgProtocolCspVault {
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,
@@ -851,7 +848,7 @@ pub trait ThresholdEcdsaSignerCspVault {
 }
 
 /// Type-safe serialization of [`IDkgTranscriptInternal`].
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IDkgTranscriptInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl From<Vec<u8>> for IDkgTranscriptInternalBytes {
@@ -869,7 +866,7 @@ impl AsRef<[u8]> for IDkgTranscriptInternalBytes {
 }
 
 /// Type-safe serialization of [`IDkgDealingInternalBytes`].
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct IDkgDealingInternalBytes(#[serde(with = "serde_bytes")] Vec<u8>);
 
 impl IDkgDealingInternalBytes {
@@ -891,6 +888,91 @@ impl AsRef<[u8]> for IDkgDealingInternalBytes {
     #[inline]
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+
+// An enum used to efficiently send an [`IDkgTranscriptOperationInternal`] to the vault.
+// It acts as intermediate type between the high-level
+// [`IDkgTranscriptOperation`] and the low-level
+// [`IDkgTranscriptOperationInternal`] in that it (1) is significantly
+// smaller than an `IDkgTranscriptOperation` and (2) contains all the raw data
+// necessary to construct an `IDkgTranscriptOperationInternal` from it.
+// Using this enum rather than [`IDkgTranscriptOperationInternal`] in the vault
+// API has the benefit that the expensive point deserialization that happens
+// upon deserialization of [`IDkgTranscriptOperationInternal`] is only done
+// once (i.e., in the vault) rather than twice (i.e., once in the crypto
+// component to construct the [`IDkgTranscriptOperationInternal`], and once in
+// the vault via the deserialization with serde::Deserialize that the tarpc
+// RPC framework automatically does behind the scenes upon receiving the RPC
+// call).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub enum IDkgTranscriptOperationInternalBytes {
+    Random,
+    RandomUnmasked,
+    ReshareOfMasked(IDkgTranscriptInternalBytes),
+    ReshareOfUnmasked(IDkgTranscriptInternalBytes),
+    UnmaskedTimesMasked(IDkgTranscriptInternalBytes, IDkgTranscriptInternalBytes),
+}
+
+impl From<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternalBytes {
+    fn from(idkm_transcript_op: &IDkgTranscriptOperation) -> Self {
+        match idkm_transcript_op {
+            IDkgTranscriptOperation::Random => Self::Random,
+            IDkgTranscriptOperation::RandomUnmasked => Self::RandomUnmasked,
+            IDkgTranscriptOperation::ReshareOfMasked(idkm_transcript) => Self::ReshareOfMasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::ReshareOfUnmasked(idkm_transcript) => Self::ReshareOfUnmasked(
+                IDkgTranscriptInternalBytes::from(idkm_transcript.internal_transcript_raw.clone()),
+            ),
+            IDkgTranscriptOperation::UnmaskedTimesMasked(idkm_transcript_1, idkm_transcript_2) => {
+                Self::UnmaskedTimesMasked(
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_1.internal_transcript_raw.clone(),
+                    ),
+                    IDkgTranscriptInternalBytes::from(
+                        idkm_transcript_2.internal_transcript_raw.clone(),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+impl TryFrom<&IDkgTranscriptOperationInternalBytes> for IDkgTranscriptOperationInternal {
+    type Error = CanisterThresholdSerializationError;
+
+    fn try_from(
+        transcript_operation_internal_bytes: &IDkgTranscriptOperationInternalBytes,
+    ) -> Result<Self, Self::Error> {
+        match transcript_operation_internal_bytes {
+            IDkgTranscriptOperationInternalBytes::Random => {
+                Ok(IDkgTranscriptOperationInternal::Random)
+            }
+            IDkgTranscriptOperationInternalBytes::RandomUnmasked => {
+                Ok(IDkgTranscriptOperationInternal::RandomUnmasked)
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfMasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfMasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::ReshareOfUnmasked(bytes) => {
+                let t = IDkgTranscriptInternal::deserialize(bytes.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::ReshareOfUnmasked(
+                    t.combined_commitment.into_commitment(),
+                ))
+            }
+            IDkgTranscriptOperationInternalBytes::UnmaskedTimesMasked(bytes_1, bytes_2) => {
+                let t1 = IDkgTranscriptInternal::deserialize(bytes_1.as_ref())?;
+                let t2 = IDkgTranscriptInternal::deserialize(bytes_2.as_ref())?;
+                Ok(IDkgTranscriptOperationInternal::UnmaskedTimesMasked(
+                    t1.combined_commitment.into_commitment(),
+                    t2.combined_commitment.into_commitment(),
+                ))
+            }
+        }
     }
 }
 
@@ -952,6 +1034,33 @@ pub enum ThresholdSchnorrCreateSigShareVaultError {
     InternalError(String),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
+}
+
+/// Operations of `CspVault` related to verifiably encrypted threshold key derivation (vetKD)
+/// (cf. [`ic_interfaces::crypto::VetKdProtocol`]).
+pub trait VetKdCspVault {
+    /// Generates an encrypted vetKD key share.
+    fn create_encrypted_vetkd_key_share(
+        &self,
+        key_id: KeyId,
+        master_public_key: Vec<u8>,
+        transport_public_key: Vec<u8>,
+        context: VetKdDerivationContext,
+        input: Vec<u8>,
+    ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError>;
+}
+
+/// Vault-level error for vetKD key share creation.
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+pub enum VetKdEncryptedKeyShareCreationVaultError {
+    /// If the secret key is missing in the key store of if it has the wrong type
+    SecretKeyMissingOrWrongType(String),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+    /// If the given master public key is invalid
+    InvalidArgumentMasterPublicKey,
+    /// If the given encryption public key is invalid
+    InvalidArgumentEncryptionPublicKey,
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].

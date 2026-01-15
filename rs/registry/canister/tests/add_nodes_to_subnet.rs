@@ -243,7 +243,7 @@ fn test_add_nodes_to_subnet_succeeds() {
             );
             for node_id in unassigned_node_ids {
                 let node_id = node_id.get().to_vec();
-                assert!(subnet_record.membership.iter().any(|x| *x == node_id));
+                assert!(subnet_record.membership.contains(&node_id));
             }
 
             Ok(())

@@ -1,8 +1,8 @@
 use crate::utils::{expect_error, expect_reply, test_canister_wasm};
 use candid::{CandidType, Encode};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachineBuilder, UserError, WasmResult};
 use ic_types::Cycles;

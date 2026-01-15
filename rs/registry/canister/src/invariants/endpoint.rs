@@ -1,5 +1,5 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
 };
 
 use std::{
@@ -89,13 +89,15 @@ pub(crate) fn check_endpoint_invariants(
             return Err(InvariantCheckError {
                 msg: format!(
                     "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
-                    new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
-                        format!("{x:?} (duplicate)")
-                    } else {
-                        format!("{x:?} (new)")
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", ")
+                    new_valid_endpoints
+                        .iter()
+                        .map(|x| if valid_endpoints.contains(x) {
+                            format!("{x:?} (duplicate)")
+                        } else {
+                            format!("{x:?} (new)")
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ")
                 ),
                 source: None,
             });
@@ -141,7 +143,7 @@ fn validate_endpoint(
 
     if !tolerate_unspecified_ip && ip.is_unspecified() {
         return Err(InvariantCheckError {
-            msg: format!("IP Address {:?} is unspecified", ip),
+            msg: format!("IP Address {ip:?} is unspecified"),
             source: None,
         });
     }
@@ -149,14 +151,14 @@ fn validate_endpoint(
     if let IpAddr::V4(ipv4) = ip {
         if ipv4.is_broadcast() {
             return Err(InvariantCheckError {
-                msg: format!("IP Address {:?} is a broadcast address", ip),
+                msg: format!("IP Address {ip:?} is a broadcast address"),
                 source: None,
             });
         }
 
         if ipv4.is_multicast() {
             return Err(InvariantCheckError {
-                msg: format!("IP Address {:?} is a multicast address", ip),
+                msg: format!("IP Address {ip:?} is a multicast address"),
                 source: None,
             });
         }
@@ -164,7 +166,7 @@ fn validate_endpoint(
         let multicast_addr_and_mask = Ipv6Addr::new(0xff00, 0, 0, 0, 0, 0, 0, 0);
         if mask_ipv6(ipv6, multicast_addr_and_mask) == multicast_addr_and_mask {
             return Err(InvariantCheckError {
-                msg: format!("IP Address {:?} is a multicast address", ip),
+                msg: format!("IP Address {ip:?} is a multicast address"),
                 source: None,
             });
         }
@@ -173,7 +175,7 @@ fn validate_endpoint(
     if strict {
         if ip.is_loopback() {
             return Err(InvariantCheckError {
-                msg: format!("IP Address {:?} is the loopback address", ip),
+                msg: format!("IP Address {ip:?} is the loopback address"),
                 source: None,
             });
         }
@@ -181,20 +183,20 @@ fn validate_endpoint(
         if let IpAddr::V4(ipv4) = ip {
             if ipv4.is_private() {
                 return Err(InvariantCheckError {
-                    msg: format!("IP Address {:?} is a private address", ip),
+                    msg: format!("IP Address {ip:?} is a private address"),
                     source: None,
                 });
             }
             if ipv4.is_link_local() {
                 return Err(InvariantCheckError {
-                    msg: format!("IP Address {:?} is a link local address", ip),
+                    msg: format!("IP Address {ip:?} is a link local address"),
                     source: None,
                 });
             }
             for (addr, mask, res_type) in &IPV4_STRICT_CHECKS {
                 if mask_ipv4(ipv4, *mask) == *addr {
                     return Err(InvariantCheckError {
-                        msg: format!("IP Address {:?} is not allowed ({})", ip, res_type),
+                        msg: format!("IP Address {ip:?} is not allowed ({res_type})"),
                         source: None,
                     });
                 }
@@ -203,7 +205,7 @@ fn validate_endpoint(
             for (addr, mask, res_type) in &IPV6_STRICT_CHECKS {
                 if mask_ipv6(ipv6, *mask) == *addr {
                     return Err(InvariantCheckError {
-                        msg: format!("IP Address {:?} is not allowed ({})", ip, res_type),
+                        msg: format!("IP Address {ip:?} is not allowed ({res_type})"),
                         source: None,
                     });
                 }
@@ -397,10 +399,7 @@ mod tests {
         );
 
         if let Err(err) = check_endpoint_invariants(&snapshot, true) {
-            panic!(
-                "Expected Ok result from registry invariant check, got {:?}",
-                err
-            );
+            panic!("Expected Ok result from registry invariant check, got {err:?}");
         }
 
         // Add a node with conflicting sockets
@@ -424,16 +423,19 @@ mod tests {
             .encode_to_vec(),
         );
 
-        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
-            assert_eq!(
-                err.msg,
-                "Invariant violation detected among 2 node records (checking failed for node \
+        match check_endpoint_invariants(&snapshot, true) {
+            Err(err) => {
+                assert_eq!(
+                    err.msg,
+                    "Invariant violation detected among 2 node records (checking failed for node \
                  gfvbo-licaa-aaaaa-aaaap-2ai): Duplicate endpoints detected across nodes; \
                  new_valid_endpoints = (200.1.1.1, 9001) (new), (200.1.1.3, 9000) (duplicate)"
-                    .to_string()
-            );
-        } else {
-            panic!("Expected Err result from registry invariant check, got Ok.");
+                        .to_string()
+                );
+            }
+            _ => {
+                panic!("Expected Err result from registry invariant check, got Ok.");
+            }
         }
 
         snapshot.remove(&key);

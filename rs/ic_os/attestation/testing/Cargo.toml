@@ -1,0 +1,11 @@
+[package]
+name = "attestation_testing"
+edition.workspace = true
+
+[dependencies]
+ic-interfaces-registry-mocks = { path = "../../../interfaces/registry/mocks" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-keys = { path = "../../../registry/keys" }
+ic-types = { path = "../../../types/types" }
+mockall = { workspace = true }
+prost = { workspace = true }

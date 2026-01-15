@@ -1,6 +1,14 @@
+#![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
-use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
-use ic_management_canister_types::{CanisterInstallMode::Install, InstallCodeArgs};
+use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
+use ic_cdk::{
+    api::call::{RejectionCode, call_with_payment},
+    call, caller, print,
+};
+use ic_management_canister_types_private::{
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CanisterSnapshotResponse,
+    CreateCanisterArgs, InstallCodeArgs, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
@@ -8,23 +16,26 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
-    start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
+    AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, LoadCanisterSnapshotError,
+    LoadCanisterSnapshotOk, LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse,
+    TakeCanisterSnapshotError, TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest,
+    TakeCanisterSnapshotResponse, UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
     types::v1 as pb,
 };
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use ic_registry_transport::pb::v1::{Precondition, RegistryMutation, registry_mutation::Type};
 use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
@@ -113,46 +124,45 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
 async fn try_to_create_and_install_canister(
     request: AddCanisterRequest,
 ) -> Result<CanisterId, String> {
-    let (id,): (CanisterIdRecord,) = call_with_funds(
-        CanisterId::ic_00(),
+    let compute_allocation = request
+        .compute_allocation
+        .map(|ca| ca.0.try_into())
+        .transpose()
+        .map_err(|_| "Provided compute allocation is too large")?;
+    let memory_allocation = request
+        .memory_allocation
+        .map(|ma| ma.0.try_into())
+        .transpose()
+        .map_err(|_| "Provided memory allocation is too large")?;
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_maybe_compute_allocation(compute_allocation)
+        .with_maybe_memory_allocation(memory_allocation)
+        .build();
+    let create_args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: Some(ic_cdk::api::canister_version()),
+    };
+    let (id,): (CanisterIdRecord,) = call_with_payment(
+        CanisterId::ic_00().get().0,
         "create_canister",
-        dfn_candid::candid_multi_arity,
-        (),
-        Funds::new(request.initial_cycles),
+        (create_args,),
+        request.initial_cycles,
     )
     .await
-    .map_err(|(code, msg)| {
-        format!(
-            "{}{}",
-            code.map(|c| format!("error code {}: ", c))
-                .unwrap_or_default(),
-            msg
-        )
-    })?;
+    .map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+
     let install_args = InstallCodeArgs {
         mode: Install,
         canister_id: id.get_canister_id().get(),
         wasm_module: request.wasm_module,
         arg: request.arg,
-        compute_allocation: request.compute_allocation,
-        memory_allocation: request.memory_allocation,
-        sender_canister_version: Some(dfn_core::api::canister_version()),
+        sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
-    let install_res: Result<(), (Option<i32>, String)> = call(
-        CanisterId::ic_00(),
-        "install_code",
-        dfn_candid::candid_multi_arity,
-        (install_args,),
-    )
-    .await;
-    install_res.map_err(|(code, msg)| {
-        format!(
-            "{}{}",
-            code.map(|c| format!("error code {}: ", c))
-                .unwrap_or_default(),
-            msg
-        )
-    })?;
+    let install_res: Result<(), (RejectionCode, String)> =
+        call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
+
+    install_res.map_err(|(code, msg)| format!("error code {}: {}", code as i32, msg))?;
+
     Ok(id.get_canister_id())
 }
 
@@ -161,18 +171,18 @@ pub async fn stop_or_start_nns_canister(
     request: StopOrStartCanisterRequest,
 ) -> Result<(), (i32, String)> {
     match request.action {
-        CanisterAction::Start => start_canister::<DfnRuntime>(request.canister_id).await,
-        CanisterAction::Stop => stop_canister::<DfnRuntime>(request.canister_id).await,
+        CanisterAction::Start => start_canister::<CdkRuntime>(request.canister_id).await,
+        CanisterAction::Stop => stop_canister::<CdkRuntime>(request.canister_id).await,
     }
 }
 
-pub async fn call_canister(proposal: CallCanisterProposal) {
+pub async fn call_canister(proposal: CallCanisterRequest) {
     print(format!(
         "Calling {}::{}...",
         proposal.canister_id, proposal.method_name,
     ));
 
-    let CallCanisterProposal {
+    let CallCanisterRequest {
         canister_id,
         method_name,
         payload,
@@ -180,15 +190,15 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
     let _tracker = ProxiedCanisterCallsTracker::start_tracking(
         &PROXIED_CANISTER_CALLS_TRACKER,
-        caller(),
+        PrincipalId::from(caller()),
         *canister_id,
         method_name,
         payload,
     );
 
-    let res = call_bytes(*canister_id, method_name, payload, Funds::zero())
+    let res = CdkRuntime::call_bytes_with_cleanup(*canister_id, method_name, payload)
         .await
-        .map_err(|(code, msg)| format!("Error: {}:{}", code.unwrap_or_default(), msg));
+        .map_err(|(code, msg)| format!("Error: {code}:{msg}"));
 
     print(format!(
         "Call {}::{} returned {:?}",
@@ -243,5 +253,120 @@ pub async fn update_canister_settings(
                 description,
             })
         }
+    }
+}
+
+pub async fn take_canister_snapshot(
+    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> TakeCanisterSnapshotResponse {
+    let TakeCanisterSnapshotRequest {
+        canister_id,
+        replace_snapshot,
+    } = take_canister_snapshot_request;
+
+    let replace_snapshot = match replace_snapshot {
+        None => None,
+        Some(snapshot_id) => {
+            let snapshot_id = match SnapshotId::try_from(&snapshot_id) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                        code: None,
+                        description: format!("Invalid snapshot ID ({snapshot_id:02X?}): {err}"),
+                    });
+                }
+            };
+
+            Some(snapshot_id)
+        }
+    };
+
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs {
+        canister_id,
+        replace_snapshot,
+        uninstall_code: None,
+        sender_canister_version: management_canister_client.canister_version(),
+    };
+
+    match management_canister_client
+        .take_canister_snapshot(take_canister_snapshot_args)
+        .await
+    {
+        Ok(result) => {
+            let result =
+                convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(result);
+            TakeCanisterSnapshotResponse::Ok(result)
+        }
+
+        Err((code, description)) => TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+            code: Some(code),
+            description,
+        }),
+    }
+}
+
+fn convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(
+    response: CanisterSnapshotResponse,
+) -> TakeCanisterSnapshotOk {
+    let CanisterSnapshotResponse {
+        id,
+        taken_at_timestamp,
+        total_size,
+    } = response;
+
+    let id = id.to_vec();
+
+    TakeCanisterSnapshotOk {
+        id,
+        taken_at_timestamp,
+        total_size,
+    }
+}
+
+pub async fn load_canister_snapshot(
+    load_canister_snapshot_request: LoadCanisterSnapshotRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> LoadCanisterSnapshotResponse {
+    let LoadCanisterSnapshotRequest {
+        canister_id,
+        snapshot_id,
+    } = load_canister_snapshot_request;
+
+    let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+        Ok(ok) => ok,
+        Err(err) => {
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid snapshot ID: {err}"),
+            });
+        }
+    };
+
+    let canister_id = match CanisterId::try_from(canister_id) {
+        Ok(ok) => ok,
+        Err(err) => {
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid canister ID: {err}"),
+            });
+        }
+    };
+
+    let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        management_canister_client.canister_version(),
+    );
+
+    match management_canister_client
+        .load_canister_snapshot(load_canister_snapshot_args)
+        .await
+    {
+        Ok(()) => LoadCanisterSnapshotResponse::Ok(LoadCanisterSnapshotOk {}),
+        Err((code, description)) => LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+            code: Some(code),
+            description,
+        }),
     }
 }

@@ -3,9 +3,10 @@
 //! canister).
 use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
-use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
-use futures::{channel::mpsc, future::FutureExt, StreamExt};
-use ic_nervous_system_common::{ledger::IcpLedger, E8};
+use fixtures::{NNS, NNSBuilder, NeuronBuilder, principal};
+use futures::{StreamExt, channel::mpsc, future::FutureExt};
+use ic_nervous_system_canisters::ledger::IcpLedger;
+use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
@@ -13,19 +14,23 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, neuron::DissolveState,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
-        settle_neurons_fund_participation_request, CreateServiceNervousSystem,
-        IdealMatchedParticipationFunction, NetworkEconomics, NeuronsFundData,
-        NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-        SettleNeuronsFundParticipationRequest, SwapParticipationLimits,
+        NeuronsFundParticipation as NeuronsFundParticipationPb,
+        SettleNeuronsFundParticipationRequest, manage_neuron::Disburse,
+        settle_neurons_fund_participation_request,
     },
+};
+use ic_nns_governance_api::{
+    CreateServiceNervousSystem, IdealMatchedParticipationFunction, NetworkEconomics,
+    NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
+    SwapParticipationLimits, neuron::DissolveState,
+    neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;
 use icp_ledger::AccountIdentifier;
 use interleaving::{InterleavingTestLedger, LedgerControlMessage};
 use rust_decimal_macros::dec;
+use std::sync::Arc;
 use std::{
     pin::Pin,
     sync::{atomic, atomic::Ordering as AOrdering},
@@ -60,7 +65,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
                 .set_kyc_verified(true),
         )
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
@@ -103,8 +108,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         let disburse_result = tokio_test::block_on(disburse_future);
         assert!(
             disburse_result.is_ok(),
-            "Got an unexpected error while disbursing: {:?}",
-            disburse_result
+            "Got an unexpected error while disbursing: {disburse_result:?}"
         );
         // As the main thread will try to drain the channel, it's important to close the
         // channel once disbursing is done, otherwise the main thread will hang.
@@ -129,8 +133,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         increase_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        increase_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {increase_dissolve_result:?}"
     );
 
     let set_dissolve_result =
@@ -140,8 +143,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         set_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        set_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {set_dissolve_result:?}"
     );
 
     // Drain the channel to finish the test.
@@ -226,7 +228,10 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         allocated_neurons_fund_participation_icp_e8s: Some(max_direct_participation_icp_e8s),
     };
 
-    assert_matches!(initial_neurons_fund_participation.validate(), Ok(_));
+    assert_matches!(
+        NeuronsFundParticipationPb::from(initial_neurons_fund_participation.clone()).validate(),
+        Ok(_)
+    );
 
     let mut nns = NNSBuilder::new()
         // Add the proposal that will be used in `settle_neurons_fund_participation`.
@@ -256,7 +261,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         )
         .add_account_for(sns_governance_canister_id, 0) // Setup the treasury account
         .add_ledger_transform(Box::new(move |l| {
-            Box::new(InterleavingTestLedger::new(l, tx))
+            Arc::new(InterleavingTestLedger::new(l, tx))
         }))
         .set_economics(NetworkEconomics::default())
         .create();
@@ -328,13 +333,12 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         {
             snapshot.total_amount_icp_e8s().unwrap()
         } else {
-            panic!("Expected Ok settle result, got {:?}", settle_nf_result);
+            panic!("Expected Ok settle result, got {settle_nf_result:?}");
         };
 
         assert!(
             settle_nf_result.is_ok(),
-            "Got an unexpected error while settling NF for the first time: {:?}",
-            settle_nf_result,
+            "Got an unexpected error while settling NF for the first time: {settle_nf_result:?}",
         );
 
         // Repeat the call; the response should be the same
@@ -385,8 +389,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         .unwrap();
     assert!(
         settle_nf_result.is_err(),
-        "Got an unexpected response while settling NF for the second time: {:?}",
-        settle_nf_result
+        "Got an unexpected response while settling NF for the second time: {settle_nf_result:?}"
     );
 
     // Get the balance of the SNS Treasury account again. It should still be zero

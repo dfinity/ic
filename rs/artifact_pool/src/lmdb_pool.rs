@@ -9,33 +9,36 @@ use ic_interfaces::{
     },
     idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
-use ic_types::consensus::certification::CertificationMessageHash;
-use ic_types::consensus::idkg::{
-    IDkgArtifactIdData, IDkgArtifactIdDataOf, SigShare, SigShareIdData, SigShareIdDataOf,
-};
-use ic_types::consensus::{DataPayload, HasHash, SummaryPayload};
+use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
+    Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::{self, DkgDataPayload},
-        idkg::{
-            EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefix, IDkgPrefixOf,
-            SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening,
-        },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, EquivocationProof, Finalization,
-        FinalizationShare, HasHeight, Notarization, NotarizationShare, Payload, PayloadType,
-        RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
+        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
+        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        SummaryPayload,
+        certification::{
+            Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
+        },
+        dkg::DkgDataPayload,
+        idkg::{
+            EcdsaSigShare, IDkgArtifactId, IDkgArtifactIdData, IDkgArtifactIdDataOf, IDkgMessage,
+            IDkgMessageType, IDkgPrefix, IDkgPrefixOf, IterationPattern, SchnorrSigShare, SigShare,
+            SigShareIdData, SigShareIdDataOf, SignedIDkgComplaint, SignedIDkgOpening,
+            VetKdKeyShare,
+        },
     },
-    crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
+    crypto::canister_threshold_sig::idkg::{
+        IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
+    },
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
-    Height, Time,
 };
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -169,6 +172,7 @@ pub(crate) enum TypeKey {
     IDkgDealingSupport,
     EcdsaSigShare,
     SchnorrSigShare,
+    VetKdKeyShare,
     IDkgComplaint,
     IDkgOpening,
 }
@@ -189,7 +193,7 @@ impl TryFrom<u8> for TypeKey {
     type Error = String;
 
     fn try_from(byte: u8) -> Result<Self, Self::Error> {
-        Self::from_repr(byte).ok_or(format!("Failed to convert byte {:#x} to TypeKey", byte))
+        Self::from_repr(byte).ok_or(format!("Failed to convert byte {byte:#x} to TypeKey"))
     }
 }
 
@@ -395,10 +399,7 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
     let db_env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
-            panic!(
-                "Error opening LMDB environment with permissions at {:?}: {:?}",
-                path, err
-            )
+            panic!("Error opening LMDB environment with permissions at {path:?}: {err:?}")
         });
 
     unsafe {
@@ -430,20 +431,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let meta = if read_only {
             db_env
                 .open_db(Some("META"))
-                .unwrap_or_else(|err| panic!("Error opening db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for metadata: {err:?}"))
         } else {
             db_env
                 .create_db(Some("META"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {err:?}"))
         };
         let artifacts = if read_only {
             db_env
                 .open_db(Some("ARTS"))
-                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {err:?}"))
         } else {
             db_env
                 .create_db(Some("ARTS"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {err:?}"))
         };
         let indices = {
             Artifact::TYPE_KEYS
@@ -510,7 +511,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         self.indices
             .iter()
             .find(|(key, _)| type_key == key)
-            .unwrap_or_else(|| panic!("Error in get_index_db: {:?} does not exist", type_key))
+            .unwrap_or_else(|| panic!("Error in get_index_db: {type_key:?} does not exist"))
             .1
     }
 
@@ -974,13 +975,12 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
             TypeKey::EquivocationProof => ConsensusMessageHash::EquivocationProof(h.into()),
             TypeKey::BlockPayload => {
-                return Err("Block payloads do not have a ConsensusMessageId".into())
+                return Err("Block payloads do not have a ConsensusMessageId".into());
             }
             other => {
                 return Err(format!(
-                    "{:?} is not a valid ConsensusMessage TypeKey.",
-                    other
-                ))
+                    "{other:?} is not a valid ConsensusMessage TypeKey."
+                ));
             }
         };
         Ok(ConsensusMessageId {
@@ -1032,7 +1032,7 @@ impl PoolArtifact for ConsensusMessage {
                 // dummy has the SAME payload type as the real payload.
                 Box::new(move || match payload_type {
                     PayloadType::Summary => BlockPayload::Summary(SummaryPayload {
-                        dkg: dkg::Summary::default(),
+                        dkg: DkgSummary::default(),
                         idkg: None,
                     }),
                     PayloadType::Data => BlockPayload::Data(DataPayload {
@@ -1364,24 +1364,19 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             self.log.clone(),
         )
         .next()
-        .unwrap_or_else(|| {
-            panic!(
-                "This should be impossible since we found a max height at {:?}",
-                h
-            )
-        })
+        .unwrap_or_else(|| panic!("This should be impossible since we found a max height at {h:?}"))
     }
 
     /// Number of artifacts in the DB.
     fn size(&self) -> u64 {
-        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn") {
-            if let Some(mut cursor) = log_err!(
+        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn")
+            && let Some(mut cursor) = log_err!(
                 tx.open_ro_cursor(self.artifacts),
                 &self.log,
                 "open_ro_cursor"
-            ) {
-                return cursor.iter().count() as u64;
-            }
+            )
+        {
+            return cursor.iter().count() as u64;
         }
         0
     }
@@ -1412,9 +1407,8 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
             TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
             other => {
                 return Err(format!(
-                    "{:?} is not a valid CertificationMessage TypeKey.",
-                    other
-                ))
+                    "{other:?} is not a valid CertificationMessage TypeKey."
+                ));
             }
         };
         Ok(CertificationMessageId {
@@ -1624,6 +1618,9 @@ impl From<IDkgMessageId> for IDkgIdKey {
             IDkgArtifactId::SchnorrSigShare(_, data) => {
                 pb::SigShareIdData::from(data.get()).encode_to_vec()
             }
+            IDkgArtifactId::VetKdKeyShare(_, data) => {
+                pb::SigShareIdData::from(data.get()).encode_to_vec()
+            }
             IDkgArtifactId::Complaint(_, data) => {
                 pb::IDkgArtifactIdData::from(data.get()).encode_to_vec()
             }
@@ -1636,11 +1633,18 @@ impl From<IDkgMessageId> for IDkgIdKey {
     }
 }
 
-impl From<IDkgPrefix> for IDkgIdKey {
-    fn from(prefix: IDkgPrefix) -> IDkgIdKey {
+impl From<IterationPattern> for IDkgIdKey {
+    fn from(pattern: IterationPattern) -> IDkgIdKey {
         let mut bytes = vec![];
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
-        bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
+        match pattern {
+            IterationPattern::GroupTag(group_tag) => {
+                bytes.extend_from_slice(&u64::to_be_bytes(group_tag));
+            }
+            IterationPattern::Prefix(prefix) => {
+                bytes.extend_from_slice(&u64::to_be_bytes(prefix.group_tag()));
+                bytes.extend_from_slice(&u64::to_be_bytes(prefix.meta_hash()));
+            }
+        }
         IDkgIdKey(bytes)
     }
 }
@@ -1690,6 +1694,10 @@ fn deser_idkg_message_id(
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
         IDkgMessageType::SchnorrSigShare => IDkgArtifactId::SchnorrSigShare(
+            IDkgPrefixOf::new(prefix),
+            SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
+        ),
+        IDkgMessageType::VetKdKeyShare => IDkgArtifactId::VetKdKeyShare(
             IDkgPrefixOf::new(prefix),
             SigShareIdDataOf::new(deser_sig_share_id_data(id_data_bytes)?),
         ),
@@ -1815,16 +1823,18 @@ impl IDkgMessageDb {
         true
     }
 
+    /// Iterate over the pool for a given optional pattern. Start at the first key that matches the
+    /// pattern and stop at the first that does not. If no pattern is given, return all elements.
     fn iter<T: TryFrom<IDkgMessage>>(
         &self,
-        prefix: Option<IDkgPrefixOf<T>>,
+        pattern: Option<IterationPattern>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, T)> + '_>
     where
         <T as TryFrom<IDkgMessage>>::Error: Debug,
     {
         let message_type = self.object_type;
         let log = self.log.clone();
-        let prefix_cl = prefix.as_ref().map(|p| p.as_ref().clone());
+        let pattern_clone = pattern.clone();
         let deserialize_fn = move |key: &[u8], bytes: &[u8]| {
             // Convert key bytes to IDkgMessageId
             let mut key_bytes = Vec::<u8>::new();
@@ -1843,11 +1853,12 @@ impl IDkgMessageDb {
                 }
             };
 
-            // Stop iterating if we hit a different prefix.
-            if let Some(prefix) = &prefix_cl {
-                if id.prefix() != *prefix {
-                    return None;
-                }
+            // Stop iterating if we hit a different pattern.
+            if pattern_clone.as_ref().is_some_and(|pattern| match pattern {
+                IterationPattern::GroupTag(group_tag) => group_tag != &id.prefix().group_tag(),
+                IterationPattern::Prefix(prefix) => prefix != &id.prefix(),
+            }) {
+                return None;
             }
 
             // Deserialize value bytes and convert to inner type
@@ -1886,7 +1897,7 @@ impl IDkgMessageDb {
             self.db_env.clone(),
             self.db,
             deserialize_fn,
-            prefix.map(|p| IDkgIdKey::from(p.get())),
+            pattern.map(IDkgIdKey::from),
             self.log.clone(),
         ))
     }
@@ -1920,7 +1931,7 @@ impl PersistentIDkgPoolSection {
         let mut path = config.persistent_pool_validated_persistent_db_path;
         path.push("idkg");
         if let Err(err) = std::fs::create_dir_all(path.as_path()) {
-            panic!("Error creating IDKG dir {:?}: {:?}", path, err)
+            panic!("Error creating IDKG dir {path:?}: {err:?}")
         }
         let db_env = Arc::new(create_db_env(
             path.as_path(),
@@ -1982,6 +1993,7 @@ impl PersistentIDkgPoolSection {
             IDkgMessageType::DealingSupport => TypeKey::IDkgDealingSupport,
             IDkgMessageType::EcdsaSigShare => TypeKey::EcdsaSigShare,
             IDkgMessageType::SchnorrSigShare => TypeKey::SchnorrSigShare,
+            IDkgMessageType::VetKdKeyShare => TypeKey::VetKdKeyShare,
             IDkgMessageType::Complaint => TypeKey::IDkgComplaint,
             IDkgMessageType::Opening => TypeKey::IDkgOpening,
         }
@@ -2010,7 +2022,15 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgDealing>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Dealing);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
+    }
+
+    fn signed_dealings_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgDealing)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::Dealing);
+        message_db.iter(Some(IterationPattern::GroupTag(transcript_id.id())))
     }
 
     fn dealing_support(
@@ -2025,7 +2045,15 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<IDkgDealingSupport>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
+    }
+
+    fn dealing_support_by_transcript_id(
+        &self,
+        transcript_id: &IDkgTranscriptId,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::DealingSupport);
+        message_db.iter(Some(IterationPattern::GroupTag(transcript_id.id())))
     }
 
     fn ecdsa_signature_shares(
@@ -2040,7 +2068,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<EcdsaSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, EcdsaSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
     }
 
     fn schnorr_signature_shares(
@@ -2055,12 +2083,26 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SchnorrSigShare>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SchnorrSigShare)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
+    }
+
+    fn vetkd_key_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
+        message_db.iter(None)
+    }
+
+    fn vetkd_key_shares_by_prefix(
+        &self,
+        prefix: IDkgPrefixOf<VetKdKeyShare>,
+    ) -> Box<dyn Iterator<Item = (IDkgMessageId, VetKdKeyShare)> + '_> {
+        let message_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
     }
 
     fn signature_shares(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SigShare)> + '_> {
         let ecdsa_db = self.get_message_db(IDkgMessageType::EcdsaSigShare);
         let schnorr_db = self.get_message_db(IDkgMessageType::SchnorrSigShare);
+        let vetkd_db = self.get_message_db(IDkgMessageType::VetKdKeyShare);
         Box::new(
             ecdsa_db
                 .iter(None)
@@ -2069,6 +2111,11 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
                     schnorr_db
                         .iter(None)
                         .map(|(id, share)| (id, SigShare::Schnorr(share))),
+                )
+                .chain(
+                    vetkd_db
+                        .iter(None)
+                        .map(|(id, share)| (id, SigShare::VetKd(share))),
                 ),
         )
     }
@@ -2083,7 +2130,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgComplaint>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgComplaint)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Complaint);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
     }
 
     fn openings(&self) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
@@ -2096,7 +2143,7 @@ impl IDkgPoolSection for PersistentIDkgPoolSection {
         prefix: IDkgPrefixOf<SignedIDkgOpening>,
     ) -> Box<dyn Iterator<Item = (IDkgMessageId, SignedIDkgOpening)> + '_> {
         let message_db = self.get_message_db(IDkgMessageType::Opening);
-        message_db.iter(Some(prefix))
+        message_db.iter(Some(IterationPattern::Prefix(prefix.get())))
     }
 }
 
@@ -2165,12 +2212,12 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
-            finalization_share_ops, notarization_share_ops, random_beacon_ops, PoolTestHelper,
+            PoolTestHelper, block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
+            finalization_share_ops, notarization_share_ops, random_beacon_ops,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
+    use ic_types::{PrincipalId, SubnetId, consensus::Rank};
     use std::{panic, path::PathBuf};
 
     #[test]
@@ -2238,7 +2285,7 @@ mod tests {
                                 hash: hash.clone(),
                             }),
                         ),
-                        _ => panic!("Unexpected type: {:?}", message_type),
+                        _ => panic!("Unexpected type: {message_type:?}"),
                     };
                     let id_key = IDkgIdKey::from(id.clone());
                     let deser_id = deser_idkg_message_id(*message_type, id_key).unwrap();

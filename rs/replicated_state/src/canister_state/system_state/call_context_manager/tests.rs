@@ -1,4 +1,5 @@
 use super::*;
+use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
@@ -12,14 +13,14 @@ fn call_context_origin() {
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
-        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
+        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(10),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
     assert_eq!(
         ccm.call_contexts().get(&cc_id).unwrap().call_origin,
-        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE)
+        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from(""))
     );
 }
 
@@ -31,20 +32,35 @@ fn call_context_handling() {
 
     // On two incoming calls
     let call_context_id1 = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(
+            canister_test_id(123),
+            CallbackId::from(1),
+            NO_DEADLINE,
+            String::from(""),
+        ),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
     let call_context_id2 = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(2), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(
+            canister_test_id(123),
+            CallbackId::from(2),
+            NO_DEADLINE,
+            String::from(""),
+        ),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
 
     let call_context_id3 = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(3), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(
+            canister_test_id(123),
+            CallbackId::from(3),
+            NO_DEADLINE,
+            String::from(""),
+        ),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
@@ -239,7 +255,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
-        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
+        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
@@ -257,7 +273,7 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
     let id = canister_test_id(42);
     let cb_id = CallbackId::from(1);
     let cc_id = ccm.new_call_context(
-        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE),
+        CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
@@ -272,7 +288,12 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
 fn test_call_context_instructions_executed_is_updated() {
     let mut call_context_manager = CallContextManager::default();
     let call_context_id = call_context_manager.new_call_context(
-        CallOrigin::CanisterUpdate(canister_test_id(123), CallbackId::from(1), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(
+            canister_test_id(123),
+            CallbackId::from(1),
+            NO_DEADLINE,
+            String::from(""),
+        ),
         Cycles::zero(),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
@@ -332,7 +353,7 @@ fn call_context_roundtrip_encoding() {
     use ic_protobuf::state::canister_state_bits::v1 as pb;
 
     let minimal_call_context = CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::zero(),
@@ -340,7 +361,7 @@ fn call_context_roundtrip_encoding() {
         Default::default(),
     );
     let maximal_call_context = CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         true,
         false,
         Cycles::new(3),
@@ -589,7 +610,7 @@ fn call_context_stats() {
     //
     let ingress_id = new_call_context(
         &mut ccm,
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
     );
 
     // Not a canister update, no stats updated.
@@ -604,7 +625,12 @@ fn call_context_stats() {
     let be_deadline = CoarseTime::from_secs_since_unix_epoch(5);
     let best_effort_id = new_call_context(
         &mut ccm,
-        CallOrigin::CanisterUpdate(be_originator, CallbackId::from(4), be_deadline),
+        CallOrigin::CanisterUpdate(
+            be_originator,
+            CallbackId::from(4),
+            be_deadline,
+            String::from(""),
+        ),
     );
 
     // One unresponded call context, but not a guaranteed response one.
@@ -621,7 +647,12 @@ fn call_context_stats() {
     let gr_originator = canister_test_id(6);
     let guaranteed_response_id = new_call_context(
         &mut ccm,
-        CallOrigin::CanisterUpdate(gr_originator, CallbackId::from(7), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(
+            gr_originator,
+            CallbackId::from(7),
+            NO_DEADLINE,
+            String::from(""),
+        ),
     );
 
     // Two unresponded call contexts, a best-effort one and a guaranteed response
@@ -731,7 +762,7 @@ fn roundtrip_encode() {
 
     // Create a new call context.
     let call_context_id = ccm.new_call_context(
-        CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE),
+        CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
         Cycles::new(30),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),

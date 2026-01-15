@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 
 def read_partition_description(data):
@@ -96,9 +97,7 @@ def _copyfile(source, target, size):
 
 
 def write_partition_image_from_tzst(gpt_entry, image_file, partition_tzst):
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
     partition_tf = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", partition_tzst, "-o", partition_tf], check=True)
@@ -138,6 +137,11 @@ def main():
     parser.add_argument("-p", "--partition_table", help="CSV file describing the partition table", type=str)
     parser.add_argument("-s", "--expanded-size", help="Optional size to grow the image to", required=False, type=str)
     parser.add_argument(
+        "--populate-b-partitions",
+        help="Whether to populate the B partition set with the same content as the A partition set "
+        "(mostly for testing). The default behavior is to leave the B partitions empty.",
+    )
+    parser.add_argument(
         "partitions",
         metavar="partition",
         type=str,
@@ -156,31 +160,23 @@ def main():
         gpt_entries = read_partition_description(f.read())
     validate_partition_table(gpt_entries)
 
-    tmpdir = os.getenv("ICOS_TMPDIR")
-    if not tmpdir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    tmpdir = tempfile.mkdtemp()
 
-    if args.dflate:
-        disk_image = os.path.join(tmpdir, "disk.img")
-    else:
-        # Disk optimization.  If no dflate program is specified, we can
-        # simply attack the target file (out_file) directly, saving gigabytes
-        # of writes to disk.
-        disk_image = out_file
+    disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
 
     for entry in gpt_entries:
         # Skip over any partitions starting with "B_". These are empty in our
         # published images, and stay this way until a live system upgrades
         # into them.
-        if entry["name"].startswith("B_"):
+        if not args.populate_b_partitions and entry["name"].startswith("B_"):
             continue
 
-        # Remove the "A_" prefix from any partitions before doing a lookup.
-        prefix = "A_"
         name = entry["name"]
-        if name.startswith(prefix):
-            name = name[len(prefix) :]
+        # Remove the prefix from any partitions before doing a lookup.
+        for prefix in ("A_", "B_"):
+            if name.startswith(prefix):
+                name = name[len(prefix) :]
 
         partition_file = select_partition_file(name, partition_files)
 
@@ -196,17 +192,18 @@ def main():
     # We use our tool, dflate, to quickly create a sparse, deterministic, tar.
     # If dflate is ever misbehaving, it can be replaced with:
     # tar cf <output> --sort=name --owner=root:0 --group=root:0 --mtime="UTC 1970-01-01 00:00:00" --sparse --hole-detection=raw -C <context_path> <item>
-    if args.dflate:
-        subprocess.run(
-            [
-                args.dflate,
-                "--input",
-                disk_image,
-                "--output",
-                out_file,
-            ],
-            check=True,
-        )
+    subprocess.run(
+        [
+            args.dflate,
+            "--input",
+            disk_image,
+            "--output",
+            out_file,
+        ],
+        check=True,
+    )
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

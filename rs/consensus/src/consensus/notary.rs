@@ -23,7 +23,10 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
-use crate::consensus::metrics::NotaryMetrics;
+use crate::consensus::{
+    ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP, ACCEPTABLE_NOTARIZATION_CUP_GAP,
+    metrics::NotaryMetrics,
+};
 use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
@@ -32,17 +35,17 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::NotarizationDelaySettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height,
     consensus::{
         BlockProposal, HasBlockHash, HasHeight, HasRank, HashedBlock, NotarizationContent,
         NotarizationShare, RandomBeacon, Rank,
     },
     replica_config::ReplicaConfig,
-    Height,
 };
 use std::{sync::Arc, time::Duration};
 
@@ -57,22 +60,13 @@ const ACCEPTABLE_FINALIZATION_CERTIFICATION_GAP: u64 = 1;
 /// for each height that the latest finalized block is ahead of the latest certified state.
 /// The value was chosen empirically.
 const BACKLOG_DELAY_MILLIS: u64 = 2_000;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the notarization/certification gap.
-const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
-
-/// In order to have a bound on the advertised consensus pool, we place a limit on
-/// the gap between notarized height and the height of the next pending CUP.
-pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 70;
-
-pub struct Notary {
+pub(crate) struct Notary {
     time_source: Arc<dyn TimeSource>,
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
-    crypto: Arc<dyn ConsensusCrypto>,
+    pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     metrics: NotaryMetrics,
 }
 
@@ -110,13 +104,12 @@ impl Notary {
             }
             let height = notarized_height.increment();
             for proposal in find_lowest_ranked_non_disqualified_proposals(pool, height) {
-                if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank()) {
-                    if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
-                        if let Some(s) = self.notarize_block(pool, &proposal.content) {
-                            self.metrics.report_notarization(proposal.as_ref(), elapsed);
-                            notarization_shares.push(s);
-                        }
-                    }
+                if let Some(elapsed) = self.time_to_notarize(pool, height, proposal.rank())
+                    && !self.is_proposal_already_notarized_by_me(pool, &proposal)
+                    && let Some(s) = self.notarize_block(pool, &proposal.content)
+                {
+                    self.metrics.report_notarization(proposal.as_ref(), elapsed);
+                    notarization_shares.push(s);
                 }
             }
         }
@@ -388,7 +381,7 @@ mod tests {
     //! Notary unit tests
     use super::*;
     use assert_matches::assert_matches;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_interfaces::{consensus_pool::ConsensusPool, time_source::TimeSource};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

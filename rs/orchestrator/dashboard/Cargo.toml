@@ -11,6 +11,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 [lib]
 name = "ic_dashboard"

@@ -1,16 +1,16 @@
 use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
-use ic_crypto_utils_tls::{node_id_from_certificate_der, NodeIdFromCertificateDerError};
+use ic_crypto_utils_tls::{NodeIdFromCertificateDerError, node_id_from_certificate_der};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion, Time};
 use rustls::{
+    CertificateError, DigitallySignedStruct, DistinguishedName, Error as TLSError, OtherError,
+    SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
     server::danger::{ClientCertVerified, ClientCertVerifier},
-    CertificateError, DigitallySignedStruct, DistinguishedName, Error as TLSError, OtherError,
-    SignatureScheme,
 };
 use std::{fmt, sync::Arc};
 
@@ -268,8 +268,7 @@ fn ensure_node_id_in_allowed_nodes(
 ) -> Result<(), TLSError> {
     if !allowed_nodes.contains(node_id) {
         return Err(TLSError::General(format!(
-            "The peer certificate with node ID {} is not allowed. Allowed node IDs: {:?}",
-            node_id, allowed_nodes
+            "The peer certificate with node ID {node_id} is not allowed. Allowed node IDs: {allowed_nodes:?}"
         )));
     }
     Ok(())
@@ -282,8 +281,7 @@ fn node_cert_from_registry(
 ) -> Result<TlsPublicKeyCert, TLSError> {
     tls_cert_from_registry(registry_client, node_id, registry_version).map_err(|e| {
         TLSError::General(format!(
-            "Failed to retrieve TLS certificate for node ID {} from the registry at registry version {}: {:?}",
-            node_id, registry_version, e
+            "Failed to retrieve TLS certificate for node ID {node_id} from the registry at registry version {registry_version}: {e:?}"
         ))
     })
 }
@@ -294,9 +292,9 @@ fn ensure_certificates_equal(
     node_cert_from_registry: &Vec<u8>,
 ) -> Result<(), TLSError> {
     if node_cert_from_registry != end_entity_cert {
-        return Err(TLSError::General(
-            format!("The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {}", node_id),
-        ));
+        return Err(TLSError::General(format!(
+            "The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {node_id}"
+        )));
     }
     Ok(())
 }
@@ -311,7 +309,7 @@ fn ensure_node_certificate_is_valid(
         cert_node_id,
         current_time,
     ))
-    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))?;
+    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {e}")))?;
     Ok(())
 }
 

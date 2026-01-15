@@ -4,7 +4,7 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use itertools::Itertools;
-use xnet_slo_test_lib::{test_async_impl, Config};
+use xnet_slo_test_lib::{Config, test_async_impl};
 
 #[derive(Clone)]
 pub struct XNet {
@@ -33,6 +33,7 @@ impl Step for XNet {
         env: ic_system_test_driver::driver::test_env::TestEnv,
         rt: tokio::runtime::Handle,
     ) -> anyhow::Result<()> {
+        // Both guaranteed response and best-effort calls.
         let config = Config::new(
             self.subnets,
             self.nodes_per_subnet,

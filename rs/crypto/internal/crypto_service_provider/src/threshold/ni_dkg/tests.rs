@@ -4,10 +4,10 @@ mod test_create_dealing;
 mod test_retention;
 
 use super::*;
+use crate::Csp;
 use crate::key_id::KeyId;
 use crate::threshold::tests::util::test_threshold_signatures;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
-use crate::Csp;
 use assert_matches::assert_matches;
 use fixtures::*;
 use ic_crypto_internal_seed::Seed;
@@ -20,8 +20,8 @@ use rand_chacha::ChaCha20Rng;
 
 mod gen_dealing_encryption_key_pair_tests {
     use super::*;
-    use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
     use crate::LocalCspVault;
+    use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
         CspDkgCreateFsKeyError, InternalError,
@@ -60,10 +60,11 @@ mod gen_dealing_encryption_key_pair_tests {
         let csp = Csp::builder_for_test().build();
         let node_id = NODE_1;
 
-        assert!(csp
-            .csp_vault
-            .gen_dealing_encryption_key_pair(node_id)
-            .is_ok());
+        assert!(
+            csp.csp_vault
+                .gen_dealing_encryption_key_pair(node_id)
+                .is_ok()
+        );
         let result = csp.csp_vault.gen_dealing_encryption_key_pair(node_id);
 
         assert_matches!(result,

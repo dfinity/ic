@@ -1,6 +1,6 @@
 #![no_main]
-use ic_management_canister_types::CanisterHttpRequestArgs;
-use ic_management_canister_types::Payload;
+use ic_management_canister_types_private::CanisterHttpRequestArgs;
+use ic_management_canister_types_private::Payload;
 use libfuzzer_sys::fuzz_target;
 
 // This fuzz test feeds binary data to Candid's `Decode!` macro for CanisterHttpRequestArgs with the goal of exposing panics

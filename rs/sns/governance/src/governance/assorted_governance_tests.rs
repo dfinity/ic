@@ -2,23 +2,26 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
-use super::test_helpers::{
-    basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
-};
-use super::*;
 use crate::{
+    extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
+    governance::{
+        test_helpers::{
+            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test,
+        },
+        *,
+    },
     pb::v1::{
+        Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
+        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron, Account as AccountProto, Motion, NeuronPermissionType, ProposalData, ProposalId,
-        Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion,
-        VotingRewardsParameters, WaitForQuietState,
+        neuron,
     },
     reward,
     sns_upgrade::{
@@ -27,28 +30,35 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
+    storage::cache_registered_extension,
+    topics::{
+        ListTopicsResponse, NervousSystemFunctions, RegisteredExtensionOperationSpec, TopicInfo,
+    },
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::Principal;
-use futures::{join, FutureExt};
+use candid::{Nat, Principal};
+use futures::{FutureExt, join};
 use ic_canister_client_sender::Sender;
+use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes, E8,
-    ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS, assert_is_err, assert_is_ok,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use maplit::{btreemap, btreeset};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
 use std::{
@@ -82,6 +92,29 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
     }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
 }
 
 const TRANSITION_ROUND_COUNT: u64 = 42;
@@ -104,11 +137,7 @@ fn unspecified_mode_is_invalid() {
         mode: governance::Mode::Unspecified as i32,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[test]
@@ -117,11 +146,7 @@ fn garbage_mode_is_invalid() {
         mode: 0xDEADBEF,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[tokio::test]
@@ -158,6 +183,27 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -250,7 +296,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         "already",
         "in progress",
     ] {
-        assert!(error_message.contains(term), "{:#?}", err);
+        assert!(error_message.contains(term), "{err:#?}");
     }
 }
 
@@ -286,6 +332,27 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -402,13 +469,13 @@ async fn test_neuron_operations_exclude_one_another() {
                         err,
                     );
                 }
-                _ => panic!("configure_result: {:#?}", configure_result),
+                _ => panic!("configure_result: {configure_result:#?}"),
             }
 
             // Allow disburse to complete.
             transfer_funds_continue.notify_one();
             let disburse_result = disburse_future.await;
-            assert!(disburse_result.is_ok(), "{:#?}", disburse_result);
+            assert!(disburse_result.is_ok(), "{disburse_result:#?}");
         })
         .await;
 }
@@ -452,6 +519,7 @@ fn test_governance_proto_ids_in_nervous_system_functions_match() {
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
                 GenericNervousSystemFunction {
+                    topic: None,
                     target_canister_id: Some(CanisterId::from_u64(1).get()),
                     target_method_name: Some("test_method".to_string()),
                     validator_canister_id: Some(CanisterId::from_u64(1).get()),
@@ -473,17 +541,12 @@ fn swap_canister_id_is_required_when_mode_is_pre_initialization_swap() {
 
     let r = ValidGovernanceProto::try_from(proto.clone());
     match r {
-        Ok(_ok) => panic!(
-            "Invalid Governance proto, but wasn't rejected: {:#?}",
-            proto
-        ),
+        Ok(_ok) => panic!("Invalid Governance proto, but wasn't rejected: {proto:#?}"),
         Err(err) => {
             for key_word in ["swap_canister_id", "populate"] {
                 assert!(
                     err.contains(key_word),
-                    "{:#?} not present in the error: {:#?}",
-                    key_word,
-                    err
+                    "{key_word:#?} not present in the error: {err:#?}"
                 );
             }
         }
@@ -643,7 +706,7 @@ proptest! {
 ) {
         // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
         // by the smallest time where any flip in the vote will cause a deadline increase.
-        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + initial_voting_period_seconds.div_ceil(2);
         // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
         let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
         let mut proposal = ProposalData {
@@ -676,8 +739,8 @@ proptest! {
             .wait_for_quiet_state
             .unwrap()
             .current_deadline_timestamp_seconds;
-        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
+        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
     }
 }
 
@@ -703,7 +766,7 @@ fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalDa
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         let upgrade_sns_action_id = 7;
@@ -794,13 +857,17 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
 
     // Step 3: Inspect result(s).
     let err = match result {
-        Ok(ok) => panic!("Proposal should have been rejected: {:#?}", ok),
+        Ok(ok) => panic!("Proposal should have been rejected: {ok:#?}"),
         Err(err) => err,
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(err.contains("mode"), "{:#?}", err);
-    assert!(err.contains("vot"), "{:#?}", err);
+    assert!(err.contains("manage nervous system parameters"), "{err:#?}");
+    assert!(err.contains("not allowed"), "{err:#?}");
+    assert!(
+        err.contains("in preinitializationswap (2) mode"),
+        "{err:#?}"
+    );
 }
 
 #[tokio::test]
@@ -899,8 +966,7 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let original_latest_reward_event = governance.proto.latest_reward_event.clone();
     assert!(
         original_latest_reward_event.is_some(),
-        "{:#?}",
-        original_latest_reward_event
+        "{original_latest_reward_event:#?}"
     );
 
     // Step 1.4: Make a proposal.
@@ -991,10 +1057,8 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let distributed_e8s_range = min_distributed_e8s..max_distributed_e8s;
     assert!(
         distributed_e8s_range.contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
-        "distributed_e8s_range = {:?}\n\
-            final_latest_reward_event = {:#?}",
-        distributed_e8s_range,
-        final_latest_reward_event,
+        "distributed_e8s_range = {distributed_e8s_range:?}\n\
+            final_latest_reward_event = {final_latest_reward_event:#?}",
     );
 
     assert_eq!(
@@ -1080,7 +1144,7 @@ fn test_disallow_concurrent_upgrade_execution(
     let execution_in_progress_proposal = ProposalData {
         action: proposal_in_progress_action_id,
         id: Some(1_u64.into()),
-        decided_timestamp_seconds: 123,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -1153,7 +1217,7 @@ fn test_disallow_concurrent_upgrade_execution(
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         if proposal_data.status().is_final() {
@@ -1460,13 +1524,11 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 root_canister_id,
                 "change_canister",
-                Encode!(&ChangeCanisterRequest::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_id
+                Encode!(
+                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                        .with_arg(Encode!().unwrap())
                 )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                .with_arg(Encode!().unwrap()))
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
                 Some(Ok(Encode!().unwrap())),
@@ -1502,13 +1564,11 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 CanisterId::ic_00(),
                 "install_code",
-                Encode!(&ic_management_canister_types::InstallCodeArgs {
-                    mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
+                Encode!(&ic_management_canister_types_private::InstallCodeArgs {
+                    mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None, // local const in install_code()
                     sender_canister_version: None,
                 })
                 .unwrap(),
@@ -2475,7 +2535,24 @@ fn test_no_target_version_fails_check_upgrade_status() {
 }
 
 #[test]
-fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing() {
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_auto() {
+    let automatically_advance_target_version = true;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+#[test]
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing_no_auto() {
+    let automatically_advance_target_version = false;
+    test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+        automatically_advance_target_version,
+    );
+}
+
+fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missing(
+    automatically_advance_target_version: bool,
+) {
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
     let governance_canister_id = *TEST_GOVERNANCE_CANISTER_ID;
     let next_version = SnsVersion {
@@ -2596,6 +2673,9 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
         Box::new(DoNothingLedger {}),
         Box::new(FakeCmc::new()),
     );
+    if let Some(parameters) = governance.proto.parameters.as_mut() {
+        parameters.automatically_advance_target_version = Some(automatically_advance_target_version)
+    };
 
     let expected_running_version_before_upgrade = Some(running_version.clone().into());
     let expected_running_version_after_upgrade = Some(next_version.clone().into());
@@ -2666,43 +2746,93 @@ fn test_check_upgrade_fails_and_sets_deployed_version_if_deployed_version_missin
     // Check that the upgrade journal reflects the succeeded upgrade.
     let upgrade_journal = governance.proto.upgrade_journal.clone().unwrap();
 
-    let (reset_upgrade_steps, refreshed_versions) = assert_matches!(
-        &upgrade_journal.entries[..],
-        [
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
-                    upgrade_journal_entry::UpgradeStepsReset {
-                        human_readable: Some(_),
-                        upgrade_steps: Some(reset_upgrade_steps),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: Some(_),
-                event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
-                    upgrade_journal_entry::UpgradeStepsRefreshed {
-                        upgrade_steps: Some(
-                            Versions {
-                                versions: refreshed_versions,
-                            },
-                        ),
-                    },
-                )),
-            },
-            UpgradeJournalEntry {
-                timestamp_seconds: _,
-                event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
-                    upgrade_journal_entry::UpgradeOutcome {
-                        human_readable: Some(_),
-                        status: Some(
-                            upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
-                        ),
-                    }
-                )),
-            }
-        ] => (reset_upgrade_steps, refreshed_versions)
-    );
+    let (reset_upgrade_steps, refreshed_versions) = if automatically_advance_target_version {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::TargetVersionSet(
+                        upgrade_journal_entry::TargetVersionSet {
+                            old_target_version: None,
+                            new_target_version: Some(_),
+                            is_advanced_automatically: Some(true),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    } else {
+        assert_matches!(
+            &upgrade_journal.entries[..],
+            [
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some(_),
+                            upgrade_steps: Some(reset_upgrade_steps),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(_),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(
+                                Versions {
+                                    versions: refreshed_versions,
+                                },
+                            ),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: _,
+                    event: Some(upgrade_journal_entry::Event::UpgradeOutcome(
+                        upgrade_journal_entry::UpgradeOutcome {
+                            human_readable: Some(_),
+                            status: Some(
+                                upgrade_journal_entry::upgrade_outcome::Status::Success(Empty {})
+                            ),
+                        }
+                    )),
+                }
+            ] => (reset_upgrade_steps, refreshed_versions)
+        )
+    };
 
     assert_eq!(
         reset_upgrade_steps.versions,
@@ -2914,6 +3044,7 @@ fn test_sns_controlled_canister_upgrade_only_upgrades_dapp_canisters() {
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
             canister_upgrade_arg: None,
             mode: Some(CanisterInstallModeProto::Upgrade.into()),
+            chunked_canister_wasm: None,
         });
 
         // Upgrade Proposal
@@ -3041,7 +3172,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let motion_proposal = ProposalData {
         action: motion_action_id,
         id: Some(motion_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3056,7 +3187,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3086,7 +3217,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3115,7 +3246,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
     let executing_upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(executing_upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3146,7 +3277,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
     let result = governance.check_no_upgrades_in_progress(Some(executing_upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3161,8 +3292,8 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let previous_upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(previous_upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
-        executed_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
+        executed_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 5,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3177,7 +3308,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let upgrade_proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(upgrade_proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3207,7 +3338,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3222,7 +3353,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
     let proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3250,7 +3381,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
 
     // Step 2 & 3: Run code under test, and inspect results.
     let result = governance.check_no_upgrades_in_progress(Some(proposal_id));
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 
     // Other upgrades should be blocked by proposal 1 though.
     let some_other_proposal_id = 99_u64;
@@ -3277,7 +3408,7 @@ fn test_upgrade_proposals_blocked_by_pending_upgrade() {
     let proposal = ProposalData {
         action: upgrade_action_id,
         id: Some(proposal_id.into()),
-        decided_timestamp_seconds: 1,
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS - 10,
         latest_tally: Some(Tally {
             yes: 1,
             no: 0,
@@ -3330,6 +3461,78 @@ fn test_upgrade_proposals_blocked_by_pending_upgrade() {
     }
 }
 
+/// Ugrade proposals (e.g. UpgradeSnsToNextVersion) block all other upgrade actions while they're adopted until they're done executing, unless they're too old. This test checks the "unless they're too old" part
+#[test]
+fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
+    // Step 1: Prepare the world.
+    use ProposalDecisionStatus as Status;
+
+    let upgrade_action_id: u64 =
+        (&Action::UpgradeSnsControlledCanister(UpgradeSnsControlledCanister::default())).into();
+
+    let proposal_id = 1_u64;
+    let some_other_proposal_id = 99_u64;
+    let proposal = ProposalData {
+        action: upgrade_action_id,
+        id: Some(proposal_id.into()),
+        decided_timestamp_seconds: NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+            - crate::governance::UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS
+            - 1,
+        latest_tally: Some(Tally {
+            yes: 1,
+            no: 0,
+            total: 1,
+            timestamp_seconds: 1,
+        }),
+        ..Default::default()
+    };
+    assert_eq!(proposal.status(), Status::Adopted);
+
+    let mut governance = Governance::new(
+        GovernanceProto {
+            proposals: btreemap! {
+                proposal_id => proposal,
+            },
+            ..basic_governance_proto()
+        }
+        .try_into()
+        .unwrap(),
+        Box::<NativeEnvironment>::default(),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    // Step 2: Check that the proposal is not blocked by an old proposal.
+    match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
+        Ok(_) => {}
+        Err(err) => panic!(
+            "The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {err:#?}"
+        ),
+    }
+
+    // Step 3: Make the proposal newer
+    governance
+        .proto
+        .proposals
+        .get_mut(&proposal_id)
+        .unwrap()
+        .decided_timestamp_seconds = NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS
+        - crate::governance::UPGRADE_PROPOSAL_BLOCK_EXPIRY_SECONDS
+        + 1;
+
+    // Step 4: Check that the proposal is now blocked by an old proposal.
+    match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
+        Ok(_) => panic!("The proposal should have gotten blocked by an old proposal"),
+        Err(err) => assert_eq!(
+            err.error_type,
+            ErrorType::ResourceExhausted as i32,
+            "{:#?}",
+            err,
+        ),
+    }
+}
+
 #[test]
 fn test_add_generic_nervous_system_function_succeeds() {
     let root_canister_id = *TEST_ROOT_CANISTER_ID;
@@ -3354,12 +3557,14 @@ fn test_add_generic_nervous_system_function_succeeds() {
         Box::new(FakeCmc::new()),
     );
 
+    let id = 1000;
     let valid = NervousSystemFunction {
-        id: 1000,
+        id,
         name: "a".to_string(),
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: Some(Topic::ApplicationBusinessLogic as i32),
                 target_canister_id: Some(CanisterId::from(200).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(100).get()),
@@ -3367,7 +3572,40 @@ fn test_add_generic_nervous_system_function_succeeds() {
             },
         )),
     };
-    assert_is_ok!(governance.perform_add_generic_nervous_system_function(valid));
+    assert_is_ok!(governance.perform_add_generic_nervous_system_function(valid.clone()));
+
+    assert_eq!(governance.proto.id_to_nervous_system_functions.len(), 1);
+    assert_eq!(governance.proto.id_to_nervous_system_functions[&id], valid);
+}
+
+#[test]
+fn test_cant_add_generic_nervous_system_function_without_topic() {
+    let id = 1000;
+    let valid = NervousSystemFunction {
+        id,
+        name: "a".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: None, // No topic specified
+                target_canister_id: Some(CanisterId::from(200).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from(100).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+
+    match crate::proposal::validate_and_render_add_generic_nervous_system_function(
+        &Default::default(),
+        &valid,
+        &Default::default(),
+    ) {
+        Ok(_) => panic!(
+            "Should not be able to add generic nervous system functions without a topic, but was able to add it."
+        ),
+        Err(err) => assert_eq!(err, "NervousSystemFunction must have a topic",),
+    }
 }
 
 fn default_governance_with_proto(governance_proto: GovernanceProto) -> Governance {
@@ -3626,10 +3864,7 @@ fn test_move_staked_maturity_on_dissolved_neurons_works() {
     let neuron_id_2 = test_neuron_id(controller_2);
     let regular_maturity: u64 = 1000000;
     let staked_maturity: u64 = 424242;
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = NativeEnvironment::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
     // Dissolved neuron.
     let neuron_1 = Neuron {
         id: Some(neuron_id_1.clone()),
@@ -4333,6 +4568,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(invalid_canister_target.get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(CanisterId::from(1).get()),
@@ -4344,9 +4580,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         .perform_add_generic_nervous_system_function(nns_function_invalid_validator.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_validator,
-        result
+        "function: {nns_function_invalid_validator:?}\nresult: {result:?}"
     );
 
     let nns_function_invalid_target = NervousSystemFunction {
@@ -4355,6 +4589,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         description: None,
         function_type: Some(FunctionType::GenericNervousSystemFunction(
             GenericNervousSystemFunction {
+                topic: None,
                 target_canister_id: Some(CanisterId::from(1).get()),
                 target_method_name: Some("test_method".to_string()),
                 validator_canister_id: Some(invalid_canister_target.get()),
@@ -4366,9 +4601,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         governance.perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_target,
-        result
+        "function: {nns_function_invalid_target:?}\nresult: {result:?}"
     );
 }
 
@@ -4436,239 +4669,391 @@ fn test_effective_maturity_modulation_basis_points() {
     assert!(err.error_message.contains("retriev"));
 }
 
-/// Main Narrative:
-///
-/// 1. There are three neurons. One votes directly. The other two follow the (direct) voter.
-/// 2. The difference between the two follower neurons is what they follow on:
-///   * catch-all/fallback: This neuron does nothing on critical proposals.
-///   * TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
-/// 3. There are two proposals that the (direct) voter neuron votes on:
-///   * Motion: Here, only the first follower neuron follows.
-///   * TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
-///     the first follower neuron uses catch-all/fallback following.
-///
-/// What the first follower neuron does is the most interesting, because what we are trying to
-/// demonstrate here is that catch-all/fallback following applies iff the proposal is
-/// normal/non-critical. Whereas, the second follower neuron is there more as a sanity check, to
-/// witness that specific (i.e. non-catch-all/non-fallback) following still happens.
-///
-/// There is actually a third follower neuron, but this one is even less interesting than the
-/// second. This one is a "super follower" in that this uses a (disjoint) union of the following
-/// of the first two follower neurons.
-///
-/// There is also a third proposal: a critical proposal, but with a different function ID that
-/// nobody specifically follows. Here, only direct voting causes a ballot to be filled in. This
-/// is another sanity test, which we throw in as a "bonus", because it's pretty cheap to add.
 #[test]
-fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
-    // Step 1: Prepare the world.
+fn test_list_topics() {
+    use crate::pb::v1::NervousSystemFunction;
 
-    let proposal_id = ProposalId { id: 42 };
-
-    let voting_neuron_id = NeuronId { id: vec![1] };
-    let follows_on_catch_all_neuron_id = NeuronId { id: vec![2] };
-    let follows_on_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![3] };
-    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![4] };
-
-    let non_critical_function_id = u64::from(&Action::Motion(Default::default()));
-    let critical_function_id = u64::from(&Action::TransferSnsTreasuryFunds(Default::default()));
-
-    let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Default::default()));
-    // This needs to be consistent with neurons (below).
-    let function_followee_index = btreemap! {
-        fallback_pseudo_function_id => btreemap! {
-            voting_neuron_id.to_string() => btreeset! {
-                follows_on_catch_all_neuron_id.clone(),
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone(),
+    // Set up the environment
+    let function_1 = NervousSystemFunction {
+        id: 1000,
+        name: "Test1".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: Some(Topic::DaoCommunitySettings as i32),
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
             },
+        )),
+    };
+    let function_2 = NervousSystemFunction {
+        id: 1001,
+        name: "Test2".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: Some(Topic::SnsFrameworkManagement as i32),
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+    let function_3 = NervousSystemFunction {
+        id: 1003,
+        name: "Test3".to_string(),
+        description: None,
+        function_type: Some(FunctionType::GenericNervousSystemFunction(
+            GenericNervousSystemFunction {
+                topic: None,
+                target_canister_id: Some(CanisterId::from_u64(1).get()),
+                target_method_name: Some("test_method".to_string()),
+                validator_canister_id: Some(CanisterId::from_u64(1).get()),
+                validator_method_name: Some("test_validator_method".to_string()),
+            },
+        )),
+    };
+    let governance_proto = basic_governance_proto();
+    let governance_proto = GovernanceProto {
+        id_to_nervous_system_functions: {
+            let mut id_to_nervous_system_functions = BTreeMap::new();
+            id_to_nervous_system_functions.insert(1000, function_1.clone());
+            id_to_nervous_system_functions.insert(1001, function_2.clone());
+            id_to_nervous_system_functions.insert(1003, function_3.clone());
+            id_to_nervous_system_functions
         },
+        ..governance_proto
+    };
 
-        critical_function_id => btreemap! {
-            voting_neuron_id.to_string() => btreeset! {
-                follows_on_transfer_sns_treasury_funds_neuron_id.clone(),
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone(),
+    let governance = Governance::new(
+        ValidGovernanceProto::try_from(governance_proto).unwrap(),
+        Box::new(NativeEnvironment::new(None)),
+        Box::new(DoNothingLedger {}),
+        Box::new(DoNothingLedger {}),
+        Box::new(FakeCmc::new()),
+    );
+
+    let registered_spec = ExtensionSpec {
+        name: "KongSwap".to_string(),
+        version: ExtensionVersion(1),
+        topic: Topic::TreasuryAssetManagement.into(),
+        extension_type: ExtensionType::TreasuryManager,
+    };
+
+    let deposit_operation_spec = registered_spec.get_operation("deposit").unwrap();
+    let withdraw_operation_spec = registered_spec.get_operation("withdraw").unwrap();
+
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec.clone());
+    cache_registered_extension(CanisterId::from_u64(100_002), registered_spec);
+
+    // Call the API under test
+    let ListTopicsResponse {
+        topics: topic_infos,
+        uncategorized_functions,
+    } = governance.list_topics();
+
+    // Assert the results are as expected
+    assert_eq!(uncategorized_functions, vec![function_3]);
+    let expected_topic_infos = vec![
+        TopicInfo {
+            topic: Topic::DaoCommunitySettings,
+            name: "DAO community settings".to_string(),
+            description: "Proposals to set the direction of the DAO by tokenomics & branding, such as the name and description, token name etc".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 2,
+                        name: "Manage nervous system parameters".to_string(),
+                        description: Some(
+                            "Proposal to change the core parameters of SNS governance.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 13,
+                        name: "Manage ledger parameters".to_string(),
+                        description: Some(
+                            "Proposal to change some parameters in the ledger canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 8,
+                        name: "Manage SNS metadata".to_string(),
+                        description: Some(
+                            "Proposal to change the metadata associated with an SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![
+                    function_1,
+                ],
             },
+            extension_operations: vec![],
+            is_critical: true,
         },
-    };
-
-    let voting_neuron = Neuron {
-        id: Some(voting_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        ..Default::default()
-    };
-    let follows_on_catch_all_neuron = Neuron {
-        id: Some(follows_on_catch_all_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            fallback_pseudo_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
+        TopicInfo {
+            topic: Topic::SnsFrameworkManagement,
+            name: "SNS framework management".to_string(),
+            description: "Proposals to upgrade and manage the SNS DAO framework.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 7,
+                        name: "Upgrade SNS to next version".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a core SNS canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 15,
+                        name: "Advance SNS target version".to_string(),
+                        description: Some(
+                            "Proposal to advance the target version of this SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![
+                    function_2
+                ],
             },
+            extension_operations: vec![],
+            is_critical: false,
         },
-        ..Default::default()
-    };
-    let follows_on_transfer_sns_treasury_funds_neuron = Neuron {
-        id: Some(follows_on_transfer_sns_treasury_funds_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            critical_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
+        TopicInfo {
+            topic: Topic::DappCanisterManagement,
+            name: "Dapp canister management".to_string(),
+            description: "Proposals to upgrade the registered dapp canisters and dapp upgrades via built-in or custom logic and updates to frontend assets.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 3,
+                        name: "Upgrade SNS controlled canister".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 10,
+                        name: "Register dapp canisters".to_string(),
+                        description: Some(
+                            "Proposal to register a dapp canister with the SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 14,
+                        name: "Manage dapp canister settings".to_string(),
+                        description: Some(
+                            "Proposal to change canister settings for some dapp canisters.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
             },
+            extension_operations: vec![],
+            is_critical: false,
         },
-        ..Default::default()
-    };
-    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron = Neuron {
-        id: Some(follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            fallback_pseudo_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
+        TopicInfo {
+            topic: Topic::ApplicationBusinessLogic,
+            name: "Application Business Logic".to_string(),
+            description: "Proposals that are custom to what the governed dapp requires.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![],
+                custom_functions: vec![],
             },
-            critical_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
-            },
+            extension_operations: vec![],
+            is_critical: false,
         },
-        ..Default::default()
-    };
-    let neurons = btreemap! {
-        voting_neuron_id.to_string()
-            => voting_neuron,
-
-        follows_on_catch_all_neuron_id.to_string()
-            => follows_on_catch_all_neuron,
-
-        follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-            => follows_on_transfer_sns_treasury_funds_neuron,
-
-        follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-            => follows_on_catch_all_and_transfer_sns_treasury_funds_neuron,
-    };
-
-    // Step 2: Run code under test.
-
-    // We loop over Votes, because the behavior is "the same" in both cases: under following,
-    // the direction of the vote is consistent (it would be a bit insane if voting Yes caused
-    // another neuron to vote No, and vice versa).
-    for vote_of_neuron in [Vote::Yes, Vote::No] {
-        let now_seconds = 123_456_789;
-
-        let empty_ballot = Ballot {
-            vote: Vote::Unspecified as i32,
-            voting_power: E8,
-            cast_timestamp_seconds: now_seconds,
-        };
-        let filled_in_ballot = Ballot {
-            vote: vote_of_neuron as i32,
-            ..empty_ballot
-        };
-
-        // Code under test.
-        let cast_vote_and_cascade_follow = |function_id| {
-            // Give all neurons an empty ballot.
-            let mut ballots = [
-                &voting_neuron_id,
-                &follows_on_catch_all_neuron_id,
-                &follows_on_transfer_sns_treasury_funds_neuron_id,
-                &follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id,
-            ]
-            .into_iter()
-            .map(|neuron_id| (neuron_id.to_string(), empty_ballot))
-            .collect::<BTreeMap<String, Ballot>>();
-
-            // voter neuron votes, and the code under test deduces all of the implications of
-            // following (or at least, tries to).
-            Governance::cast_vote_and_cascade_follow(
-                &proposal_id,
-                &voting_neuron_id,
-                vote_of_neuron,
-                function_id,
-                &function_followee_index,
-                &neurons,
-                now_seconds,
-                &mut ballots,
-            );
-
-            ballots
-        };
-
-        // Step 2A: Consider following on non-critical proposal. Here catch-all/fallback
-        // following should be used.
-        let non_critical_ballots = cast_vote_and_cascade_follow(non_critical_function_id);
-
-        // Step 3: Inspect results.
-
-        // Step 3A: Non-critical proposal.
-        assert_eq!(
-            non_critical_ballots,
-            btreemap! {
-                voting_neuron_id.to_string()
-                    // Direct vote.
-                    => filled_in_ballot,
-
-                follows_on_catch_all_neuron_id.to_string()
-                    // Thanks to catch-all/fallback following.
-                    => filled_in_ballot,
-
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    // Because this only follows specifically on TransferSnsTreasuryFunds.
-                    => empty_ballot,
-
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    // Thanks to catch-all/fallback following, although from just this case, it
-                    // is unclear why this happens (you need to look at behavior on many
-                    // different proposals to explain the behavior of this neuron).
-                    => filled_in_ballot,
-            }
-        );
-
-        // Step 2B: Critical proposal following. Here catch-all/fallback following should NOT be
-        // used.
-        let critical_ballots = cast_vote_and_cascade_follow(critical_function_id);
-
-        // Step 3B: Critical proposal.
-        assert_eq!(
-            critical_ballots,
-            btreemap! {
-                voting_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // Perhaps, surprisingly, even though this neuron follows on
-                // "catch-all/fallback", that does not apply here, because the proposal is
-                // "critical".
-                follows_on_catch_all_neuron_id.to_string()
-                    => empty_ballot,
-
-                // Unsurprisingly, this neuron follows, because it specifically follows on
-                // proposals of this type.
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // Even less surprisingly, this also follows for similar reasons.
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => filled_in_ballot,
-            }
-        );
-
-        // Step 2C: A different critical proposal -> only direct voting happens here.
-        let no_following_ballots = cast_vote_and_cascade_follow(u64::from(
-            &Action::DeregisterDappCanisters(Default::default()),
-        ));
-        // Step 3C: A different critical proposal.
-        assert_eq!(
-            no_following_ballots,
-            btreemap! {
-                // Only direct vote.
-                voting_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // No following.
-                follows_on_catch_all_neuron_id.to_string()
-                    => empty_ballot,
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => empty_ballot,
-                // Even this "super follower" doesn't follow here.
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => empty_ballot,
-            }
-        );
-    }
+        TopicInfo {
+            topic: Topic::Governance,
+            name: "Governance".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 1,
+                        name: "Motion".to_string(),
+                        description: Some(
+                            "Side-effect-less proposals to set general governance direction.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            extension_operations: vec![],
+            is_critical: false,
+        },
+        TopicInfo {
+            topic: Topic::TreasuryAssetManagement,
+            name: "Treasury & asset management".to_string(),
+            description: "Proposals to move and manage assets that are DAO-owned, including tokens in the treasury, tokens in liquidity pools, or DAO-owned neurons.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 9,
+                        name: "Transfer SNS treasury funds".to_string(),
+                        description: Some(
+                            "Proposal to transfer funds from an SNS Governance controlled treasury account".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 12,
+                        name: "Mint SNS tokens".to_string(),
+                        description: Some(
+                            "Proposal to mint SNS tokens to a specified recipient.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            extension_operations: vec![
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  deposit_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  withdraw_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  deposit_operation_spec },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  withdraw_operation_spec },
+            ],
+            is_critical: true,
+        },
+        TopicInfo {
+            topic: Topic::CriticalDappOperations,
+            name: "Critical Dapp Operations".to_string(),
+            description: "Proposals to execute critical operations on dapps, such as adding or removing dapps from the SNS, or executing custom logic on dapps.".to_string(),
+            functions: NervousSystemFunctions {
+                native_functions: vec![
+                    NervousSystemFunction {
+                        id: 11,
+                        name: "Deregister Dapp Canisters".to_string(),
+                        description: Some(
+                            "Proposal to deregister a previously-registered dapp canister from the SNS.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 4,
+                        name: "Add nervous system function".to_string(),
+                        description: Some(
+                            "Proposal to add a new, user-defined, nervous system function: a canister call which can then be executed by proposal.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 5,
+                        name: "Remove nervous system function".to_string(),
+                        description: Some(
+                            "Proposal to remove a user-defined nervous system function, which will be no longer executable by proposal.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 16,
+                        name: "Set topics for custom proposals".to_string(),
+                        description: Some(
+                            "Proposal to set the topics for custom SNS proposals.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 17,
+                        name: "Register SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to register a new SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                ],
+                custom_functions: vec![],
+            },
+            extension_operations: vec![],
+            is_critical: true,
+        },
+    ];
+    assert_eq!(topic_infos, expected_topic_infos);
 }

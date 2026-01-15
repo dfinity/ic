@@ -2,16 +2,12 @@ use crate::{
     governance::{governance_minting_account, neuron_subaccount},
     neuron::Neuron,
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
 };
 
-use ic_nervous_system_common::ledger::IcpLedger;
+use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nns_common::pb::v1::NeuronId;
-
-#[cfg(feature = "tla")]
-use super::tla::TLA_INSTRUMENTATION_STATE;
-#[cfg(feature = "tla")]
-use tla_instrumentation_proc_macros::tla_function;
+use icp_ledger::AccountIdentifier;
 
 /// An object that represents the burning of neuron fees.
 #[derive(Clone, PartialEq, Debug)]
@@ -24,7 +20,6 @@ impl BurnNeuronFeesOperation {
     /// Burns the neuron fees by calling ledger and changing the neuron. Recoverable errors are
     /// returned while unrecoverable errors cause a panic. A neuron lock should be held before
     /// calling this.
-    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn burn_neuron_fees_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -46,7 +41,7 @@ impl BurnNeuronFeesOperation {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to burn fees: {}", err),
+                    format!("Failed to burn fees: {err}"),
                 )
             })?;
 
@@ -86,7 +81,6 @@ pub struct NeuronStakeTransferOperation {
 impl NeuronStakeTransferOperation {
     /// Transfers the stake from one neuron to another by calling ledger and changing the neurons.
     /// Recoverable errors are returned while unrecoverable errors cause a panic.
-    #[cfg_attr(feature = "tla", tla_function)]
     pub async fn transfer_neuron_stake_with_ledger(
         self,
         ledger: &dyn IcpLedger,
@@ -125,7 +119,7 @@ impl NeuronStakeTransferOperation {
                     .expect("Source neuron not found after failing to transfer stake");
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to transfer stake: {}", err),
+                    format!("Failed to transfer stake: {err}"),
                 )
             })?;
 
@@ -169,5 +163,38 @@ impl NeuronStakeTransferOperation {
     fn amount_from_source_e8s(&self) -> u64 {
         self.amount_to_target_e8s
             .saturating_add(self.transaction_fees_e8s)
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct MintIcpOperation {
+    account: AccountIdentifier,
+    amount_e8s: u64,
+}
+
+impl MintIcpOperation {
+    pub fn new(account: AccountIdentifier, amount_e8s: u64) -> Self {
+        Self {
+            amount_e8s,
+            account,
+        }
+    }
+
+    /// Mints ICP by calling ledger.
+    pub async fn mint_icp_with_ledger(
+        self,
+        ledger: &dyn IcpLedger,
+        now_seconds: u64,
+    ) -> Result<(), GovernanceError> {
+        let _ = ledger
+            .transfer_funds(self.amount_e8s, 0, None, self.account, now_seconds)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Failed to mint ICP: {err}"),
+                )
+            })?;
+        Ok(())
     }
 }

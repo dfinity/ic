@@ -1,9 +1,9 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta_client::RosettaClient;
-use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::convert;
 use ic_rosetta_api::models::{
     BlockIdentifier, CallResponse, NetworkIdentifier, NetworkListResponse, NetworkStatusResponse,
@@ -12,20 +12,20 @@ use ic_rosetta_api::models::{
 use ic_rosetta_api::request_types::{RosettaBlocksMode, RosettaStatus};
 use ic_sender_canister_lib::{SendArg, SendResult};
 use icp_ledger::{
-    AccountIdentifier, Memo, Operation, TimeStamp, Tokens, Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, Operation, TimeStamp, Tokens, Transaction,
 };
-use icp_rosetta_integration_tests::{start_rosetta, RosettaContext};
+use icp_rosetta_integration_tests::{RosettaContext, start_rosetta};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
-use pocket_ic::WasmResult;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
-use std::thread::sleep;
-use std::time::Duration;
+use std::process::Command;
+use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
+use tokio::time::sleep;
 use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
@@ -46,11 +46,7 @@ fn icp_ledger_wasm_bytes() -> Vec<u8> {
             .unwrap()
             .join("icp_ledger")
             .join("ledger");
-    ic_test_utilities_load_wasm::load_wasm(
-        icp_ledger_project_path,
-        "ledger-canister",
-        &["notify-method"],
-    )
+    ic_test_utilities_load_wasm::load_wasm(icp_ledger_project_path, "ledger-canister", &[])
 }
 
 fn icp_ledger_init(sender_id: Principal) -> Vec<u8> {
@@ -58,17 +54,19 @@ fn icp_ledger_init(sender_id: Principal) -> Vec<u8> {
         .sender()
         .expect("test identity sender not found!");
     let minter = AccountIdentifier::new(sender.into(), None);
-    Encode!(&icp_ledger::LedgerCanisterInitPayload::builder()
-        .minting_account(minter)
-        .initial_values(
-            [(
-                AccountIdentifier::new(sender_id.into(), None),
-                icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
-            )]
-            .into()
-        )
-        .build()
-        .unwrap())
+    Encode!(
+        &icp_ledger::LedgerCanisterInitPayload::builder()
+            .minting_account(minter)
+            .initial_values(
+                [(
+                    AccountIdentifier::new(sender_id.into(), None),
+                    icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
+                )]
+                .into()
+            )
+            .build()
+            .unwrap()
+    )
     .unwrap()
 }
 
@@ -168,7 +166,7 @@ impl RosettaTestingClient {
                 );
             }
             attempts += 1;
-            sleep(DURATION_BETWEEN_ATTEMPTS);
+            sleep(DURATION_BETWEEN_ATTEMPTS).await;
         }
         Ok(())
     }
@@ -256,9 +254,9 @@ impl TestEnv {
                     println!("call to /network/status was successfull");
                     break;
                 }
-                Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
+                Err(Error(err)) if matches_blockchain_is_empty_or_still_syncing_error(&err) => {
                     retries -= 1;
-                    sleep(DURATION_BETWEEN_ATTEMPTS);
+                    sleep(DURATION_BETWEEN_ATTEMPTS).await;
                 }
                 Err(Error(err)) => {
                     panic!("Unable to call /network/status: {err:?}")
@@ -352,14 +350,19 @@ impl TestEnv {
         persistent_storage: bool,
     ) -> anyhow::Result<()> {
         let rosetta_state_directory;
-        if let Some(rosetta_context) = std::mem::take(&mut self.rosetta_context) {
-            rosetta_state_directory = rosetta_context.state_directory.clone();
-            rosetta_context.kill();
-        } else {
-            panic!("The Rosetta State directory should be set")
+        match std::mem::take(&mut self.rosetta_context) {
+            Some(rosetta_context) => {
+                rosetta_state_directory = rosetta_context.state_directory.clone();
+                rosetta_context.kill();
+            }
+            _ => {
+                panic!("The Rosetta State directory should be set")
+            }
         }
         assert!(rosetta_state_directory.exists());
-        println!("Restarting rosetta with enable_rosetta_blocks={enable_rosetta_blocks}. State directory: {rosetta_state_directory:?}");
+        println!(
+            "Restarting rosetta with enable_rosetta_blocks={enable_rosetta_blocks}. State directory: {rosetta_state_directory:?}"
+        );
         let replica_url = self
             .pocket_ic
             .url()
@@ -404,16 +407,18 @@ impl TestEnv {
     }
 }
 
-fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
-    (error.code == 700 || error.code == 712 || error.code == 721)
+fn matches_blockchain_is_empty_or_still_syncing_error(
+    error: &rosetta_core::miscellaneous::Error,
+) -> bool {
+    (error.code == 700 || error.code == 702 || error.code == 712 || error.code == 721)
         && error.details.is_some()
         && error
             .details
             .as_ref()
             .unwrap()
             .get("error_message")
-            .map_or(false, |e| {
-                e == "Blockchain is empty" || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
+            .is_some_and( |e| {
+                e == "Blockchain is empty" || e == "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete." || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
             })
 }
 
@@ -506,7 +511,7 @@ async fn test_rosetta_blocks_mode_enabled() {
     );
 }
 
-// a simple trait to simplify unwrapping and decoding a WasmResult
+// a simple trait to simplify unwrapping and decoding Vec<u8>
 trait UnwrapCandid {
     fn unwrap(&self) -> &[u8];
     fn unwrap_as<T: CandidType + for<'a> Deserialize<'a>>(&self) -> T {
@@ -514,12 +519,9 @@ trait UnwrapCandid {
     }
 }
 
-impl UnwrapCandid for WasmResult {
+impl UnwrapCandid for Vec<u8> {
     fn unwrap(&self) -> &[u8] {
-        match self {
-            WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(err) => panic!("Cannot unwrap Reject: {err}"),
-        }
+        self.as_slice()
     }
 }
 
@@ -550,7 +552,8 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -708,7 +711,8 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -743,24 +747,26 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     assert_eq!(block1.metadata, None);
     assert_eq!(
         block1.transactions,
-        vec![convert::to_rosetta_core_transaction(
-            /* block_index: */ 1,
-            Transaction {
-                operation: Operation::Transfer {
-                    from: AccountIdentifier::new(env.sender_id.into(), None),
-                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                    amount: Tokens::from_e8s(1u64),
-                    fee: DEFAULT_TRANSFER_FEE,
-                    spender: None,
+        vec![
+            convert::to_rosetta_core_transaction(
+                /* block_index: */ 1,
+                Transaction {
+                    operation: Operation::Transfer {
+                        from: AccountIdentifier::new(env.sender_id.into(), None),
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(1u64),
+                        fee: DEFAULT_TRANSFER_FEE,
+                        spender: None,
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
                 },
-                memo: Memo(0),
-                created_at_time: None,
-                icrc1_memo: None,
-            },
-            rosetta_block1_expected_time_ts,
-            "ICP"
-        )
-        .unwrap()]
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap()
+        ]
     );
 
     // check block 2
@@ -837,24 +843,26 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     assert_eq!(block3.metadata, None);
     assert_eq!(
         block3.transactions,
-        vec![convert::to_rosetta_core_transaction(
-            /* block_index: */ 4,
-            Transaction {
-                operation: Operation::Transfer {
-                    from: AccountIdentifier::new(env.sender_id.into(), None),
-                    to: AccountIdentifier::new(Principal::anonymous().into(), None),
-                    amount: Tokens::from_e8s(1u64),
-                    fee: DEFAULT_TRANSFER_FEE,
-                    spender: None,
+        vec![
+            convert::to_rosetta_core_transaction(
+                /* block_index: */ 4,
+                Transaction {
+                    operation: Operation::Transfer {
+                        from: AccountIdentifier::new(env.sender_id.into(), None),
+                        to: AccountIdentifier::new(Principal::anonymous().into(), None),
+                        amount: Tokens::from_e8s(1u64),
+                        fee: DEFAULT_TRANSFER_FEE,
+                        spender: None,
+                    },
+                    memo: Memo(0),
+                    created_at_time: None,
+                    icrc1_memo: None,
                 },
-                memo: Memo(0),
-                created_at_time: None,
-                icrc1_memo: None,
-            },
-            rosetta_block1_expected_time_ts,
-            "ICP"
-        )
-        .unwrap()]
+                rosetta_block1_expected_time_ts,
+                "ICP"
+            )
+            .unwrap()
+        ]
     );
 }
 
@@ -913,22 +921,23 @@ async fn test_query_block_range() {
 async fn test_block_transaction() {
     let env = TestEnv::setup(true, true).await.unwrap();
     env.pocket_ic.stop_progress().await;
-    assert!(env
-        .rosetta
-        .block_transaction(
-            BlockIdentifier {
-                index: 100,
-                hash: "INVALID_HASH".to_owned()
-            },
-            TransactionIdentifier {
-                hash: "INVALID_TX_HASH".to_owned()
-            }
-        )
-        .await
-        .unwrap_err()
-        .0
-        .message
-        .contains("Block not found"));
+    assert!(
+        env.rosetta
+            .block_transaction(
+                BlockIdentifier {
+                    index: 100,
+                    hash: "INVALID_HASH".to_owned()
+                },
+                TransactionIdentifier {
+                    hash: "INVALID_TX_HASH".to_owned()
+                }
+            )
+            .await
+            .unwrap_err()
+            .0
+            .message
+            .contains("Block not found")
+    );
 
     // We are creating a second rosetta block that contains 4 transactions with each having a unique tx hash
     env.icrc1_transfers(vec![
@@ -1008,19 +1017,20 @@ async fn test_block_transaction() {
         .transaction;
     assert!(transaction == transactions[1]);
 
-    assert!(env
-        .rosetta
-        .block_transaction(
-            block_identifier,
-            TransactionIdentifier {
-                hash: "INVALID_TX_HASH".to_owned()
-            }
-        )
-        .await
-        .unwrap_err()
-        .0
-        .message
-        .contains("Invalid transaction id"));
+    assert!(
+        env.rosetta
+            .block_transaction(
+                block_identifier,
+                TransactionIdentifier {
+                    hash: "INVALID_TX_HASH".to_owned()
+                }
+            )
+            .await
+            .unwrap_err()
+            .0
+            .message
+            .contains("Invalid transaction id")
+    );
 }
 
 #[tokio::test]
@@ -1204,17 +1214,18 @@ async fn test_network_status_multiple_genesis_transactions() {
     );
     assert_eq!(network_status.oldest_block_identifier, None);
     // We should not be able to call block with block index 3 at this point
-    assert!(env
-        .rosetta
-        .block(PartialBlockIdentifier {
-            index: Some(3),
-            hash: None,
-        })
-        .await
-        .unwrap_err()
-        .0
-        .message
-        .contains("Block not found"));
+    assert!(
+        env.rosetta
+            .block(PartialBlockIdentifier {
+                index: Some(3),
+                hash: None,
+            })
+            .await
+            .unwrap_err()
+            .0
+            .message
+            .contains("Block not found")
+    );
 }
 
 #[tokio::test]
@@ -1222,7 +1233,7 @@ async fn test_network_status_single_genesis_transaction() {
     let mut env = TestEnv::setup(false, true).await.unwrap();
     let t1 = env.pocket_ic.get_time().await;
     // We need to advance the time to make sure only a single transaction gets into the genesis block
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    sleep(Duration::from_secs(1)).await;
     let t2 = env.pocket_ic.get_time().await;
     assert!(t1 < t2);
     env.pocket_ic.stop_progress().await;
@@ -1325,4 +1336,16 @@ async fn test_network_status_single_genesis_transaction() {
         network_status.genesis_block_identifier,
         genesis_block.block_identifier
     );
+}
+
+#[test]
+fn test_mainnet_and_env_flag_set_returns_error() {
+    let output = Command::new(get_rosetta_path())
+        .args(["--environment", "test", "--mainnet"])
+        .output()
+        .expect("Failed to execute binary");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Cannot specify both --mainnet and --environment flags"));
 }

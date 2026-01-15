@@ -19,9 +19,6 @@ Basically, each test has three or four basic parts:
    level interface to governance, such as `NNS::merge_maturity`. You can also
    directly manipulate the `nns.governance` object within the fixture.
 
-4. After each operation, or at the end of the test, call `nns.assert_changes`,
-   which takes a vector of expected changes to the NNS since either the
-   fixture was created or `assert_changes` was called.
 
 ## Notes
 
@@ -52,14 +49,3 @@ builds in certain assumptions. For example, `NNS::get_neuron` will assert if
 the neuron does not exist, while `Governance::get_neuron` returns a `Result`
 that must be checked for errors.
 
-### Change lists
-
-Throughout the test, or at its end, `comparable::assert_changes` should be
-used to confirm that the resulting state of the NNS is exactly what you think
-it is, and nothing more or less. This is done by asserting the list of changes
-the test should expect to see. The types used for this generally follow the
-exact same data types found within the NNS, but using a predictable pattern.
-
-For more information, see the crate documentation for `comparable` here:
-
-https://docs.rs/comparable

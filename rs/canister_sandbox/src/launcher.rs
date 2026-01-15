@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     os::unix::{net::UnixStream, prelude::FromRawFd},
     sync::{Arc, Condvar, Mutex},
-    thread,
 };
 
 use crate::{
@@ -25,12 +24,12 @@ use crate::{
 use ic_types::CanisterId;
 use nix::{
     errno::Errno,
-    sys::wait::{wait, WaitStatus},
+    sys::wait::{WaitStatus, wait},
     unistd::Pid,
 };
 
 /// The `main()` of the launcher binary. This function is called from
-/// binaries such as `ic-replay` and `drun` to run as a sandbox launcher.
+/// binaries such as `ic-replay` to run as a sandbox launcher.
 ///
 pub fn sandbox_launcher_main() {
     let socket = child_process_initialization();
@@ -104,58 +103,63 @@ impl LauncherServer {
         let has_children = Arc::new(Condvar::new());
         let watcher_process_info_map = Arc::clone(&pid_to_process_info);
         let watcher_has_children = Arc::clone(&has_children);
-        thread::spawn(move || loop {
-            // Explicitly drop the lock on the id map before waiting on children
-            // (to avoid a deadlock with the `launch_sandbox`).
-            drop(
-                watcher_has_children
-                    .wait_while(watcher_process_info_map.lock().unwrap(), |info_map| {
-                        info_map.is_empty()
-                    })
-                    .unwrap(),
-            );
-            match wait() {
-                Err(err) => match err {
-                    Errno::ECHILD => {
-                        unreachable!("Launcher received ECHILD error");
-                    }
-                    _ => unreachable!("Launcher encountered error waiting on children: {}", err),
-                },
-                Ok(status) => match status {
-                    WaitStatus::Exited(pid, 0) => {
-                        watcher_process_info_map.lock().unwrap().remove(&pid);
-                    }
-                    WaitStatus::StillAlive => {}
-                    _ => {
-                        let pid = status
-                            .pid()
-                            .expect("WaitStatus is not StillAlive so it should have a pid");
-
-                        let mut info_map = watcher_process_info_map.lock().unwrap();
-                        let process_info = info_map.remove(&pid);
-                        eprintln!(
-                            "Sandbox pid {} for canister {:?} exited unexpectedly with status {:?}",
-                            pid, process_info, status
-                        );
-
-                        let should_panic = process_info
-                            .as_ref()
-                            .map(|x| x.panic_on_failure)
-                            .unwrap_or(true);
-                        if should_panic {
-                            // If we have a canister id, tell the replica process to print its history.
-                            if let Some(canister_id) = process_info.and_then(|x| x.canister_id) {
-                                controller
-                                    .sandbox_exited(SandboxExitedRequest { canister_id })
-                                    .sync()
-                                    .unwrap();
-                            }
-                            panic!("Launcher detected sandbox exit");
+        std::thread::Builder::new()
+            .name("LauncherChildWatch".to_string())
+            .spawn(move || loop {
+                // Explicitly drop the lock on the id map before waiting on children
+                // (to avoid a deadlock with the `launch_sandbox`).
+                drop(
+                    watcher_has_children
+                        .wait_while(watcher_process_info_map.lock().unwrap(), |info_map| {
+                            info_map.is_empty()
+                        })
+                        .unwrap(),
+                );
+                match wait() {
+                    Err(err) => match err {
+                        Errno::ECHILD => {
+                            unreachable!("Launcher received ECHILD error");
                         }
-                    }
-                },
-            }
-        });
+                        _ => {
+                            unreachable!("Launcher encountered error waiting on children: {}", err)
+                        }
+                    },
+                    Ok(status) => match status {
+                        WaitStatus::Exited(pid, 0) => {
+                            watcher_process_info_map.lock().unwrap().remove(&pid);
+                        }
+                        WaitStatus::StillAlive => {}
+                        _ => {
+                            let pid = status
+                                .pid()
+                                .expect("WaitStatus is not StillAlive so it should have a pid");
+
+                            let mut info_map = watcher_process_info_map.lock().unwrap();
+                            let process_info = info_map.remove(&pid);
+                            eprintln!(
+                                "Sandbox pid {pid} for canister {process_info:?} exited unexpectedly with status {status:?}"
+                            );
+
+                            let should_panic = process_info
+                                .as_ref()
+                                .map(|x| x.panic_on_failure)
+                                .unwrap_or(true);
+                            if should_panic {
+                                // If we have a canister id, tell the replica process to print its history.
+                                if let Some(canister_id) = process_info.and_then(|x| x.canister_id)
+                                {
+                                    controller
+                                        .sandbox_exited(SandboxExitedRequest { canister_id })
+                                        .sync()
+                                        .unwrap();
+                                }
+                                panic!("Launcher detected sandbox exit");
+                            }
+                        }
+                    },
+                }
+            })
+            .unwrap();
         Self {
             pid_to_process_info,
             has_children,
@@ -205,7 +209,7 @@ impl LauncherService for LauncherServer {
                 rpc::Call::new_resolved(Ok(LaunchSandboxReply { pid }))
             }
             Err(err) => {
-                eprintln!("Error spawning sandbox process: {}", err);
+                eprintln!("Error spawning sandbox process: {err}");
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }
@@ -249,7 +253,7 @@ impl LauncherService for LauncherServer {
                 rpc::Call::new_resolved(Ok(LaunchCompilerReply { pid }))
             }
             Err(err) => {
-                eprintln!("Error spawning compiler process {}: {}", exec_path, err);
+                eprintln!("Error spawning compiler process {exec_path}: {err}");
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }

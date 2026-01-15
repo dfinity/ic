@@ -73,8 +73,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
         let key_epoch = secret_key.current_epoch().unwrap().get();
         assert_eq!(
             key_epoch, epoch,
-            "Deleted epoch {} but key epoch is {}\n",
-            epoch, key_epoch
+            "Deleted epoch {epoch} but key epoch is {key_epoch}\n"
         );
     }
 }
@@ -257,8 +256,7 @@ fn encrypted_messages_should_decrypt() {
         assert_eq!(
             plaintext_maybe.as_ref(),
             Ok(message),
-            "Plaintext doesn't match for node {}",
-            node_index
+            "Plaintext doesn't match for node {node_index}"
         );
     }
 }
@@ -339,8 +337,7 @@ fn decryption_should_fail_below_epoch() {
                 assert_eq!(
                     plaintext_maybe.as_ref(),
                     Ok(message),
-                    "Plaintext doesn't match for node {}",
-                    node_index
+                    "Plaintext doesn't match for node {node_index}"
                 );
             } else {
                 assert_eq!(
@@ -349,8 +346,7 @@ fn decryption_should_fail_below_epoch() {
                         ciphertext_epoch,
                         secret_key_epoch
                     }),
-                    "Node {} should not be able to decrypt after having deleted the current epoch",
-                    node_index
+                    "Node {node_index} should not be able to decrypt after having deleted the current epoch"
                 );
             }
         }

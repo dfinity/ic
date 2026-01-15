@@ -5,10 +5,10 @@ use dfn_core::{
     println,
 };
 use ic_base_types::PrincipalId;
-use ic_crypto_secp256k1::PublicKey;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::GovernanceError;
+use ic_nns_governance_api::GovernanceError;
+use ic_secp256k1::PublicKey;
 use sha3::{Digest, Keccak256};
 use std::{collections::HashSet, time::SystemTime};
 
@@ -227,16 +227,12 @@ impl GovernanceCanister {
 
         let result = result.map_err(|(code, msg)| {
             format!(
-                "Error calling method 'claim_gtc_neurons' of the Governance canister. Code: {:?}. Message: {}",
-                code, msg
+                "Error calling method 'claim_gtc_neurons' of the Governance canister. Code: {code:?}. Message: {msg}"
             )
         })?;
 
         result.map_err(|e| {
-            format!(
-                "Error returned by 'claim_gtc_neurons' of the Governance canister: {:?}",
-                e
-            )
+            format!("Error returned by 'claim_gtc_neurons' of the Governance canister: {e:?}")
         })
     }
 
@@ -256,16 +252,12 @@ impl GovernanceCanister {
         let result = result.map_err(|(code, msg)| {
             format!(
                 "Error calling method 'transfer_gtc_neuron' of the Governance canister. \
-                 Code: {:?}. Message: {}",
-                code, msg
+                 Code: {code:?}. Message: {msg}"
             )
         })?;
 
         result.map_err(|e| {
-            format!(
-                "Error returned by 'transfer_gtc_neuron' of the Governance canister: {:?}",
-                e
-            )
+            format!("Error returned by 'transfer_gtc_neuron' of the Governance canister: {e:?}")
         })
     }
 }
@@ -310,7 +302,7 @@ fn public_key_to_principal(public_key: &PublicKey) -> PrincipalId {
 pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
-    use ic_crypto_secp256k1::{PrivateKey, PublicKey};
+    use ic_secp256k1::{PrivateKey, PublicKey};
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests

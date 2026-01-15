@@ -5,6 +5,8 @@ Wants=network-online.target
 After=network-online.target
 After=bootstrap-ic-node.service
 Wants=bootstrap-ic-node.service
+PartOf=systemd-networkd.service
+After=systemd-networkd.service
 # Only start if configuration file exists
 ConditionPathExists=/etc/danted.conf
 

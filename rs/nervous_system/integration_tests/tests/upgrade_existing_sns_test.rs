@@ -2,11 +2,13 @@ use candid::Nat;
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, install_nns_canisters,
-        nns, sns, upgrade_nns_canister_to_tip_of_master_or_panic,
+        add_wasm_via_nns_proposal, add_wasms_to_sns_wasm, install_canister, nns,
+        sns::{self, governance::set_automatically_advance_target_version_flag},
+        upgrade_nns_canister_to_tip_of_master_or_panic,
     },
 };
 use ic_nns_constants::{self, GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
@@ -14,6 +16,7 @@ use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_index_ng_sns_wasm, build_ledger_sns_wasm,
     create_modified_sns_wasm,
 };
+use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::SnsCanisterType;
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::{
@@ -22,7 +25,6 @@ use icrc_ledger_types::{
 };
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::prelude::ToPrimitive;
-use std::time::SystemTime;
 
 #[tokio::test]
 async fn test_upgrade_existing_sns() {
@@ -35,6 +37,10 @@ async fn test_upgrade_existing_sns() {
             0,
         )
         .build();
+    let swap_parameters = create_service_nervous_system
+        .swap_parameters
+        .clone()
+        .unwrap();
 
     let dapp_canister_ids: Vec<_> = create_service_nervous_system
         .dapp_canisters
@@ -73,8 +79,9 @@ async fn test_upgrade_existing_sns() {
         }
 
         eprintln!("Install the (mainnet) NNS canisters ...");
-        let with_mainnet_nns_canisters = true;
-        install_nns_canisters(&pocket_ic, vec![], with_mainnet_nns_canisters, None, vec![]).await;
+        let mut nns_installer = NnsInstaller::default();
+        nns_installer.with_mainnet_nns_canister_versions();
+        nns_installer.install(&pocket_ic).await;
 
         eprintln!(" Publish (mainnet) SNS Wasms to SNS-W ...");
         let with_mainnet_sns_wasms = true;
@@ -96,6 +103,31 @@ async fn test_upgrade_existing_sns() {
         sns_instance_label,
     )
     .await;
+
+    eprintln!("Await the swap lifecycle ...");
+    sns::swap::await_swap_lifecycle(&pocket_ic, sns.swap.canister_id, Lifecycle::Open)
+        .await
+        .unwrap();
+
+    eprintln!("smoke_test_participate_and_finalize ...");
+    sns::swap::smoke_test_participate_and_finalize(
+        &pocket_ic,
+        sns.swap.canister_id,
+        swap_parameters,
+    )
+    .await;
+
+    eprintln!(
+        "Disabling automatic upgrades to have full control over when an upgrade is triggered ..."
+    );
+    let automatically_advance_target_version = false;
+    set_automatically_advance_target_version_flag(
+        &pocket_ic,
+        sns.governance.canister_id,
+        automatically_advance_target_version,
+    )
+    .await
+    .unwrap();
 
     eprintln!("Testing the Archive canister requires that it can be spawned ...");
     sns::ensure_archive_canister_is_spawned_or_panic(
@@ -184,7 +216,9 @@ async fn test_upgrade_existing_sns() {
         eprintln!("Ledger check 1: We get the expected state in the archive(s) ...");
         sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id).await;
 
-        eprintln!("Ledger check 2: We get the same number of blocks that we had before the upgrade (because no transactions have happened after the upgrade) ...");
+        eprintln!(
+            "Ledger check 2: We get the same number of blocks that we had before the upgrade (because no transactions have happened after the upgrade) ..."
+        );
         let post_upgrade_chain_length =
             sns::ledger::get_blocks(&pocket_ic, sns.ledger.canister_id, 0_u64, 1_u64)
                 .await
@@ -228,12 +262,7 @@ async fn test_upgrade_existing_sns() {
             .unwrap();
             (wealthy_user_principal_id, wealthy_user_account)
         };
-        let current_ic_unix_time_nanos = pocket_ic
-            .get_time()
-            .await
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
+        let current_ic_unix_time_nanos = pocket_ic.get_time().await.as_nanos_since_unix_epoch();
         let spender_principal_id = PrincipalId::new_user_test_id(1_000_002);
         let spender = Account {
             owner: spender_principal_id.0,
@@ -300,7 +329,9 @@ async fn test_upgrade_existing_sns() {
         sns::ledger::check_blocks_or_panic(&pocket_ic, sns.ledger.canister_id).await;
     }
 
-    eprintln!("Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test) ...");
+    eprintln!(
+        "Publish modified versions of all the wasms and ensure we can upgrade a second time (pre-upgrade smoke test) ..."
+    );
     {
         let wasm = create_modified_sns_wasm(&build_index_ng_sns_wasm(), Some(42));
         let proposal_info = add_wasm_via_nns_proposal(&pocket_ic, wasm).await.unwrap();
@@ -322,10 +353,7 @@ async fn test_upgrade_existing_sns() {
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,
     ] {
-        eprintln!(
-            "upgrade_sns_to_next_version_and_assert_change {:?} ...",
-            sns_canister_type
-        );
+        eprintln!("upgrade_sns_to_next_version_and_assert_change {sns_canister_type:?} ...");
         sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, sns_canister_type)
             .await;
     }

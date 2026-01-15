@@ -1,51 +1,54 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
-use ic_management_canister_types::{
+use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
-    SchnorrAlgorithm, SchnorrKeyId,
+    OnLowWasmMemoryHookStatus, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
-        system_state::{CyclesUseCase, OnLowWasmMemoryHookStatus, TaskQueue},
+        system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
+        Stream, SubnetMetrics,
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        Stream, SubnetMetrics,
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
+};
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
-use std::convert::TryFrom;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
+    ops::RangeInclusive,
     sync::Arc,
 };
 use strum::IntoEnumIterator;
@@ -152,6 +155,7 @@ impl ReplicatedStateBuilder {
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
 
@@ -255,7 +259,7 @@ impl CanisterStateBuilder {
     }
 
     pub fn with_memory_allocation<B: Into<NumBytes>>(mut self, num_bytes: B) -> Self {
-        self.memory_allocation = MemoryAllocation::try_from(num_bytes.into()).unwrap();
+        self.memory_allocation = MemoryAllocation::from(num_bytes.into());
         self
     }
 
@@ -396,7 +400,7 @@ impl Default for CanisterStateBuilder {
             cycles: INITIAL_CYCLES,
             stable_memory: None,
             wasm: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             wasm_memory_threshold: NumBytes::new(0),
             compute_allocation: ComputeAllocation::zero(),
             ingress_queue: Vec::default(),
@@ -451,8 +455,7 @@ impl SystemStateBuilder {
     }
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
-        self.system_state.memory_allocation =
-            MemoryAllocation::try_from(memory_allocation).unwrap();
+        self.system_state.memory_allocation = MemoryAllocation::from(memory_allocation);
         self
     }
 
@@ -466,15 +469,38 @@ impl SystemStateBuilder {
         self
     }
 
-    pub fn on_low_wasm_memory_hook_status(
+    pub fn environment_variables(
+        mut self,
+        environment_variables: BTreeMap<String, String>,
+    ) -> Self {
+        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
+        self
+    }
+
+    pub fn empty_task_queue_with_on_low_wasm_memory_hook_status(
         mut self,
         on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
     ) -> Self {
-        self.system_state.task_queue = TaskQueue::from_checkpoint(
-            VecDeque::new(),
-            on_low_wasm_memory_hook_status,
-            &self.system_state.canister_id,
-        );
+        self.system_state.task_queue = TaskQueue::default();
+        match on_low_wasm_memory_hook_status {
+            // Default hook status is `ConditionNotSatisfied`.
+            OnLowWasmMemoryHookStatus::ConditionNotSatisfied => (),
+            // To make hook status `Ready`, we should enqueue `ExecutionTask::OnLowWasmMemory`.
+            OnLowWasmMemoryHookStatus::Ready => self
+                .system_state
+                .task_queue
+                .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory),
+            // To make hook status `Executed`, we should enqueue `ExecutionTask::OnLowWasmMemory`,
+            // followed by `pop_front()`, which from the standpoint of `TaskQueue` is equivalent to
+            // executing task.
+            OnLowWasmMemoryHookStatus::Executed => {
+                self.system_state
+                    .task_queue
+                    .enqueue(ic_replicated_state::ExecutionTask::OnLowWasmMemory);
+                self.system_state.task_queue.pop_front();
+            }
+        };
+
         self
     }
 
@@ -529,7 +555,7 @@ impl CallContextBuilder {
 impl Default for CallContextBuilder {
     fn default() -> Self {
         Self {
-            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0)),
+            call_origin: CallOrigin::Ingress(user_test_id(0), message_test_id(0), String::from("")),
             responded: false,
             time: Time::from_nanos_since_unix_epoch(0),
         }
@@ -848,26 +874,36 @@ pub fn insert_dummy_canister(
 }
 
 prop_compose! {
-    /// Produces a strategy that generates an arbitrary `signals_end` and between
-    /// `[min_signal_count, max_signal_count]` reject signals.
-    pub fn arb_reject_signals(min_signal_count: usize, max_signal_count: usize, reject_reasons: Vec<RejectReason>)(
-        sig_start in 0..10000_u64,
-        reject_signals_map in prop::collection::btree_map(
-            0..(100 + max_signal_count),
-            proptest::sample::select(reject_reasons),
-            min_signal_count..=max_signal_count,
-        ),
-        signals_end_delta in 0..10u64,
+    /// Produces a strategy that generates arbitrary stream signals.
+    ///
+    /// Signals start at `signal_start` from which there are `signal_count` signals.
+    /// Of these signals, `ceil(sqrt(signal_count))` are randomly distributed reject signals.
+    ///
+    /// `signals_end` comes after the signal range, i.e. `signal_start + signal_count + 1`.
+    pub fn arb_stream_signals(
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
+        with_reject_reasons: Vec<RejectReason>
+    )(
+        signal_start in signal_start_range,
+        (signal_count, reject_signals_map) in signal_count_range
+            .prop_flat_map(move |signal_count| {
+                let reject_signals_count = (signal_count as f64).sqrt().ceil() as usize;
+                (
+                    Just(signal_count),
+                    prop::collection::btree_map(
+                        0..=signal_count,
+                        proptest::sample::select(with_reject_reasons.clone()),
+                        reject_signals_count,
+                    ),
+                )
+            })
     ) -> (StreamIndex, VecDeque<RejectSignal>) {
         let reject_signals = reject_signals_map
-            .iter()
-            .map(|(index, reason)| RejectSignal::new(*reason, (*index as u64 + sig_start).into()))
+            .into_iter()
+            .map(|(index, reason)| RejectSignal::new(reason, (index as u64 + signal_start).into()))
             .collect::<VecDeque<RejectSignal>>();
-        let signals_end = reject_signals
-            .back()
-            .map(|signal| signal.index)
-            .unwrap_or(0.into())
-            .increment() + signals_end_delta.into();
+        let signals_end = (signal_start + signal_count as u64 + 1).into();
         (signals_end, reject_signals)
     }
 }
@@ -878,20 +914,20 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals using `with_reject_reasons` to
     /// determine the type of reject signal.
     pub fn arb_stream_with_config(
-        min_size: usize,
-        max_size: usize,
-        min_signal_count: usize,
-        max_signal_count: usize,
+        msg_start_range: RangeInclusive<u64>,
+        size_range: RangeInclusive<usize>,
+        signal_start_range: RangeInclusive<u64>,
+        signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>,
     )(
-        msg_start in 0..10000u64,
+        msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::request_or_response_with_config(true),
-            min_size..=max_size
+            arbitrary::stream_message_with_config(true),
+            size_range,
         ),
-        (signals_end, reject_signals) in arb_reject_signals(
-            min_signal_count,
-            max_signal_count,
+        (signals_end, reject_signals) in arb_stream_signals(
+            signal_start_range,
+            signal_count_range,
             with_reject_reasons,
         ),
         responses_only_flag in any::<bool>(),
@@ -915,11 +951,11 @@ prop_compose! {
     /// `[min_signal_count, max_signal_count]` reject signals.
     pub fn arb_stream(min_size: usize, max_size: usize, min_signal_count: usize, max_signal_count: usize)(
         stream in arb_stream_with_config(
-            min_size,
-            max_size,
-            min_signal_count,
-            max_signal_count,
-            RejectReason::iter().collect(),
+            0..=10000,
+            min_size..=max_size,
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            RejectReason::all(),
         )
     ) -> Stream {
         stream
@@ -953,7 +989,11 @@ prop_compose! {
     )(
         msg_start in 0..10000u64,
         msg_len in 0..10000u64,
-        (signals_end, reject_signals) in arb_reject_signals(min_signal_count, max_signal_count, with_reject_reasons),
+        (signals_end, reject_signals) in arb_stream_signals(
+            0..=10000,
+            min_signal_count..=max_signal_count,
+            with_reject_reasons,
+        ),
         responses_only in any::<bool>(),
     ) -> StreamHeader {
         let begin = StreamIndex::from(msg_start);
@@ -968,6 +1008,27 @@ prop_compose! {
                 deprecated_responses_only: responses_only,
             },
         )
+    }
+}
+
+prop_compose! {
+    pub fn arb_invalid_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+    )(
+        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, RejectReason::all()),
+        reason in proptest::sample::select(RejectReason::all()),
+    ) -> StreamHeader {
+        let begin = valid_stream_header.begin();
+        let end = valid_stream_header.end();
+        let signals_end = valid_stream_header.signals_end();
+        let mut reject_signals = valid_stream_header.reject_signals().clone();
+        let flags = *valid_stream_header.flags();
+
+        // `reject_signals` may not contain the `signals_end`.
+        reject_signals.push_back(RejectSignal::new(reason, signals_end));
+
+        StreamHeader::new(begin, end, signals_end, reject_signals, flags)
     }
 }
 

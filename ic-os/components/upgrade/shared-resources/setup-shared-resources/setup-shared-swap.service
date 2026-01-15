@@ -1,0 +1,23 @@
+[Unit]
+Description=Setup shared-swap space
+DefaultDependencies=no
+Requires=dev-mapper-store\x2dshared\x2d\x2dswap.device
+After=init-config.service dev-mapper-store\x2dshared\x2d\x2dswap.device
+Before=dev-mapper-store\x2dshared\x2d\x2dswap.swap
+# Add an explicit sequencing to LVM setup. The observed problem is that the
+# LV apparently becomes notified as "ready" through udev before the actual
+# lvcreate command has finished. This results in filesystem setup racing with
+# lvcreate performing a "wipe" of the LV, resulting in a destroyed filesystem
+# in turn.
+After=setup-lvs.service
+Requires=setup-lvs.service
+ConditionPathExists=/run/config/guest_vm_type/default
+
+[Install]
+RequiredBy=systemd-fsck@dev-mapper-store\x2dshared\x2d\x2dswap.service
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-shared-swap.sh

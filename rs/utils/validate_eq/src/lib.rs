@@ -6,7 +6,6 @@ use std::fmt::Debug;
 ///
 /// Gigantic fields such as PageMaps that are unfeasible to compare in production are meant to
 /// be exempted from comparison.
-
 pub trait ValidateEq {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String>;
 }
@@ -121,25 +120,29 @@ mod tests {
         assert!(A { a: 2, b: 2 }.validate_eq(&A { a: 2, b: 1 }).is_ok());
         assert!(A { a: 2, b: 2 }.validate_eq(&A { a: 1, b: 2 }).is_err());
 
-        assert!(C {
-            a: A { a: 2, b: 2 },
-            c: 2
-        }
-        .validate_eq(&C {
-            a: A { a: 2, b: 1 },
-            c: 2
-        })
-        .is_ok());
+        assert!(
+            C {
+                a: A { a: 2, b: 2 },
+                c: 2
+            }
+            .validate_eq(&C {
+                a: A { a: 2, b: 1 },
+                c: 2
+            })
+            .is_ok()
+        );
 
-        assert!(C {
-            a: A { a: 2, b: 2 },
-            c: 2
-        }
-        .validate_eq(&C {
-            a: A { a: 1, b: 1 },
-            c: 2
-        })
-        .is_err());
+        assert!(
+            C {
+                a: A { a: 2, b: 2 },
+                c: 2
+            }
+            .validate_eq(&C {
+                a: A { a: 1, b: 1 },
+                c: 2
+            })
+            .is_err()
+        );
     }
 
     #[test]

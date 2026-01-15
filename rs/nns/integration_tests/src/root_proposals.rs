@@ -1,7 +1,7 @@
 use canister_test::{Canister, Project};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types::CanisterInstallMode;
+use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
@@ -15,7 +15,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::initial_mutations_for_a_multinode_nns_subnet,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
@@ -91,9 +91,6 @@ fn test_upgrade_governance_through_root_proposal() {
         // Build and submit a root proposal
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 // Note that we upgrade the governance canister to the universal
                 // canister (effectively breaking governance). This is needed so
                 // that we can be sure that the upgrade actually went through.
@@ -193,9 +190,6 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
         // Build and submit a root proposal
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters
@@ -209,10 +203,12 @@ fn test_unauthorized_user_cant_submit_on_root_proposals() {
             .await
             .expect("Error submitting root proposal (Generic error)");
         assert!(response.is_err());
-        assert!(response
-            .err()
-            .unwrap()
-            .contains("must be among the node operators of the nns subnet"));
+        assert!(
+            response
+                .err()
+                .unwrap()
+                .contains("must be among the node operators of the nns subnet")
+        );
         Ok(())
     })
 }
@@ -233,9 +229,6 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
         // Build and submit a root proposal
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
@@ -252,10 +245,12 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
             .await
             .expect("Error submitting root proposal (Generic error)");
         assert!(response.is_err());
-        assert!(response
-            .err()
-            .unwrap()
-            .contains("Expected governance wasm sha must match"));
+        assert!(
+            response
+                .err()
+                .unwrap()
+                .contains("Expected governance wasm sha must match")
+        );
         Ok(())
     })
 }
@@ -279,9 +274,6 @@ fn test_enough_no_votes_rejects_the_proposal() {
         // Build and submit a root proposal
         let change_canister_request =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 // Note that we upgrade the governance canister to the universal
                 // canister (effectively breaking governance). This is needed so
                 // that we can be sure that the upgrade actually went through.
@@ -358,9 +350,6 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         // Build and submit a root proposal
         let change_canister_request1 =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 // Note that we upgrade the governance canister to the empty
                 // canister (effectively breaking governance). This is needed so
                 // that we can be sure that the upgrade actually went through.
@@ -392,9 +381,6 @@ fn test_changing_the_sha_invalidates_the_proposal() {
         // Build and submit a second root proposal
         let change_canister_request2 =
             ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, GOVERNANCE_CANISTER_ID)
-                .with_memory_allocation(ic_nns_constants::memory_allocation_of(
-                    GOVERNANCE_CANISTER_ID,
-                ))
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let response: Result<(), String> = nns_canisters

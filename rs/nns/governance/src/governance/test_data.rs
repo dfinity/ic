@@ -13,19 +13,26 @@ use ic_sns_swap::pb::v1::{IdealMatchedParticipationFunction, LinearScalingCoeffi
 use lazy_static::lazy_static;
 use rust_decimal_macros::dec;
 
+/// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+/// Canisters created in those tests without any `specified_id` are assigned to the default range
+/// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+/// canisters created with `specified_id` can only be assigned to the extra range
+/// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
+
 // Alias types from crate::pb::v1::...
 //
 // This is done within another mod to differentiate against types that have
 // similar names as types found in ic_sns_init.
 mod src {
     pub use crate::pb::v1::create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, SwapParameters,
     };
 } // end mod src
 
@@ -118,7 +125,7 @@ lazy_static! {
             }),
         }),
         dapp_canisters: vec![pb::Canister {
-            id: Some(CanisterId::from_u64(1000).get())
+            id: Some(SPECIFIED_CANISTER_ID.get())
         }],
 
         swap_parameters: Some(src::SwapParameters {
@@ -153,12 +160,10 @@ lazy_static! {
                 seconds: Some(604_800),
             }),
 
-            neurons_fund_investment_icp: Some(pb::Tokens {
-                e8s: Some(6_100_000_000),
-            }),
             neurons_fund_participation: Some(false),
 
             // Deprecated fields must not be set.
+            neurons_fund_investment_icp: None,
             minimum_icp: None,
             maximum_icp: None,
         })

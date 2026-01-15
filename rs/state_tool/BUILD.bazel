@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_test")
 
 DEPENDENCIES = [
     # Keep sorted.
@@ -25,6 +26,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/state_machine_tests",
     "@crate_index//:tempfile",
 ]
 
@@ -58,10 +60,18 @@ rust_binary(
     deps = DEPENDENCIES + [":state_tool_lib"],
 )
 
-rust_test(
+rust_ic_test(
     name = "state_tool_test",
     aliases = ALIASES,
     crate = ":state_tool_lib",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "state_tool_integration_test",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":state_tool_lib"],
 )

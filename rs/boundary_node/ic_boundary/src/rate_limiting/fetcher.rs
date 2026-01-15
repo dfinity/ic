@@ -1,23 +1,14 @@
-use std::{path::PathBuf, sync::Arc, time::SystemTime};
+use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{anyhow, Context as _, Error};
+use anyhow::{Context as _, Error, anyhow, bail};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use ic_canister_client::Agent;
+use ic_agent::{Agent, export::Principal};
 use ic_types::CanisterId;
-use rate_limits_api::{v1::RateLimitRule, GetConfigResponse, Version};
+use rate_limits_api::{GetConfigResponse, Version, v1::RateLimitRule};
 use tokio::fs;
 
 const SCHEMA_VERSION: u64 = 1;
-
-fn nonce() -> Vec<u8> {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos()
-        .to_le_bytes()
-        .to_vec()
-}
 
 #[async_trait]
 pub trait FetchesRules: Send + Sync {
@@ -55,15 +46,19 @@ pub struct CanisterConfigFetcherQuery(pub Agent, pub CanisterId);
 #[async_trait]
 impl FetchesConfig for CanisterConfigFetcherQuery {
     async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
-        self.0
-            .execute_query(
-                &self.1,                            // canister_id
-                "get_config",                       // method
-                Encode!(&None::<Version>).unwrap(), // arguments
-            )
+        let response = self
+            .0
+            .query(&Principal::from(self.1), "get_config")
+            .with_arg(Encode!(&None::<Version>).unwrap())
+            .call()
             .await
-            .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?
-            .ok_or_else(|| anyhow!("got empty response from the canister"))
+            .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?;
+
+        if response.is_empty() {
+            bail!("got empty response from the canister")
+        } else {
+            Ok(response)
+        }
     }
 }
 
@@ -72,17 +67,19 @@ pub struct CanisterConfigFetcherUpdate(pub Agent, pub CanisterId);
 #[async_trait]
 impl FetchesConfig for CanisterConfigFetcherUpdate {
     async fn fetch_config(&self) -> Result<Vec<u8>, Error> {
-        self.0
-            .execute_update(
-                &self.1,                            // canister_id
-                &self.1,                            // effective_canister_id
-                "get_config",                       // method
-                Encode!(&None::<Version>).unwrap(), // arguments
-                nonce(),                            // nonce
-            )
+        let response = self
+            .0
+            .update(&Principal::from(self.1), "get_config")
+            .with_arg(Encode!(&None::<Version>).unwrap())
+            .call_and_wait()
             .await
-            .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?
-            .ok_or_else(|| anyhow!("got empty response from the canister"))
+            .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?;
+
+        if response.is_empty() {
+            bail!("got empty response from the canister")
+        } else {
+            Ok(response)
+        }
     }
 }
 
@@ -102,17 +99,15 @@ impl FetchesRules for CanisterFetcher {
             .map_err(|e| anyhow!("failed to get config: {e:?}"))?;
 
         if response.config.schema_version != SCHEMA_VERSION {
-            return Err(anyhow!(
+            bail!(
                 "incorrect schema version (got {}, expected {})",
                 response.config.schema_version,
                 SCHEMA_VERSION
-            ));
+            );
         }
 
         if response.config.is_redacted {
-            return Err(anyhow!(
-                "got a redacted response, probably authentication is incorrect"
-            ));
+            bail!("got a redacted response, probably authentication is incorrect");
         }
 
         let rules = response
@@ -121,15 +116,11 @@ impl FetchesRules for CanisterFetcher {
             .into_iter()
             .map(|x| -> Result<RateLimitRule, Error> {
                 let Some(raw) = x.rule_raw else {
-                    return Err(anyhow!(
-                        "rule with id {} ({:?}) is None",
-                        x.id,
-                        x.description
-                    ));
+                    bail!("rule with id {} ({:?}) is None", x.rule_id, x.description);
                 };
 
                 let rule = RateLimitRule::from_bytes_yaml(&raw)
-                    .context(format!("unable to decode raw rule with id {}", x.id))?;
+                    .context(format!("unable to decode raw rule with id {}", x.rule_id))?;
 
                 Ok(rule)
             })
@@ -144,12 +135,12 @@ mod test {
     use std::time::Duration;
 
     use candid::Encode;
+    use ic_bn_lib_common::principal;
     use indoc::indoc;
     use rate_limits_api::*;
     use regex::Regex;
 
     use super::*;
-    use crate::test_utils::principal;
 
     struct FakeConfigFetcherOk;
 
@@ -164,7 +155,7 @@ mod test {
                     is_redacted: false,
                     rules: vec![
                         OutputRule {
-                            id: "foobar".into(),
+                            rule_id: "foobar".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: aaaaa-aa
@@ -175,7 +166,7 @@ mod test {
                             description: None
                         },
                         OutputRule {
-                            id: "foobaz".into(),
+                            rule_id: "foobaz".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: 5s2ji-faaaa-aaaaa-qaaaq-cai
@@ -186,7 +177,7 @@ mod test {
                             description: None
                         },
                         OutputRule {
-                            id: "deadbeef".into(),
+                            rule_id: "deadbeef".into(),
                             incident_id: "barfoo".into(),
                             rule_raw: Some(indoc! {"
                                 canister_id: aaaaa-aa
@@ -234,7 +225,7 @@ mod test {
                     schema_version: SCHEMA_VERSION,
                     is_redacted: false,
                     rules: vec![OutputRule {
-                        id: "foobar".into(),
+                        rule_id: "foobar".into(),
                         incident_id: "barfoo".into(),
                         rule_raw: None,
                         description: None,
@@ -270,6 +261,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^foo|bar$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Block,
                 },
                 RateLimitRule {
@@ -279,6 +272,8 @@ mod test {
                     )),
                     methods_regex: Some(Regex::new("^baz|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(1, Duration::from_secs(10)),
                 },
                 RateLimitRule {
@@ -286,6 +281,8 @@ mod test {
                     subnet_id: None,
                     methods_regex: Some(Regex::new("^foo|bax$").unwrap()),
                     request_types: None,
+                    ip_prefix_group: None,
+                    ip: None,
                     limit: v1::Action::Limit(10, Duration::from_secs(60)),
                 }
             ]

@@ -1,6 +1,6 @@
 use crate::fixtures::{
-    environment_fixture::CanisterCallRequest, neuron_id, GovernanceCanisterFixture,
-    GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
+    GovernanceCanisterFixture, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
+    environment_fixture::CanisterCallRequest, neuron_id,
 };
 use assert_matches::assert_matches;
 use fixtures::DEFAULT_TEST_START_TIMESTAMP_SECONDS;
@@ -11,6 +11,11 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
+use ic_sns_governance::pb::v1::manage_neuron::SetFollowing;
+use ic_sns_governance::pb::v1::neuron::{FolloweesForTopic, TopicFollowees};
+use ic_sns_governance::pb::v1::{
+    Followee, ListProposals, ListProposalsResponse, Topic, TopicSelector,
+};
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -18,21 +23,29 @@ use ic_sns_governance::{
     neuron::NeuronState,
     pb::{
         sns_root_types::{
-            set_dapp_controllers_response::FailedUpdate, RegisterDappCanistersResponse,
-            SetDappControllersResponse,
+            RegisterDappCanistersResponse, SetDappControllersResponse,
+            set_dapp_controllers_response::FailedUpdate,
         },
         v1::{
+            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse,
+            MintTokensRequest, MintTokensResponse, Motion, NervousSystemParameters, Neuron,
+            NeuronId, NeuronIds, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
+            Proposal, ProposalData, ProposalId, RegisterDappCanisters, UpgradeJournalEntry, Vote,
+            WaitForQuietState,
             claim_swap_neurons_request::{
-                neuron_recipe::{self, Participant},
                 NeuronRecipe, NeuronRecipes,
+                neuron_recipe::{self, Participant},
             },
             claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             governance::{Version, Versions},
             governance_error::ErrorType,
             manage_neuron::{
-                self, claim_or_refresh, configure::Operation, AddNeuronPermissions, ClaimOrRefresh,
-                Configure, Disburse, DisburseMaturity, Follow, IncreaseDissolveDelay,
-                MergeMaturity, RegisterVote, RemoveNeuronPermissions, Split, StakeMaturity,
+                self, AddNeuronPermissions, ClaimOrRefresh, Configure, Disburse, DisburseMaturity,
+                Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
+                RemoveNeuronPermissions, Split, StakeMaturity, claim_or_refresh,
+                configure::Operation,
             },
             manage_neuron_response::{
                 Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
@@ -40,19 +53,13 @@ use ic_sns_governance::{
             },
             neuron::{self, DissolveState, Followees},
             proposal::Action,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest, Ballot,
-            ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-            ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty, GovernanceError,
-            ManageNeuronResponse, MintTokensRequest, MintTokensResponse, Motion,
-            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, UpgradeJournalEntry, Vote, WaitForQuietState,
+            upgrade_journal_entry,
         },
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
     types::native_action_ids,
 };
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
@@ -101,9 +108,9 @@ async fn test_disburse_succeeds() {
         user_principal,
     );
     match manage_neuron_response.command.unwrap() {
-        CommandResponse::Disburse(response) => println!("Successfully disbursed: {:?}", response),
+        CommandResponse::Disburse(response) => println!("Successfully disbursed: {response:?}"),
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing the neuron: {}", error)
+            panic!("Unexpected error when disbursing the neuron: {error}")
         }
         _ => panic!("Unexpected command response when disbursing the neuron"),
     };
@@ -254,10 +261,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         .expect("missing response from manage_neuron operation");
     let response = match command_response {
         CommandResponse::DisburseMaturity(response) => response,
-        _ => panic!(
-            "Wrong response to DisburseMaturity: {:#?}",
-            command_response
-        ),
+        _ => panic!("Wrong response to DisburseMaturity: {command_response:#?}"),
     };
     assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
 
@@ -286,15 +290,11 @@ fn test_disburse_maturity_succeeds_to_self() {
     let d_age = now - ts;
     assert!(
         d_age >= 0,
-        "Disbursement timestamp {} is in the future (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is in the future (now = {now})"
     );
     assert!(
         d_age < 10,
-        "Disbursement timestamp {} is too old (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is too old (now = {now})"
     );
 
     // Check the disbursal is not transferred yet.
@@ -307,6 +307,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
@@ -397,15 +398,11 @@ fn test_disburse_maturity_succeeds_to_other() {
     let d_age = now - ts;
     assert!(
         d_age >= 0,
-        "Disbursement timestamp {} is in the future (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is in the future (now = {now})"
     );
     assert!(
         d_age < 10,
-        "Disbursement timestamp {} is too old (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is too old (now = {now})"
     );
 
     // Check the disbursal is not transferred yet.
@@ -417,6 +414,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
+        .disable_update_cached_metrics()
         .temporarily_disable_sns_upgrades()
         .run_periodic_tasks_now();
 
@@ -512,7 +510,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     // Advance time, to trigger disbursal finalization.
     env.gov_fixture
         .advance_time_by(7 * ONE_DAY_SECONDS + 10)
-        .temporarily_disable_sns_upgrades();
+        .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics();
 
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
@@ -698,7 +697,7 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let err = |op: &str| -> ManageNeuronResponse {
         ManageNeuronResponse::error(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!("Neuron {} is vesting and cannot call {}", neuron_id1, op),
+            format!("Neuron {neuron_id1} is vesting and cannot call {op}"),
         ))
     };
 
@@ -1455,9 +1454,137 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
     assert!(
         missing_actions.is_empty(),
         "Governance::list_nervous_system_functions is missing \
-         native proposal actions in response {:?}",
-        missing_actions
+         native proposal actions in response {missing_actions:?}"
     );
+}
+
+#[test]
+fn list_proposals_filter_by_topic() {
+    // Prepare the world.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    for proposal in [
+        ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            topic: Some(Topic::CriticalDappOperations as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 2 }),
+            topic: Some(Topic::TreasuryAssetManagement as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 3 }),
+            topic: None,
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 4 }),
+            topic: Some(Topic::SnsFrameworkManagement as i32),
+            ..ProposalData::default()
+        },
+    ] {
+        canister_fixture.directly_insert_proposal_data(proposal);
+    }
+
+    let test_cases = [
+        (
+            "List all proposals",
+            ListProposals {
+                include_topics: vec![],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+        (
+            "List proposals without topics",
+            ListProposals {
+                include_topics: vec![TopicSelector { topic: None }],
+                ..Default::default()
+            },
+            vec![3],
+        ),
+        (
+            "Select one topic",
+            ListProposals {
+                include_topics: vec![TopicSelector {
+                    topic: Some(Topic::TreasuryAssetManagement as i32),
+                }],
+                ..Default::default()
+            },
+            vec![2],
+        ),
+        (
+            "Select two topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2],
+        ),
+        (
+            "Select three topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2, 1],
+        ),
+        (
+            "Select three topics and proposals with no topic",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector { topic: None },
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+    ];
+
+    for (label, request, expected) in test_cases {
+        let ListProposalsResponse {
+            proposals,
+            include_ballots_by_caller: _,
+            include_topic_filtering: _,
+        } = canister_fixture
+            .governance
+            .list_proposals(&request, &PrincipalId::new_anonymous());
+
+        let observed = proposals
+            .iter()
+            .map(|proposal| proposal.id.unwrap().id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected, "Test case: {}", label);
+    }
 }
 
 #[test]
@@ -1527,11 +1654,13 @@ fn test_register_dapp_canister_proposal_root_failure() {
     // Proposal should have failed execution
     assert!(proposal_data.failed_timestamp_seconds > 0);
     assert_eq!(proposal_data.executed_timestamp_seconds, 0);
-    assert!(proposal_data
-        .failure_reason
-        .unwrap()
-        .error_message
-        .contains("Canister method call failed"));
+    assert!(
+        proposal_data
+            .failure_reason
+            .unwrap()
+            .error_message
+            .contains("Canister method call failed")
+    );
 
     let observed_register_canister_request = match canister_fixture
         .environment_fixture
@@ -1970,8 +2099,7 @@ fn test_claim_swap_neurons_succeeds() {
     let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
         ClaimSwapNeuronsResult::Ok(result) => result.swap_neurons,
         ClaimSwapNeuronsResult::Err(err) => panic!(
-            "Unexpected response from claim_swap_neurons. Was expected Ok(result). Err {}",
-            err
+            "Unexpected response from claim_swap_neurons. Was expected Ok(result). Err {err}"
         ),
     };
 
@@ -2363,25 +2491,29 @@ fn test_neurons_can_follow_themselves() {
     // Set up the following relationships
 
     // The follower neuron will follow the followee neuron for all actions
-    assert!(canister_fixture
-        .follow(
-            &follower_neuron_id,
-            native_action_ids::UNSPECIFIED,
-            vec![followee_neuron_id.clone()],
-            follower_principal_id
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .follow(
+                &follower_neuron_id,
+                native_action_ids::UNSPECIFIED,
+                vec![followee_neuron_id.clone()],
+                follower_principal_id
+            )
+            .is_ok()
+    );
 
     // The follower neuron will follow themselves on a single Action, effectively overriding
     // the catch all follow.
-    assert!(canister_fixture
-        .follow(
-            &follower_neuron_id,
-            native_action_ids::MOTION,
-            vec![follower_neuron_id.clone()],
-            follower_principal_id,
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .follow(
+                &follower_neuron_id,
+                native_action_ids::MOTION,
+                vec![follower_neuron_id.clone()],
+                follower_principal_id,
+            )
+            .is_ok()
+    );
 
     // Assert that the following has been setup correctly and no errors were thrown.
     let follower_neuron = canister_fixture.get_neuron(&follower_neuron_id);
@@ -2389,10 +2521,10 @@ fn test_neurons_can_follow_themselves() {
         follower_neuron.followees,
         btreemap! {
             native_action_ids::UNSPECIFIED => neuron::Followees {
-                followees: vec![followee_neuron_id.clone()]
+                followees: vec![followee_neuron_id.clone()],
             },
             native_action_ids::MOTION => neuron::Followees {
-                followees: vec![follower_neuron_id.clone()]
+                followees: vec![follower_neuron_id.clone()],
             }
         }
     );
@@ -2409,14 +2541,16 @@ fn test_neurons_can_follow_themselves() {
         .unwrap();
 
     // Vote with the followee neuron, this should not result in the follower neuron voting
-    assert!(canister_fixture
-        .vote(
-            &followee_neuron_id,
-            proposal_id,
-            Vote::Yes,
-            followee_principal_id
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .vote(
+                &followee_neuron_id,
+                proposal_id,
+                Vote::Yes,
+                followee_principal_id
+            )
+            .is_ok()
+    );
 
     let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
     let follower_ballot = proposal_data
@@ -2426,14 +2560,16 @@ fn test_neurons_can_follow_themselves() {
     assert_eq!(follower_ballot.vote, Vote::Unspecified as i32);
 
     // Vote with the follower neuron, this should result in casting a vote
-    assert!(canister_fixture
-        .vote(
-            &follower_neuron_id,
-            proposal_id,
-            Vote::No,
-            follower_principal_id
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .vote(
+                &follower_neuron_id,
+                proposal_id,
+                Vote::No,
+                follower_principal_id
+            )
+            .is_ok()
+    );
     let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
     let follower_ballot = proposal_data
         .ballots
@@ -2453,14 +2589,16 @@ fn test_neurons_can_follow_themselves() {
         .unwrap();
 
     // Vote with the followee neuron. This should result in the follower neuron casting a vote
-    assert!(canister_fixture
-        .vote(
-            &followee_neuron_id,
-            proposal_id,
-            Vote::No,
-            followee_principal_id
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .vote(
+                &followee_neuron_id,
+                proposal_id,
+                Vote::No,
+                followee_principal_id
+            )
+            .is_ok()
+    );
 
     let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
     let follower_ballot = proposal_data
@@ -2471,14 +2609,16 @@ fn test_neurons_can_follow_themselves() {
 
     // An error should occur if the follower neuron now tries to vote as their vote has
     // already been cast
-    assert!(canister_fixture
-        .vote(
-            &follower_neuron_id,
-            proposal_id,
-            Vote::No,
-            follower_principal_id
-        )
-        .is_err());
+    assert!(
+        canister_fixture
+            .vote(
+                &follower_neuron_id,
+                proposal_id,
+                Vote::No,
+                follower_principal_id
+            )
+            .is_err()
+    );
 }
 
 // Same as the previous test, but wait_for_quiet_state is None.
@@ -2592,14 +2732,16 @@ fn test_empty_followees_are_filtered() {
 
     // Vote with the followee neuron, this should result in the follower neuron voting even though
     // it has an empty followees vector on this Action
-    assert!(canister_fixture
-        .vote(
-            &followee_neuron_id,
-            proposal_id,
-            Vote::Yes,
-            followee_principal_id
-        )
-        .is_ok());
+    assert!(
+        canister_fixture
+            .vote(
+                &followee_neuron_id,
+                proposal_id,
+                Vote::Yes,
+                followee_principal_id
+            )
+            .is_ok()
+    );
 
     let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
     let follower_ballot = proposal_data
@@ -2645,6 +2787,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
@@ -2676,7 +2819,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
         CommandResponse::DisburseMaturity(response) => response,
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing maturity: {}", error)
+            panic!("Unexpected error when disbursing maturity: {error}")
         }
         _ => panic!("Unexpected command response when disbursing maturity"),
     };
@@ -2735,6 +2878,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
@@ -2779,7 +2923,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
         CommandResponse::DisburseMaturity(response) => response,
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing maturity: {}", error)
+            panic!("Unexpected error when disbursing maturity: {error}")
         }
         _ => panic!("Unexpected command response when disbursing maturity"),
     };
@@ -2891,8 +3035,24 @@ async fn test_mint_tokens() {
 }
 
 #[tokio::test]
-async fn test_refresh_cached_upgrade_steps() {
-    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+async fn test_refresh_cached_upgrade_steps_auto() {
+    let automatically_advance_target_version = true;
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version).await;
+}
+
+#[tokio::test]
+async fn test_refresh_cached_upgrade_steps_no_auto() {
+    let automatically_advance_target_version = false;
+    test_refresh_cached_upgrade_steps(automatically_advance_target_version).await;
+}
+
+async fn test_refresh_cached_upgrade_steps(automatically_advance_target_version: bool) {
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .set_nervous_system_parameters(NervousSystemParameters {
+            automatically_advance_target_version: Some(automatically_advance_target_version),
+            ..NervousSystemParameters::with_default_values()
+        })
+        .create();
 
     let v1 = Version::default();
     let v2 = Version {
@@ -3033,14 +3193,7 @@ async fn test_refresh_cached_upgrade_steps() {
     // Check that after the initialization, only one refresh has been recorded
     // in the upgrade journal (because the 2nd one is identical to the 1st).
     {
-        let upgrade_journal = canister_fixture
-            .governance
-            .proto
-            .upgrade_journal
-            .clone()
-            .unwrap();
-        assert_eq!(
-            upgrade_journal.entries,
+        let expected_upgrade_journal_entries = if automatically_advance_target_version {
             vec![
                 UpgradeJournalEntry {
                     timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
@@ -3048,7 +3201,17 @@ async fn test_refresh_cached_upgrade_steps() {
                         upgrade_journal_entry::UpgradeStepsReset {
                             human_readable: Some("Initializing the cache".to_string()),
                             upgrade_steps: Some(Versions { versions: vec![v1] }),
-                        }
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    event: Some(upgrade_journal_entry::Event::TargetVersionSet(
+                        upgrade_journal_entry::TargetVersionSet {
+                            old_target_version: None,
+                            new_target_version: Some(v3),
+                            is_advanced_automatically: Some(true),
+                        },
                     )),
                 },
                 UpgradeJournalEntry {
@@ -3058,13 +3221,46 @@ async fn test_refresh_cached_upgrade_steps() {
                     event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
                         upgrade_journal_entry::UpgradeStepsRefreshed {
                             upgrade_steps: Some(Versions {
-                                versions: expected_upgrade_steps
+                                versions: expected_upgrade_steps,
                             }),
-                        }
+                        },
                     )),
                 },
             ]
-        );
+        } else {
+            vec![
+                UpgradeJournalEntry {
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsReset(
+                        upgrade_journal_entry::UpgradeStepsReset {
+                            human_readable: Some("Initializing the cache".to_string()),
+                            upgrade_steps: Some(Versions { versions: vec![v1] }),
+                        },
+                    )),
+                },
+                UpgradeJournalEntry {
+                    // we advanced time by one second after the first refresh
+                    timestamp_seconds: Some(DEFAULT_TEST_START_TIMESTAMP_SECONDS),
+                    // the event contains the upgrade steps
+                    event: Some(upgrade_journal_entry::Event::UpgradeStepsRefreshed(
+                        upgrade_journal_entry::UpgradeStepsRefreshed {
+                            upgrade_steps: Some(Versions {
+                                versions: expected_upgrade_steps,
+                            }),
+                        },
+                    )),
+                },
+            ]
+        };
+
+        let upgrade_journal = canister_fixture
+            .governance
+            .proto
+            .upgrade_journal
+            .clone()
+            .unwrap();
+
+        assert_eq!(upgrade_journal.entries, expected_upgrade_journal_entries);
     }
 }
 
@@ -3305,4 +3501,428 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         proposal_data.minimum_yes_proportion_of_total.unwrap(),
         Percentage::from_basis_points(2000)
     );
+}
+
+#[test]
+fn test_set_following() {
+    // Boilerplate variables.
+    let my_principal = PrincipalId::new_user_test_id(1000);
+    let my_sns_neuron_id = neuron_id(my_principal, 0);
+    let my_sns_neuron_id_as_btree_set = btreeset! { my_sns_neuron_id.clone() };
+
+    let another_principal = PrincipalId::new_user_test_id(1000);
+    let another_neuron_id = neuron_id(another_principal, 0);
+
+    let expected_followee = Followee {
+        neuron_id: Some(another_neuron_id.clone()),
+        alias: Some("Bob Dylan".to_string()),
+    };
+
+    let cleared_topic_following_for_all_non_critical_proposals = [
+        Topic::SnsFrameworkManagement,
+        Topic::DappCanisterManagement,
+        Topic::ApplicationBusinessLogic,
+        Topic::Governance,
+    ]
+    .iter()
+    .map(|topic| FolloweesForTopic {
+        followees: vec![],
+        topic: Some(*topic as i32),
+    })
+    .collect::<Vec<_>>();
+
+    let test_cases = [
+        (
+            "Trivial case.",
+            vec![],
+            vec![],
+            None,
+            btreemap! {},
+            btreemap! {},
+        ),
+        (
+            "Smoke test (does the test harness work as expected?)",
+            vec![Follow {
+                function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![],
+            None,
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {},
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }
+                },
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {}
+            },
+        ),
+        (
+            "Set following works incrementally.",
+            vec![],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                    Topic::TreasuryAssetManagement as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                },
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::TreasuryAssetManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Topic following clears legacy following for that topic.",
+            vec![Follow {
+                function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    // MOTION is in `Topic::Governance`.
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                },
+            }),
+            // Legacy following is cleared.
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Topic following does not clear legacy following for other topics.",
+            vec![Follow {
+                function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    // MOTION is in `Topic::Governance` (not `Topic::ApplicationBusinessLogic`).
+                    topic: Some(Topic::ApplicationBusinessLogic as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::ApplicationBusinessLogic as i32),
+                    },
+                },
+            }),
+            // Legacy following is preserved.
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Specifying following for all non-critical topics in one command clears catch-all following.",
+            vec![Follow {
+                function_id: 0, // catch-all
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![SetFollowing {
+                topic_following: cleared_topic_following_for_all_non_critical_proposals.clone(),
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+            btreemap! {},
+        ),
+        (
+            "Specifying fewer than all non-critical topics doesn't clear catch-all following.",
+            vec![Follow {
+                function_id: 0, // catch-all
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![SetFollowing {
+                // Remove one non-critical topic and add the two critical ones.
+                topic_following: cleared_topic_following_for_all_non_critical_proposals
+                    .iter()
+                    .skip(1)
+                    .cloned()
+                    .chain(
+                        vec![
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::TreasuryAssetManagement as i32),
+                            },
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                            },
+                        ]
+                        .into_iter(),
+                    )
+                    .collect(),
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {},
+            }),
+            // catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {},
+        ),
+        (
+            "Setting following for all non-critical topics in two commands clears catch-all following.",
+            vec![Follow {
+                function_id: 0, // catch-all
+                followees: vec![another_neuron_id.clone()],
+            }],
+            vec![
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .take(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect(),
+                },
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect(),
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::SnsFrameworkManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::SnsFrameworkManagement as i32) },
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DappCanisterManagement as i32) },
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::ApplicationBusinessLogic as i32) },
+                    Topic::Governance as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::Governance as i32) },
+                },
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+            btreemap! {
+                Topic::SnsFrameworkManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::DappCanisterManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Complex scenario.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                },
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                },
+            ],
+            vec![
+                // Follow on `Topic::Governance` (clears legacy following on MOTION proposals).
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                // Set up some topic following for a critical topic.
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }],
+                },
+                // Clear all part of the non-critical topic following. This should remove
+                // following on `Topic::Governance` but preserve `Topic::CriticalDappOperations`.
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(1)
+                        .cloned()
+                        .collect(),
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }
+                },
+            }),
+            // legacy following on MOTION proposals is cleared; catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {
+                Topic::CriticalDappOperations => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {},
+            },
+        ),
+    ];
+
+    // Follow is the legacy command, set_following is the new command.
+    for (
+        label,
+        follow_commands,
+        set_following_commands,
+        expected_topic_followees,
+        expected_followees,
+        expected_topic_follower_index,
+    ) in test_cases
+    {
+        // Prepare the world.
+        let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+            .add_neuron(NeuronBuilder::new(
+                my_sns_neuron_id.clone(),
+                E8 * 1000,
+                NeuronPermission::all(&my_principal),
+            ))
+            .create();
+
+        for follow in follow_commands {
+            canister_fixture
+                .governance
+                .follow(&my_sns_neuron_id, &my_principal, &follow)
+                .unwrap();
+        }
+
+        // Run code under test.
+        for set_following in set_following_commands {
+            canister_fixture
+                .governance
+                .set_following(&my_sns_neuron_id, &my_principal, &set_following)
+                .unwrap();
+        }
+
+        // Check the results.
+        let Neuron {
+            followees,
+            topic_followees,
+            ..
+        } = canister_fixture.get_neuron(&my_sns_neuron_id);
+
+        assert_eq!(
+            topic_followees, expected_topic_followees,
+            "unexpected topic_followees: {}",
+            label
+        );
+
+        assert_eq!(
+            followees, expected_followees,
+            "unexpected followees: {}",
+            label
+        );
+
+        assert_eq!(
+            canister_fixture.governance.topic_follower_index, expected_topic_follower_index,
+            "unexpected topic_follower_index: {}",
+            label
+        );
+    }
 }

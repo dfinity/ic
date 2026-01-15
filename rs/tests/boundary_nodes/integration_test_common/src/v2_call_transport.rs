@@ -1,15 +1,15 @@
 use anyhow::bail;
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree, Path};
 use ic_types::{
+    PrincipalId,
     messages::{
         Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpReadState,
         HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope,
     },
     time::current_time,
-    PrincipalId,
 };
-use reqwest::{header::CONTENT_TYPE, StatusCode};
-use slog::{info, Logger};
+use reqwest::{StatusCode, header::CONTENT_TYPE};
+use slog::{Logger, info};
 use std::time::Duration;
 use tokio::time::sleep;
 

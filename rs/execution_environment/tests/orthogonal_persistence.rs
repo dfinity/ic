@@ -1,5 +1,5 @@
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, CanisterId};
+use ic_types::{CanisterId, ingress::WasmResult};
 use proptest::{
     prelude::*,
     test_runner::{TestRng, TestRunner},
@@ -55,12 +55,11 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $msg_reply)
       )
 
-      (memory $memory {})
+      (memory $memory {heap_size})
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update memory_grow" (func $memory_grow))
       (export "canister_update write_bytes" (func $write_bytes))
-    )"#,
-        heap_size
+    )"#
     )
 }
 
@@ -81,7 +80,7 @@ fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = V
 }
 
 fn write_bytes(test: &mut ExecutionTest, canister_id: CanisterId, dst: u32, bytes: &[u8]) {
-    println!("write_bytes(dst: {}, bytes: {:?})", dst, bytes);
+    println!("write_bytes(dst: {dst}, bytes: {bytes:?})");
     let mut payload = dst.to_le_bytes().to_vec();
     payload.extend(bytes.iter());
     let result = test.ingress(canister_id, "write_bytes", payload).unwrap();
@@ -94,7 +93,7 @@ fn dump_heap(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
     match result {
         WasmResult::Reply(canister_heap) => canister_heap,
         WasmResult::Reject(error) => {
-            panic!("failed to dump heap: {}", error)
+            panic!("failed to dump heap: {error}")
         }
     }
 }

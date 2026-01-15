@@ -1,7 +1,7 @@
 [package]
 name = "guestos_tool"
 version = "1.0.0"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "guestos_tool"
@@ -10,10 +10,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-config = { path = "../../config" }
-indoc = "1.0.9"
-itertools = { workspace = true }
-network = { path = "../../network" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
+indoc = { workspace = true }
+network = { path = "../../networking/network" }
 regex = { workspace = true }
 utils = { path = "../../utils" }
-

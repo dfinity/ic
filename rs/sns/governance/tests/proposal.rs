@@ -442,8 +442,7 @@ mod early_decision {
         assert_ne!(
             initial_decision,
             Vote::Unspecified,
-            "Initial tally does not have an absolute majority: {:#?}.",
-            initial_proposal
+            "Initial tally does not have an absolute majority: {initial_proposal:#?}."
         );
         assert!(initial_proposal.can_make_decision(1));
 
@@ -462,9 +461,7 @@ mod early_decision {
             assert_eq!(
                 later_proposal.early_decision(),
                 initial_decision,
-                "failed at new_yes={}. initial_proposal:\n{:#?}",
-                new_yes,
-                initial_proposal
+                "failed at new_yes={new_yes}. initial_proposal:\n{initial_proposal:#?}"
             );
             assert!(later_proposal.can_make_decision(1));
         }
@@ -477,9 +474,7 @@ mod early_decision {
             assert_eq!(
                 later_proposal.early_decision(),
                 initial_decision,
-                "failed at new_no={}. initial_proposal:\n{:#?}",
-                new_no,
-                initial_proposal
+                "failed at new_no={new_no}. initial_proposal:\n{initial_proposal:#?}"
             );
             assert!(later_proposal.can_make_decision(1));
         }
