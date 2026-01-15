@@ -177,9 +177,9 @@ impl CanisterStateFixture {
         );
 
         // Pop the response and make it into a paused response execution task.
-        let response_canister_message = self.canister_state.pop_input().unwrap();
+        let canister_message = self.canister_state.pop_input().unwrap();
         assert_matches!(
-            &response_canister_message,
+            &canister_message,
             CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
         );
         self.canister_state
@@ -187,7 +187,7 @@ impl CanisterStateFixture {
             .task_queue
             .enqueue(ExecutionTask::PausedExecution {
                 id: PausedExecutionId(13),
-                input: CanisterMessageOrTask::Message(response_canister_message),
+                input: CanisterMessageOrTask::Message(canister_message),
             });
 
         message
@@ -277,9 +277,9 @@ fn canister_state_push_input_best_effort_response_no_reserved_slot() {
             .unwrap()
     );
     // Only one response was enqueued.
-    let response_canister_message = fixture.canister_state.pop_input().unwrap();
+    let canister_message = fixture.canister_state.pop_input().unwrap();
     assert_matches!(
-        &response_canister_message,
+        &canister_message,
         CanisterMessage::Response{ response: r, .. } if r.as_ref() == &response
     );
     assert!(!fixture.canister_state.has_input());
@@ -491,12 +491,26 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         .refund(Cycles::new(1))
         .build();
 
-    // Make an input queue slot reservation.
-    fixture
-        .canister_state
-        .push_output_request(request.clone().into(), UNIX_EPOCH)
-        .unwrap();
-    fixture.pop_output().unwrap();
+    // Make two input queue slot reservations (for response and duplicate).
+    for _ in 0..2 {
+        fixture
+            .canister_state
+            .push_output_request(request.clone().into(), UNIX_EPOCH)
+            .unwrap();
+        fixture.pop_output().unwrap();
+    }
+
+    // And an output queue slot reservation, for the duplicate.
+    assert!(
+        fixture
+            .push_input(
+                request.clone().into(),
+                SubnetType::Application,
+                InputQueueType::LocalSubnet,
+            )
+            .unwrap()
+    );
+    fixture.canister_state.pop_input().unwrap();
 
     // Enqueue the inbound response.
     assert!(
@@ -509,7 +523,7 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             .unwrap()
     );
 
-    // Pop the response and make it into a paused response execution task.
+    // Pop the response and pause its execution.
     let response_canister_message = fixture.canister_state.pop_input().unwrap();
     assert_matches!(
         &response_canister_message,
@@ -524,23 +538,12 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
             input: CanisterMessageOrTask::Message(response_canister_message),
         });
 
-    // Make an output queue slot reservation.
-    assert!(
-        fixture
-            .push_input(
-                request.clone().into(),
-                SubnetType::Application,
-                InputQueueType::LocalSubnet,
-            )
-            .unwrap()
-    );
-    fixture.canister_state.pop_input().unwrap();
-
-    // Emqueue the response in the output queue.
+    // Enqueue the duplicate response into the output queue.
     fixture
         .canister_state
         .push_output_response(response.clone().into());
 
+    // Attempt to induct the duplicate response.
     fixture.canister_state.induct_messages_to_self(
         &mut SUBNET_AVAILABLE_MEMORY.clone(),
         SubnetType::Application,

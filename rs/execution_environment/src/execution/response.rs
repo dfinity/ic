@@ -307,10 +307,9 @@ impl ResponseHelper {
         // the callback have been checked in `execute_response()`.
         // Note that we cannot return an error here because the cleanup callback
         // cannot be invoked without a valid call context and a callback.
-        let (_, _, call_context, _) = common::get_call_context_and_callback(
+        let (call_context, _) = common::get_call_context(
             clean_canister,
-            &original.message,
-            Some(original.callback.clone()),
+            &original.callback,
             round.log,
             round.counters.unexpected_response_error,
         )
@@ -922,27 +921,27 @@ pub fn execute_response(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let (callback, callback_id, call_context, call_context_id) =
-        match common::get_call_context_and_callback(
-            &clean_canister,
-            &response,
-            Some(callback.as_ref().clone()),
-            round.log,
-            round.counters.unexpected_response_error,
-        ) {
-            Some(r) => r,
-            None => {
-                // This case is unreachable because the call context and
-                // callback should always exist.
-                return ExecuteMessageResult::Finished {
-                    canister: clean_canister,
-                    instructions_used: NumInstructions::from(0),
-                    heap_delta: NumBytes::from(0),
-                    response: ExecutionResponse::Empty,
-                    call_duration: None,
-                };
-            }
-        };
+    let callback_id = response.originator_reply_callback;
+    let (call_context, call_context_id) = match common::get_call_context(
+        &clean_canister,
+        &callback,
+        round.log,
+        round.counters.unexpected_response_error,
+    ) {
+        Some(r) => r,
+        None => {
+            // This case is unreachable because the call context and
+            // callback should always exist.
+            return ExecuteMessageResult::Finished {
+                canister: clean_canister,
+                instructions_used: NumInstructions::from(0),
+                heap_delta: NumBytes::from(0),
+                response: ExecutionResponse::Empty,
+                call_duration: None,
+            };
+        }
+    };
+    // FIXME: Drop.
     clean_canister
         .system_state
         .unregister_callback(callback_id)
@@ -960,7 +959,8 @@ pub fn execute_response(
     );
 
     let original = OriginalContext {
-        callback,
+        // FIXME: Use the Arc directly.
+        callback: callback.as_ref().clone(),
         call_context_id,
         callback_id,
         call_origin: call_context.call_origin().clone(),

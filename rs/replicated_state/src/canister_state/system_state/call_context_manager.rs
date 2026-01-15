@@ -8,7 +8,7 @@ use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
-    RequestMetadata, Response,
+    RequestMetadata,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
@@ -277,53 +277,6 @@ impl CallContextManagerStats {
     }
 
     /// Calculates the expected number of response slots (responses plus
-    /// reservations) per input queue.
-    ///
-    /// This is the count of callbacks per respondent; except for the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
-    ///
-    /// Time complexity: `O(n)`.
-    #[cfg(test)]
-    pub(crate) fn calculate_unresponded_callbacks_per_respondent(
-        callbacks: &MutableIntMap<CallbackId, Arc<Callback>>,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> BTreeMap<CanisterId, usize> {
-        use std::collections::btree_map::Entry;
-
-        let mut callback_counts = callbacks.values().fold(
-            BTreeMap::<CanisterId, usize>::new(),
-            |mut counts, callback| {
-                *counts.entry(callback.respondent).or_default() += 1;
-                counts
-            },
-        );
-
-        // Discount the callback corresponding to an aborted or paused response
-        // execution, because this response was already delivered.
-        if let Some(response) = aborted_or_paused_response {
-            match callback_counts.entry(response.respondent) {
-                Entry::Occupied(mut entry) => {
-                    let count = entry.get_mut();
-                    if *count > 1 {
-                        *count -= 1;
-                    } else {
-                        entry.remove();
-                    }
-                }
-                Entry::Vacant(_) => {
-                    debug_assert!(
-                        false,
-                        "Aborted or paused DTS response with no matching callback: {response:?}"
-                    )
-                }
-            }
-        }
-
-        callback_counts
-    }
-
-    /// Calculates the expected number of response slots (responses plus
     /// reservations) per output queue corresponding to unresponded call contexts.
     ///
     /// This is the count of unresponded call contexts per originator; potentially
@@ -534,6 +487,7 @@ impl CallContextManager {
             No,
         }
 
+        // FIXME: Drop. Callback has already been removed.
         if let Some(callback_id) = callback_id {
             self.unregister_callback(callback_id);
         }
@@ -821,36 +775,18 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of unresponded callbacks, ignoring the callback
-    /// corresponding to a potential paused or aborted canister response execution
-    /// (since this response was just delivered).
+    /// Returns the number of unresponded callbacks.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_callback_count(
-        &self,
-        _aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_callback_count(&self) -> usize {
         self.callbacks.len()
-        // - match aborted_or_paused_response {
-        //     Some(_) => 1,
-        //     None => 0,
-        // }
     }
 
-    /// Returns the number of unresponded guaranteed response callbacks, ignoring
-    /// the callback corresponding to a potential paused or aborted canister
-    /// response execution (since this response was just delivered).
+    /// Returns the number of unresponded guaranteed response callbacks.
     ///
     /// Time complexity: `O(1)`.
-    pub fn unresponded_guaranteed_response_callback_count(
-        &self,
-        _aborted_or_paused_response: Option<&Response>,
-    ) -> usize {
+    pub fn unresponded_guaranteed_response_callback_count(&self) -> usize {
         self.stats.guaranteed_response_callback_count
-        // - match aborted_or_paused_response {
-        //     Some(response) if response.deadline == NO_DEADLINE => 1,
-        //     _ => 0,
-        // }
     }
 
     /// Helper function to concisely validate stats adjustments in debug builds,

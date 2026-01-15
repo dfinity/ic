@@ -344,17 +344,6 @@ pub enum CanisterMessage {
     Ingress(Arc<Ingress>),
 }
 
-// impl CanisterMessage {
-//     /// Helper function to extract the effective canister id.
-//     pub fn effective_canister_id(&self) -> Option<CanisterId> {
-//         match &self {
-//             CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
-//             CanisterMessage::Request(request) => request.extract_effective_canister_id(),
-//             CanisterMessage::Response { .. } => None,
-//         }
-//     }
-// }
-
 impl Display for CanisterMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {

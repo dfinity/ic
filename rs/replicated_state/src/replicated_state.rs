@@ -975,17 +975,13 @@ impl ReplicatedState {
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn pop_subnet_input(&mut self) -> Option<SubnetMessage> {
-        self.subnet_queues
-            .pop_input()
-            .map(subnet_input_into_canister_message)
+        self.subnet_queues.pop_input().map(into_subnet_message)
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
     pub fn peek_subnet_input(&mut self) -> Option<SubnetMessage> {
-        self.subnet_queues
-            .peek_input()
-            .map(subnet_input_into_canister_message)
+        self.subnet_queues.peek_input().map(into_subnet_message)
     }
 
     /// Skips the next inter-canister or ingress message from `self.subnet_queues`.
@@ -1639,7 +1635,7 @@ impl ReplicatedState {
 /// As opposed to actual canister queues, subnet input queues should never hold
 /// any kind of response (because the management canister does not make any
 /// outbound calls as itself).
-fn subnet_input_into_canister_message(input: CanisterInput) -> SubnetMessage {
+fn into_subnet_message(input: CanisterInput) -> SubnetMessage {
     match input {
         CanisterInput::Ingress(ingress) => SubnetMessage::Ingress(ingress),
         CanisterInput::Request(request) => SubnetMessage::Request(request),

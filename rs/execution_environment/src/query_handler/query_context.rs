@@ -574,30 +574,18 @@ impl<'a> QueryContext<'a> {
         response: Response,
         measurement_scope: &MeasurementScope,
     ) -> Result<(CanisterState, CallOrigin, CallContextAction), UserError> {
-        let canister_id = canister.canister_id();
-        let (callback, callback_id, call_context, call_context_id) =
-            match common::get_call_context_and_callback(
-                &canister,
-                &response,
-                None,
-                self.log,
-                self.query_critical_error,
-            ) {
-                Some(r) => r,
-                None => {
-                    error!(
-                        self.log,
-                        "[EXC-BUG] Canister {} does not have call context and callback. This is a bug @{}",
-                        canister_id,
-                        QUERY_HANDLER_CRITICAL_ERROR,
-                    );
-                    self.query_critical_error.inc();
-                    return Err(UserError::new(
-                        ErrorCode::QueryCallGraphInternal,
-                        "Composite query: canister does not have call context and callback",
-                    ));
-                }
-            };
+        let err = || {
+            UserError::new(
+                ErrorCode::QueryCallGraphInternal,
+                "Composite query: no callback for response",
+            )
+        };
+        let (callback, callback_id) =
+            common::get_callback(&canister, &response, self.log, self.query_critical_error)
+                .ok_or_else(err)?;
+        let (call_context, call_context_id) =
+            common::get_call_context(&canister, &callback, self.log, self.query_critical_error)
+                .ok_or_else(err)?;
 
         let call_responded = call_context.has_responded();
         let call_origin = call_context.call_origin().clone();

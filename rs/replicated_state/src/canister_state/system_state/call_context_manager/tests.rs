@@ -2,7 +2,7 @@ use super::*;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, user_test_id},
-    messages::{RequestBuilder, ResponseBuilder},
+    messages::RequestBuilder,
 };
 use ic_types::{messages::RequestMetadata, methods::WasmClosure, time::UNIX_EPOCH};
 use maplit::btreemap;
@@ -408,82 +408,23 @@ fn callback_stats() {
         NO_DEADLINE,
     );
 
-    fn calculate_callback_counts(
-        ccm: &CallContextManager,
-        aborted_or_paused_response: Option<&Response>,
-    ) -> BTreeMap<CanisterId, usize> {
-        CallContextManagerStats::calculate_unresponded_callbacks_per_respondent(
-            ccm.callbacks(),
-            aborted_or_paused_response,
-        )
-    }
-
-    assert_eq!(0, ccm.unresponded_callback_count(None));
-    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Register a best-effort callback.
     //
     let best_effort_callback_id = ccm.register_callback(best_effort_callback);
-    let best_effort_callback_response = ResponseBuilder::new()
-        .originator(originator)
-        .respondent(respondent)
-        .originator_reply_callback(best_effort_callback_id)
-        .deadline(CoarseTime::from_secs_since_unix_epoch(14))
-        .build();
-    assert_eq!(1, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Register a guaranteed response callback.
     //
     let guaranteed_response_callback_id = ccm.register_callback(guaranteed_response_callback);
-    let guaranteed_response_callback_response = ResponseBuilder::new()
-        .originator(originator)
-        .respondent(respondent)
-        .originator_reply_callback(guaranteed_response_callback_id)
-        .deadline(NO_DEADLINE)
-        .build();
     // 2 pending callbacks, one guaranteed response.
-    assert_eq!(2, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 2 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
-
-    // But only 1 if either response is in DTS execution.
-    assert_eq!(
-        2,
-        ccm.unresponded_callback_count(Some(&guaranteed_response_callback_response))
-    );
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, Some(&guaranteed_response_callback_response))
-    );
-    assert_eq!(
-        1,
-        ccm.unresponded_guaranteed_response_callback_count(Some(
-            &guaranteed_response_callback_response
-        ))
-    );
-    assert_eq!(
-        2,
-        ccm.unresponded_callback_count(Some(&best_effort_callback_response))
-    );
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, Some(&best_effort_callback_response))
-    );
-    assert_eq!(
-        1,
-        ccm.unresponded_guaranteed_response_callback_count(Some(&best_effort_callback_response))
-    );
+    assert_eq!(2, ccm.unresponded_callback_count());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count());
 
     // Also test an encode-decode roundtrip, to ensure that the count is preserved.
     let call_context_manager_proto: pb::CallContextManager = (&ccm).into();
@@ -493,23 +434,18 @@ fn callback_stats() {
     );
 
     //
-    // Unreguster the best-effort callback.
+    // Unregister the best-effort callback.
     //
     ccm.unregister_callback(best_effort_callback_id);
-    assert_eq!(1, ccm.unresponded_callback_count(None));
-    assert_eq!(
-        btreemap! { respondent => 1 },
-        calculate_callback_counts(&ccm, None)
-    );
-    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(1, ccm.unresponded_callback_count());
+    assert_eq!(1, ccm.unresponded_guaranteed_response_callback_count());
 
     //
     // Unregister the guaranteed response callback.
     //
     ccm.unregister_callback(guaranteed_response_callback_id);
-    assert_eq!(0, ccm.unresponded_callback_count(None));
-    assert_eq!(btreemap! {}, calculate_callback_counts(&ccm, None));
-    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count(None));
+    assert_eq!(0, ccm.unresponded_callback_count());
+    assert_eq!(0, ccm.unresponded_guaranteed_response_callback_count());
 }
 
 #[test]

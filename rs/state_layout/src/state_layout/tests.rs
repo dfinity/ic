@@ -302,20 +302,16 @@ fn test_encode_decode_task_queue() {
             .respondent(canister_test_id(42))
             .build(),
     );
-    let wasm_closure = WasmClosure {
-        func_idx: 13,
-        env: 14,
-    };
     let callback = Arc::new(Callback {
         call_context_id: 1.into(),
         originator: canister_test_id(42),
         respondent: canister_test_id(43),
         cycles_sent: Cycles::new(6),
-        prepayment_for_response_execution: Cycles::zero(),
-        prepayment_for_response_transmission: Cycles::zero(),
-        on_reply: wasm_closure.clone(),
-        on_reject: wasm_closure,
-        on_cleanup: None,
+        prepayment_for_response_execution: Cycles::new(169),
+        prepayment_for_response_transmission: Cycles::new(2197),
+        on_reply: WasmClosure::new(13, 14),
+        on_reject: WasmClosure::new(15, 16),
+        on_cleanup: Some(WasmClosure::new(17, 18)),
         deadline: CoarseTime::from_secs_since_unix_epoch(44),
     });
     for task in [
