@@ -272,8 +272,7 @@ fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             }
 
             if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
-                state.retrieve_blocks_from_ledger_interval =
-                    Some(Duration::from_secs(new_value));
+                state.retrieve_blocks_from_ledger_interval = Some(Duration::from_secs(new_value));
             }
         });
     }
