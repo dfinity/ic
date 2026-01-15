@@ -26,7 +26,9 @@ rust_library(
         "@crate_index//:assert_matches",
         "@crate_index//:bitcoin_dogecoin",
         "@crate_index//:candid",
+        "@crate_index//:ic-doge-interface",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde",
         "@crate_index//:serde_json",
     ],
 )

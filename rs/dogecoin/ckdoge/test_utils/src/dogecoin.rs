@@ -1,11 +1,9 @@
 use crate::DOGE;
 use bitcoin::hashes::Hash;
 use bitcoin::{Amount, dogecoin};
-use candid::Principal;
+use candid::{Decode, Encode, Principal};
 use ic_btc_adapter_test_utils::bitcoind::Daemon;
-use ic_management_canister_types::CanisterId;
-use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
-use pocket_ic::PocketIc;
+use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -49,7 +47,7 @@ impl DogecoinDaemon {
     }
 
     /// Send a single transaction with potentially multiple outputs: one for each amount to the given recipient.
-    pub fn send_transaction<I: IntoIterator<Item=u64>>(
+    pub fn send_transaction<I: IntoIterator<Item = u64>>(
         &self,
         from: &DogecoinUsers,
         to: &dogecoin::Address,
@@ -210,16 +208,23 @@ impl Drop for DogecoinSyncGuard<'_> {
         const MAX_TICKS: u64 = 1000;
 
         let dogecoin_canister = DogecoinCanister::new(self.daemon.env.clone());
-        let dogecoin_block_height = self.daemon
+        let dogecoin_block_height = self
+            .daemon
             .await_ok(|dogecoind| dogecoind.get_blockchain_info())
             .blocks;
 
         for _ in 0..MAX_TICKS {
-            let dogecoin_canister_block_height = dogecoin_canister.get_block_height();
-            if dogecoin_canister_block_height >= dogecoin_block_height {
-                return;
+            match dogecoin_canister.get_block_height() {
+                Ok(dogecoin_canister_block_height)
+                    if dogecoin_canister_block_height >= dogecoin_block_height =>
+                {
+                    return;
+                }
+                result => {
+                    println!("Dogecoin canister not ready {result:?}");
+                    self.daemon.env.tick();
+                }
             }
-            self.daemon.env.tick();
         }
 
         panic!(
@@ -239,27 +244,23 @@ impl DogecoinCanister {
         Self { env }
     }
 
-    pub fn get_block_height(&self) -> u64 {
-        use std::str::FromStr;
-
-        // unfortunately there is currently no other way to retrieve the block height than via metrics
-        // Should contain a single element with the format
-        // main_chain_height 122 1767716911384
-        let main_chain_height_metric =
-            MetricsAssert::from_http_query(self).find_metrics_matching("^main_chain_height");
-        assert_eq!(main_chain_height_metric.len(), 1);
-        let mut iter = main_chain_height_metric[0].split_whitespace();
-        assert_eq!(iter.next(), Some("main_chain_height"));
-        u64::from_str(iter.next().unwrap()).unwrap()
-    }
-}
-
-impl PocketIcHttpQuery for &DogecoinCanister {
-    fn get_pocket_ic(&self) -> &PocketIc {
-        &self.env
-    }
-
-    fn get_canister_id(&self) -> CanisterId {
-        DogecoinCanister::ID
+    pub fn get_block_height(&self) -> Result<u64, RejectResponse> {
+        let request = ic_doge_interface::GetUtxosRequest {
+            address: DogecoinUsers::Miner.address().to_string(),
+            network: ic_doge_interface::NetworkInRequest::Regtest,
+            filter: None,
+        };
+        self.env
+            .query_call(
+                DogecoinCanister::ID,
+                Principal::anonymous(),
+                "dogecoin_get_utxos_query",
+                Encode!(&request).unwrap(),
+            )
+            .map(|response| {
+                Decode!(&response, ic_doge_interface::GetUtxosResponse)
+                    .unwrap()
+                    .tip_height as u64
+            })
     }
 }

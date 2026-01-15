@@ -7722,6 +7722,7 @@ dependencies = [
  "canlog 0.2.0",
  "ic-btc-adapter-test-utils",
  "ic-ckdoge-minter",
+ "ic-doge-interface",
  "ic-http-types",
  "ic-icrc1-ledger",
  "ic-management-canister-types 0.5.0",
