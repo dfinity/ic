@@ -900,3 +900,6 @@ pub fn repair_fee_collector_balances(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

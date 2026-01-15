@@ -1,6 +1,6 @@
+use super::*;
 use candid::{Nat, Principal};
 use ic_icrc_rosetta::common::storage::schema;
-use ic_icrc_rosetta::common::storage::storage_operations::*;
 use ic_icrc_rosetta::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
