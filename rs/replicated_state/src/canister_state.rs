@@ -464,7 +464,8 @@ impl CanisterState {
 
     /// Returns the memory usage of the log memory store in bytes.
     pub fn log_memory_store_memory_usage(&self) -> NumBytes {
-        NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
+        //NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
+        NumBytes::new(self.system_state.log_memory_limit.get() as u64)
     }
 
     pub fn snapshots_memory_usage(&self) -> NumBytes {
