@@ -18,6 +18,18 @@ pub enum SevRootCertificateVerification {
 
 /// Extension trait for verifying attestation packages.
 pub trait AttestationVerifier: Sized {
+    /// Verify all attestation report fields.
+    fn verify_all<T: EncodeSevCustomData + Debug>(
+        self,
+        expected_custom_data: &T,
+        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        expected_chip_ids: &[[u8; 64]],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        self.verify_custom_data(expected_custom_data)
+            .verify_measurement(blessed_guest_launch_measurements)
+            .verify_chip_id(expected_chip_ids)
+    }
+
     /// Verify that the attestation report chip ID matches one of the expected chip IDs.
     fn verify_chip_id(
         self,
