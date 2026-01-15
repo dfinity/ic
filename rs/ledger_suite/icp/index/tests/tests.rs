@@ -2,7 +2,8 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
+    GetAccountIdentifierTransactionsResult, InitArg, SettledTransaction, SettledTransactionWithId,
+    UpgradeArg,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -131,7 +132,7 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = ic_icp_index::InitArg {
+    let args = InitArg {
         ledger_id: ledger_id.into(),
     };
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
@@ -1589,8 +1590,13 @@ fn test_post_upgrade_start_timer() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    env.upgrade_canister(index_id, index_wasm(), Encode!(&()).unwrap())
-        .unwrap();
+    // Upgrade with no argument (None) should work and restart the timer
+    env.upgrade_canister(
+        index_id,
+        index_wasm(),
+        Encode!(&None::<UpgradeArg>).unwrap(),
+    )
+    .unwrap();
 
     // Check that the index syncs the new block (wait_until_sync_is_completed fails
     // if the new block is not synced).
@@ -1695,7 +1701,7 @@ fn test_index_http_request_decoding_quota() {
 
 mod metrics {
     use crate::index_wasm;
-    use candid::Principal;
+    use candid::{Encode, Principal};
     use ic_icp_index::InitArg;
 
     #[test]
@@ -1706,7 +1712,7 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg { ledger_id }
+    fn encode_init_args(ledger_id: Principal) -> Vec<u8> {
+        Encode!(&InitArg { ledger_id }).unwrap()
     }
 }
