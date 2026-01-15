@@ -474,7 +474,7 @@ impl StateManagerMetrics {
 
         let tip_hash_count = metrics_registry.int_counter(
             "state_manager_tip_hash_count",
-            "Number of heights whose states were not cloned and not stored by this node, but whose state hash had to be computed by this node.",
+            "Number of tip heights whose state snapshot was not stored by this node and whose state hash was computed by this node.",
         );
 
         Self {
@@ -2717,6 +2717,12 @@ impl StateManager for StateManagerImpl {
                 } else if let Some(tip_certification) = states.certifications.get(&tip_height) {
                     tip_certification.signed.content.hash.clone()
                 } else {
+                    std::mem::drop(states);
+
+                    if tip_height != Self::INITIAL_STATE_HEIGHT {
+                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height);
+                    }
+
                     let mut tip_certification_metadata =
                         Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
                             .unwrap_or_else(|err| {
