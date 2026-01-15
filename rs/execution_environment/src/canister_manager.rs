@@ -626,7 +626,7 @@ impl CanisterManager {
                 .saturating_sub(old_compute_allocation - new_compute_allocation);
         }
 
-        let new_usage = old_usage;
+        let new_usage = canister.memory_usage();
         let new_mem = canister.memory_allocation().allocated_bytes(new_usage);
         if new_mem >= old_mem {
             // Settings were validated before so this should always succeed.
@@ -1981,9 +1981,7 @@ impl CanisterManager {
         }
 
         let uninstalled_canister_size = if uninstall_code {
-            canister.execution_memory_usage()
-                //+ canister.log_memory_store_memory_usage() // TODO: double check this.
-                + canister.wasm_chunk_store_memory_usage()
+            canister.execution_memory_usage() + canister.wasm_chunk_store_memory_usage()
         } else {
             NumBytes::from(0)
         };
