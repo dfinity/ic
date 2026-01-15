@@ -41,33 +41,15 @@ impl DogecoinDaemon {
     }
 
     pub fn mine_blocks_to(&self, miner: &DogecoinUsers, num_blocks: u64) {
-        const MAX_TICKS: u64 = 1000;
+        let _sync_guard = DogecoinSyncGuard::new(self);
 
         let mined_blocks =
             self.await_ok(|dogecoind| dogecoind.generate_to_address(num_blocks, &miner.address()));
         assert_eq!(mined_blocks.len() as u64, num_blocks);
-
-        let dogecoin_canister = DogecoinCanister::new(self.env.clone());
-        let dogecoin_block_height = self
-            .await_ok(|dogecoind| dogecoind.get_blockchain_info())
-            .blocks;
-
-        for _ in 0..MAX_TICKS {
-            let dogecoin_canister_block_height = dogecoin_canister.get_block_height();
-
-            if dogecoin_canister_block_height >= dogecoin_block_height {
-                return;
-            }
-            self.env.tick();
-        }
-
-        panic!(
-            "BUG: dogecoin canister did not reach block height {dogecoin_block_height} after {MAX_TICKS} ticks"
-        );
     }
 
     /// Send a single transaction with potentially multiple outputs: one for each amount to the given recipient.
-    pub fn send_transaction<I: IntoIterator<Item = u64>>(
+    pub fn send_transaction<I: IntoIterator<Item=u64>>(
         &self,
         from: &DogecoinUsers,
         to: &dogecoin::Address,
@@ -209,6 +191,40 @@ impl DogecoinUsers {
             DogecoinUsers::DepositUser => "deposit_user",
             DogecoinUsers::WithdrawalRecipientUser => "recipient_user",
         }
+    }
+}
+
+/// Guard to ensure that the Dogecoin canister is caught up with the Dogecoin daemon.
+pub struct DogecoinSyncGuard<'a> {
+    daemon: &'a DogecoinDaemon,
+}
+
+impl<'a> DogecoinSyncGuard<'a> {
+    pub fn new(daemon: &'a DogecoinDaemon) -> Self {
+        Self { daemon }
+    }
+}
+
+impl Drop for DogecoinSyncGuard<'_> {
+    fn drop(&mut self) {
+        const MAX_TICKS: u64 = 1000;
+
+        let dogecoin_canister = DogecoinCanister::new(self.daemon.env.clone());
+        let dogecoin_block_height = self.daemon
+            .await_ok(|dogecoind| dogecoind.get_blockchain_info())
+            .blocks;
+
+        for _ in 0..MAX_TICKS {
+            let dogecoin_canister_block_height = dogecoin_canister.get_block_height();
+            if dogecoin_canister_block_height >= dogecoin_block_height {
+                return;
+            }
+            self.daemon.env.tick();
+        }
+
+        panic!(
+            "BUG: dogecoin canister did not reach block height {dogecoin_block_height} after {MAX_TICKS} ticks"
+        );
     }
 }
 
