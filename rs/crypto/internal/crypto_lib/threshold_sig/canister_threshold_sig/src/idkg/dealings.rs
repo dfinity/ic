@@ -86,62 +86,6 @@ impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for Sec
     }
 }
 
-/// Simple type verification for MEGa ciphertexts
-///
-/// Verifies that the ciphertext is of the expected type (single or pairs)
-/// and is for the expected curve.
-fn check_mega_type(
-    ciphertext: &MEGaCiphertext,
-    ctype: MEGaCiphertextType,
-    key_curve: EccCurveType,
-    plaintext_curve: EccCurveType,
-) -> CanisterThresholdResult<()> {
-    if ciphertext.ephemeral_key().curve_type() != key_curve {
-        return Err(CanisterThresholdError::MalformedCiphertext);
-    }
-
-    if ciphertext.pop_public_key().curve_type() != key_curve {
-        return Err(CanisterThresholdError::MalformedCiphertext);
-    }
-    if ciphertext.pop_proof().curve_type()? != key_curve {
-        return Err(CanisterThresholdError::MalformedCiphertext);
-    }
-
-    let curves_ok = match ciphertext {
-        MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == plaintext_curve),
-        MEGaCiphertext::Pairs(c) => c
-            .ctexts
-            .iter()
-            .all(|(x, y)| x.curve_type() == plaintext_curve && y.curve_type() == plaintext_curve),
-    };
-
-    if !curves_ok {
-        return Err(CanisterThresholdError::MalformedCiphertext);
-    }
-
-    if ciphertext.ctype() != ctype {
-        return Err(CanisterThresholdError::MalformedCiphertext);
-    }
-
-    Ok(())
-}
-
-fn check_comm_type(
-    commitment: &PolynomialCommitment,
-    ctype: PolynomialCommitmentType,
-    curve: EccCurveType,
-) -> CanisterThresholdResult<()> {
-    if commitment.curve_type() != curve {
-        return Err(CanisterThresholdError::UnexpectedCommitmentType);
-    }
-
-    if commitment.ctype() != ctype {
-        return Err(CanisterThresholdError::UnexpectedCommitmentType);
-    }
-
-    Ok(())
-}
-
 fn encrypt_and_commit_single_polynomial(
     alg: IdkgProtocolAlgorithm,
     poly: &Polynomial,
@@ -416,28 +360,17 @@ impl IDkgDealingInternal {
         // Check that the proof type matches the transcript type, and verify the proof
         match (transcript_type, self.proof.as_ref()) {
             (Op::Random, None) => {
-                check_comm_type(
-                    &self.commitment,
-                    PolynomialCommitmentType::Pedersen,
-                    signature_curve,
-                )?;
-                check_mega_type(
-                    &self.ciphertext,
-                    MEGaCiphertextType::Pairs,
-                    key_curve,
-                    signature_curve,
-                )?;
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
+                self.ciphertext
+                    .verify_is(MEGaCiphertextType::Pairs, key_curve, signature_curve)?;
                 // no ZK proof for this transcript type
                 Ok(())
             }
             (Op::RandomUnmasked, None) => {
-                check_comm_type(
-                    &self.commitment,
-                    PolynomialCommitmentType::Simple,
-                    signature_curve,
-                )?;
-                check_mega_type(
-                    &self.ciphertext,
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                self.ciphertext.verify_is(
                     MEGaCiphertextType::Single,
                     key_curve,
                     signature_curve,
@@ -449,18 +382,11 @@ impl IDkgDealingInternal {
                 Op::ReshareOfMasked(previous_commitment),
                 Some(ZkProof::ProofOfMaskedResharing(proof)),
             ) => {
-                check_comm_type(
-                    &self.commitment,
-                    PolynomialCommitmentType::Simple,
-                    signature_curve,
-                )?;
-                check_comm_type(
-                    previous_commitment,
-                    PolynomialCommitmentType::Pedersen,
-                    signature_curve,
-                )?;
-                check_mega_type(
-                    &self.ciphertext,
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                previous_commitment
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
+                self.ciphertext.verify_is(
                     MEGaCiphertextType::Single,
                     key_curve,
                     signature_curve,
@@ -477,18 +403,10 @@ impl IDkgDealingInternal {
             }
 
             (Op::ReshareOfUnmasked(previous_commitment), None) => {
-                check_comm_type(
-                    &self.commitment,
-                    PolynomialCommitmentType::Simple,
-                    signature_curve,
-                )?;
-                check_comm_type(
-                    previous_commitment,
-                    PolynomialCommitmentType::Simple,
-                    signature_curve,
-                )?;
-                check_mega_type(
-                    &self.ciphertext,
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                previous_commitment.verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                self.ciphertext.verify_is(
                     MEGaCiphertextType::Single,
                     key_curve,
                     signature_curve,
@@ -511,20 +429,12 @@ impl IDkgDealingInternal {
                 Ok(())
             }
             (Op::UnmaskedTimesMasked(lhs, rhs), Some(ZkProof::ProofOfProduct(proof))) => {
-                check_comm_type(
-                    &self.commitment,
-                    PolynomialCommitmentType::Pedersen,
-                    signature_curve,
-                )?;
-                check_comm_type(lhs, PolynomialCommitmentType::Simple, signature_curve)?;
-                check_comm_type(rhs, PolynomialCommitmentType::Pedersen, signature_curve)?;
-
-                check_mega_type(
-                    &self.ciphertext,
-                    MEGaCiphertextType::Pairs,
-                    key_curve,
-                    signature_curve,
-                )?;
+                self.commitment
+                    .verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
+                self.ciphertext
+                    .verify_is(MEGaCiphertextType::Pairs, key_curve, signature_curve)?;
+                lhs.verify_is(PolynomialCommitmentType::Simple, signature_curve)?;
+                rhs.verify_is(PolynomialCommitmentType::Pedersen, signature_curve)?;
 
                 proof.verify(
                     alg,
@@ -566,7 +476,8 @@ impl IDkgDealingInternal {
             PolynomialCommitmentType::Pedersen => MEGaCiphertextType::Pairs,
         };
 
-        check_mega_type(&self.ciphertext, mega_type, key_curve, signature_curve)?;
+        self.ciphertext
+            .verify_is(mega_type, key_curve, signature_curve)?;
 
         let _opening = self.ciphertext.decrypt_and_check(
             alg,

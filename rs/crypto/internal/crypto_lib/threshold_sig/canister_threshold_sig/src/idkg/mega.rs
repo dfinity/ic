@@ -200,6 +200,45 @@ impl MEGaCiphertext {
         }
     }
 
+    /// Simple type verification for MEGa ciphertexts
+    ///
+    /// Verifies that the ciphertext is of the expected type (single or pairs)
+    /// and is for the expected curve.
+    pub fn verify_is(
+        &self,
+        ctype: MEGaCiphertextType,
+        key_curve: EccCurveType,
+        plaintext_curve: EccCurveType,
+    ) -> CanisterThresholdResult<()> {
+        if self.ephemeral_key().curve_type() != key_curve {
+            return Err(CanisterThresholdError::MalformedCiphertext);
+        }
+
+        if self.pop_public_key().curve_type() != key_curve {
+            return Err(CanisterThresholdError::MalformedCiphertext);
+        }
+        if self.pop_proof().curve_type()? != key_curve {
+            return Err(CanisterThresholdError::MalformedCiphertext);
+        }
+
+        let curves_ok = match self {
+            MEGaCiphertext::Single(c) => c.ctexts.iter().all(|x| x.curve_type() == plaintext_curve),
+            MEGaCiphertext::Pairs(c) => c.ctexts.iter().all(|(x, y)| {
+                x.curve_type() == plaintext_curve && y.curve_type() == plaintext_curve
+            }),
+        };
+
+        if !curves_ok {
+            return Err(CanisterThresholdError::MalformedCiphertext);
+        }
+
+        if self.ctype() != ctype {
+            return Err(CanisterThresholdError::MalformedCiphertext);
+        }
+
+        Ok(())
+    }
+
     /// Decrypt a MEGa ciphertext and return the encrypted commitment opening
     ///
     /// # Arguments:
