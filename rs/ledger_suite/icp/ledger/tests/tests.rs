@@ -2662,7 +2662,11 @@ fn test_upgrade_archive_options() {
     )
     .expect("failed to decode archives response");
 
-    assert_eq!(archives.archives.len(), 1, "First archive should have been created");
+    assert_eq!(
+        archives.archives.len(),
+        1,
+        "First archive should have been created"
+    );
     let first_archive = archives.archives[0].canister_id;
 
     // Check cycles on the first archive (should be 0 since cycles_for_archive_creation was 0)

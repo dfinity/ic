@@ -5,8 +5,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::archive::{Archive, ArchiveCanisterWasm};
-use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
+use ic_ledger_canister_core::runtime::Runtime;
 use ic_ledger_core::{
     approvals::{AllowanceTable, HeapAllowancesData},
     balances::Balances,
