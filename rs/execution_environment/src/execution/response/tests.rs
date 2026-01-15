@@ -56,7 +56,7 @@ fn execute_response_when_stopping_status() {
         .build();
 
     // Execute response when canister status is Stopping.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -113,7 +113,7 @@ fn execute_response_refunds_cycles() {
     // Execute response.
     let balance_before = test.canister_state(a_id).system_state.balance();
     let instructions_before = test.canister_executed_instructions(a_id);
-    test.execute_response(a_id, response);
+    test.execute_responsez(a_id, response);
     let instructions_after = test.canister_executed_instructions(a_id);
     let instructions_executed = instructions_after - instructions_before;
     let balance_after = test.canister_state(a_id).system_state.balance();
@@ -183,7 +183,7 @@ fn execute_response_when_call_context_deleted() {
     );
 
     // Execute response with deleted call context.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     assert_matches!(result, ExecutionResponse::Empty);
 }
 
@@ -224,7 +224,7 @@ fn execute_response_successfully() {
     );
 
     // Execute response returns successfully.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -272,7 +272,7 @@ fn execute_response_traps() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((
             _,
@@ -329,7 +329,7 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((
             _,

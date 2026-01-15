@@ -80,7 +80,8 @@ use ic_types::{
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, SubnetMessage,
+        extract_effective_canister_id,
     },
     methods::{Callback, SystemMethod},
     nominal_cycles::NominalCycles,
@@ -294,10 +295,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, Option<Callback>, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles);
 
     /// Returns a reference to the message or task being executed.
     fn input(&self) -> CanisterMessageOrTask;
@@ -494,7 +492,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
         &self,
-        msg: CanisterMessage,
+        msg: SubnetMessage,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
@@ -508,7 +506,7 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
-            CanisterMessage::Response(response) => {
+            SubnetMessage::Response(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
@@ -598,8 +596,8 @@ impl ExecutionEnvironment {
                 };
             }
 
-            CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
-            CanisterMessage::Request(msg) => CanisterCall::Request(msg),
+            SubnetMessage::Ingress(msg) => CanisterCall::Ingress(msg),
+            SubnetMessage::Request(msg) => CanisterCall::Request(msg),
         };
 
         let timestamp_nanos = state.time();
@@ -1960,7 +1958,6 @@ impl ExecutionEnvironment {
         instruction_limits: InstructionLimits,
         max_instructions_per_query_message: NumInstructions,
         input: CanisterMessageOrTask,
-        callback: Option<Callback>,
         prepaid_execution_cycles: Option<Cycles>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -2013,7 +2010,7 @@ impl ExecutionEnvironment {
                     subnet_size,
                 );
             }
-            CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Response { response, callback }) => {
                 return self.execute_canister_response(
                     canister,
                     response,
@@ -2912,7 +2909,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         response: Arc<Response>,
-        callback: Option<Callback>,
+        callback: Arc<Callback>,
         instruction_limits: InstructionLimits,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -3950,11 +3947,10 @@ impl ExecutionEnvironment {
         match *paused_task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = self.take_paused_execution(id).unwrap();
-                let (input, callback, prepaid_execution_cycles) = paused.abort(log);
+                let (input, prepaid_execution_cycles) = paused.abort(log);
 
                 ExecutionTask::AbortedExecution {
                     input,
-                    callback,
                     prepaid_execution_cycles,
                 }
             }
@@ -4434,7 +4430,6 @@ pub struct ExecuteCanisterResult {
 /// This is a helper for `execute_canister()`.
 fn execute_canister_input(
     input: CanisterMessageOrTask,
-    callback: Option<Callback>,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
     canister: CanisterState,
@@ -4452,7 +4447,6 @@ fn execute_canister_input(
         instruction_limits,
         max_instructions_per_query_message,
         input,
-        callback,
         prepaid_execution_cycles,
         time,
         network_topology,
@@ -4496,11 +4490,7 @@ pub fn execute_canister(
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
 
-    let (input, callback, prepaid_execution_cycles) = match canister
-        .system_state
-        .task_queue
-        .pop_front()
-    {
+    let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {
                 let paused = exec_env.take_paused_execution(id).unwrap();
@@ -4543,21 +4533,20 @@ pub fn execute_canister(
             }
             ExecutionTask::Heartbeat => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
-                (task, None, None)
+                (task, None)
             }
             ExecutionTask::GlobalTimer => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
-                (task, None, None)
+                (task, None)
             }
             ExecutionTask::OnLowWasmMemory => {
                 let task = CanisterMessageOrTask::Task(CanisterTask::OnLowWasmMemory);
-                (task, None, None)
+                (task, None)
             }
             ExecutionTask::AbortedExecution {
                 input,
-                callback,
                 prepaid_execution_cycles,
-            } => (input, callback, Some(prepaid_execution_cycles)),
+            } => (input, Some(prepaid_execution_cycles)),
             ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
                 unreachable!("The guard at the beginning filters these cases out")
             }
@@ -4569,12 +4558,11 @@ pub fn execute_canister(
             {
                 exec_env.metrics.oversize_intra_subnet_messages.inc();
             }
-            (CanisterMessageOrTask::Message(message), None, None)
+            (CanisterMessageOrTask::Message(message), None)
         }
     };
     execute_canister_input(
         input,
-        callback,
         prepaid_execution_cycles,
         exec_env,
         canister,

@@ -17,6 +17,7 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
+use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
 use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
@@ -331,23 +332,28 @@ impl SignedRequestBytes {
 }
 
 /// A wrapper around ingress messages and canister requests/responses.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessage {
-    Response(Arc<Response>),
+    /// A response as an input for Execution consists of the response itself plus
+    /// its associated callback.
+    Response {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
 }
 
-impl CanisterMessage {
-    /// Helper function to extract the effective canister id.
-    pub fn effective_canister_id(&self) -> Option<CanisterId> {
-        match &self {
-            CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
-            CanisterMessage::Request(request) => request.extract_effective_canister_id(),
-            CanisterMessage::Response(_) => None,
-        }
-    }
-}
+// impl CanisterMessage {
+//     /// Helper function to extract the effective canister id.
+//     pub fn effective_canister_id(&self) -> Option<CanisterId> {
+//         match &self {
+//             CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
+//             CanisterMessage::Request(request) => request.extract_effective_canister_id(),
+//             CanisterMessage::Response { .. } => None,
+//         }
+//     }
+// }
 
 impl Display for CanisterMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -358,16 +364,39 @@ impl Display for CanisterMessage {
             CanisterMessage::Request(request) => {
                 write!(f, "Request, method name {},", request.method_name)
             }
-            CanisterMessage::Response(_) => write!(f, "Response"),
+            CanisterMessage::Response { .. } => write!(f, "Response"),
         }
     }
 }
 
-impl From<RequestOrResponse> for CanisterMessage {
-    fn from(msg: RequestOrResponse) -> Self {
-        match msg {
-            RequestOrResponse::Request(request) => CanisterMessage::Request(request),
-            RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+// impl From<RequestOrResponse> for CanisterMessage {
+//     fn from(msg: RequestOrResponse) -> Self {
+//         match msg {
+//             RequestOrResponse::Request(request) => CanisterMessage::Request(request),
+//             RequestOrResponse::Response(response) => CanisterMessage::Response(response),
+//         }
+//     }
+// }
+
+/// A wrapper around ingress messages and canister requests/responses, as
+/// management canister inputs.
+///
+/// As opposed to `CanisterMessage`, there is no `Callback` associated with
+/// a `Response`, as the management canister manages its own callbacks.
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum SubnetMessage {
+    Request(Arc<Request>),
+    Response(Arc<Response>),
+    Ingress(Arc<Ingress>),
+}
+
+impl SubnetMessage {
+    /// Helper function to extract the effective canister id.
+    pub fn effective_canister_id(&self) -> Option<CanisterId> {
+        match &self {
+            SubnetMessage::Ingress(ingress) => ingress.effective_canister_id,
+            SubnetMessage::Request(request) => request.extract_effective_canister_id(),
+            SubnetMessage::Response { .. } => None,
         }
     }
 }
@@ -451,7 +480,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-            CanisterMessage::Response(_) => Err(()),
+            CanisterMessage::Response { .. } => Err(()),
         }
     }
 }
@@ -514,7 +543,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessageOrTask {
     Message(CanisterMessage),
     Task(CanisterTask),

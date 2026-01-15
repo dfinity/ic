@@ -427,7 +427,6 @@ pub enum ExecutionTask {
     /// there are too many long-running executions.
     AbortedExecution {
         input: CanisterMessageOrTask,
-        callback: Option<Callback>,
         /// The execution cost that has already been charged from the canister.
         /// Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -943,7 +942,16 @@ impl SystemState {
         Some(match self.queues.pop_input()? {
             CanisterInput::Ingress(msg) => CanisterMessage::Ingress(msg),
             CanisterInput::Request(msg) => CanisterMessage::Request(msg),
-            CanisterInput::Response(msg) => CanisterMessage::Response(msg),
+            CanisterInput::Response(msg) => {
+                let callback_id = msg.originator_reply_callback;
+                CanisterMessage::Response {
+                    response: msg,
+                    callback: call_context_manager_mut(&mut self.status)
+                        .unwrap()
+                        .unregister_callback(callback_id)
+                        .unwrap(),
+                }
+            }
             CanisterInput::DeadlineExpired(callback_id) => {
                 self.to_reject_response(callback_id, "Call deadline has expired.")
             }
@@ -960,7 +968,7 @@ impl SystemState {
     /// `CallbackId`, generates a reject response with arbitrary values (but
     /// matching `CallbackId`). The missing callback will generate a critical error
     /// when the response is about to be executed, regardless.
-    fn to_reject_response(&self, callback_id: CallbackId, message: &str) -> CanisterMessage {
+    fn to_reject_response(&mut self, callback_id: CallbackId, message: &str) -> CanisterMessage {
         const UNKNOWN_CANISTER_ID: CanisterId =
             CanisterId::unchecked_from_principal(PrincipalId::new_anonymous());
         const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
@@ -977,8 +985,8 @@ impl SystemState {
                 None => (UNKNOWN_CANISTER_ID, UNKNOWN_CANISTER_ID, SOME_DEADLINE),
             };
 
-        CanisterMessage::Response(
-            Response {
+        CanisterMessage::Response {
+            response: Response {
                 originator,
                 respondent,
                 originator_reply_callback: callback_id,
@@ -991,7 +999,11 @@ impl SystemState {
                 deadline,
             }
             .into(),
-        )
+            callback: call_context_manager_mut(&mut self.status)
+                .unwrap()
+                .unregister_callback(callback_id)
+                .unwrap(),
+        }
     }
 
     /// Returns true if there are messages in the input queues, false otherwise.
@@ -1860,11 +1872,11 @@ impl SystemState {
     fn aborted_or_paused_response(&self) -> Option<&Response> {
         match self.task_queue.front() {
             Some(ExecutionTask::AbortedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response { response, .. }),
                 ..
             })
             | Some(ExecutionTask::PausedExecution {
-                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response { response, .. }),
                 ..
             }) => Some(response),
             _ => None,
@@ -2092,9 +2104,11 @@ pub mod testing {
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
 
+        /// Testing only: Registers a call context and returns its ID.
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
 
-        /// Registers a callback for the given respondent, with the given deadline.
+        /// Testing only: Registers a callback for the given respondent, with the given
+        /// deadline.
         fn with_callback(&mut self, respondent: CanisterId, deadline: CoarseTime) -> CallbackId;
 
         /// Testing only: sets the canister status.

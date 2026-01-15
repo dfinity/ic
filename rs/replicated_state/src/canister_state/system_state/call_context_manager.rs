@@ -986,7 +986,9 @@ impl AsInt for (CoarseTime, CallbackId) {
 
 pub mod testing {
     use super::{CallContext, CallContextManager};
-    use ic_types::messages::CallContextId;
+    use ic_types::messages::{CallContextId, CallbackId};
+    use ic_types::methods::Callback;
+    use std::sync::Arc;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -994,6 +996,9 @@ pub mod testing {
         /// Testing only: Registers the given call context (which may already be
         /// responded or deleted).
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
+
+        /// Testing only: publicly exposes `unregister_callback()`.
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -1009,6 +1014,10 @@ pub mod testing {
             debug_assert!(self.stats_ok());
 
             id
+        }
+
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+            self.unregister_callback(callback_id)
         }
     }
 }

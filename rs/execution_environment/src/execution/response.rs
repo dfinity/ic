@@ -773,10 +773,7 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, Option<Callback>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
         info!(
             log,
             "[DTS] Aborting paused response callback {:?} of canister {}.",
@@ -784,17 +781,19 @@ impl PausedExecution for PausedResponseExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: Arc::clone(&self.original.message),
+            callback: Arc::new(self.original.callback),
+        };
         // No cycles were prepaid for execution during this DTS execution.
-        (
-            CanisterMessageOrTask::Message(message),
-            Some(self.original.callback),
-            Cycles::zero(),
-        )
+        (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: Arc::new(self.original.callback.clone()),
+        })
     }
 }
 
@@ -880,10 +879,7 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(
-        self: Box<Self>,
-        log: &ReplicaLogger,
-    ) -> (CanisterMessageOrTask, Option<Callback>, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
         info!(
             log,
             "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
@@ -891,17 +887,19 @@ impl PausedExecution for PausedCleanupExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterMessage::Response(self.original.message);
+        let message = CanisterMessage::Response {
+            response: Arc::clone(&self.original.message),
+            callback: Arc::new(self.original.callback),
+        };
         // No cycles were prepaid for execution during this DTS execution.
-        (
-            CanisterMessageOrTask::Message(message),
-            Some(self.original.callback),
-            Cycles::zero(),
-        )
+        (CanisterMessageOrTask::Message(message), Cycles::zero())
     }
 
     fn input(&self) -> CanisterMessageOrTask {
-        CanisterMessageOrTask::Message(CanisterMessage::Response(self.original.message.clone()))
+        CanisterMessageOrTask::Message(CanisterMessage::Response {
+            response: self.original.message.clone(),
+            callback: Arc::new(self.original.callback.clone()),
+        })
     }
 }
 
@@ -914,7 +912,7 @@ impl PausedExecution for PausedCleanupExecution {
 pub fn execute_response(
     mut clean_canister: CanisterState,
     response: Arc<Response>,
-    callback: Option<Callback>,
+    callback: Arc<Callback>,
     time: Time,
     execution_parameters: ExecutionParameters,
     round: RoundContext,
@@ -928,7 +926,7 @@ pub fn execute_response(
         match common::get_call_context_and_callback(
             &clean_canister,
             &response,
-            callback,
+            Some(callback.as_ref().clone()),
             round.log,
             round.counters.unexpected_response_error,
         ) {

@@ -1,6 +1,7 @@
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
+use ic_protobuf::state::canister_state_bits::v1::execution_task::aborted_execution::AbortedResponse;
 
 impl From<CyclesUseCase> for pb::CyclesUseCase {
     fn from(item: CyclesUseCase) -> Self {
@@ -123,16 +124,19 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             }
             ExecutionTask::AbortedExecution {
                 input,
-                callback,
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
                     CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
                 };
                 let input = match input {
-                    CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
-                        PbInput::Response(v.as_ref().into())
-                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Response {
+                        response,
+                        callback,
+                    }) => PbInput::AbortedResponse(AbortedResponse {
+                        response: Some(response.as_ref().into()),
+                        callback: Some(callback.as_ref().into()),
+                    }),
                     CanisterMessageOrTask::Message(CanisterMessage::Request(v)) => {
                         PbInput::Request(v.as_ref().into())
                     }
@@ -148,7 +152,6 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                         pb::execution_task::AbortedExecution {
                             input: Some(input),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
-                            callback: callback.as_ref().map(|cb| cb.into()),
                         },
                     )),
                 }
@@ -196,9 +199,26 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    PbInput::Response(v) => CanisterMessageOrTask::Message(
-                        CanisterMessage::Response(Arc::new(v.try_into()?)),
-                    ),
+                    PbInput::Response(_) => Err(ProxyDecodeError::Other("Oops".to_string()))?,
+                    PbInput::AbortedResponse(v) => {
+                        CanisterMessageOrTask::Message(CanisterMessage::Response {
+                            response: Arc::new(
+                                v.response
+                                    .ok_or(ProxyDecodeError::MissingField(
+                                        "AbortedResponse::response",
+                                    ))?
+                                    .try_into()?,
+                            ),
+                            callback: Arc::new(
+                                v.callback
+                                    .clone()
+                                    .ok_or(ProxyDecodeError::MissingField(
+                                        "AbortedExecution::callback",
+                                    ))?
+                                    .try_into()?,
+                            ),
+                        })
+                    }
                     PbInput::Ingress(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),
@@ -217,7 +237,6 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .map_or_else(Cycles::zero, |c| c.into());
                 ExecutionTask::AbortedExecution {
                     input,
-                    callback: aborted.callback.map(|cb| cb.try_into()).transpose()?,
                     prepaid_execution_cycles,
                 }
             }

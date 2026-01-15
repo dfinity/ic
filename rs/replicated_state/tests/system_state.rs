@@ -345,9 +345,9 @@ fn induct_messages_to_self_memory_limit_test_impl(
         .induct_messages_to_self(subnet_available_guaranteed_response_memory, own_subnet_type);
 
     // Expect the response and first request to have been inducted.
-    assert_eq!(
-        Some(CanisterMessage::Response(response)),
+    assert_matches!(
         fixture.pop_input(),
+        Some(CanisterMessage::Response{ response: r, .. }) if r == response
     );
     assert_eq!(Some(CanisterMessage::Request(request)), fixture.pop_input(),);
 
@@ -411,7 +411,6 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
     let mut fixture = SystemStateFixture::running();
 
     let (request, response) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-    let callback = response.originator_reply_callback;
 
     // Enqueue the outgoing request.
     fixture.push_output_request(request.clone()).unwrap();
@@ -438,11 +437,7 @@ fn induct_messages_to_self_duplicate_best_effort_response() {
 
     // Pop the timeout reject response and execute it (consuming the callback).
     // The late response was silently dropped, as a duplicate.
-    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(resp)) if resp.response_payload == Payload::Reject(RejectContext::new(RejectCode::SysUnknown, "Call deadline has expired.")));
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
-    );
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response{ response, .. }) if response.response_payload == Payload::Reject(RejectContext::new(RejectCode::SysUnknown, "Call deadline has expired.")));
 
     // There should now be zero messages and reserved slots in the canister queues.
     let queues = fixture.system_state.queues();
@@ -459,7 +454,6 @@ fn induct_messages_to_self_best_effort_callback_gone() {
     let mut fixture = SystemStateFixture::running();
 
     let (request, response) = fixture.prepare_call(CANISTER_ID, SOME_DEADLINE);
-    let callback = response.originator_reply_callback;
 
     // Enqueue the outgoing request.
     fixture.push_output_request(request.clone()).unwrap();
@@ -475,11 +469,7 @@ fn induct_messages_to_self_best_effort_callback_gone() {
     fixture.time_out_callbacks(CoarseTime::from_secs_since_unix_epoch(u32::MAX));
 
     // Pop the resulting reject response and execute it (consuming the callback).
-    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response(_)));
-    assert_matches!(
-        fixture.system_state.unregister_callback(callback),
-        Ok(Some(_))
-    );
+    assert_matches!(fixture.pop_input(), Some(CanisterMessage::Response { .. }));
 
     // A few rounds later, have the running call context produce a response.
     fixture.push_output_response(response);
@@ -591,12 +581,16 @@ fn time_out_callbacks() {
     assert!(!fixture.system_state.has_expired_callbacks(d2));
 
     // Pop `rep2`.
-    assert_eq!(Some(CanisterMessage::Response(rep2)), fixture.pop_input());
+    assert_matches!(
+        fixture.pop_input(),
+        Some(CanisterMessage::Response{ response, .. })
+            if response == rep2
+    );
 
     // Pop the reject response for `c3`.
     assert_matches!(
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
+        Some(CanisterMessage::Response{ response, .. })
             if response.originator_reply_callback == c3 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());
@@ -609,7 +603,7 @@ fn time_out_callbacks() {
     // Pop the reject responses for `c4`.
     assert_matches!(
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
+        Some(CanisterMessage::Response{ response, .. })
             if response.originator_reply_callback == c4 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());
@@ -646,7 +640,7 @@ fn time_out_callbacks_no_reserved_slot() {
     // Only one timeout reject for `c1` was enqueued before we ran out of slots.
     assert_matches!(
         fixture.pop_input(),
-        Some(CanisterMessage::Response(response))
+        Some(CanisterMessage::Response{ response, .. })
             if response.originator_reply_callback == c1 && response.response_payload == deadline_expired_reject_payload
     );
     assert_eq!(None, fixture.pop_input());

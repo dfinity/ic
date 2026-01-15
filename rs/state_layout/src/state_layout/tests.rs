@@ -306,6 +306,18 @@ fn test_encode_decode_task_queue() {
         func_idx: 13,
         env: 14,
     };
+    let callback = Arc::new(Callback {
+        call_context_id: 1.into(),
+        originator: canister_test_id(42),
+        respondent: canister_test_id(43),
+        cycles_sent: Cycles::new(6),
+        prepayment_for_response_execution: Cycles::zero(),
+        prepayment_for_response_transmission: Cycles::zero(),
+        on_reply: wasm_closure.clone(),
+        on_reject: wasm_closure,
+        on_cleanup: None,
+        deadline: CoarseTime::from_secs_since_unix_epoch(44),
+    });
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
@@ -314,7 +326,6 @@ fn test_encode_decode_task_queue() {
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
-            callback: None,
             prepaid_execution_cycles: Cycles::new(2),
         },
         ExecutionTask::AbortedInstallCode {
@@ -323,24 +334,14 @@ fn test_encode_decode_task_queue() {
             call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),
-            callback: Some(Callback {
-                call_context_id: 1.into(),
-                originator: canister_test_id(42),
-                respondent: canister_test_id(43),
-                cycles_sent: Cycles::new(6),
-                prepayment_for_response_execution: Cycles::zero(),
-                prepayment_for_response_transmission: Cycles::zero(),
-                on_reply: wasm_closure.clone(),
-                on_reject: wasm_closure,
-                on_cleanup: None,
-                deadline: CoarseTime::from_secs_since_unix_epoch(44),
-            }),
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response((
+                Arc::clone(&response),
+                Arc::clone(&callback),
+            ))),
             prepaid_execution_cycles: Cycles::new(4),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(&ingress))),
-            callback: None,
             prepaid_execution_cycles: Cycles::new(5),
         },
     ] {
@@ -1170,7 +1171,6 @@ fn test_encode_decode_non_empty_task_queue() {
 
     task_queue.enqueue(ExecutionTask::AbortedExecution {
         input: CanisterMessageOrTask::Task(CanisterTask::Heartbeat),
-        callback: None,
         prepaid_execution_cycles: Cycles::zero(),
     });
 

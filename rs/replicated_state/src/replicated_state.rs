@@ -31,7 +31,7 @@ use ic_types::{
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{
-        CallbackId, CanisterMessage, Ingress, MessageId, Refund, RequestOrResponse, Response,
+        CallbackId, Ingress, MessageId, Refund, RequestOrResponse, Response, SubnetMessage,
     },
     time::CoarseTime,
 };
@@ -974,7 +974,7 @@ impl ReplicatedState {
 
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn pop_subnet_input(&mut self) -> Option<CanisterMessage> {
+    pub fn pop_subnet_input(&mut self) -> Option<SubnetMessage> {
         self.subnet_queues
             .pop_input()
             .map(subnet_input_into_canister_message)
@@ -982,7 +982,7 @@ impl ReplicatedState {
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn peek_subnet_input(&mut self) -> Option<CanisterMessage> {
+    pub fn peek_subnet_input(&mut self) -> Option<SubnetMessage> {
         self.subnet_queues
             .peek_input()
             .map(subnet_input_into_canister_message)
@@ -1634,15 +1634,15 @@ impl ReplicatedState {
 }
 
 /// Converts a `CanisterInput` popped from a subnet input queue into a
-/// `CanisterMessage`.
+/// `SubnetMessage`.
 ///
 /// As opposed to actual canister queues, subnet input queues should never hold
 /// any kind of response (because the management canister does not make any
 /// outbound calls as itself).
-fn subnet_input_into_canister_message(input: CanisterInput) -> CanisterMessage {
+fn subnet_input_into_canister_message(input: CanisterInput) -> SubnetMessage {
     match input {
-        CanisterInput::Ingress(ingress) => CanisterMessage::Ingress(ingress),
-        CanisterInput::Request(request) => CanisterMessage::Request(request),
+        CanisterInput::Ingress(ingress) => SubnetMessage::Ingress(ingress),
+        CanisterInput::Request(request) => SubnetMessage::Request(request),
         CanisterInput::Response(_)
         | CanisterInput::DeadlineExpired(_)
         | CanisterInput::ResponseDropped(_) => {
