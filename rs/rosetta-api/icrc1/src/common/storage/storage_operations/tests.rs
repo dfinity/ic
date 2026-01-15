@@ -1,7 +1,7 @@
 use super::*;
 use candid::{Nat, Principal};
-use ic_icrc_rosetta::common::storage::schema;
-use ic_icrc_rosetta::common::storage::types::{
+use crate::common::storage::schema;
+use crate::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
 use icrc_ledger_types::icrc1::account::Account;
