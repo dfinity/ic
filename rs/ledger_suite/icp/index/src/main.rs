@@ -357,7 +357,11 @@ pub async fn build_index() -> Option<()> {
     let res = match get_blocks_from_ledger(next_txid).await {
         Ok(res) => res,
         Err(err) => {
-            log!(P0, "[build_index]: failed to get blocks from ledger: {}", err);
+            log!(
+                P0,
+                "[build_index]: failed to get blocks from ledger: {}",
+                err
+            );
             return Some(());
         }
     };
@@ -379,7 +383,11 @@ pub async fn build_index() -> Option<()> {
             let candid_blocks = match get_blocks_from_archive(&archived).await {
                 Ok(blocks) => blocks,
                 Err(err) => {
-                    log!(P0, "[build_index]: failed to get blocks from archive: {}", err);
+                    log!(
+                        P0,
+                        "[build_index]: failed to get blocks from archive: {}",
+                        err
+                    );
                     return Some(());
                 }
             };
