@@ -309,14 +309,23 @@ impl Hypervisor {
             cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
-                (slice, output, system_state_modifications)
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+                (slice, output, canister_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");
             }
         };
         update_round_limits(round_limits, &slice);
+        // TODO: check if total logs is not allocated yet, delta logs non-empty and update allocated bytes.
+        if !system_state.log_memory_store.is_allocated()
+            && !canister_state_changes
+                .system_state_modifications
+                .canister_log()
+                .is_empty()
+        {
+            output.allocated_bytes += system_state.log_memory_limit;
+        }
         apply_canister_state_changes(
             canister_state_changes,
             &mut execution_state,

@@ -616,6 +616,10 @@ impl SystemStateModifications {
             ..Default::default()
         }
     }
+
+    pub fn canister_log(&self) -> &CanisterLog {
+        &self.canister_log
+    }
 }
 
 /// A version of the `SystemState` that can be used in a sandboxed process.
