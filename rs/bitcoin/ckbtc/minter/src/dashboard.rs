@@ -1,7 +1,7 @@
-use crate::Network;
 use crate::address::{BitcoinAddress, account_to_bitcoin_address};
 use crate::state;
 use crate::tx::DisplayAmount;
+use crate::{ECDSAPublicKey, Network};
 use ic_btc_interface::Txid;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
@@ -17,6 +17,12 @@ fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
 const DEFAULT_PAGE_SIZE: u64 = 100;
 
 pub trait DashboardBuilder {
+    fn display_account_address(
+        &self,
+        key: &ECDSAPublicKey,
+        aaccount: &Account,
+        network: Network,
+    ) -> String;
     fn display_address(&self, address: &BitcoinAddress, network: Network) -> String;
     fn transaction_url(&self, txid: &Txid, network: Network) -> String;
     fn token(&self) -> &str;
@@ -27,12 +33,22 @@ pub struct Dashboard {
     builder: Box<dyn DashboardBuilder>,
 }
 
-struct BitcoinDashboardBuilder;
+struct CkBtcDashboardBuilder;
 
-impl DashboardBuilder for BitcoinDashboardBuilder {
+impl DashboardBuilder for CkBtcDashboardBuilder {
+    fn display_account_address(
+        &self,
+        key: &ECDSAPublicKey,
+        account: &Account,
+        network: Network,
+    ) -> String {
+        account_to_bitcoin_address(key, account).display(network)
+    }
+
     fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
         address.display(network)
     }
+
     fn transaction_url(&self, txid: &Txid, network: Network) -> String {
         let net_prefix = if network == Network::Mainnet {
             ""
@@ -41,16 +57,18 @@ impl DashboardBuilder for BitcoinDashboardBuilder {
         };
         format!("https://mempool.space/{net_prefix}tx/{txid}")
     }
+
     fn token(&self) -> &str {
         "ckBTC"
     }
+
     fn native_token(&self) -> &str {
         "BTC"
     }
 }
 
 pub fn ckbtc_dashboard() -> Dashboard {
-    Dashboard::new(BitcoinDashboardBuilder)
+    Dashboard::new(CkBtcDashboardBuilder)
 }
 
 impl Dashboard {
@@ -351,7 +369,7 @@ impl Dashboard {
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
-                        <th>Bitcoin Checker Principal</th>
+                        <th>{native_token} Checker Principal</th>
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
@@ -376,10 +394,8 @@ impl Dashboard {
             s.ecdsa_public_key
                 .clone()
                 .map(|key| {
-                    self.builder.display_address(
-                        &account_to_bitcoin_address(&key, &main_account),
-                        s.btc_network,
-                    )
+                    self.builder
+                        .display_account_address(&key, &main_account, s.btc_network)
                 })
                 .unwrap_or_default(),
             s.min_confirmations,

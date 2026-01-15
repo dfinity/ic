@@ -3,7 +3,9 @@ use ic_ckbtc_minter::dashboard::{Dashboard, DashboardBuilder};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
-use ic_ckbtc_minter::{BuildTxError, CanisterRuntime, Network, Txid, address::BitcoinAddress};
+use ic_ckbtc_minter::{
+    BuildTxError, CanisterRuntime, ECDSAPublicKey, Network, Txid, address::BitcoinAddress,
+};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
@@ -16,8 +18,10 @@ use ic_ckdoge_minter::{
     event::{CkDogeMinterEvent, bitcoin_to_dogecoin},
     lifecycle::MinterArg,
     updates,
+    updates::account_to_p2pkh_address,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
+use icrc_ledger_types::icrc1::account::Account;
 
 #[init]
 fn init(args: MinterArg) {
@@ -232,6 +236,16 @@ fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
 struct CkDogeDashboardBuilder;
 
 impl DashboardBuilder for CkDogeDashboardBuilder {
+    fn display_account_address(
+        &self,
+        key: &ECDSAPublicKey,
+        account: &Account,
+        network: Network,
+    ) -> String {
+        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
+        account_to_p2pkh_address(key, account).display(&network)
+    }
+
     fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
         let address = bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
         let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
