@@ -121,10 +121,10 @@ impl LogMemoryStore {
         let target_limit = limit.max(DATA_CAPACITY_MIN);
 
         // Only resize when the capacity actually changes.
-        if let Some(current_buffer) = self.load_ring_buffer() {
-            if current_buffer.byte_capacity() == target_limit {
-                return;
-            }
+        if let Some(current_buffer) = self.load_ring_buffer()
+            && current_buffer.byte_capacity() == target_limit
+        {
+            return;
         }
 
         let preserved_records = self.load_ring_buffer().map(|b| b.all_records());
