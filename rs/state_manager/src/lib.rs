@@ -2719,10 +2719,6 @@ impl StateManager for StateManagerImpl {
                 } else {
                     std::mem::drop(states);
 
-                    if tip_height != Self::INITIAL_STATE_HEIGHT {
-                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height);
-                    }
-
                     let mut tip_certification_metadata =
                         Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
                             .unwrap_or_else(|err| {
