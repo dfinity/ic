@@ -1629,12 +1629,14 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
+            let target_id_mutex = Arc::new(Mutex::new(Some(target_id)));
+
             complement_state_manager_with_remote_dkg_requests(
                 state_manager.clone(),
                 registry.get_latest_version(),
                 vec![10, 11, 12, 13],
                 None,
-                Some(target_id),
+                target_id_mutex.clone(),
             );
 
             // Verify that the next summary block contains the configs and no transcripts.
@@ -1690,7 +1692,7 @@ mod tests {
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // Now we put the other dealing into the pool
-            // The payload buukder will include the dealing
+            // The payload builder will include the dealing
             dkg_pool
                 .write()
                 .unwrap()
@@ -1706,6 +1708,7 @@ mod tests {
             // NOTE: We only need one dealing each, since we are using `CryptoReturningOk`. We should consider
             // using real crypto for these tests, to make them more realistic
             pool.advance_round_normal_operation();
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
 
             // Check that the payload also validates
@@ -1745,6 +1748,9 @@ mod tests {
                 )
                 .is_ok()
             );
+
+            // Simulate the delivery of the block, which removes to context from the state
+            target_id_mutex.lock().unwrap().take();
 
             // Advance the pool a until the next DKG, check that the early remote transcripts are not generated multiple times
             // including that they are not included in the summary

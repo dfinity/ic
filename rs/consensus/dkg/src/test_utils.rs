@@ -17,7 +17,10 @@ use ic_types::{
     messages::CallbackId,
     signature::{BasicSignature, BasicSigned},
 };
-use std::sync::Arc;
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, Mutex},
+};
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
     state_manager: Arc<RefMockStateManager>,
@@ -92,32 +95,30 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
     registry_version: RegistryVersion,
     node_ids: Vec<u64>,
     times: Option<usize>,
-    target: Option<NiDkgTargetId>,
+    target: Arc<Mutex<Option<NiDkgTargetId>>>,
 ) {
-    let mut state = ic_test_utilities_state::get_initial_state(0, 0);
-
     // Add the context into state_manager.
-    let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
-
-    if let Some(target_id) = target {
-        state.metadata.subnet_call_context_manager.push_context(
-            SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
-                request: RequestBuilder::new().build(),
-                nodes_in_target_subnet,
-                target_id,
-                registry_version,
-                time: state.time(),
-            }),
-        );
-    }
+    let nodes_in_target_subnet: BTreeSet<_> = node_ids.into_iter().map(node_test_id).collect();
 
     let mut mock = state_manager.get_mut();
-    let expectation =
-        mock.expect_get_state_at()
-            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
-                Height::new(0),
-                Arc::new(state),
-            )));
+    let expectation = mock.expect_get_state_at().returning(move |_| {
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+        if let Some(target_id) = target.lock().unwrap().as_ref() {
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+                    request: RequestBuilder::new().build(),
+                    nodes_in_target_subnet: nodes_in_target_subnet.clone(),
+                    target_id: target_id.clone(),
+                    registry_version,
+                    time: state.time(),
+                }),
+            );
+        }
+        Ok(ic_interfaces_state_manager::Labeled::new(
+            Height::new(0),
+            Arc::new(state),
+        ))
+    });
     if let Some(times) = times {
         expectation.times(times);
     }

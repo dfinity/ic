@@ -123,8 +123,6 @@ fn create_data_payload(
         .cloned()
         .collect();
 
-    dbg!(new_validated_dealings.len());
-
     // If we have dealings in the payload, we will not try to make transcripts as well
     if !new_validated_dealings.is_empty() {
         return Ok(DkgDataPayload::new(
@@ -151,7 +149,6 @@ fn create_data_payload(
             remote_dkg_transcripts.len()
         );
     }
-    dbg!(remote_dkg_transcripts.len());
 
     // Try to include remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
@@ -312,9 +309,7 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    dbg!("Creating summary payload");
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
-    dbg!(&all_dealings.len());
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
@@ -405,7 +400,6 @@ pub(super) fn create_summary_payload(
             &last_summary.initial_dkg_attempts,
             &logger,
         )?;
-    dbg!(transcripts_for_remote_subnets.len());
 
     let interval_length = last_summary.next_interval_length;
     let next_interval_length = get_dkg_interval_length(
