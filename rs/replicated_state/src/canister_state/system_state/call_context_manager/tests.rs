@@ -75,7 +75,7 @@ fn call_context_handling() {
             },
             call_context_manager.call_context(call_context_id3).cloned()
         ),
-        call_context_manager.on_canister_result(call_context_id3, None, Ok(None), 0.into())
+        call_context_manager.on_canister_result(call_context_id3, Ok(None), 0.into())
     );
 
     // First they're unanswered
@@ -163,10 +163,12 @@ fn call_context_handling() {
     assert_eq!(callback.on_reject, WasmClosure::new(2, 3));
     assert_eq!(call_context_manager.callbacks().len(), 3);
 
+    call_context_manager
+        .unregister_callback(callback_id1)
+        .unwrap();
     assert_eq!(
         call_context_manager.on_canister_result(
             call_context_id1,
-            Some(callback_id1),
             Ok(Some(WasmResult::Reply(vec![1]))),
             0.into()
         ),
@@ -209,6 +211,9 @@ fn call_context_handling() {
 
     // We mark the CallContext 2 as responded and it is deleted as it has no
     // outstanding calls
+    call_context_manager
+        .unregister_callback(callback_id3)
+        .unwrap();
     assert_eq!(
         (
             CallContextAction::Reply {
@@ -219,7 +224,6 @@ fn call_context_handling() {
         ),
         call_context_manager.on_canister_result(
             call_context_id2,
-            Some(callback_id3),
             Ok(Some(WasmResult::Reply(vec![]))),
             0.into()
         )
@@ -231,17 +235,15 @@ fn call_context_handling() {
     let callback = call_context_manager.callback(callback_id2).unwrap().clone();
     assert_eq!(callback.on_reply, WasmClosure::new(4, 5));
     assert_eq!(callback.on_reject, WasmClosure::new(6, 7));
+    call_context_manager
+        .unregister_callback(callback_id2)
+        .unwrap();
     assert_eq!(
         (
             CallContextAction::AlreadyResponded,
             call_context_manager.call_context(call_context_id1).cloned()
         ),
-        call_context_manager.on_canister_result(
-            call_context_id1,
-            Some(callback_id2),
-            Ok(None),
-            0.into()
-        )
+        call_context_manager.on_canister_result(call_context_id1, Ok(None), 0.into())
     );
 
     // Since CallContext 1 was already responded, make sure we're in a clean state
@@ -314,7 +316,7 @@ fn test_call_context_instructions_executed_is_updated() {
 
     // Finish a successful execution with 1K instructions.
     assert_eq!(
-        call_context_manager.on_canister_result(call_context_id, None, Ok(None), 1_000.into()),
+        call_context_manager.on_canister_result(call_context_id, Ok(None), 1_000.into()),
         (CallContextAction::NotYetResponded, None)
     );
     assert_eq!(
@@ -330,7 +332,6 @@ fn test_call_context_instructions_executed_is_updated() {
     assert_eq!(
         call_context_manager.on_canister_result(
             call_context_id,
-            None,
             Err(HypervisorError::InstructionLimitExceeded(2_000.into())),
             2_000.into()
         ),
@@ -666,7 +667,7 @@ fn call_context_stats() {
     // Non-response result on the best effort call context. Call context is
     // consumed, but no effect on the stats.
     //
-    ccm.on_canister_result(best_effort_id, None, Ok(None), 0.into());
+    ccm.on_canister_result(best_effort_id, Ok(None), 0.into());
     assert_eq!(2, ccm.call_contexts.len());
     assert_eq!(1, ccm.unresponded_canister_update_call_contexts(None));
     assert_eq!(
@@ -678,7 +679,7 @@ fn call_context_stats() {
     //
     // A no response result to the guaranteed response call context.
     //
-    ccm.on_canister_result(guaranteed_response_id, None, Ok(None), 1.into());
+    ccm.on_canister_result(guaranteed_response_id, Ok(None), 1.into());
     assert_eq!(1, ccm.call_contexts.len());
     // No more unresponded call contexts.
     assert_eq!(0, ccm.unresponded_canister_update_call_contexts(None));

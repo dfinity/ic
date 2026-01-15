@@ -31,6 +31,7 @@ use ic_types::time::CoarseTime;
 use ic_types::{Cycles, NumInstructions, Time, UserId};
 use lazy_static::lazy_static;
 use prometheus::IntCounter;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
@@ -336,41 +337,25 @@ pub(crate) fn validate_message(
     Ok(())
 }
 
-/// Retrieves the callback corresponding to the given response.
-pub fn get_callback(
-    canister: &CanisterState,
+/// Unregisters the callback corresponding to the given response.
+pub fn unregister_callback(
+    canister: &mut CanisterState,
     response: &Response,
     logger: &ReplicaLogger,
     unexpected_response_error: &IntCounter,
-) -> Option<(Callback, CallbackId)> {
-    let call_context_manager = canister.system_state.call_context_manager().or_else(|| {
-        // A canister by definition can only be stopped when no open call contexts.
-        // Hence, if we receive a response for a stopped canister then that is
-        // a either a bug in the code or potentially a faulty (or
-        // malicious) subnet generating spurious messages.
-        unexpected_response_error.inc();
-        error!(
-            logger,
-            "[EXC-BUG] Stopped canister got a response.  originator {} respondent {}, deadline {:?}.",
-            response.originator,
-            response.respondent,
-            response.deadline,
-        );
-        debug_assert!(false);
-        None
-    })?;
+) -> Option<Arc<Callback>> {
+    match canister
+        .system_state
+        .unregister_callback(response.originator_reply_callback)
+    {
+        Ok(callback) => callback,
 
-    let callback_id = response.originator_reply_callback;
-    match call_context_manager.callback(callback_id) {
-        Some(callback) => Some((callback.clone(), callback_id)),
-
-        None => {
+        Err(e) => {
             // Received an unknown callback ID. Nothing to do.
             unexpected_response_error.inc();
             error!(
                 logger,
-                "[EXC-BUG] Canister got a response with unknown callback ID {}.  originator {} respondent {}, deadline {:?}.",
-                response.originator_reply_callback,
+                "[EXC-BUG] Canister got unexpected response: {e}.  originator {} respondent {}, deadline {:?}.",
                 response.originator,
                 response.respondent,
                 response.deadline,
