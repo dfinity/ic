@@ -28,6 +28,8 @@ system_test_nns(
     },
     data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
     ],
@@ -136,6 +138,8 @@ system_test_nns(
         "boot_image_minimal_size_gibibytes": 500,
     },
     data = COUNTER_CANISTER_DATA,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
     deps = [
         # Keep sorted.
@@ -155,7 +159,9 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     data = COUNTER_CANISTER_DATA,
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
@@ -176,7 +182,9 @@ system_test(
         "boot_image_minimal_size_gibibytes": 500,
     },
     data = COUNTER_CANISTER_DATA,
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

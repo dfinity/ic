@@ -45,6 +45,7 @@ rust_library(
 system_test(
     name = "catch_up_loop_prevention_test",
     guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
@@ -63,6 +64,7 @@ system_test(
 system_test(
     name = "catch_up_possible_test",
     guestos = "malicious",
+    prometheus_vm_scrape_interval_secs = 5,
     # TODO(NET-1683): Adjust test for faster p2p
     tags = [
         "long_test",
@@ -340,7 +342,9 @@ system_test_nns(
         "//rs/tests:jaeger_uvm_config_image",
     ],
     enable_head_nns_variant = False,
+    enable_metrics = True,
     env = {"ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)"},
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",

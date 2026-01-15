@@ -185,6 +185,8 @@ system_test(
     data = [
         "//rs/tests:jaeger_uvm_config_image",
     ],
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

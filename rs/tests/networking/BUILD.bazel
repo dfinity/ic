@@ -68,6 +68,7 @@ system_test_nns(
     name = "canister_http_stress_test",
     data =
         CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
+    enable_metrics = True,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
@@ -89,6 +90,7 @@ system_test_nns(
     name = "canister_http_soak_test",
     data =
         CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
+    enable_metrics = True,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
@@ -359,6 +361,8 @@ system_test_nns(
     data = COUNTER_CANISTER_DATA + [
         "//rs/tests:jaeger_uvm_config_image",
     ],
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
@@ -379,7 +383,9 @@ system_test_nns(
     },
     data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
+    enable_metrics = True,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
     ],
@@ -391,7 +397,10 @@ system_test_nns(
 
 system_test_nns(
     name = "state_sync_performance",
+    colocated_test_driver_vm_required_host_features = ["performance"],
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",
@@ -424,7 +433,9 @@ system_test_nns(
     },
     data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
+    enable_metrics = True,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
     ],
@@ -437,6 +448,8 @@ system_test_nns(
 system_test(
     name = "cloner_canister_workload",
     data = COUNTER_CANISTER_DATA,
+    enable_metrics = True,
+    e> master
     tags = [
         "manual",
     ],

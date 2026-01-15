@@ -1,5 +1,5 @@
 {
-  "checksum": "55c7a581cc8bbcdb86c093ec6b478c55a9b8b51e044d141966b31a354cfb9901",
+  "checksum": "f13e1458face2df2ff47416ff4fbf5541a26beaaf7466d8b6b5d9561e4346eea",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -68286,6 +68286,7 @@
         "crate_features": {
           "common": [
             "bundled",
+            "hooks",
             "modern_sqlite"
           ],
           "selects": {}

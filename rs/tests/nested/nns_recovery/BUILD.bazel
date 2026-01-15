@@ -69,6 +69,7 @@ system_test_nns(
     flaky = True,
     guestos_update = "test",
     tags = [
+        "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
