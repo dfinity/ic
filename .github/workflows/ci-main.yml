@@ -174,7 +174,11 @@ jobs:
           run: |
             set -euo pipefail
 
+            printenv USER || echo 'no user set'
+            printenv HOSTUSER || echo 'no hostuser set'
+
             echo "Building as user: $(whoami)"
+            exit 1
             echo "Bazel version: $(bazel version)"
 
             # Determine bazel_args based on event type or branch name
