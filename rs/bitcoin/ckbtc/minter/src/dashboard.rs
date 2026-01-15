@@ -16,6 +16,9 @@ fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
 // Number of entries per page for the account_to_utxos table.
 const DEFAULT_PAGE_SIZE: u64 = 100;
 
+/// This abstracts over both Bitcoin and Dogecoin dashboard building,
+/// taking care of their differences, e.g. in address display and block
+/// explorer URL.
 pub trait DashboardBuilder {
     fn display_account_address(
         &self,
