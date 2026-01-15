@@ -61,6 +61,7 @@ component_files = {
     Label("guestos/init/setup-encryption/systemd-fsck@dev-mapper-var_crypt.service"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service",
     Label("guestos/init/setup-encryption/retry-var-failure.service"): "/etc/systemd/system/retry-var-failure.service",
     Label("guestos/init/setup-encryption/retry-var-failure.sh"): "/opt/ic/bin/retry-var-failure.sh",
+    Label("break-fsck.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
     Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",

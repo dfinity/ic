@@ -4,6 +4,7 @@
 Description=File System Check on /dev/mapper/var_crypt
 Documentation=man:systemd-fsck@.service(8)
 DefaultDependencies=no
+BindsTo=dev-mapper-var_crypt.device
 Conflicts=shutdown.target
 Wants=systemd-fsckd.socket
 After=dev-mapper-var_crypt.device systemd-fsck-root.service local-fs-pre.target systemd-fsckd.socket
