@@ -16,33 +16,60 @@ fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
 // Number of entries per page for the account_to_utxos table.
 const DEFAULT_PAGE_SIZE: u64 = 100;
 
-type DisplayAddressFn = Box<dyn Fn(&BitcoinAddress, Network) -> String>;
-
-pub struct DashboardBuilder {
-    display_address: DisplayAddressFn,
+pub trait DashboardBuilder {
+    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String;
+    fn transaction_url(&self, txid: &Txid, network: Network) -> String;
+    fn token(&self) -> &str;
+    fn native_token(&self) -> &str;
 }
 
-impl Default for DashboardBuilder {
-    fn default() -> Self {
-        Self::new_with(|address, network| address.display(network))
+pub struct Dashboard {
+    builder: Box<dyn DashboardBuilder>,
+}
+
+struct BitcoinDashboardBuilder;
+
+impl DashboardBuilder for BitcoinDashboardBuilder {
+    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
+        address.display(network)
+    }
+    fn transaction_url(&self, txid: &Txid, network: Network) -> String {
+        let net_prefix = if network == Network::Mainnet {
+            ""
+        } else {
+            "testnet4/"
+        };
+        format!("https://mempool.space/{net_prefix}tx/{txid}")
+    }
+    fn token(&self) -> &str {
+        "ckBTC"
+    }
+    fn native_token(&self) -> &str {
+        "BTC"
     }
 }
 
-impl DashboardBuilder {
-    pub fn new_with<F: Fn(&BitcoinAddress, Network) -> String + 'static>(f: F) -> Self {
+pub fn ckbtc_dashboard() -> Dashboard {
+    Dashboard::new(BitcoinDashboardBuilder)
+}
+
+impl Dashboard {
+    pub fn new<Builder: DashboardBuilder + 'static>(builder: Builder) -> Self {
         Self {
-            display_address: Box::new(f),
+            builder: Box::new(builder),
         }
     }
 
     pub fn build(&self, account_to_utxos_start: u64) -> Vec<u8> {
+        let token = self.builder.token();
+        let native_token = self.builder.native_token();
         state::read_state(|s| {
             let html = format!(
         "
         <!DOCTYPE html>
         <html lang=\"en\">
             <head>
-                <title>ckBTC Minter Dashboard</title>
+                <title>{token} Minter Dashboard</title>
                 <style>
                     body {{
                         font-family: monospace;
@@ -86,14 +113,14 @@ impl DashboardBuilder {
             </head>
             <body>
               <div class='background'><div class='content'>
-                <h2>ckBTC Minter Dashboard</h2>
+                <h2>{token} Minter Dashboard</h2>
                 <p>
-                    On the <a href=\"https://internetcomputer.org/ckbtc/\" target=\"_blank\">ckBTC</a> minter dashboard,
+                    On the <a href=\"https://internetcomputer.org/ckbtc/\" target=\"_blank\">{token}</a> minter dashboard,
                     you can find all the information about the minter's current state, the available UTXOs, outgoing transactions, current parameters, and the logs.
                 </p>
                 <h3>Metadata</h3>
                 {}
-                <h3>Pending retrieve BTC requests</h3>
+                <h3>Pending retrieve {native_token} requests</h3>
                      <table>
                         <thead>
                             <tr>
@@ -104,7 +131,7 @@ impl DashboardBuilder {
                         </thead>
                         <tbody>{}</tbody>
                     </table>
-                <h3>In flight retrieve BTC requests</h3>
+                <h3>In flight retrieve {native_token} requests</h3>
                 <table>
                     <thead>
                         <tr>
@@ -123,12 +150,12 @@ impl DashboardBuilder {
                             <th>Input UTXO Txid</th>
                             <th>Input UTXO Vout</th>
                             <th>Input UTXO Height</th>
-                            <th>Input UTXO Value (BTC)</th>
+                            <th>Input UTXO Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>{}</tbody>
                 </table>
-                <h3>Finalized retrieve BTC requests</h3>
+                <h3>Finalized retrieve {native_token} requests</h3>
                 <table>
                     <thead>
                         <tr>
@@ -146,7 +173,7 @@ impl DashboardBuilder {
                         <tr>
                             <th>Txid</th>
                             <th>Vout</th>
-                            <th>Value (BTC)</th>
+                            <th>Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>{}</tbody>
@@ -158,7 +185,7 @@ impl DashboardBuilder {
                             <th>Txid</th>
                             <th>Vout</th>
                             <th>Height</th>
-                            <th>Value (BTC)</th>
+                            <th>Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -172,7 +199,7 @@ impl DashboardBuilder {
                             <th>Txid</th>
                             <th>Vout</th>
                             <th>Height</th>
-                            <th>Value (BTC)</th>
+                            <th>Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -186,7 +213,7 @@ impl DashboardBuilder {
                             <th>Txid</th>
                             <th>Vout</th>
                             <th>Height</th>
-                            <th>Value (BTC)</th>
+                            <th>Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -201,14 +228,14 @@ impl DashboardBuilder {
                             <th>Txid</th>
                             <th>Vout</th>
                             <th>Height</th>
-                            <th>Value (BTC)</th>
+                            <th>Value ({native_token})</th>
                         </tr>
                     </thead>
                     <tbody>{}</tbody>
                 </table>
                 <h3>Update balance principals pending</h3>
                 <ul>{}</ul>
-                <h3>Retrieve BTC principals pending</h3>
+                <h3>Retrieve {native_token} principals pending</h3>
                 <ul>{}</ul>
               </div></div>
             </body>
@@ -299,6 +326,7 @@ impl DashboardBuilder {
     }
 
     pub fn build_metadata(&self, s: &CkBtcMinterState) -> String {
+        let native_token = self.builder.native_token();
         let main_account = Account {
             owner: ic_cdk::api::canister_self(),
             subaccount: None,
@@ -311,7 +339,7 @@ impl DashboardBuilder {
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Main address (do not send BTC here)</th>
+                        <th>Main address (do not send {native_token} here)</th>
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
@@ -331,15 +359,15 @@ impl DashboardBuilder {
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Min retrieve BTC amount</th>
+                        <th>Min retrieve {native_token} amount</th>
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Min retrieve BTC amount (fee based)</th>
+                        <th>Min retrieve {native_token} amount (fee based)</th>
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Total BTC managed</th>
+                        <th>Total {native_token} managed</th>
                         <td>{}</td>
                     </tr>
                 </tbody>
@@ -348,7 +376,7 @@ impl DashboardBuilder {
             s.ecdsa_public_key
                 .clone()
                 .map(|key| {
-                    (self.display_address)(
+                    self.builder.display_address(
                         &account_to_bitcoin_address(&key, &main_account),
                         s.btc_network,
                     )
@@ -373,7 +401,7 @@ impl DashboardBuilder {
                     buf,
                     "<tr><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
                     req.block_index,
-                    (self.display_address)(&req.address, s.btc_network),
+                    self.builder.display_address(&req.address, s.btc_network),
                     req.amount
                 )
                 .unwrap();
@@ -430,7 +458,7 @@ impl DashboardBuilder {
                             </table>",
                                 req.block_index(),
                                 DisplayAmount(req.amount()),
-                                (self.display_address)(req.address(), s.btc_network),
+                                self.builder.display_address(req.address(), s.btc_network),
                                 req.received_at(),
                             )
                             .unwrap();
@@ -461,7 +489,8 @@ impl DashboardBuilder {
                         <td><code>{}</code></td>
                         <td>{}</td>",
                     req.request.block_index(),
-                    (self.display_address)(req.request.address(), s.btc_network),
+                    self.builder
+                        .display_address(req.request.address(), s.btc_network),
                     DisplayAmount(req.request.amount()),
                 )
                 .unwrap();
@@ -590,21 +619,15 @@ impl DashboardBuilder {
     }
 
     fn txid_link_on(&self, txid: &Txid, btc_network: Network) -> String {
-        let net_prefix = if btc_network == Network::Mainnet {
-            ""
-        } else {
-            "testnet4/"
-        };
-        format!(
-            "<a target='_blank' href='https://mempool.space/{net_prefix}tx/{txid}'><code>{txid}</code></a>",
-        )
+        let url = self.builder.transaction_url(txid, btc_network);
+        format!("<a target='_blank' href='{url}'><code>{txid}</code></a>",)
     }
 }
 
 #[test]
 fn test_txid_link() {
     assert_eq!(
-        DashboardBuilder::default().txid_link_on(
+        ckbtc_dashboard().txid_link_on(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
@@ -616,7 +639,7 @@ fn test_txid_link() {
     );
 
     assert_eq!(
-        DashboardBuilder::default().txid_link_on(
+        ckbtc_dashboard().txid_link_on(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6

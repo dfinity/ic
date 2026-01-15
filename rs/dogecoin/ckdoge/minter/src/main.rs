@@ -1,9 +1,9 @@
 use ic_cdk::{init, post_upgrade, query, update};
-use ic_ckbtc_minter::dashboard::DashboardBuilder;
+use ic_ckbtc_minter::dashboard::{Dashboard, DashboardBuilder};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
-use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime, Network, Txid, address::BitcoinAddress};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
@@ -229,21 +229,37 @@ fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
         .collect()
 }
 
+struct CkDogeDashboardBuilder;
+
+impl DashboardBuilder for CkDogeDashboardBuilder {
+    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
+        let address = bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
+        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
+        address.display(&network)
+    }
+    fn transaction_url(&self, txid: &Txid, _network: Network) -> String {
+        // Since we don't support testnet, treat it as mainnet regardless.
+        format!("https://blockexplorer.one/dogecoin/mainnet/tx/{txid}")
+    }
+    fn token(&self) -> &str {
+        "ckDOGE"
+    }
+    fn native_token(&self) -> &str {
+        "DOGE"
+    }
+}
+
+fn ckdoge_dashboard() -> Dashboard {
+    Dashboard::new(CkDogeDashboardBuilder)
+}
+
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(
-        req,
-        &DashboardBuilder::new_with(|address, network| {
-            let address =
-                bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
-            let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
-            address.display(&network)
-        }),
-    )
+    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard())
 }
 
 fn main() {}

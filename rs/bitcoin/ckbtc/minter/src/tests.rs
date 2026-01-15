@@ -1081,8 +1081,6 @@ fn can_form_a_batch_conditions() {
 
 #[test]
 fn test_build_account_to_utxos_table_pagination() {
-    use crate::dashboard::DashboardBuilder;
-
     let mut state = CkBtcMinterState::from(InitArgs {
         retrieve_btc_min_amount: 5_000u64,
         ..default_init_args()
@@ -1101,7 +1099,7 @@ fn test_build_account_to_utxos_table_pagination() {
     state.add_utxos::<CheckInvariantsImpl>(account1, utxos[..10].to_vec());
     state.add_utxos::<CheckInvariantsImpl>(account2, utxos[10..].to_vec());
 
-    let dashboard = DashboardBuilder::default();
+    let dashboard = crate::dashboard::ckbtc_dashboard();
     // Check if all pages combined together would give the full utxos set.
     let pages = [
         dashboard.build_account_to_utxos_table(&state, 0, 7),

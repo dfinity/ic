@@ -1,5 +1,5 @@
 use crate::address::BitcoinAddress;
-use crate::dashboard::DashboardBuilder;
+use crate::dashboard::Dashboard;
 use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
@@ -74,7 +74,7 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     })
 }
 
-pub fn http_request(req: HttpRequest, dashboard: &DashboardBuilder) -> HttpResponse {
+pub fn http_request(req: HttpRequest, dashboard: &Dashboard) -> HttpResponse {
     match req.path() {
         "/metrics" => {
             let mut writer = ic_metrics_encoder::MetricsEncoder::new(
