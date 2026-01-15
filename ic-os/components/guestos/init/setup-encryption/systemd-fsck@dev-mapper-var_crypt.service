@@ -1,4 +1,6 @@
-# This unit is overridden to remove BindsTo
+# This unit is overridden to remove the BindsTo on the underlying crypt device.
+# Otherwise, it is the same as the systemd generated default. We suspect the
+# device flapping in udev can lead to the mount locking up.
 
 [Unit]
 Description=File System Check on /dev/mapper/var_crypt
