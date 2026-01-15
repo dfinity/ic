@@ -115,7 +115,6 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-
 LOCAL_REPLICA_DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox:sandbox_launcher",
