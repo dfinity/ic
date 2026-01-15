@@ -27,17 +27,17 @@ impl DogecoinDaemon {
         // See https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L423
         const COINBASE_MATURITY_REGTEST: u64 = 60;
 
-        self.mine_blocks_to(&DogecoinUsers::Miner1, COINBASE_MATURITY_REGTEST + 1);
+        self.mine_blocks_to(&DogecoinUsers::Miner, COINBASE_MATURITY_REGTEST + 1);
         let _txid = self.send_transaction(
-            &DogecoinUsers::Miner1,
+            &DogecoinUsers::Miner,
             &DogecoinUsers::DepositUser.address(),
             vec![BLOCK_REWARD],
         );
-        self.mine_blocks_to(&DogecoinUsers::Miner2, 1);
+        self.mine_blocks_to(&DogecoinUsers::Miner, 1);
     }
 
     pub fn mine_blocks(&self, num_blocks: u64) {
-        self.mine_blocks_to(&DogecoinUsers::Miner1, num_blocks)
+        self.mine_blocks_to(&DogecoinUsers::Miner, num_blocks)
     }
 
     pub fn mine_blocks_to(&self, miner: &DogecoinUsers, num_blocks: u64) {
@@ -171,9 +171,7 @@ impl DogecoinDaemon {
 
 pub enum DogecoinUsers {
     /// Receive block rewards.
-    Miner1,
-    /// Receive block rewards.
-    Miner2,
+    Miner,
     /// User with initially zero balance.
     DepositUser,
     /// User with initially zero balance.
@@ -184,8 +182,7 @@ impl DogecoinUsers {
     /// Output of `dogecoin-cli dumpprivkey`
     pub fn private_key(&self) -> &str {
         match self {
-            Self::Miner1 => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
-            Self::Miner2 => "cQsMeW4Jpxi6Mcrn6gxWzfBbGeECjRPQpY6q9SMKXCus93rNaKK6",
+            Self::Miner => "cTsFcvMfz8LhHtBMyVBkWGr42aHELFXecY4ZPGvUkmN3Tu5Ter1e",
             Self::DepositUser => "cVJe3RYJyTgwPFr7KeKpSJ6PTiwpFqynWXp9MYmjfctmrVQKPDXb",
             DogecoinUsers::WithdrawalRecipientUser => {
                 "cVo2Sckkd8DuXvLD9cANSgTjaMfviBynKBFu5UikQf99nNwME5KH"
@@ -195,8 +192,7 @@ impl DogecoinUsers {
 
     pub fn address(&self) -> dogecoin::Address {
         let address = match self {
-            DogecoinUsers::Miner1 => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
-            DogecoinUsers::Miner2 => "mjoDCYdX7YqtQPYpCD4Zxsa3aMDmttvqbj",
+            DogecoinUsers::Miner => "mgcQKpmkKUv5k23sk6kx3o4o6B8DfM96mM",
             DogecoinUsers::DepositUser => "n3zDWiJxzMzH1w8mXjruGeyzXdCKuqSk7R",
             DogecoinUsers::WithdrawalRecipientUser => "mzm3fSWxQBgBYLMxTzbhwdHheiH7iUCpVj",
         };
@@ -209,8 +205,7 @@ impl DogecoinUsers {
 
     pub fn label(&self) -> &str {
         match self {
-            DogecoinUsers::Miner1 => "miner1",
-            DogecoinUsers::Miner2 => "miner2",
+            DogecoinUsers::Miner => "miner",
             DogecoinUsers::DepositUser => "deposit_user",
             DogecoinUsers::WithdrawalRecipientUser => "recipient_user",
         }
