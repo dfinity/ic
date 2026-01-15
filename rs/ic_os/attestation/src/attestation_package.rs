@@ -9,13 +9,19 @@ use std::fmt::Debug;
 
 /// Generate an SEV Attestation Package based on the given SEV firmware,
 /// trusted execution environment configuration, and custom data.
-pub fn generate_attestation_package(
+pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
     sev_firmware: &mut dyn SevGuestFirmware,
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
-    custom_data: &(impl EncodeSevCustomData + Debug),
+    custom_data: &T,
 ) -> Result<SevAttestationPackage> {
+    let custom_data_bytes = if T::needs_legacy_encoding() {
+        // TODO(NODE-1784): Move to new SEV encoding once clients are updated
+        custom_data.encode_for_sev_legacy()?
+    } else {
+        custom_data.encode_for_sev()?.to_bytes()
+    };
     let attestation_report = sev_firmware
-        .get_report(None, Some(custom_data.encode_for_sev()?.to_bytes()), None)
+        .get_report(None, Some(custom_data_bytes), None)
         .context("Failed to get attestation report from SEV firmware")?;
     let parsed_attestation_report = AttestationReport::from_bytes(&attestation_report);
     if let Err(err) = parsed_attestation_report {
@@ -33,7 +39,7 @@ pub fn generate_attestation_package(
             certificate_chain_from_config(trusted_execution_environment_config)
                 .context("Failed to get SEV certificate chain")?,
         ),
-        custom_data_debug_info: format!("{custom_data:?}").into(),
+        custom_data_debug_info: format!("{custom_data_bytes:?}").into(),
     })
 }
 

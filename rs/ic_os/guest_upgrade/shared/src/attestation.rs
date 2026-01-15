@@ -18,6 +18,10 @@ impl DerEncodedCustomData for GetDiskEncryptionKeyTokenCustomData<'_> {
     fn namespace(&self) -> SevCustomDataNamespace {
         SevCustomDataNamespace::GetDiskEncryptionKeyToken
     }
+
+    fn needs_legacy_encoding() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -34,7 +38,6 @@ mod tests {
             server_tls_public_key,
         };
 
-        #[allow(deprecated)]
         let result = custom_data.encode_for_sev_legacy().unwrap();
         assert_eq!(
             &result,
@@ -67,10 +70,9 @@ mod tests {
             // probably fail because the old GuestOS version will still derive the previous
             // encoding, so take extra care!
             &[
-                2, 0, 0, 0, 31, 13, 254, 213, 44, 96, 47, 104, 171, 127, 68, 166, 43, 242, 61, 116,
-                55, 229, 214, 227, 107, 88, 24, 26, 223, 134, 119, 215, 136, 162, 198, 128, 60,
-                107, 133, 229, 145, 220, 92, 231, 186, 211, 34, 11, 30, 155, 53, 20, 23, 114, 250,
-                74, 83, 143, 28, 23, 30, 166, 65, 176
+                2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 193, 239, 169, 57, 190, 108, 66, 46, 79, 92, 166, 152, 18, 27, 246, 6,
+                237, 57, 248, 178, 251, 13, 215, 199, 180, 86, 196, 225, 236, 184, 95, 158
             ]
         );
     }
