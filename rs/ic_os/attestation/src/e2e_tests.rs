@@ -181,7 +181,7 @@ fn test_invalid_measurement() {
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap()
-    .verify_measurement(&[[0; 48]])
+    .verify_measurement(&[[0; 48]]) // Different from MEASUREMENT
     .expect_err("Verification should fail due to invalid measurement")
     .detail
     .unwrap();
@@ -201,7 +201,7 @@ fn test_invalid_chip_id() {
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap()
-    .verify_chip_id(&[[0; 64]])
+    .verify_chip_id(&[[0; 64]]) // Different from CHIP_ID
     .expect_err("Verification should fail due to invalid chip ID")
     .detail
     .unwrap();

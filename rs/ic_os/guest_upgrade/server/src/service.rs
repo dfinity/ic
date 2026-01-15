@@ -6,12 +6,15 @@ use attestation::verification::{
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
-use guest_upgrade_shared::api::{
-    GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
-    SignalStatusResponse,
-    disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
-};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
+use guest_upgrade_shared::{
+    STORE_DEVICE,
+    api::{
+        GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
+        SignalStatusResponse,
+        disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
+    },
+};
 use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
@@ -154,7 +157,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                 derive_key_from_sev_measurement(
                     sev_firmware.as_mut(),
                     Key::DiskEncryptionKey {
-                        device_path: Path::new("/dev/vda10"),
+                        device_path: Path::new(STORE_DEVICE),
                     },
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?

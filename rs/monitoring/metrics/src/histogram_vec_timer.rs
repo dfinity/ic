@@ -32,7 +32,7 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
         label_values: [&'a str; LABEL_COUNT],
     ) -> HistogramVecTimer<'a, LABEL_COUNT> {
         #[cfg(debug_assertions)]
-        let label_map = label_names
+        let label_map: std::collections::HashMap<&str, &str> = label_names
             .iter()
             .cloned()
             .zip(label_values.iter().cloned())
@@ -179,6 +179,6 @@ mod tests {
         label_values: &[&str],
     ) -> prometheus::proto::Histogram {
         let metric = hist.with_label_values(label_values).metric();
-        metric.get_histogram().clone()
+        metric.get_histogram().get_or_default().clone()
     }
 }
