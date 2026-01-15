@@ -2993,7 +2993,7 @@ impl StateManager for StateManagerImpl {
         let tip_height = self.tip_height.load(Ordering::Relaxed);
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
-        let state_heights = (tip_height + 1)..min(tip_height + 20, latest_subnet_certified_height);
+        let state_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
         state_heights
             .into_iter()
             .map(Height::new)
@@ -3237,10 +3237,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        self.metrics
-            .tip_handler_queue_length
-            .set(self.tip_channel.len() as i64);
-
         self.populate_extra_metadata(&mut state, height);
 
         if let CertificationScope::Metadata = scope {
@@ -3291,6 +3287,10 @@ impl StateManager for StateManagerImpl {
             self.tip_height.store(height.get(), Ordering::Relaxed);
             return;
         }
+
+        self.metrics
+            .tip_handler_queue_length
+            .set(self.tip_channel.len() as i64);
 
         let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
             None;
