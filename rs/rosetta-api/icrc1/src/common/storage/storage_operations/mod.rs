@@ -14,6 +14,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
 
+#[cfg(test)]
+mod tests;
+
 pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
 
 /// Gets the current value of a counter from the database.
@@ -900,6 +903,3 @@ pub fn repair_fee_collector_balances(
 
     Ok(())
 }
-
-#[cfg(test)]
-mod tests;
