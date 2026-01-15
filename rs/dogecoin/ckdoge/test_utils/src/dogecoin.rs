@@ -17,6 +17,12 @@ pub struct DogecoinDaemon {
 }
 
 impl DogecoinDaemon {
+    /// Set up a user having a single UTXO with value [`BLOCK_REWARD`] doge.
+    ///
+    /// Internally, what it does is the following
+    /// * Mines 1 + 60 blocks to the miner, where the last 60 blocks are required to be able to spend the coins from the coinbase transaction in the first block
+    /// * Transfer 1 block reward from the miner to the user.
+    /// * Mine a last block to include this last transaction.
     pub fn setup_user_with_balance(&self) {
         // See https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L423
         const COINBASE_MATURITY_REGTEST: u64 = 60;
