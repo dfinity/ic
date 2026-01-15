@@ -318,14 +318,27 @@ impl Hypervisor {
         };
         update_round_limits(round_limits, &slice);
         // TODO: check if total logs is not allocated yet, delta logs non-empty and update allocated bytes.
-        if !system_state.log_memory_store.is_allocated()
-            && !canister_state_changes
-                .system_state_modifications
-                .canister_log()
-                .is_empty()
-        {
-            output.allocated_bytes += system_state.log_memory_limit;
-        }
+        // if !system_state.log_memory_store.is_allocated()
+        //     && !canister_state_changes
+        //         .system_state_modifications
+        //         .canister_log()
+        //         .is_empty()
+        // {
+        //     let delta_bytes = system_state.log_memory_limit;
+        //     output.allocated_bytes += delta_bytes;
+        //     let subnet_size = network_topology
+        //         .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
+        //         .unwrap_or(ic_limits::SMALL_APP_SUBNET_MAX_SIZE);
+        //     let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
+        //         delta_bytes,
+        //         &execution_parameters.subnet_memory_saturation,
+        //         subnet_size,
+        //         cost_schedule,
+        //     );
+        //     system_state
+        //         .reserve_cycles(reservation_cycles)
+        //         .expect("Failed to reserve cycles for lazily allocated memory");
+        // }
         apply_canister_state_changes(
             canister_state_changes,
             &mut execution_state,
