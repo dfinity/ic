@@ -373,7 +373,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, data = [], runtime_deps = {}, **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, runtime_deps = {}, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -398,7 +398,6 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         name: the name of the system-tests.
         enable_head_nns_variant: whether to run the head_nns variant daily.
         enable_mainnet_nns_variant: whether to run the mainnet variant.
-        data: TODO.
         runtime_deps: dependencies to make available to the test when it runs. For the mainnet variant this gets merged with the mainnet NNS canisters and for the _head_nns variant it gets merged with the HEAD NNS canisters.
         **kwargs: the arguments of the system-tests.
 
@@ -420,7 +419,6 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         name,
         runtime_deps = runtime_deps | MAINNET_NNS_CANISTER_RUNTIME_DEPS,
         env = env,
-        data = data,
         tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
         **kwargs
     )
@@ -439,7 +437,6 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         name + "_head_nns",
         runtime_deps = runtime_deps | NNS_CANISTER_RUNTIME_DEPS,
         env = env,
-        data = data,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )
