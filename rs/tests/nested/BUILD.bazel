@@ -116,15 +116,18 @@ system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",
     env = MAINNET_ENV | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-        "TRUSTED_EXECUTION_ENVIRONMENT": "true"
+        "TRUSTED_EXECUTION_ENVIRONMENT": "true",
     },
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
-    tags = ["long_test", "manual"],
+    tags = [
+        "long_test",
+        "manual",
+    ],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_setupos_mainnet_latest_img = True,
     uses_bare_metal = True,
+    uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
 )
 
