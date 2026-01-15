@@ -97,7 +97,6 @@ impl PartialEq for IgnoreTimestamp {
                     utxos,
                     change_output,
                     submitted_at: _,
-                    estimated_fee_per_vbyte,
                     effective_fee_per_vbyte,
                     withdrawal_fee,
                     signed_tx,
@@ -108,7 +107,6 @@ impl PartialEq for IgnoreTimestamp {
                     utxos: rhs_utxos,
                     change_output: rhs_change_output,
                     submitted_at: _,
-                    estimated_fee_per_vbyte: rhs_estimated_fee_per_vbyte,
                     effective_fee_per_vbyte: rhs_effective_fee_per_vbyte,
                     withdrawal_fee: rhs_withdrawal_fee,
                     signed_tx: rhs_signed_tx,
@@ -118,7 +116,6 @@ impl PartialEq for IgnoreTimestamp {
                     && txid == rhs_txid
                     && utxos == rhs_utxos
                     && change_output == rhs_change_output
-                    && estimated_fee_per_vbyte == rhs_estimated_fee_per_vbyte
                     && effective_fee_per_vbyte == rhs_effective_fee_per_vbyte
                     && withdrawal_fee == rhs_withdrawal_fee
                     && signed_tx == rhs_signed_tx
@@ -130,7 +127,6 @@ impl PartialEq for IgnoreTimestamp {
                     new_txid,
                     change_output,
                     submitted_at: _,
-                    estimated_fee_per_vbyte,
                     effective_fee_per_vbyte,
                     withdrawal_fee,
                     reason,
@@ -141,7 +137,6 @@ impl PartialEq for IgnoreTimestamp {
                     new_txid: rhs_new_txid,
                     change_output: rhs_change_output,
                     submitted_at: _,
-                    estimated_fee_per_vbyte: rhs_estimated_fee_per_vbyte,
                     effective_fee_per_vbyte: rhs_effective_fee_per_vbyte,
                     withdrawal_fee: rhs_withdrawal_fee,
                     reason: rhs_reason,
@@ -151,7 +146,6 @@ impl PartialEq for IgnoreTimestamp {
                 old_txid == rhs_old_txid
                     && new_txid == rhs_new_txid
                     && change_output == rhs_change_output
-                    && estimated_fee_per_vbyte == rhs_estimated_fee_per_vbyte
                     && effective_fee_per_vbyte == rhs_effective_fee_per_vbyte
                     && withdrawal_fee == rhs_withdrawal_fee
                     && reason == rhs_reason

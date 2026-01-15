@@ -223,7 +223,6 @@ where
         let (
             request_block_indices,
             change_amount,
-            estimated_fee_per_vbyte,
             effective_fee_per_vbyte,
             withdrawal_fee,
             used_utxos,
@@ -240,14 +239,12 @@ where
                     utxos,
                     change_output,
                     submitted_at: _,
-                    estimated_fee_per_vbyte,
                     effective_fee_per_vbyte,
                     withdrawal_fee,
                     signed_tx: _,
                 } => (
                     request_block_indices,
                     change_output.expect("BUG: missing change output").value,
-                    estimated_fee_per_vbyte.expect("BUG: missing estimated_fee_per_vbyte"),
                     effective_fee_per_vbyte.expect("BUG: missing effective_fee_per_vbyte"),
                     withdrawal_fee.expect("BUG: missing withdrawal fee"),
                     utxos,
@@ -262,9 +259,9 @@ where
             ),
             "BUG: withdrawal fee from event does not match fees retrieved from endpoint"
         );
-        assert!(
-            effective_fee_per_vbyte >= estimated_fee_per_vbyte,
-            "BUG: effective fee is lower than estimated fee"
+        assert_eq!(
+            (withdrawal_fee.dogecoin_fee * 1_000).div_ceil(tx.total_size() as u64),
+            effective_fee_per_vbyte
         );
         assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
 
@@ -522,11 +519,11 @@ where
             CkDogeMinterEventType::SentDogeTransaction {
                 effective_fee_per_vbyte,
                 ..
-            }
-            | CkDogeMinterEventType::ReplacedDogeTransaction {
+            } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
+            CkDogeMinterEventType::ReplacedDogeTransaction {
                 effective_fee_per_vbyte,
                 ..
-            } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
+            } => effective_fee_per_vbyte,
             _ => unreachable!(),
         };
 
@@ -541,7 +538,7 @@ where
             CkDogeMinterEventType::ReplacedDogeTransaction {
                 effective_fee_per_vbyte,
                 ..
-            } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
+            } => effective_fee_per_vbyte,
             _ => unreachable!(),
         };
 

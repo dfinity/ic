@@ -112,12 +112,9 @@ pub enum CkDogeMinterEventType {
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) estimated for the transaction.
-        #[serde(rename = "fee")]
-        #[serde(skip_serializing_if = "Option::is_none")]
-        estimated_fee_per_vbyte: Option<u64>,
         /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
-        /// It may be higher than `estimated_fee_per_vbyte` due to signatures not having constant-size DER encodings.
+        /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
+        #[serde(rename = "fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
         effective_fee_per_vbyte: Option<u64>,
         /// The total fee for this transaction
@@ -146,12 +143,10 @@ pub enum CkDogeMinterEventType {
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) estimated for the transaction.
+        /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
+        /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
         #[serde(rename = "fee")]
-        estimated_fee_per_vbyte: u64,
-        /// The actual fee per vbyte (in millisatoshi) that was used for the transaction.
-        /// It may be higher than `estimated_fee_per_vbyte` due to signatures not having constant-size DER encodings.
-        effective_fee_per_vbyte: Option<u64>,
+        effective_fee_per_vbyte: u64,
         /// The total fee for this transaction
         #[serde(rename = "withdrawal_fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -356,7 +351,6 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee,
                 signed_tx,
@@ -366,7 +360,6 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 signed_tx,
@@ -376,7 +369,6 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee,
                 reason,
@@ -386,7 +378,6 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 reason,
@@ -505,7 +496,6 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee,
                 signed_tx,
@@ -515,7 +505,6 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 signed_tx,
@@ -525,7 +514,6 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee,
                 reason,
@@ -535,7 +523,6 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                estimated_fee_per_vbyte,
                 effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 reason,
