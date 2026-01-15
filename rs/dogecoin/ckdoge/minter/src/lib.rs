@@ -24,7 +24,11 @@ use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_ckbtc_minter::tx::{SignedRawTransaction, UnsignedTransaction};
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, ECDSAPublicKey, GetCurrentFeePercentilesRequest,
-    GetUtxosRequest, GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
+    GetUtxosRequest, GetUtxosResponse,
+    dashboard::{Dashboard, DashboardBuilder},
+    management::CallError,
+    state::CkBtcMinterState,
+    tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
@@ -308,4 +312,43 @@ mod dogecoin_canister {
             ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
         }
     }
+}
+
+struct CkDogeDashboardBuilder;
+
+impl DashboardBuilder for CkDogeDashboardBuilder {
+    fn display_account_address(
+        &self,
+        key: &ECDSAPublicKey,
+        account: &Account,
+        network: ic_ckbtc_minter::Network,
+    ) -> String {
+        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
+        updates::account_to_p2pkh_address(key, account).display(&network)
+    }
+
+    fn display_address(
+        &self,
+        address: &BitcoinAddress,
+        network: ic_ckbtc_minter::Network,
+    ) -> String {
+        let address =
+            event::bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
+        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
+        address.display(&network)
+    }
+    fn transaction_url(&self, txid: &Txid, _network: ic_ckbtc_minter::Network) -> String {
+        // Since we don't support testnet, treat it as mainnet regardless.
+        format!("https://blockexplorer.one/dogecoin/mainnet/tx/{txid}")
+    }
+    fn token(&self) -> &str {
+        "ckDOGE"
+    }
+    fn native_token(&self) -> &str {
+        "DOGE"
+    }
+}
+
+pub fn ckdoge_dashboard() -> Dashboard {
+    Dashboard::new(CkDogeDashboardBuilder)
 }

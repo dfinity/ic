@@ -1,11 +1,8 @@
 use ic_cdk::{init, post_upgrade, query, update};
-use ic_ckbtc_minter::dashboard::{Dashboard, DashboardBuilder};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
-use ic_ckbtc_minter::{
-    BuildTxError, CanisterRuntime, ECDSAPublicKey, Network, Txid, address::BitcoinAddress,
-};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
 use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
@@ -15,13 +12,12 @@ use ic_ckdoge_minter::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
-    event::{CkDogeMinterEvent, bitcoin_to_dogecoin},
+    ckdoge_dashboard,
+    event::CkDogeMinterEvent,
     lifecycle::MinterArg,
     updates,
-    updates::account_to_p2pkh_address,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
-use icrc_ledger_types::icrc1::account::Account;
 
 #[init]
 fn init(args: MinterArg) {
@@ -231,40 +227,6 @@ fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()
-}
-
-struct CkDogeDashboardBuilder;
-
-impl DashboardBuilder for CkDogeDashboardBuilder {
-    fn display_account_address(
-        &self,
-        key: &ECDSAPublicKey,
-        account: &Account,
-        network: Network,
-    ) -> String {
-        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
-        account_to_p2pkh_address(key, account).display(&network)
-    }
-
-    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
-        let address = bitcoin_to_dogecoin(address.clone()).unwrap_or_else(|err| ic_cdk::trap(err));
-        let network = network.try_into().unwrap_or_else(|err| ic_cdk::trap(err));
-        address.display(&network)
-    }
-    fn transaction_url(&self, txid: &Txid, _network: Network) -> String {
-        // Since we don't support testnet, treat it as mainnet regardless.
-        format!("https://blockexplorer.one/dogecoin/mainnet/tx/{txid}")
-    }
-    fn token(&self) -> &str {
-        "ckDOGE"
-    }
-    fn native_token(&self) -> &str {
-        "DOGE"
-    }
-}
-
-fn ckdoge_dashboard() -> Dashboard {
-    Dashboard::new(CkDogeDashboardBuilder)
 }
 
 #[query(hidden = true)]
