@@ -333,6 +333,31 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
+        // Append non-empty delta logs unconditionally.
+        if !self.canister_log.is_empty() {
+            let log_memory_store = &mut system_state.log_memory_store;
+
+            // Resize log_memory_store if needed.
+            let limit = system_state.log_memory_limit.get() as usize;
+            if log_memory_store.byte_capacity() != limit {
+                log_memory_store.set_log_memory_limit(limit);
+            }
+
+            // TODO(DSM-11): cleanup population logic after migration is done.
+            // We need to copy existing canister_log to log_memory_store in order
+            // not to loose any log records until the migration is complete.
+            let old_total = &system_state.canister_log;
+            if log_memory_store.is_empty() && !old_total.is_empty() {
+                log_memory_store.append_delta_log(&mut old_total.clone());
+            }
+
+            // Append delta log to the total canister log.
+            log_memory_store.append_delta_log(&mut self.canister_log.clone());
+            system_state
+                .canister_log
+                .append_delta_log(&mut self.canister_log);
+        }
+
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
@@ -511,33 +536,6 @@ impl SystemStateModifications {
         // Update canister global timer
         if let Some(new_global_timer) = self.new_global_timer {
             system_state.global_timer = new_global_timer;
-        }
-
-        // Append non-empty delta logs.
-        if !self.canister_log.is_empty() {
-            // Resize log_memory_store if needed.
-            let limit = system_state.log_memory_limit.get() as usize;
-            if system_state.log_memory_store.byte_capacity() != limit {
-                system_state.log_memory_store.set_log_memory_limit(limit);
-            }
-
-            // TODO(DSM-11): cleanup population logic after migration is done.
-            // We need to copy existing canister_log to log_memory_store in order
-            // not to loose any log records until the migration is complete.
-            let old_total = &system_state.canister_log;
-            if system_state.log_memory_store.is_empty() && !old_total.is_empty() {
-                system_state
-                    .log_memory_store
-                    .append_delta_log(&mut old_total.clone());
-            }
-
-            // Append delta log to the total canister log.
-            system_state
-                .log_memory_store
-                .append_delta_log(&mut self.canister_log.clone());
-            system_state
-                .canister_log
-                .append_delta_log(&mut self.canister_log);
         }
 
         // Bump the canister version after all changes have been applied.
