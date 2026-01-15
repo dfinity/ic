@@ -178,7 +178,7 @@ pub(crate) fn create_early_remote_transcripts(
         return vec![];
     };
 
-    //  Since this function is relatively expensive, we simply return, if there are no outstanding DKG constexts
+    //  Since this function is relatively expensive, we simply return, if there are no outstanding DKG contexts
     if number_of_contexts(state.get_ref()) == 0 {
         return vec![];
     }
@@ -202,7 +202,7 @@ pub(crate) fn create_early_remote_transcripts(
 
     let mut selected_transcripts = vec![];
     for (_, dkg_ids) in remote_contexts {
-        // For each target_id, try to build the necessary (dkg_id, callback_id transcript) triple
+        // For each target_id, try to build the necessary (dkg_id, callback_id, transcript) triple
         let mut transcripts = dkg_ids
             .iter()
             // Lookup the config from the summary
@@ -233,9 +233,17 @@ pub(crate) fn create_early_remote_transcripts(
         // Here we do some matching, to check that we have the right number of configs
         match transcripts.len() {
             1 => {
-                // TODO: With vetkd, we need to check that these have a HighTresholdForMasterPublicKeyId tag
-                // Sould we also check that the keys exists?
-                continue;
+                // For VetKD, we need to check that these have a HighThresholdForKey tag
+                let dkg_id = &transcripts[0].0;
+                match &dkg_id.dkg_tag {
+                    NiDkgTag::HighThresholdForKey(_) => {
+                        // This is a valid VetKD transcript, include it
+                    }
+                    _ => {
+                        // Single transcript that is not VetKD, skip it
+                        continue;
+                    }
+                }
             }
             // If we have two transcripts for the same ID, we check that it is one low and one high threshold transcript
             // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
@@ -511,7 +519,6 @@ fn compute_remote_dkg_data(
         let mut expected_configs = Vec::new();
         for config in low_high_threshold_configs {
             let dkg_id = config.dkg_id();
-
             // Check if we have a transcript in the previous summary for this config, and
             // if we do, move it to the new summary.
             if let Some((id, transcript)) = previous_transcripts
@@ -520,11 +527,10 @@ fn compute_remote_dkg_data(
             {
                 new_transcripts.insert(id.clone(), transcript.clone());
             }
-
-            // We check if we computed a transcript for this config in the last round. And
+            // If not, we check if we computed a transcript for this config in the last round. And
             // if not, we move the config into the new summary so that we try again in
             // the next round.
-            if !new_transcripts
+            else if !new_transcripts
                 .iter()
                 .any(|(id, _)| eq_sans_height(id, dkg_id))
             {
@@ -931,7 +937,7 @@ fn process_setup_initial_dkg_contexts(
         // Dealers must be in the same registry_version.
         let dealers = get_node_list(this_subnet_id, registry_client, context.registry_version)?;
 
-        match create_remote_dkg_configs(
+        match create_low_high_remote_dkg_configs(
             start_block_height,
             this_subnet_id,
             context.target_id,
@@ -998,18 +1004,54 @@ fn add_callback_ids_to_transcript_results(
 }
 
 fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<CallbackId> {
+    // First check setup_initial_dkg_contexts
     let setup_initial_dkg_contexts = &state
         .metadata
         .subnet_call_context_manager
         .setup_initial_dkg_contexts;
 
-    setup_initial_dkg_contexts
+    if let Some(callback_id) = setup_initial_dkg_contexts
         .iter()
         .filter_map(|(callback_id, context)| {
-            if NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet {
-                Some(*callback_id)
-            } else {
-                None
+            (NiDkgTargetSubnet::Remote(context.target_id) == id.target_subnet)
+                .then_some(*callback_id)
+        })
+        .next_back()
+    {
+        return Some(callback_id);
+    }
+
+    // Then check reshare_chain_key_contexts (for VetKD)
+    // For VetKD, we need to match both target_id and key_id
+    let reshare_chain_key_contexts = &state
+        .metadata
+        .subnet_call_context_manager
+        .reshare_chain_key_contexts;
+
+    reshare_chain_key_contexts
+        .iter()
+        .filter_map(|(callback_id, context)| {
+            // Match target_subnet
+            if NiDkgTargetSubnet::Remote(context.target_id) != id.target_subnet {
+                return None;
+            }
+            // For VetKD, also match the key_id from the dkg_tag
+            match &id.dkg_tag {
+                NiDkgTag::HighThresholdForKey(dkg_key_id) => {
+                    // Try to convert context.key_id to NiDkgMasterPublicKeyId and compare
+                    if let Ok(context_key_id) =
+                        NiDkgMasterPublicKeyId::try_from(context.key_id.clone())
+                    {
+                        if context_key_id == *dkg_key_id {
+                            Some(*callback_id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
             }
         })
         .next_back()
@@ -1021,12 +1063,17 @@ fn number_of_contexts(state: &ReplicatedState) -> usize {
         .subnet_call_context_manager
         .setup_initial_dkg_contexts
         .len()
+        + state
+            .metadata
+            .subnet_call_context_manager
+            .reshare_chain_key_contexts
+            .len()
 }
 
 /// This function is called for each entry on the SubnetCallContext. It returns
 /// either the created high and low configs for the entry or returns two errors
 /// identified by the NiDkgId.
-fn create_remote_dkg_configs(
+fn create_low_high_remote_dkg_configs(
     start_block_height: Height,
     dealer_subnet: SubnetId,
     target_subnet: NiDkgTargetId,

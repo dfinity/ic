@@ -123,6 +123,7 @@ pub(super) fn get_dkg_dealings(
                 payload
                     .transcripts_for_remote_subnets
                     .iter()
+                    .filter(|transcript| transcript.2.is_ok())
                     .map(|transcript| transcript.0.clone()),
             );
         }
@@ -131,7 +132,7 @@ pub(super) fn get_dkg_dealings(
         for (signer, ni_dkg_id, dealing) in payload
             .messages
             .iter()
-            // Filer out if they are already used
+            // Filter out if they are already used
             .filter(|message| !used_dealings.contains(&message.content.dkg_id))
             .map(|message| {
                 (

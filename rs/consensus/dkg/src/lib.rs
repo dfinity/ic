@@ -1606,7 +1606,7 @@ mod tests {
     #[test]
     fn test_early_remote_dkg_transcripts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let node_ids = (1..4).into_iter().map(node_test_id).collect::<Vec<_>>();
+            let node_ids = (1..4).map(node_test_id).collect::<Vec<_>>();
             let dkg_interval_length = 99;
             let subnet_id = subnet_test_id(0);
 
@@ -1733,7 +1733,7 @@ mod tests {
                     &pool_reader,
                     &*dkg_pool.read().unwrap(),
                     parent,
-                    &block.payload.as_ref(),
+                    block.payload.as_ref(),
                     state_manager.as_ref(),
                     &block.context,
                     &MetricsRegistry::new().int_counter_vec(
