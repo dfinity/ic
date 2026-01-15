@@ -285,8 +285,8 @@ fn should_sync_according_to_interval() {
                     env,
                     ledger_id,
                     index_id,
-                    a1,  // from
-                    a2,  // to
+                    a1, // from
+                    a2, // to
                     install_interval,
                     None,
                 );
@@ -307,8 +307,8 @@ fn should_sync_according_to_interval() {
                     env,
                     ledger_id,
                     index_id,
-                    a1,  // from
-                    a2,  // to
+                    a1, // from
+                    a2, // to
                     install_interval,
                     upgrade_interval,
                 );
