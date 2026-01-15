@@ -1012,7 +1012,7 @@ fn get_callback_id_from_id(state: &ReplicatedState, id: &NiDkgId) -> Option<Call
                 None
             }
         })
-        .last()
+        .next_back()
 }
 
 fn number_of_contexts(state: &ReplicatedState) -> usize {
