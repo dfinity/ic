@@ -13,7 +13,7 @@ system_test(
     ],
     runtime_deps = MAINNET_NNS_CANISTER_RUNTIME_DEPS | {
         "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
-        "ENV_DEPS__IC_VERSION_FILE": "//bazel:version.txt",
+        "IC_VERSION_FILE": "//bazel:version.txt",
     },
     deps = [
         # Keep sorted
