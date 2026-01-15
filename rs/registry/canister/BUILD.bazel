@@ -15,6 +15,7 @@ filegroup(
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/node_key_validation",
+    "//rs/ic_os/sev/attestation",
     "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/ni_dkg",

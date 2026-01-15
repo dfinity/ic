@@ -11,6 +11,7 @@ name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+attestation = { path = "../../ic_os/sev/attestation" }
 build-info = { workspace = true }
 
 candid = { workspace = true }

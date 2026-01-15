@@ -933,6 +933,7 @@ pub fn prepare_add_node_payload(
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
         chip_id: None,
+        node_registration_attestation: None,
         public_ipv4_config: None,
         domain: None,
         // Unused section follows

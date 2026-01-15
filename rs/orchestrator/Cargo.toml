@@ -9,15 +9,20 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 async-trait = { workspace = true }
+attestation = { path = "../ic_os/sev/attestation" }
 backoff = { workspace = true }
 candid = { workspace = true }
-config_tool = { path = "../ic_os/config/tool" }
 clap = { workspace = true }
+config_tool = { path = "../ic_os/config/tool" }
+config_types = { path = "../ic_os/config/types" }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
 get_if_addrs = { workspace = true }
 guest_upgrade_server = { path = "../ic_os/guest_upgrade/server" }
 hex = { workspace = true }
+pem = { workspace = true }
+sev = { workspace = true }
+sev_guest = { path = "../ic_os/sev/guest" }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
