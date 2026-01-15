@@ -1,4 +1,4 @@
-use candid::{Encode, Principal};
+use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -13,6 +13,7 @@ use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
 use slog::info;
+use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Debug;
@@ -36,7 +37,11 @@ const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
 
+const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
+
 const GIB: u64 = 1 << 30;
+
+const BACKOFF_TIME_MILLIS: u64 = 1000;
 
 pub async fn rejoin_test(
     env: &TestEnv,
@@ -71,7 +76,7 @@ pub async fn rejoin_test(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -86,14 +91,14 @@ pub async fn rejoin_test(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().kill();
+        node_to_kill.vm().await.kill().await;
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -165,7 +170,7 @@ pub async fn rejoin_test_large_state(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -202,14 +207,14 @@ pub async fn rejoin_test_large_state(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().kill();
+        node_to_kill.vm().await.kill().await;
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -263,15 +268,13 @@ async fn deploy_busy_canister(agent: &Agent, effective_canister_id: PrincipalId,
         .expect("Failed to set up a busy canister.");
 }
 
-pub async fn rejoin_test_long_rounds(
-    env: TestEnv,
+async fn deploy_canisters_for_long_rounds(
+    logger: &slog::Logger,
+    nodes: Vec<IcNodeSnapshot>,
     num_canisters: usize,
-    dkg_interval: u64,
-    rejoin_node: IcNodeSnapshot,
-    agent_node: IcNodeSnapshot,
 ) {
-    let logger = env.logger();
-    let agent = agent_node.build_default_agent_async().await;
+    let init_node = nodes[0].clone();
+    let agent = init_node.build_default_agent_async().await;
     let ic00 = ManagementCanister::create(&agent);
 
     let num_seed_canisters = 4;
@@ -279,13 +282,13 @@ pub async fn rejoin_test_long_rounds(
         logger,
         "Deploying {} seed canisters on a node {} ...",
         num_seed_canisters,
-        agent_node.get_public_url()
+        init_node.get_public_url()
     );
     let mut create_seed_canisters_futs = vec![];
     for _ in 0..num_seed_canisters {
         create_seed_canisters_futs.push(deploy_seed_canister(
             &ic00,
-            agent_node.effective_canister_id(),
+            init_node.effective_canister_id(),
         ));
     }
     let seed_canisters = join_all(create_seed_canisters_futs).await;
@@ -298,45 +301,109 @@ pub async fn rejoin_test_long_rounds(
     );
     let mut create_many_canisters_futs = vec![];
     for seed_canister_id in seed_canisters {
-        let bytes = Encode!(&num_canisters_per_seed_canister)
-            .expect("Failed to candid encode argument for a seed canister");
-        let fut = agent
-            .update(&seed_canister_id, "create_many_canisters")
-            .with_arg(bytes)
-            .call_and_wait();
+        let agent = agent.clone();
+        let fut = async move {
+            loop {
+                let bytes = Encode!(&num_canisters_per_seed_canister)
+                    .expect("Failed to candid encode argument for a seed canister");
+                let res = agent
+                    .update(&seed_canister_id, "create_many_canisters")
+                    .with_arg(bytes)
+                    .call_and_wait()
+                    .await;
+                if res.is_ok() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+            loop {
+                let bytes = Encode!(&()).expect("Failed to candid encode unit type");
+                let res = agent
+                    .query(&seed_canister_id, "canister_creation_status")
+                    .with_arg(bytes)
+                    .call()
+                    .await;
+                if let Ok(bytes) = res {
+                    let status = Decode!(&bytes, CanisterCreationStatus)
+                        .expect("Failed to candid decode canister creation status");
+                    match status {
+                        CanisterCreationStatus::Idle | CanisterCreationStatus::InProgress(_) => (),
+                        CanisterCreationStatus::Done(_) => {
+                            break;
+                        }
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+            }
+        };
         create_many_canisters_futs.push(fut);
     }
-    let res = join_all(create_many_canisters_futs).await;
-    for r in res {
-        r.expect("Failed to create canisters via a seed canister");
-    }
+    join_all(create_many_canisters_futs).await;
 
     // We deploy 8 "busy" canisters: this way,
-    // there are 2 canisters per each of the 4 scheduler cores
+    // there are 2 canisters per each of the 4 scheduler threads
     // and thus every thread executes 2 x 1.8B = 3.6B instructions.
     let num_busy_canisters = 8;
     info!(
         logger,
         "Deploying {} busy canisters on a node {} ...",
         num_busy_canisters,
-        agent_node.get_public_url()
+        init_node.get_public_url()
     );
     let mut create_busy_canisters_futs = vec![];
     for _ in 0..num_busy_canisters {
         create_busy_canisters_futs.push(deploy_busy_canister(
             &agent,
-            agent_node.effective_canister_id(),
-            &logger,
+            init_node.effective_canister_id(),
+            logger,
         ));
     }
     join_all(create_busy_canisters_futs).await;
+}
+
+pub async fn rejoin_test_long_rounds(
+    env: TestEnv,
+    nodes: Vec<IcNodeSnapshot>,
+    num_canisters: usize,
+    dkg_interval: u64,
+) {
+    let logger = env.logger();
+    deploy_canisters_for_long_rounds(&logger, nodes.clone(), num_canisters).await;
+
+    // Sort nodes by their average duration to process a batch.
+    let mut average_process_batch_durations = vec![];
+    for node in &nodes {
+        let duration = average_process_batch_duration(&logger, node.clone()).await;
+        average_process_batch_durations.push(duration);
+    }
+    let mut paired: Vec<_> = average_process_batch_durations
+        .into_iter()
+        .zip(nodes.into_iter())
+        .collect();
+    paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
+    let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
+
+    // The fastest node will be the reference node used to check
+    // the latest certified height of the subnet.
+    let reference_node = sorted_nodes[0].clone();
+
+    // The restarted node will be the slowest node
+    // required for consensus in terms of batch processing time:
+    // this way, the restarted node cannot catch up with the subnet
+    // without additional measures (to be implemented in the future).
+    // E.g., for `n = 13`, we have `f = 4` and the nodes at indices
+    // `0`, `1`, ..., `n - (f + 1)` are required for consensus,
+    // i.e., we restart the node at (0-based) index
+    // `n - (f + 1) = n - (n / 3 + 1)`.
+    let n = sorted_nodes.len();
+    let rejoin_node = sorted_nodes[n - (n / 3 + 1)].clone();
 
     info!(
         logger,
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().kill();
+    rejoin_node.vm().await.kill().await;
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -345,24 +412,24 @@ pub async fn rejoin_test_long_rounds(
     // This way, the restarted node starts from that CUP
     // and we can assert it to catch up until the next CUP.
     info!(logger, "Waiting for a CUP ...");
-    let agent_node_status = agent_node
+    let reference_node_status = reference_node
         .status_async()
         .await
-        .expect("Failed to get status of agent_node");
-    let latest_certified_height = agent_node_status
+        .expect("Failed to get status of reference_node");
+    let latest_certified_height = reference_node_status
         .certified_height
-        .expect("Failed to get certified height of agent_node")
+        .expect("Failed to get certified height of reference_node")
         .get();
-    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+    wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
 
     info!(logger, "Start the killed node again ...");
-    rejoin_node.vm().start();
+    rejoin_node.vm().await.start().await;
 
     info!(logger, "Waiting for the next CUP ...");
     let last_cup_height = wait_for_cup(
         &logger,
         latest_certified_height + dkg_interval + 1,
-        agent_node.clone(),
+        reference_node.clone(),
     )
     .await;
 
@@ -392,7 +459,6 @@ pub async fn assert_state_sync_has_happened(
     base_count: u64,
 ) -> f64 {
     const NUM_RETRIES: u32 = 300;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,
@@ -449,6 +515,24 @@ pub async fn assert_state_sync_has_happened(
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
 }
 
+async fn average_process_batch_duration(log: &slog::Logger, node: IcNodeSnapshot) -> f64 {
+    let label_sum = format!("{METRIC_PROCESS_BATCH_DURATION}_sum");
+    let label_count = format!("{METRIC_PROCESS_BATCH_DURATION}_count");
+    let metrics = fetch_metrics::<f64>(log, node.clone(), vec![&label_sum, &label_count]).await;
+    assert_eq!(metrics.len(), 2);
+    let sum = metrics
+        .iter()
+        .find(|(k, _)| **k == label_sum)
+        .expect("Did not find {label_sum}")
+        .1;
+    let count = metrics
+        .iter()
+        .find(|(k, _)| **k == label_count)
+        .expect("Did not find {label_count}")
+        .1;
+    sum[0] / count[0]
+}
+
 pub async fn fetch_metrics<T>(
     log: &slog::Logger,
     node: IcNodeSnapshot,
@@ -458,7 +542,6 @@ where
     T: Copy + Debug + FromStr,
 {
     const NUM_RETRIES: u32 = 500;
-    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),

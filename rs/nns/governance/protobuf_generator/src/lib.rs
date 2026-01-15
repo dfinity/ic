@@ -151,6 +151,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "NeuronsFundEconomics",
         "NeuronsFundMatchedFundingCurveCoefficients",
         "VotingPowerEconomics",
+        "CreateServiceNervousSystem",
+        "BlessAlternativeGuestOsVersion",
     ];
     for type_name in self_describing_types {
         config.type_attribute(

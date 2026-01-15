@@ -11,7 +11,7 @@ rust_library(
         # Keep sorted.
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/types/types",
-        "@crate_index//:base64",
+        "@crate_index//:pem",
         "@crate_index//:simple_asn1",
         "@crate_index//:thiserror",
     ],

@@ -166,24 +166,25 @@ members = [
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
-    "rs/ic_os/config",
-    "rs/ic_os/config_types",
-    "rs/ic_os/config_types/compatibility_tests",
-    "rs/ic_os/deterministic_ips",
-    "rs/ic_os/device",
+    "rs/ic_os/config/tool",
+    "rs/ic_os/config/types",
+    "rs/ic_os/config/types/compatibility_tests",
     "rs/ic_os/dev_test_tools/bare_metal_deployment",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
-    "rs/ic_os/fstrim_tool",
-    "rs/ic_os/grub",
+    "rs/ic_os/device",
+    "rs/ic_os/boot/grub",
     "rs/ic_os/guest_upgrade/client",
     "rs/ic_os/guest_upgrade/server",
     "rs/ic_os/guest_upgrade/shared",
     "rs/ic_os/guest_upgrade/tests",
-    "rs/ic_os/metrics_tool",
-    "rs/ic_os/network",
-    "rs/ic_os/nft_exporter",
-    "rs/ic_os/nss_icos",
+    "rs/ic_os/networking/deterministic_ips",
+    "rs/ic_os/networking/network",
+    "rs/ic_os/networking/nss_icos",
+    "rs/ic_os/linux_kernel_command_line",
+    "rs/ic_os/metrics/fstrim_tool",
+    "rs/ic_os/metrics/metrics_tool",
+    "rs/ic_os/metrics/nft_exporter",
     "rs/ic_os/os_tools/guest_disk",
     "rs/ic_os/os_tools/guestos_tool",
     "rs/ic_os/os_tools/guest_vm_runner",
@@ -581,7 +582,7 @@ opt-level = 3
 [workspace.dependencies]
 actix-rt = "2.10.0"
 actix-web = "4.9.0"
-actix-web-prom = "0.9.0"
+actix-web-prom = "0.10.0"
 aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
@@ -745,6 +746,7 @@ opentelemetry = { version = "0.27.0", features = ["metrics", "trace"] }
 opentelemetry-otlp = { version = "0.27.0", features = ["grpc-tonic"] }
 opentelemetry_sdk = { version = "0.27.0", features = ["trace", "rt-tokio"] }
 p256 = { version = "0.13.2", default-features = false, features = [
+    "alloc",
     "arithmetic",
     "ecdsa",
     "pem",
@@ -764,15 +766,15 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
-procfs = { version = "^0.9" }
+procfs = { version = "^0.17", default-features = false }
 proc-macro2 = "1.0.89"
-prometheus = { version = "0.13.4", features = ["process"] }
+prometheus = { version = "0.14.0", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
 proptest = "1.5.0"
 proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
-protobuf = "2.28.0"
+protobuf = "3.7.2"
 ring = { version = "^0.17.7", features = ["std"] }
 qrcode = { version = "0.14.1", default-features = false }
 quinn = { version = "0.11.5", default-features = false, features = [
@@ -897,11 +899,11 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.240.0", features = ["wasmparser"] }
-wasmparser = "0.240.0"
-wasmprinter = "0.240.0"
-wast = "240.0.0"
-wat = "1.240.0"
+wasm-encoder = { version = "0.243.0", features = ["wasmparser"] }
+wasmparser = "0.243.0"
+wasmprinter = "0.243.0"
+wast = "243.0.0"
+wat = "1.243.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
