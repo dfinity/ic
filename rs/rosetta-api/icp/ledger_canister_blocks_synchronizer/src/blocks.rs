@@ -1318,7 +1318,11 @@ impl Blocks {
         database_access::get_all_accounts(&mut connection)
     }
 
-    pub fn push_batch(&mut self, batch: Vec<HashedBlock>) -> Result<(), BlockStoreError> {
+    pub fn push_batch(
+        &mut self,
+        batch: Vec<HashedBlock>,
+        progress_bar: Option<&indicatif::ProgressBar>,
+    ) -> Result<(), BlockStoreError> {
         let connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
@@ -1355,6 +1359,9 @@ impl Blocks {
                         .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                     return Err(e);
                 }
+            }
+            if let Some(bar) = progress_bar {
+                bar.inc(1);
             }
         }
         connection
