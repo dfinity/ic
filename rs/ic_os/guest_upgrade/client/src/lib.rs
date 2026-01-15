@@ -3,7 +3,7 @@ use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::generate_attestation_package;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
 use attestation::verification::{
-    AttestationVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
@@ -181,7 +181,7 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
         // inject malicious files into the data partition then trigger an upgrade to a
         // legit version. The malicious data would remain on the data partition.
-        ParsedAttestationPackage::parse(
+        ParsedSevAttestationPackage::parse(
             server_attestation_package,
             self.sev_root_certificate_verification,
         )

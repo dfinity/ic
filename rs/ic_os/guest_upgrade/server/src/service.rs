@@ -2,7 +2,7 @@ use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
 use attestation::attestation_package::generate_attestation_package;
 use attestation::verification::{
-    AttestationVerifier, ParsedAttestationPackage, SevRootCertificateVerification,
+    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
@@ -138,7 +138,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         )
         .map_err(|e| Status::internal(format!("Failed to parse own attestation report: {e:?}")))?;
 
-        ParsedAttestationPackage::parse(
+        ParsedSevAttestationPackage::parse(
             client_attestation_package,
             self.sev_root_certificate_verification,
         )
