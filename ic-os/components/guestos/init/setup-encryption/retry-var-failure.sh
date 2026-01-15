@@ -17,3 +17,7 @@ write_metric "tainted_var" \
 sleep 2
 
 systemctl reboot
+
+sleep 15
+
+systemctl reboot --force
