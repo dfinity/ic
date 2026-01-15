@@ -310,15 +310,19 @@ fn maybe_hash_large_blobs(
 /// Otherwise, leaves the entry unchanged.
 ///
 /// # Example
-/// ```
-/// let field_names = &["wasm_module", "init_arg"];
-/// let (k, v) = maybe_replace_large_blob_entry_with_hash(
-///     "wasm_module".to_string(),
-///     SelfDescribingValue { value: Some(Value::Blob(vec![1,2,3])) },
-///     field_names,
-/// );
-/// assert_eq!(k, "wasm_module_hash");
-/// assert!(matches!(v.value, Some(Value::Blob(_))));
+/// {
+///   "some_key": "some_value",
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// becomes
+///
+/// {
+///   "some_key_hash": sha256("some_value"),
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// if the `field_names` is `["some_key"]`.
 /// ```
 fn maybe_replace_large_blob_entry_with_hash(
     key: String,

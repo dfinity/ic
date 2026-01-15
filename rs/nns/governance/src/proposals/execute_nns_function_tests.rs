@@ -433,9 +433,9 @@ async fn test_to_self_describing_nns_canister_install() {
         name: "test-canister".to_string(),
         wasm_module: wasm_module.clone(),
         arg: arg.clone(),
+        initial_cycles: 1_000_000_000_000_u64,
         compute_allocation: None,
         memory_allocation: None,
-        initial_cycles: 1_000_000_000_000_u64,
     };
     let payload = Encode!(&request).unwrap();
 
