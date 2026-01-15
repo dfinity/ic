@@ -2310,7 +2310,7 @@ impl CanisterManager {
                 Ok(execution_state) => execution_state,
                 Err(err) => {
                     let err = CanisterManagerError::from((canister_id, err));
-                    return (Err(err), instructions_used);
+                    return (Err(err), SubnetMessageInstructions::from_already_charged(instructions_used));
                 }
             };
 
@@ -2325,7 +2325,7 @@ impl CanisterManager {
                         Err(CanisterManagerError::CanisterSnapshotInconsistent {
                             message: "Wasm exported globals of canister module and snapshot metadata do not match.".to_string(),
                         }),
-                        instructions_used,
+                        SubnetMessageInstructions::from_already_charged(instructions_used),
                     );
             }
 
@@ -2346,7 +2346,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_used,
+                            SubnetMessageInstructions::from_already_charged(instructions_used),
                         );
                     }
                 };
@@ -2363,7 +2363,7 @@ impl CanisterManager {
                                 canister_id,
                                 snapshot_id,
                             }),
-                            instructions_used,
+                            SubnetMessageInstructions::from_already_charged(instructions_used),
                         );
                     }
                 };
@@ -2420,7 +2420,7 @@ impl CanisterManager {
                             "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
                         ),
                     }),
-                    instructions_used,
+                    SubnetMessageInstructions::from_already_charged(instructions_used),
                 );
             }
         }
@@ -2449,7 +2449,7 @@ impl CanisterManager {
         ) {
             Ok(validated_cycles_and_memory_usage) => validated_cycles_and_memory_usage,
             Err(err) => {
-                return (Err(err), instructions_used);
+                return (Err(err), SubnetMessageInstructions::from_already_charged(instructions_used));
             }
         };
 
@@ -2502,7 +2502,7 @@ impl CanisterManager {
             .heap_delta_estimate
             .saturating_add(&new_canister.heap_delta());
 
-        (Ok(new_canister), instructions_used)
+        (Ok(new_canister), SubnetMessageInstructions::from_already_charged(instructions_used))
     }
 
     /// Returns the canister snapshots list, or

@@ -284,9 +284,11 @@ impl SubnetMessageInstructions {
         self.instructions
     }
 
-    /// Creates a token for instructions that were already charged during
-    /// a mutli-round code installation.
-    pub fn from_install_code(instructions: NumInstructions) -> Self {
+    /// Creates a token for instructions that were already charged outside of
+    /// `charge_message_execution_cost()`. This should only be used when instructions
+    /// were charged via `charge_instructions()` or similar mechanisms, and we
+    /// need to create a token to represent them without charging again.
+    pub fn from_already_charged(instructions: NumInstructions) -> Self {
         Self { instructions }
     }
 }
@@ -1764,7 +1766,7 @@ impl ExecutionEnvironment {
                 Ok(args) => {
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
                     let canister_id = args.get_canister_id();
-                    let (result, instructions_used) = self.load_canister_snapshot(
+                    let (result, instructions_token) = self.load_canister_snapshot(
                         registry_settings.subnet_size,
                         *msg.sender(),
                         &mut state,
@@ -1772,8 +1774,6 @@ impl ExecutionEnvironment {
                         round_limits,
                         origin,
                     );
-                    let instructions_token =
-                        round_limits.charge_subnet_message_instructions(instructions_used);
                     let msg_result = ExecuteSubnetMessageResult::Finished {
                         response: result.map(|res| (res, Some(canister_id))),
                         refund: msg.take_cycles(),
@@ -2735,7 +2735,7 @@ impl ExecutionEnvironment {
         args: LoadCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
         origin: CanisterChangeOrigin,
-    ) -> (Result<Vec<u8>, UserError>, NumInstructions) {
+    ) -> (Result<Vec<u8>, UserError>, SubnetMessageInstructions) {
         let canister_id = args.get_canister_id();
         // Take canister out.
         let mut old_canister = match state.take_canister_state(&canister_id) {
@@ -2745,7 +2745,7 @@ impl ExecutionEnvironment {
                         ErrorCode::CanisterNotFound,
                         format!("Canister {} not found.", &canister_id),
                     )),
-                    NumInstructions::new(0),
+                    SubnetMessageInstructions::none(),
                 );
             }
             Some(canister) => canister,
@@ -4002,7 +4002,7 @@ impl ExecutionEnvironment {
                 // Instructions were already charged during DTS execution, so we create
                 // a token representing those instructions without charging again.
                 let instructions_token =
-                    SubnetMessageInstructions::from_install_code(instructions_used);
+                    SubnetMessageInstructions::from_already_charged(instructions_used);
                 let (state, _) = self.finish_subnet_message_execution(
                     state,
                     message,
