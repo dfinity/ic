@@ -14,7 +14,9 @@ use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::time::Duration;
 
-use crate::archive::{ArchivingGuardError, FailedToArchiveBlocks, LedgerArchivingGuard};
+use crate::archive::{
+    ArchivingError, ArchivingGuardError, ArchivingStats, ArchivingSuccess, LedgerArchivingGuard,
+};
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
@@ -191,6 +193,10 @@ pub trait LedgerData: LedgerContext {
     fn increment_archiving_failure_metric(&mut self);
 
     fn get_archiving_failure_metric(&self) -> u64;
+
+    /// Records archiving statistics for metrics collection.
+    /// This is called after each archiving operation with the collected stats.
+    fn record_archiving_stats(&mut self, stats: ArchivingStats);
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
@@ -437,9 +443,17 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     )
     .await;
 
-    if result.is_err() {
-        LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
-    }
+    // Record archiving stats (for metrics) and update failure counter if needed
+    let stats = match &result {
+        Ok(ArchivingSuccess { stats, .. }) => stats.clone(),
+        Err(ArchivingError { stats, .. }) => stats.clone(),
+    };
+    LA::with_ledger_mut(|ledger| {
+        ledger.record_archiving_stats(stats);
+        if result.is_err() {
+            ledger.increment_archiving_failure_metric();
+        }
+    });
 
     remove_archived_blocks::<LA>(archiving_guard, num_blocks, &sink, result)
 }
@@ -476,22 +490,28 @@ pub fn remove_archived_blocks<LA: LedgerAccess>(
     _archiving_guard: LedgerArchivingGuard<LA>,
     expected_num_blocks: usize,
     sink: &impl Sink,
-    result: Result<usize, (usize, FailedToArchiveBlocks)>,
+    result: Result<ArchivingSuccess, ArchivingError>,
 ) {
     LA::with_ledger_mut(|ledger| match result {
-        Ok(num_sent_blocks) => ledger
+        Ok(ArchivingSuccess {
+            blocks_archived, ..
+        }) => ledger
             .blockchain_mut()
-            .remove_archived_blocks(num_sent_blocks),
-        Err((num_sent_blocks, FailedToArchiveBlocks(err))) => {
+            .remove_archived_blocks(blocks_archived),
+        Err(ArchivingError {
+            blocks_archived,
+            error,
+            ..
+        }) => {
             ledger
                 .blockchain_mut()
-                .remove_archived_blocks(num_sent_blocks);
+                .remove_archived_blocks(blocks_archived);
             log!(
                 sink,
                 "[ledger] archived only {} out of {} blocks; error: {}",
-                num_sent_blocks,
+                blocks_archived,
                 expected_num_blocks,
-                err
+                error
             );
         }
     });
