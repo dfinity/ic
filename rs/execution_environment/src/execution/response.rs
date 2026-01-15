@@ -660,7 +660,7 @@ impl ResponseHelper {
 /// time slicing execution of a response.
 #[derive(Clone, Debug)]
 struct OriginalContext {
-    callback: Callback,
+    callback: Arc<Callback>,
     call_context_id: CallContextId,
     callback_id: CallbackId,
     call_origin: CallOrigin,
@@ -776,8 +776,8 @@ impl PausedExecution for PausedResponseExecution {
         );
         self.paused_wasm_execution.abort();
         let message = CanisterMessage::Response {
-            response: Arc::clone(&self.original.message),
-            callback: Arc::new(self.original.callback),
+            response: self.original.message,
+            callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
@@ -786,7 +786,7 @@ impl PausedExecution for PausedResponseExecution {
     fn input(&self) -> CanisterMessageOrTask {
         CanisterMessageOrTask::Message(CanisterMessage::Response {
             response: self.original.message.clone(),
-            callback: Arc::new(self.original.callback.clone()),
+            callback: self.original.callback.clone(),
         })
     }
 }
@@ -882,8 +882,8 @@ impl PausedExecution for PausedCleanupExecution {
         );
         self.paused_wasm_execution.abort();
         let message = CanisterMessage::Response {
-            response: Arc::clone(&self.original.message),
-            callback: Arc::new(self.original.callback),
+            response: self.original.message,
+            callback: self.original.callback,
         };
         // No cycles were prepaid for execution during this DTS execution.
         (CanisterMessageOrTask::Message(message), Cycles::zero())
@@ -892,7 +892,7 @@ impl PausedExecution for PausedCleanupExecution {
     fn input(&self) -> CanisterMessageOrTask {
         CanisterMessageOrTask::Message(CanisterMessage::Response {
             response: self.original.message.clone(),
-            callback: Arc::new(self.original.callback.clone()),
+            callback: self.original.callback.clone(),
         })
     }
 }
@@ -904,7 +904,7 @@ impl PausedExecution for PausedCleanupExecution {
 /// without any changes.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_response(
-    mut clean_canister: CanisterState,
+    clean_canister: CanisterState,
     response: Arc<Response>,
     callback: Arc<Callback>,
     time: Time,
@@ -916,7 +916,6 @@ pub fn execute_response(
     log_dirty_pages: FlagStatus,
     deallocation_sender: &DeallocationSender,
 ) -> ExecuteMessageResult {
-    let callback_id = response.originator_reply_callback;
     let (call_context, call_context_id) = match common::get_call_context(
         &clean_canister,
         &callback,
@@ -936,11 +935,6 @@ pub fn execute_response(
             };
         }
     };
-    // FIXME: Drop.
-    clean_canister
-        .system_state
-        .unregister_callback(callback_id)
-        .ok();
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
@@ -954,10 +948,9 @@ pub fn execute_response(
     );
 
     let original = OriginalContext {
-        // FIXME: Use the Arc directly.
-        callback: callback.as_ref().clone(),
+        callback,
         call_context_id,
-        callback_id,
+        callback_id: response.originator_reply_callback,
         call_origin: call_context.call_origin().clone(),
         time,
         call_context_creation_time: call_context.time(),
