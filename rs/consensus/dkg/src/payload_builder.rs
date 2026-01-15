@@ -178,7 +178,7 @@ pub(crate) fn create_early_remote_transcripts(
         return vec![];
     };
 
-    //  Since this function is relatively expensive, we simply return, if there are no outstanding DKG contexts
+    //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
     if number_of_contexts(state.get_ref()) == 0 {
         return vec![];
     }
@@ -245,9 +245,8 @@ pub(crate) fn create_early_remote_transcripts(
                     }
                 }
             }
-            // If we have two transcripts for the same ID, we check that it is one low and one high threshold transcript
-            // Note: We do not really need to check whether there is an actual context, since this will happen later when we map
-            // the transcripts to callback ids
+            // If we have two transcripts for the same ID, we check that it is
+            // one low and one high threshold transcript
             2 => {
                 let tags = transcripts
                     .iter()

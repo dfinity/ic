@@ -200,16 +200,8 @@ fn validate_dealings_payload(
         crypto_validate_dealing(crypto, config, message)?;
     }
 
-    // TODO: Remove this
-    info!(
-        log,
-        "This payload contains {} early remote DKG transcripts in regular block payload!!",
-        dealings.transcripts_for_remote_subnets.len()
-    );
-    dbg!(dealings.transcripts_for_remote_subnets.len());
     // If we have early transcripts, we compare them
     if !dealings.transcripts_for_remote_subnets.is_empty() {
-        // TODO: We should actually compare the  contents of the vectors
         let expected_transcripts = create_early_remote_transcripts(
             pool_reader,
             crypto,
@@ -222,7 +214,7 @@ fn validate_dealings_payload(
         );
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
-            info!(
+            warn!(
                 log,
                 "Failed to validate {} early remote DKG transcripts in regular block payload",
                 dealings.transcripts_for_remote_subnets.len()
