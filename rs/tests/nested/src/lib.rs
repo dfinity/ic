@@ -62,7 +62,6 @@ pub fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) 
             .expect("Failed to parse baremetal login info");
     let mut bare_metal = BareMetalIpmiSession::start(&bare_metal_login_info)
         .expect("Failed to start baremetal session");
-    let pid = bare_metal.process_id();
     bare_metal
         .inject_ssh_key(
             &env.get_ssh_public_key()
