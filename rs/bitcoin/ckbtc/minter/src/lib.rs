@@ -583,7 +583,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 used_utxos,
                 change_output: Some(req.change_output),
                 submitted_at: runtime.time(),
-                effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
+                effective_fee_per_vbyte: Some(fee_rate.millis()),
                 withdrawal_fee: Some(total_fee),
                 signed_tx,
             },
@@ -1003,7 +1003,7 @@ pub async fn resubmit_transactions<
                     txid: new_txid,
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
-                    effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
+                    effective_fee_per_vbyte: Some(fee_rate.millis()),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
                     signed_tx: None,

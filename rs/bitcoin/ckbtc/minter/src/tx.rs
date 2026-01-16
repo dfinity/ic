@@ -384,20 +384,22 @@ impl AsRef<[u8]> for SignedRawTransaction {
     }
 }
 
+/// Fee rate in millis base unit per (v)byte.
 #[derive(Copy, Eq, PartialEq, Debug, Clone)]
-pub struct FeeRate {
-    /// Total fee in base units (e.g. satoshis).
-    fee: u64,
-
-    /// Length of the signed transaction.
-    ///
-    /// This could be in virtual bytes for bitcoin or an actual number of bytes for Dogecoin.
-    signed_tx_len: NonZeroU32,
-}
+pub struct FeeRate(u64);
 
 impl FeeRate {
-    pub fn new(fee: u64, signed_tx_len: NonZeroU32) -> Self {
-        Self { fee, signed_tx_len }
+    /// Computes the fee rate for a given signed transaction, where :
+    /// * the total transaction fee is given in base units.
+    /// * the size of the transaction is given in (v)bytes.
+    ///
+    /// The resulting fee rate will be rounded up.
+    pub fn from_tx_ceil(fee: u64, signed_tx_len: NonZeroU32) -> Self {
+        Self((fee * 1_000).div_ceil(signed_tx_len.get() as u64))
+    }
+
+    pub fn from_millis_per_byte(millis_per_byte: u64) -> Self {
+        Self(millis_per_byte)
     }
 
     /// Returns the fee rate in millis base unit per (v)byte.
@@ -408,11 +410,29 @@ impl FeeRate {
     /// use ic_ckbtc_minter::tx::FeeRate;
     /// use std::num::NonZeroU32;
     ///
-    /// let fee_rate = FeeRate::new(42_300, NonZeroU32::new(141).unwrap());
-    /// assert_eq!(fee_rate.millis_ceil(), 300_000);
+    /// let fee_rate = FeeRate::from_tx_ceil(42_300, NonZeroU32::new(141).unwrap());
+    /// assert_eq!(fee_rate.millis(), 300_000);
     /// ```
-    pub fn millis_ceil(&self) -> u64 {
-        (self.fee * 1_000).div_ceil(self.signed_tx_len.get() as u64)
+    pub fn millis(&self) -> u64 {
+        self.0
+    }
+
+    /// Returns the total fee for a signed transaction of a given size in (v)bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ic_ckbtc_minter::tx::FeeRate;
+    ///
+    /// let fee_rate = FeeRate::from_millis_per_byte(3_000);
+    /// let signed_tx_len: u64 = 141;
+    /// assert_eq!(fee_rate.fee_ceil(signed_tx_len), 423);
+    ///
+    /// let fee_rate = FeeRate::from_millis_per_byte(999);
+    /// assert_eq!(fee_rate.fee_ceil(signed_tx_len), 141);
+    /// ```
+    pub fn fee_ceil(&self, signed_tx_len: impl Into<u64>) -> u64 {
+        (signed_tx_len.into() * self.0).div_ceil(1_000)
     }
 }
 
@@ -686,7 +706,7 @@ impl BitcoinTransactionSigner {
             outputs: unsigned_tx.outputs,
             lock_time: unsigned_tx.lock_time,
         };
-        let fee_rate = FeeRate::new(
+        let fee_rate = FeeRate::from_tx_ceil(
             sum_inputs - sum_outputs,
             NonZeroU32::try_from(signed_tx.vsize() as u32)
                 .expect("BUG: signed transaction cannot have zero size"),

@@ -433,7 +433,7 @@ fn test_no_dust_in_change_output() {
     let fee_estimator = bitcoin_fee_estimator();
     for change in 1..=100 {
         let mut available_utxos = UtxoSet::from_iter(vec![utxo.clone()]);
-        let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
+        let (tx, change_output, withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
             &minter_addr,
@@ -442,8 +442,7 @@ fn test_no_dust_in_change_output() {
             &fee_estimator,
         )
         .expect("failed to build a transaction");
-        let fee =
-            fee_estimator.evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
+        let fee = withdrawal_fee.minter_fee + withdrawal_fee.bitcoin_fee;
 
         assert_eq!(
             &tx.outputs,
@@ -828,7 +827,7 @@ proptest! {
         .expect("failed to build transaction");
         let signed_tx = fake_sign(&tx);
         let mut txids = vec![signed_tx.compute_txid()];
-        let fee_rate = FeeRate::new(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(signed_tx.vsize() as u32).unwrap());
+        let fee_rate = FeeRate::from_tx_ceil(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(signed_tx.vsize() as u32).unwrap());
 
         let submitted_at = 1_234_567_890;
 
@@ -838,7 +837,7 @@ proptest! {
             used_utxos: used_utxos.clone(),
             submitted_at,
             change_output: Some(change_output),
-            effective_fee_per_vbyte: Some(fee_rate.millis_ceil()),
+            effective_fee_per_vbyte: Some(fee_rate.millis()),
             withdrawal_fee: Some(withdrawal_fee),
             signed_tx: None,
         });
@@ -856,7 +855,7 @@ proptest! {
             )
             .expect("failed to build transaction");
             let new_signed_tx = fake_sign(&tx);
-            let new_fee_rate = FeeRate::new(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(new_signed_tx.vsize() as u32).unwrap());
+            let new_fee_rate = FeeRate::from_tx_ceil(withdrawal_fee.bitcoin_fee, NonZeroU32::try_from(new_signed_tx.vsize() as u32).unwrap());
 
             let new_txid = new_signed_tx.compute_txid();
 
@@ -866,7 +865,7 @@ proptest! {
                 used_utxos: used_utxos.clone(),
                 submitted_at,
                 change_output: Some(change_output),
-                effective_fee_per_vbyte: Some(new_fee_rate.millis_ceil()),
+                effective_fee_per_vbyte: Some(new_fee_rate.millis()),
                 withdrawal_fee: Some(withdrawal_fee),
                 signed_tx: None,
             });

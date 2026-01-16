@@ -103,7 +103,7 @@ impl DogecoinTransactionSigner {
 
         let txid = ic_ckbtc_minter::Txid::from(signed_tx.compute_txid().to_byte_array());
         let serialized_signed_tx = bitcoin::consensus::encode::serialize(&signed_tx);
-        let fee_rate = FeeRate::new(
+        let fee_rate = FeeRate::from_tx_ceil(
             sum_inputs - sum_outputs,
             NonZeroU32::try_from(serialized_signed_tx.len() as u32)
                 .expect("BUG: signed transaction cannot have zero size"),
