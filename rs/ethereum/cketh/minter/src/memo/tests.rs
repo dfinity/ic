@@ -34,12 +34,12 @@ proptest! {
     }
 
     #[test]
-    fn should_be_less_than_max_bytes(mint_memo in arb_mint_memo(), burn_memo in arb_burn_memo()) {
+    fn should_be_less_than_80_bytes(mint_memo in arb_mint_memo(), burn_memo in arb_burn_memo()) {
         let encoded_mint_memo = Memo::from(mint_memo);
-        prop_assert!(encoded_mint_memo.0.len() <= CKETH_LEDGER_MEMO_SIZE as usize, "encoded mint memo is too large: {:?}", encoded_mint_memo);
+        prop_assert!(encoded_mint_memo.0.len() <= 80, "encoded mint memo is too large: {:?}", encoded_mint_memo);
 
         let encoded_burn_memo = Memo::from(burn_memo);
-        prop_assert!(encoded_burn_memo.0.len() <= CKETH_LEDGER_MEMO_SIZE as usize, "encoded burn memo is too large: {:?}", encoded_burn_memo);
+        prop_assert!(encoded_burn_memo.0.len() <= 80, "encoded burn memo is too large: {:?}", encoded_burn_memo);
     }
 
 
@@ -382,10 +382,10 @@ fn should_return_error_for_invalid_burn_memo() {
 
 #[test]
 fn should_decode_memo_only_if_size_below_limit() {
-    let memo_100_bytes = vec![0u8; 100];
+    let memo_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize];
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
-        encoded_memo: memo_100_bytes,
+        encoded_memo: memo_max_bytes,
     };
     let result = decode_ledger_memo(args);
     assert_matches!(
@@ -393,17 +393,18 @@ fn should_decode_memo_only_if_size_below_limit() {
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
     );
-    let memo_101_bytes = vec![0u8; 101];
+    let memo_more_than_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize + 1];
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
-        encoded_memo: memo_101_bytes,
+        encoded_memo: memo_more_than_max_bytes,
     };
     let result = decode_ledger_memo(args);
     assert_eq!(
         result,
-        Err(Some(DecodeLedgerMemoError::InvalidMemo(
-            "Memo longer than permitted length 100".to_string()
-        )))
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+            "Memo longer than permitted length {}",
+            CKETH_LEDGER_MEMO_SIZE
+        ))))
     );
 }
 
@@ -431,16 +432,13 @@ mod arbitrary {
     }
 
     fn arb_mint_convert_memo() -> impl Strategy<Value = MintMemo> {
-        (arb_hash(), arb_address(), any::<u128>(), any::<u128>()).prop_map(
-            |(tx_hash, from_address, hi, lo)| {
-                let log_index = LogIndex::from_words(hi, lo);
-                MintMemo::Convert {
-                    from_address,
-                    log_index,
-                    tx_hash,
-                }
-            },
-        )
+        (arb_hash(), arb_address(), any::<u128>()).prop_map(|(tx_hash, from_address, log_index)| {
+            MintMemo::Convert {
+                from_address,
+                log_index: LogIndex::from(log_index),
+                tx_hash,
+            }
+        })
     }
 
     fn arb_mint_reimburse_transaction_memo() -> impl Strategy<Value = MintMemo> {
