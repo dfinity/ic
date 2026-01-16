@@ -637,7 +637,7 @@ impl PolynomialCommitment {
         curve: EccCurveType,
     ) -> CanisterThresholdResult<()> {
         if self.curve_type() != curve {
-            return Err(CanisterThresholdError::CurveMismatch);
+            return Err(CanisterThresholdError::UnexpectedCommitmentType);
         }
 
         if self.ctype() != ctype {

@@ -87,11 +87,21 @@ pub trait EncodeSevCustomData {
     /// Encodes the struct into a legacy 64-byte array for use as SEV custom data.
     #[deprecated = "Should only be used for verifying potentially old clients"]
     fn encode_for_sev_legacy(&self) -> Result<[u8; 64], EncodingError>;
+
+    /// True if the type was available before the migration to new encoding.
+    /// New types should not override this method and return false.
+    fn needs_legacy_encoding() -> bool;
 }
 
 /// A trait for types that can be encoded into SEV custom data using DER encoding.
 pub trait DerEncodedCustomData: Encode {
     fn namespace(&self) -> SevCustomDataNamespace;
+
+    /// True if the type was available before the migration to new encoding.
+    /// New types should not override this method and return false.
+    fn needs_legacy_encoding() -> bool {
+        false
+    }
 }
 
 impl<T: DerEncodedCustomData> EncodeSevCustomData for T {
@@ -113,6 +123,10 @@ impl<T: DerEncodedCustomData> EncodeSevCustomData for T {
         let hash: [u8; 64] = Sha512::digest(&encoded).into();
         Ok(hash)
     }
+
+    fn needs_legacy_encoding() -> bool {
+        T::needs_legacy_encoding()
+    }
 }
 
 impl EncodeSevCustomData for SevCustomData {
@@ -122,6 +136,10 @@ impl EncodeSevCustomData for SevCustomData {
 
     fn encode_for_sev_legacy(&self) -> Result<[u8; 64], EncodingError> {
         Ok(self.to_bytes())
+    }
+
+    fn needs_legacy_encoding() -> bool {
+        false
     }
 }
 

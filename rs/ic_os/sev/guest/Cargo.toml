@@ -19,4 +19,3 @@ x509-cert = { workspace = true }
 
 attestation = { path = "../attestation" }
 config_types = { path = "../../config/types" }
-

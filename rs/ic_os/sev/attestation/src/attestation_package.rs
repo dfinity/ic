@@ -25,9 +25,9 @@ pub trait AttestationPackageVerifier: Sized {
     ) -> Result<ParsedSevAttestationPackage, VerificationError>;
 
     /// Verify that the attestation report custom data matches the expected custom data.
-    fn verify_custom_data(
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &(impl EncodeSevCustomData + Debug),
+        expected_custom_data: &T,
     ) -> Result<ParsedSevAttestationPackage, VerificationError>;
 
     /// Verify that the attestation report launch measurement matches one of the blessed guest
@@ -156,41 +156,37 @@ impl AttestationPackageVerifier for ParsedSevAttestationPackage {
         Ok(self)
     }
 
-    fn verify_custom_data(
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &(impl EncodeSevCustomData + Debug),
+        expected_custom_data: &T,
     ) -> Result<ParsedSevAttestationPackage, VerificationError> {
         let actual_report_data = &self.attestation_report.report_data;
-        let expected_report_data = expected_custom_data.encode_for_sev().map_err(|e| {
-            VerificationError::internal(format!("Could not encode expected custom data: {e}"))
-        });
-        // TODO: remove this once clients no longer send legacy custom data
-        #[allow(deprecated)]
-        let expected_report_data_legacy =
-            expected_custom_data.encode_for_sev_legacy().map_err(|e| {
-                VerificationError::internal(format!(
-                    "Could not encode expected custom data (legacy): {e}"
-                ))
-            });
-        if !expected_report_data
-            .as_ref()
-            .is_ok_and(|expected| expected.verify(actual_report_data))
-            && !expected_report_data_legacy
-                .as_ref()
-                .is_ok_and(|expected| actual_report_data == expected)
+        let expected_report_data = expected_custom_data.encode_for_sev();
+        if let Ok(expected_report_data) = expected_report_data
+            && expected_report_data.verify(actual_report_data)
         {
-            return Err(VerificationError::invalid_custom_data(format!(
-                "Expected attestation report custom data: {expected_report_data:?}, \
-             legacy: {expected_report_data_legacy:?}, \
-                 actual: {actual_report_data:?} \
-                 Debug info: \
-                 expected: {expected_custom_data:?} \
-                 actual: {}",
-                self.custom_data_debug_info
-            )));
+            return Ok(self);
         }
 
-        Ok(self)
+        // TODO(NODE-1784): remove this once clients no longer send legacy custom data
+        #[allow(deprecated)]
+        let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy();
+        if T::needs_legacy_encoding()
+            && let Ok(expected_report_data_legacy) = expected_report_data_legacy
+            && &expected_report_data_legacy == actual_report_data
+        {
+            return Ok(self);
+        }
+
+        Err(VerificationError::invalid_custom_data(format!(
+            "Expected attestation report custom data: {expected_report_data:?}, \
+             legacy: {expected_report_data_legacy:?}, \
+             actual: {actual_report_data:?} \
+             Debug info: \
+             expected: {expected_custom_data:?} \
+             actual: {}",
+            self.custom_data_debug_info
+        )))
     }
 
     fn verify_measurement(
@@ -228,9 +224,9 @@ impl AttestationPackageVerifier for Result<ParsedSevAttestationPackage, Verifica
         self?.verify_chip_id(expected_chip_ids)
     }
 
-    fn verify_custom_data(
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &(impl EncodeSevCustomData + Debug),
+        expected_custom_data: &T,
     ) -> Result<ParsedSevAttestationPackage, VerificationError> {
         self?.verify_custom_data(expected_custom_data)
     }

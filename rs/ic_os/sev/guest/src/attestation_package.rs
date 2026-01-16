@@ -41,6 +41,7 @@ pub fn generate_attestation_package(
             false,
             "Generated attestation report could not be verified: {err}"
         );
+
         anyhow!("Generated attestation report could not be verified: {err}")
     })
 }

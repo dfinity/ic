@@ -24,12 +24,29 @@ impl DerEncodedCustomData for FooCustomData {
     fn namespace(&self) -> SevCustomDataNamespace {
         SevCustomDataNamespace::Test
     }
+
+    fn needs_legacy_encoding() -> bool {
+        true
+    }
+}
+
+#[derive(der::Sequence, Debug)]
+struct NewFooCustomData {
+    a: i32,
+}
+
+impl DerEncodedCustomData for NewFooCustomData {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::Test
+    }
 }
 
 const CUSTOM_DATA: FooCustomData = FooCustomData {
     a: 42,
     b: 1234567890,
 };
+
+const NEW_CUSTOM_DATA: NewFooCustomData = NewFooCustomData { a: 42 };
 
 fn generate_valid_attestation_package() -> SevAttestationPackage {
     let signer = FakeAttestationReportSigner::default();
@@ -170,7 +187,7 @@ fn test_invalid_measurement() {
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap()
-    .verify_measurement(&[[0; 48]])
+    .verify_measurement(&[[0; 48]]) // Different from MEASUREMENT
     .expect_err("Verification should fail due to invalid measurement")
     .detail
     .unwrap();
@@ -190,7 +207,7 @@ fn test_invalid_chip_id() {
         SevRootCertificateVerification::TestOnlySkipVerification,
     )
     .unwrap()
-    .verify_chip_id(&[[0; 64]])
+    .verify_chip_id(&[[0; 64]]) // Different from CHIP_ID
     .expect_err("Verification should fail due to invalid chip ID")
     .detail
     .unwrap();
@@ -289,4 +306,48 @@ fn test_legacy_custom_data_accepted() {
     .verify_custom_data(&CUSTOM_DATA)
     .verify_chip_id(&[CHIP_ID])
     .expect("Failed to verify attestation package with legacy custom data format");
+}
+
+#[test]
+fn test_legacy_custom_data_not_accepted_for_new_types() {
+    let signer = FakeAttestationReportSigner::default();
+
+    #[allow(deprecated)]
+    let legacy_custom_data = NEW_CUSTOM_DATA
+        .encode_for_sev_legacy()
+        .expect("Failed to encode custom data in legacy format");
+
+    let attestation_report_bytes = AttestationReportBuilder::new()
+        .with_custom_data(legacy_custom_data)
+        .with_measurement(MEASUREMENT)
+        .with_chip_id(CHIP_ID)
+        .build_signed(&signer)
+        .to_bytes()
+        .unwrap();
+
+    let attestation_package = SevAttestationPackage {
+        attestation_report: Some(attestation_report_bytes.to_vec()),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: None,
+    };
+
+    let error = ParsedSevAttestationPackage::parse(
+        attestation_package,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+    )
+    .verify_custom_data(&NEW_CUSTOM_DATA)
+    .expect_err(
+        "Verification should fail because legacy custom data format is not accepted for new types",
+    )
+    .detail
+    .unwrap();
+
+    assert!(
+        matches!(error, VerificationErrorDetail::InvalidCustomData { .. }),
+        "Expected InvalidCustomData error, got {error:?}",
+    );
 }
