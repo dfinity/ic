@@ -69,28 +69,83 @@ def last_runs(args):
     )
 
 
+def top(args):
+    """
+    Get the top N non-successful/flaky/failed/timed-out tests
+    in the last specified period.
+    """
+    period = "month" if args.month else "week" if args.week else ""
+
+    query(
+        f"Top {args.N} {args.order_by} tests{f' in the last {period}' if period else ''}",
+        args.verbose,
+        Template((THIS_SCRIPT_DIR / "top_tests.sql").read_text()).substitute(
+            period=period,
+            N=args.N,
+            order_by=args.order_by,
+        ),
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
 
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument("--verbose", action="store_true", help="Log queries")
 
+    period_parser = argparse.ArgumentParser(add_help=False)
+    period_group = period_parser.add_mutually_exclusive_group()
+    period_group.add_argument("--week", action="store_true", help="Limit to last week (default)")
+    period_group.add_argument("--month", action="store_true", help="Limit to last month")
+
     subparsers = parser.add_subparsers(required=True)
 
+    ## last-runs ##############################################################
+
     last_runs_parser = subparsers.add_parser(
-        "last-runs", parents=[common_parser], help="Get all runs of the specified test in the last week"
+        "last-runs",
+        parents=[common_parser, period_parser],
+        help="Get all runs of the specified test in the last period",
     )
     last_runs_parser.add_argument("--success", action="store_true")
     last_runs_parser.add_argument("--flaky", action="store_true")
     last_runs_parser.add_argument("--failed", action="store_true")
     last_runs_parser.add_argument("--timeout", action="store_true")
 
-    period = last_runs_parser.add_mutually_exclusive_group()
-    period.add_argument("--week", action="store_true", help="Limit to last week (default)")
-    period.add_argument("--month", action="store_true", help="Limit to last month")
-
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last_runs)
+
+    ## top ####################################################################
+
+    top_parser = subparsers.add_parser(
+        "top",
+        parents=[common_parser, period_parser],
+        help="Get the top N non-successful/flaky/failed/timed-out tests in the last period",
+    )
+    top_parser.add_argument("N", type=int, nargs="?", default=100, help="Number of tests to show (default: 100)")
+
+    top_parser.add_argument(
+        "order_by",
+        type=str,
+        choices=[
+            "total_count",
+            "non_success_count",
+            "non_success_rate",
+            "flaky_count",
+            "flaky_rate",
+            "timeout_count",
+            "timeout_rate",
+            "fail_count",
+            "fail_rate",
+            "p90_duration",
+        ],
+        default="flaky_rate",
+        help="Column to order by (default: flaky_rate)",
+    )
+
+    top_parser.set_defaults(func=top)
+
+    ###########################################################################
 
     args = parser.parse_args()
     args.func(args)

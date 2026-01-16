@@ -13,5 +13,18 @@ The DB can be accessed in a read-only matter via the browser using Apache Supers
 psql -h githubstats.idx.dfinity.network -U githubstats_read -d github
 ```
 
-Useful queries
+Frequently Asked Queries
 ---
+
+The following Python script can be used to run some frequently asked queries
+(use `--verbose` to log the queries):
+
+```
+$ ci/githubstats/query.py --help
+usage: query.py [-h] {last-runs,top} ...
+
+positional arguments:
+  {last-runs,top}
+    last-runs      Get all runs of the specified test in the last period
+    top            Get the top N non-successful/flaky/failed/timed-out tests in the last period
+```
