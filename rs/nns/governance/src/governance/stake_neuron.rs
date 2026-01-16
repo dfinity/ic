@@ -32,6 +32,8 @@ impl Governance {
             controller,
             followees,
             dissolve_delay_seconds,
+            dissolving,
+            auto_stake_maturity,
         } = request;
 
         let (
@@ -98,6 +100,18 @@ impl Governance {
         let dissolve_delay_seconds = dissolve_delay_seconds
             .unwrap_or(INITIAL_NEURON_DISSOLVE_DELAY)
             .min(MAX_DISSOLVE_DELAY_SECONDS);
+        let dissolving = dissolving.unwrap_or(false);
+        let dissolve_state_and_age = if dissolving {
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now_seconds
+                    .saturating_add(dissolve_delay_seconds),
+            }
+        } else {
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds,
+                aging_since_timestamp_seconds: now_seconds,
+            }
+        };
         let controller = controller.unwrap_or(caller);
         let Some(amount_e8s) = amount_e8s else {
             return Err(GovernanceError::new_with_message(
@@ -123,6 +137,7 @@ impl Governance {
         let followees = set_following
             .map(SetFollowing::into_followees)
             .unwrap_or(default_followees);
+        let auto_stake_maturity = auto_stake_maturity.unwrap_or(false);
 
         // Acquire neuron lock before transferring funds with enough information to recover from a
         // failure after the transfer is successful.
@@ -153,14 +168,12 @@ impl Governance {
             neuron_id,
             Subaccount(neuron_subaccount),
             controller,
-            DissolveStateAndAge::NotDissolving {
-                dissolve_delay_seconds,
-                aging_since_timestamp_seconds: now_seconds,
-            },
+            dissolve_state_and_age,
             now_seconds,
         )
         .with_followees(followees)
         .with_kyc_verified(true)
+        .with_auto_stake_maturity(auto_stake_maturity)
         .build();
         governance.with_borrow_mut(|g| g.add_neuron(neuron.id().id, neuron.clone()))?;
 

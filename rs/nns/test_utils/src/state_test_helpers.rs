@@ -1145,6 +1145,8 @@ pub fn nns_stake_neuron(
             controller: None,
             followees: None,
             dissolve_delay_seconds: None,
+            dissolving: None,
+            auto_stake_maturity: None,
         },
         sender,
     );

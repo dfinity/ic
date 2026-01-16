@@ -4547,6 +4547,8 @@ pub struct StakeNeuronRequest {
     pub controller: Option<PrincipalId>,
     pub followees: Option<manage_neuron::SetFollowing>,
     pub dissolve_delay_seconds: Option<u64>,
+    pub dissolving: Option<bool>,
+    pub auto_stake_maturity: Option<bool>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
