@@ -869,9 +869,10 @@ impl SystemState {
         callback_id: CallbackId,
         callback: Callback,
     ) -> Result<(), StateError> {
-        Ok(call_context_manager_mut(&mut self.status)
+        call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .insert_callback(callback_id, callback))
+            .insert_callback(callback_id, callback);
+        Ok(())
     }
 
     /// Unregisters the callback with the given ID (when a response was received for
