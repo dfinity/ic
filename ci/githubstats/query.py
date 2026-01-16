@@ -19,7 +19,7 @@ def query(title, log_query: bool, query: str):
     """Run the given read-only SQL query against the github database."""
     args = ["psql", "-h", "githubstats.idx.dfinity.network", "-U", "githubstats_read", "-d", "github"]
     if log_query:
-        log(f"""{title}:
+        log(f"""# {title}:
 {shlex.join(args) } << EOF
 {query}
 EOF
