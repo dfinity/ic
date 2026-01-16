@@ -15,7 +15,7 @@ use ic_ledger_core::{
     tokens::TokensType,
 };
 use ic_ledger_hash_of::HashOf;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc1::account::Account, icrc107::schema::BTYPE_107};
 use icrc_ledger_types::{icrc1::transfer::Memo, icrc3::transactions::TRANSACTION_FEE_COLLECTOR};
 use serde::{Deserialize, Serialize};
 
@@ -490,8 +490,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
-            Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
+            Operation::FeeCollector {
+                fee_collector,
+                caller: _,
+                mthd: _,
+            } => {
+                context.set_fee_collector_107(*fee_collector);
             }
         }
         Ok(())
@@ -680,9 +684,6 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
-            Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
-            }
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
@@ -693,6 +694,14 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Some(FeeCollector { block_index, .. }) => (None, block_index),
             None => (None, None),
         };
+        let btype = match &transaction.operation {
+            Operation::FeeCollector {
+                fee_collector: _,
+                caller: _,
+                mthd: _,
+            } => Some(BTYPE_107.to_string()),
+            _ => None,
+        };
         Self {
             parent_hash,
             transaction,
@@ -700,7 +709,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
-            btype: None,
+            btype,
         }
     }
 }

@@ -969,6 +969,11 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
     );
 }
 
+#[test]
+fn test_fee_collector_107() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107(ledger_wasm(), encode_init_args);
+}
+
 mod metrics {
     use crate::{encode_init_args, encode_upgrade_args, ledger_wasm};
     use ic_ledger_suite_state_machine_tests::metrics::LedgerSuiteType;

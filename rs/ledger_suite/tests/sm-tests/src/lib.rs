@@ -63,6 +63,8 @@ use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc107;
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
+use icrc_ledger_types::icrc107::set_fee_collector::SetFeeCollectorArgs;
+use icrc_ledger_types::icrc107::set_fee_collector::SetFeeCollectorError;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -5199,6 +5201,64 @@ pub fn test_cycles_for_archive_creation_default_spawns_archive<T>(
     // have been successfully spawned.
     let archives = list_archives(&env, canister_id);
     assert_eq!(archives.len(), 1);
+}
+
+fn set_fc_107(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    caller: PrincipalId,
+    fee_collector: Option<Account>,
+) -> Result<Nat, SetFeeCollectorError> {
+    let now = system_time_to_nanos(env.time());
+    let fc107_args = SetFeeCollectorArgs {
+        fee_collector,
+        created_at_time: now,
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            caller,
+            canister_id,
+            "icrc107_set_fee_collector",
+            Encode!(&fc107_args).unwrap(),
+        ).unwrap().bytes(), Result<Nat, SetFeeCollectorError>
+    )
+    .expect("failed to decode set fee collector result")
+}
+
+pub fn test_fee_collector_107<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+    let fee_collector_107 = Account::from(PrincipalId::new_user_test_id(3).0);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let controllers = env
+        .get_controllers(canister_id)
+        .expect("ledger should have a controller");
+    assert!(
+        !controllers.is_empty(),
+        "ledger should have at least one controller"
+    );
+    let controller = controllers[0];
+    let result = set_fc_107(&env, canister_id, from, Some(fee_collector_107));
+
+    let err = result.unwrap_err();
+    assert_eq!(err, SetFeeCollectorError::AccessDenied("The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string()));
+
+    let result = set_fc_107(&env, canister_id, controller, Some(fee_collector_107));
+    assert!(result.is_ok());
+
+    let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
+    for block in resp.blocks {
+        println!("{block}");
+    }
 }
 
 pub mod metadata {

@@ -824,6 +824,10 @@ impl LedgerContext for Ledger {
     fn fee_collector_107(&self) -> Option<Option<Self::AccountId>> {
         self.fee_collector_107
     }
+
+    fn set_fee_collector_107(&mut self, fee_collector: Option<Self::AccountId>) {
+        self.fee_collector_107 = Some(fee_collector);
+    }
 }
 
 impl LedgerData for Ledger {
