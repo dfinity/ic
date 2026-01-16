@@ -469,6 +469,13 @@ impl CallContextManager {
         self.callbacks.get(&callback_id).map(AsRef::as_ref)
     }
 
+    /// Temporary workaround to allow backward compatible decoding of
+    /// `ExecutionTasks` without a callback.
+    #[doc(hidden)]
+    pub fn callbacks_mut(&mut self) -> &mut MutableIntMap<CallbackId, Arc<Callback>> {
+        &mut self.callbacks
+    }
+
     /// Accepts a canister result and produces an action that should be taken
     /// by the caller; and the call context, if completed.
     pub(super) fn on_canister_result(
@@ -769,14 +776,16 @@ impl CallContextManager {
             }
     }
 
-    /// Returns the number of unresponded callbacks.
+    /// Returns the number of unresponded callbacks, including those for which
+    /// responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
     pub fn unresponded_callback_count(&self) -> usize {
         self.callbacks.len()
     }
 
-    /// Returns the number of unresponded guaranteed response callbacks.
+    /// Returns the number of unresponded guaranteed response callbacks, including
+    /// those for which responses are already enqueued.
     ///
     /// Time complexity: `O(1)`.
     pub fn unresponded_guaranteed_response_callback_count(&self) -> usize {
@@ -916,9 +925,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 
 pub mod testing {
     use super::{CallContext, CallContextManager};
-    use ic_types::messages::{CallContextId, CallbackId};
-    use ic_types::methods::Callback;
-    use std::sync::Arc;
+    use ic_types::messages::CallContextId;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -926,9 +933,6 @@ pub mod testing {
         /// Testing only: Registers the given call context (which may already be
         /// responded or deleted).
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
-
-        /// Testing only: publicly exposes `unregister_callback()`.
-        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -944,10 +948,6 @@ pub mod testing {
             debug_assert!(self.stats_ok());
 
             id
-        }
-
-        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
-            self.unregister_callback(callback_id)
         }
     }
 }

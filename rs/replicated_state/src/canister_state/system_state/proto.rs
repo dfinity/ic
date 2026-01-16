@@ -1,4 +1,5 @@
 use super::*;
+use crate::page_map::int_map::MutableIntMap;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
@@ -180,10 +181,23 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-impl TryFrom<pb::ExecutionTask> for ExecutionTask {
+// TODO(DSM-95): Drop the `callbacks` parameter in the next replica release.
+// It is only needed for backward compatible decoding of the legacy
+// `ExecutionTask::Response` variant, which has no callback.
+impl
+    TryFrom<(
+        pb::ExecutionTask,
+        &mut MutableIntMap<CallbackId, Arc<Callback>>,
+    )> for ExecutionTask
+{
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, callbacks): (
+            pb::ExecutionTask,
+            &mut MutableIntMap<CallbackId, Arc<Callback>>,
+        ),
+    ) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -199,8 +213,16 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     PbInput::Request(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Request(Arc::new(v.try_into()?)),
                     ),
-                    // FIXME: Handle Response case properly. Maybe pass in the list of callbacks?
-                    PbInput::Response(_) => Err(ProxyDecodeError::Other("Oops".to_string()))?,
+                    PbInput::Response(v) => {
+                        let response = Response::try_from(v)?;
+                        let callback = callbacks
+                            .remove(&response.originator_reply_callback)
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
+                        CanisterMessageOrTask::Message(CanisterMessage::Response {
+                            response: Arc::new(response),
+                            callback,
+                        })
+                    }
                     PbInput::AbortedResponse(v) => {
                         let response = v
                             .response

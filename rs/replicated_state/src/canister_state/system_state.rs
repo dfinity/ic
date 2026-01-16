@@ -36,7 +36,7 @@ use ic_types::messages::{
     Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
     Response, StopCanisterContext,
 };
-use ic_types::methods::Callback;
+use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
@@ -948,12 +948,10 @@ impl SystemState {
                 let callback_id = response.originator_reply_callback;
                 CanisterMessage::Response {
                     response,
-                    // FIXME: Figure out what to do about the unwraps(). Generate a matching
-                    // callback and raise a critical error?
                     callback: call_context_manager_mut(&mut self.status)
-                        .unwrap()
-                        .unregister_callback(callback_id)
-                        .unwrap(),
+                        .map(|ccm| ccm.unregister_callback(callback_id))
+                        .flatten()
+                        .unwrap_or_else(invalid_callback),
                 }
             }
             CanisterInput::DeadlineExpired(callback_id) => {
@@ -1003,12 +1001,10 @@ impl SystemState {
                 deadline,
             }
             .into(),
-            // FIXME: Figure out what to do about the unwraps(). Generate a matching
-            // callback and raise a critical error?
             callback: call_context_manager_mut(&mut self.status)
-                .unwrap()
-                .unregister_callback(callback_id)
-                .unwrap(),
+                .map(|ccm| ccm.unregister_callback(callback_id))
+                .flatten()
+                .unwrap_or_else(invalid_callback),
         }
     }
 
@@ -2043,6 +2039,30 @@ fn call_context_manager_mut(status: &mut CanisterStatus) -> Option<&mut CallCont
 
         CanisterStatus::Stopped => None,
     }
+}
+
+/// Produces an invalid `Callback` (pointing to a non-existent `CallContext`)
+/// to be returned when popping an inbound `Request` with no matching callback.
+///
+/// This is technically unreachable code but, just in case, it is preferable to
+/// panicking. Execution will fail to load the `Callback`, bump a critical error
+/// and move on.
+fn invalid_callback() -> Arc<Callback> {
+    debug_assert!(false, "Unreachable code: callback not found.");
+
+    Callback::new(
+        CallContextId::from(u64::MAX), // Non-existent CallContext
+        CanisterId::from_u64(0),
+        CanisterId::from_u64(0),
+        Cycles::zero(),
+        Cycles::zero(),
+        Cycles::zero(),
+        WasmClosure::new(0, 0),
+        WasmClosure::new(0, 0),
+        None,
+        NO_DEADLINE,
+    )
+    .into()
 }
 
 pub mod testing {
