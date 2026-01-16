@@ -86,7 +86,6 @@ fn default_init_args() -> InitArgs {
         max_memo_length: None,
         feature_flags: None,
         index_principal: None,
-        fee_collector_107: None,
     }
 }
 

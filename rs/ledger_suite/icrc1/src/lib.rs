@@ -379,12 +379,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
     where
         C: LedgerContext<AccountId = Self::AccountId, Tokens = Tokens>,
     {
-        let fee_collector_107 = context.fee_collector_107();
-        let fee_collector = match fee_collector_107 {
-            Some(fc_107) => fc_107,
-            None => context.fee_collector().map(|fc| fc.fee_collector),
-        };
-        let fee_collector = fee_collector.as_ref();
+        let fee_collector = context.fee_collector().as_ref();
         match &self.operation {
             Operation::Transfer {
                 from,
@@ -466,10 +461,8 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
             } => {
                 let fee_amount = fee.clone().unwrap_or(effective_fee.clone());
                 context.balances_mut().burn(from, fee_amount.clone())?;
-                if let Some(Some(fee_collector_107)) = fee_collector_107 {
-                    context
-                        .balances_mut()
-                        .mint(&fee_collector_107, fee_amount)?;
+                if let Some(fee_collector) = fee_collector {
+                    context.balances_mut().mint(fee_collector, fee_amount)?;
                 }
                 let result = context
                     .approvals_mut()
@@ -495,7 +488,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 caller: _,
                 mthd: _,
             } => {
-                context.set_fee_collector_107(*fee_collector);
+                context.set_fee_collector(*fee_collector);
             }
         }
         Ok(())

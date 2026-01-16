@@ -76,9 +76,8 @@ pub trait LedgerContext {
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData>;
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData>;
 
-    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>>;
-    fn fee_collector_107(&self) -> Option<Option<Self::AccountId>>;
-    fn set_fee_collector_107(&mut self, fee_collector: Option<Self::AccountId>);
+    fn fee_collector(&self) -> Option<Self::AccountId>;
+    fn set_fee_collector(&mut self, fee_collector: Option<Self::AccountId>);
 }
 
 pub trait LedgerTransaction: Sized {

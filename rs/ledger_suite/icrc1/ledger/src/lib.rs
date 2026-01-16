@@ -191,7 +191,6 @@ impl InitArgsBuilder {
             max_memo_length: None,
             feature_flags: None,
             index_principal: None,
-            fee_collector_107: None,
         })
     }
 
@@ -261,11 +260,6 @@ impl InitArgsBuilder {
         self
     }
 
-    pub fn with_fee_collector_107(mut self, fee_collector: Account) -> Self {
-        self.0.fee_collector_107 = Some(fee_collector);
-        self
-    }
-
     pub fn build(self) -> InitArgs {
         self.0
     }
@@ -285,7 +279,6 @@ pub struct InitArgs {
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
     pub index_principal: Option<Principal>,
-    pub fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -620,7 +613,7 @@ pub struct Ledger {
     pub token_type: String,
 
     #[serde(default)]
-    fee_collector_107: Option<Option<Account>>,
+    fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -689,7 +682,6 @@ impl Ledger {
             max_memo_length,
             feature_flags,
             index_principal,
-            fee_collector_107,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -708,7 +700,7 @@ impl Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
-            fee_collector: fee_collector_account.map(FeeCollector::from),
+            fee_collector: None,
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 panic!("failed to convert transfer fee {transfer_fee} to tokens: {e}")
             }),
@@ -723,7 +715,7 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
             index_principal,
             token_type: wasm_token_type(),
-            fee_collector_107: Some(fee_collector_107),
+            fee_collector_107: fee_collector_account,
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -821,12 +813,12 @@ impl LedgerContext for Ledger {
         self.fee_collector.as_ref()
     }
 
-    fn fee_collector_107(&self) -> Option<Option<Self::AccountId>> {
+    fn fee_collector(&self) -> Option<Self::AccountId> {
         self.fee_collector_107
     }
 
-    fn set_fee_collector_107(&mut self, fee_collector: Option<Self::AccountId>) {
-        self.fee_collector_107 = Some(fee_collector);
+    fn set_fee_collector(&mut self, fee_collector: Option<Self::AccountId>) {
+        self.fee_collector_107 = fee_collector;
     }
 }
 
