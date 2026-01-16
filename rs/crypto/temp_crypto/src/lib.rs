@@ -148,6 +148,7 @@ pub mod internal {
         registry_version: Option<RegistryVersion>,
         node_id: Option<NodeId>,
         start_remote_vault: bool,
+        override_vault: Option<Arc<dyn CspVault>>,
         vault_client_runtime_handle: Option<tokio::runtime::Handle>,
         temp_dir_source: Option<PathBuf>,
         logger: Option<ReplicaLogger>,
@@ -218,6 +219,11 @@ pub mod internal {
             self
         }
 
+        pub fn with_override_vault(mut self, vault: Arc<dyn CspVault>) -> Self {
+            self.override_vault = Some(vault);
+            self
+        }
+
         pub fn with_vault_client_runtime(mut self, rt_handle: tokio::runtime::Handle) -> Self {
             self.vault_client_runtime_handle = Some(rt_handle);
             self
@@ -244,6 +250,7 @@ pub mod internal {
                 registry_version: self.registry_version,
                 node_id: self.node_id,
                 start_remote_vault: self.start_remote_vault,
+                override_vault: self.override_vault,
                 vault_client_runtime_handle: self.vault_client_runtime_handle,
                 temp_dir_source: self.temp_dir_source,
                 logger: self.logger,
@@ -291,7 +298,12 @@ pub mod internal {
                     ),
                 }
             });
-            let vault: Arc<dyn CspVault> = if let Some(env) = &opt_remote_vault_environment {
+            let vault: Arc<dyn CspVault> = if let Some(vault) = self.override_vault {
+                if self.start_remote_vault {
+                    panic!("Cannot override a remote vault with a local vault");
+                }
+                vault
+            } else if let Some(env) = &opt_remote_vault_environment {
                 let remote_vault = env
                     .new_vault_client_builder()
                     .with_logger(new_logger!(logger))
@@ -449,6 +461,7 @@ pub mod internal {
                 vault_client_runtime_handle: None,
                 registry_client: None,
                 registry_data: None,
+                override_vault: None,
                 node_keys_to_generate: None,
                 registry_version: None,
                 temp_dir_source: None,
@@ -478,6 +491,12 @@ pub mod internal {
             self.remote_vault_environment
                 .as_ref()
                 .map(|env| env.vault_client_runtime.handle())
+        }
+
+        pub fn remote_vault_client(&self) -> Option<Arc<dyn CspVault>> {
+            self.remote_vault_environment
+                .as_ref()
+                .map(|env| env.new_vault_client())
         }
 
         pub fn copy_crypto_root_to(&self, target: &Path) {
