@@ -1,5 +1,6 @@
 //! Integration tests for the multisig lib public API
 
+use assert_matches::assert_matches;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine};
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_crypto_internal_multi_sig_bls12381::types::{
@@ -7,7 +8,7 @@ use ic_crypto_internal_multi_sig_bls12381::types::{
 };
 use ic_crypto_internal_types::curves::bls12_381::G2Bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::CryptoResult;
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use proptest::prelude::*;
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -153,7 +154,13 @@ proptest! {
         let (secret_key, public_key) = keys;
         let signature = multi_sig::sign(&message, &secret_key);
         prop_assume!(evil_signature != signature);
-        assert!(multi_sig::verify_individual(&message, &evil_signature, &public_key).is_err())
+        assert_matches!(
+            multi_sig::verify_individual(&message, &evil_signature, &public_key),
+            Err(CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::MultiBls12_381,
+                ..
+            })
+        );
     }
 
     #[test]
@@ -164,7 +171,13 @@ proptest! {
         let (secret_key, public_key) = keys;
         let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
         prop_assume!(evil_pop != pop);
-        assert!(multi_sig::verify_pop(&evil_pop, &public_key).is_err())
+        assert_matches!(
+            multi_sig::verify_pop(&evil_pop, &public_key),
+            Err(CryptoError::PopVerification {
+                algorithm: AlgorithmId::MultiBls12_381,
+                ..
+            })
+        );
     }
 
     #[test]
@@ -175,7 +188,13 @@ proptest! {
     ) {
         let (_signatures, signature, public_keys) = test_happy_path(&keys, &message);
         prop_assume!(evil_signature != signature);
-        assert!(multi_sig::verify_combined(&message, &evil_signature, &public_keys).is_err())
+        assert_matches!(
+            multi_sig::verify_combined(&message, &evil_signature, &public_keys),
+            Err(CryptoError::SignatureVerification {
+                algorithm: AlgorithmId::MultiBls12_381,
+                ..
+            })
+        );
     }
 }
 
@@ -255,9 +274,12 @@ fn individual_signature_fails_with_wrong_message() {
 
     let signature = multi_sig::sign(message, &secret_key);
 
-    assert!(
-        multi_sig::verify_individual(wrong_message, &signature, &public_key).is_err(),
-        "Signature should not verify with wrong message"
+    assert_matches!(
+        multi_sig::verify_individual(wrong_message, &signature, &public_key),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -270,9 +292,12 @@ fn individual_signature_fails_with_wrong_public_key() {
 
     let signature = multi_sig::sign(message, &secret_key);
 
-    assert!(
-        multi_sig::verify_individual(message, &signature, &other_public_key).is_err(),
-        "Signature should not verify with wrong public key"
+    assert_matches!(
+        multi_sig::verify_individual(message, &signature, &other_public_key),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -290,9 +315,12 @@ fn combined_signature_fails_with_wrong_message() {
     let combined_sig = multi_sig::combine(&signatures).expect("Failed to combine");
     let public_keys: Vec<_> = keys.iter().map(|(_, pk)| *pk).collect();
 
-    assert!(
-        multi_sig::verify_combined(wrong_message, &combined_sig, &public_keys).is_err(),
-        "Combined signature should not verify with wrong message"
+    assert_matches!(
+        multi_sig::verify_combined(wrong_message, &combined_sig, &public_keys),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -310,9 +338,12 @@ fn combined_signature_fails_with_missing_public_key() {
     // Only include first two public keys, missing the third
     let public_keys: Vec<_> = keys.iter().take(2).map(|(_, pk)| *pk).collect();
 
-    assert!(
-        multi_sig::verify_combined(message, &combined_sig, &public_keys).is_err(),
-        "Combined signature should not verify with missing public key"
+    assert_matches!(
+        multi_sig::verify_combined(message, &combined_sig, &public_keys),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -331,9 +362,12 @@ fn combined_signature_fails_with_extra_public_key() {
     let mut public_keys: Vec<_> = keys.iter().map(|(_, pk)| *pk).collect();
     public_keys.push(extra_public_key);
 
-    assert!(
-        multi_sig::verify_combined(message, &combined_sig, &public_keys).is_err(),
-        "Combined signature should not verify with extra public key"
+    assert_matches!(
+        multi_sig::verify_combined(message, &combined_sig, &public_keys),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -367,9 +401,12 @@ fn pop_fails_with_wrong_public_key() {
 
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
 
-    assert!(
-        multi_sig::verify_pop(&pop, &other_public_key).is_err(),
-        "PoP should not verify with wrong public key"
+    assert_matches!(
+        multi_sig::verify_pop(&pop, &other_public_key),
+        Err(CryptoError::PopVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }
 
@@ -514,9 +551,11 @@ fn verify_combined_identity_signature_fails_with_nonempty_public_keys() {
     let combined_sig = multi_sig::combine(&[]).expect("Failed to combine empty");
     let public_keys = vec![public_key];
 
-    let result = multi_sig::verify_combined(message, &combined_sig, &public_keys);
-    assert!(
-        result.is_err(),
-        "Identity signature should not verify with non-empty public keys"
+    assert_matches!(
+        multi_sig::verify_combined(message, &combined_sig, &public_keys),
+        Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::MultiBls12_381,
+            ..
+        })
     );
 }

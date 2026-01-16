@@ -31,6 +31,7 @@ rust_test(
         # Keep sorted.
         "//rs/crypto/internal/test_vectors",
         "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:serde_cbor",
     ],
@@ -45,6 +46,7 @@ rust_test_suite(
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/types/types",
+        "@crate_index//:assert_matches",
         "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
