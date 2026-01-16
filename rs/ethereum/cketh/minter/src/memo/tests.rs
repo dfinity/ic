@@ -139,7 +139,6 @@ fn should_decode_ledger_mint_convert_memo() {
         "0x23",
         "0xffffffffffffffff",                 // u64 max
         "0xffffffffffffffffffffffffffffffff", // u128 max
-        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // u256 max
     ] {
         let log_index = CheckedAmountOf::from_str_hex(index).expect("should decode number");
         let memo = MintMemo::Convert {
@@ -397,6 +396,33 @@ fn should_decode_memo_only_if_size_below_limit() {
     let args = DecodeLedgerMemoArgs {
         memo_type: MemoType::Mint,
         encoded_memo: memo_more_than_max_bytes,
+    };
+    let result = decode_ledger_memo(args);
+    assert_eq!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+            "Memo longer than permitted length {}",
+            CKETH_LEDGER_MEMO_SIZE
+        ))))
+    );
+
+    // Mint convert memo with u256::MAX log_index is above the size limit.
+    // We accept that since u128::MAX is still within the limit and should
+    // be orders of magnitude larger that the maximum possible log_index.
+    let log_index = CheckedAmountOf::from_str_hex(
+        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    )
+    .expect("should decode number");
+    let memo = MintMemo::Convert {
+        from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+        log_index,
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: buf,
     };
     let result = decode_ledger_memo(args);
     assert_eq!(
