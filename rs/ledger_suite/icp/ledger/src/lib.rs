@@ -152,16 +152,16 @@ thread_local! {
 
     // Histogram data for archiving metrics
     static ARCHIVING_DURATION_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0])) // seconds
+        RefCell::new(HistogramData::new(&[1.0, 2.0, 5.0, 10.0, 20.0, 50.0])) // seconds
     };
     static ARCHIVING_CHUNK_DURATION_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0])) // seconds
+        RefCell::new(HistogramData::new(&[1.0, 2.0, 5.0, 10.0, 20.0, 50.0])) // seconds
     };
     static ARCHIVING_CHUNKS_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0])) // chunk count
+        RefCell::new(HistogramData::new(&[1.0, 2.0, 4.0, 8.0, 16.0])) // chunk count
     };
     static ARCHIVING_BLOCKS_HISTOGRAM: RefCell<HistogramData> = const {
-        RefCell::new(HistogramData::new(&[100.0, 500.0, 1000.0, 5000.0, 10000.0, 18000.0])) // block count
+        RefCell::new(HistogramData::new(&[1000.0, 2000.0, 5000.0, 10000.0, 20000.0])) // block count
     };
 }
 
