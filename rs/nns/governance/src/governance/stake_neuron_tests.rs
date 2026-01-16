@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    pb::v1::{Topic, governance_error::ErrorType},
+    pb::v1::{NeuronState, Topic, governance_error::ErrorType},
     test_utils::{MockEnvironment, MockRandomness},
 };
 
@@ -77,6 +77,8 @@ async fn test_stake_neuron_with_defaults() {
         controller: None,
         followees: None,
         dissolve_delay_seconds: None,
+        dissolving: None,
+        auto_stake_maturity: None,
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request)
@@ -97,6 +99,9 @@ async fn test_stake_neuron_with_defaults() {
             neuron.dissolve_delay_seconds(NOW_SECONDS),
             INITIAL_NEURON_DISSOLVE_DELAY
         );
+        assert_eq!(neuron.state(NOW_SECONDS), NeuronState::NotDissolving);
+        // Verify auto_stake_maturity defaults to None (false)
+        assert_eq!(neuron.auto_stake_maturity, None);
     });
 }
 
@@ -128,6 +133,8 @@ async fn test_stake_neuron_with_custom_values() {
         controller: Some(controller),
         followees: Some(followees),
         dissolve_delay_seconds: Some(dissolve_delay_seconds),
+        dissolving: Some(true),
+        auto_stake_maturity: Some(true),
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request)
@@ -148,6 +155,15 @@ async fn test_stake_neuron_with_custom_values() {
             neuron.dissolve_delay_seconds(NOW_SECONDS),
             dissolve_delay_seconds
         );
+        // Verify the neuron is dissolving since dissolving: Some(true) was set
+        assert_eq!(neuron.state(NOW_SECONDS), NeuronState::Dissolving);
+        // Verify when_dissolved_timestamp_seconds is correctly calculated
+        assert_eq!(
+            neuron.dissolved_at_timestamp_seconds(),
+            Some(NOW_SECONDS + dissolve_delay_seconds)
+        );
+        // Verify auto_stake_maturity is set since auto_stake_maturity: Some(true) was set
+        assert_eq!(neuron.auto_stake_maturity, Some(true));
         assert_eq!(neuron.followees.len(), 2);
         assert_eq!(
             neuron
@@ -194,6 +210,8 @@ async fn test_stake_neuron_invalid_followees() {
         controller: None,
         followees: Some(followees),
         dissolve_delay_seconds: None,
+        dissolving: None,
+        auto_stake_maturity: None,
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request).await;
@@ -215,6 +233,8 @@ async fn test_stake_neuron_amount_below_minimum() {
         controller: None,
         followees: None,
         dissolve_delay_seconds: None,
+        dissolving: None,
+        auto_stake_maturity: None,
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request).await;
@@ -234,6 +254,8 @@ async fn test_stake_neuron_missing_amount() {
         controller: None,
         followees: None,
         dissolve_delay_seconds: None,
+        dissolving: None,
+        auto_stake_maturity: None,
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request).await;
@@ -255,6 +277,8 @@ async fn test_stake_neuron_invalid_source_subaccount() {
         controller: None,
         followees: None,
         dissolve_delay_seconds: None,
+        dissolving: None,
+        auto_stake_maturity: None,
     };
 
     let result = Governance::stake_neuron(&TEST_GOVERNANCE, CALLER, request).await;

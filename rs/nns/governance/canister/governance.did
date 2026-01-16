@@ -1506,6 +1506,8 @@ type StakeNeuronRequest = record {
   controller : opt principal;
   followees : opt SetFollowing;
   dissolve_delay_seconds : opt nat64;
+  dissolving : opt bool;
+  auto_stake_maturity : opt bool;
 };
 
 type StakeNeuronResult = record {
