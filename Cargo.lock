@@ -863,6 +863,7 @@ dependencies = [
  "pem 3.0.6",
  "prost 0.13.4",
  "prost-build 0.13.4",
+ "rand 0.8.5",
  "ring 0.17.14",
  "serde",
  "sev",
@@ -16211,6 +16212,7 @@ dependencies = [
  "sev",
  "sha2 0.10.9",
  "tempfile",
+ "thiserror 2.0.17",
  "tokio",
  "x509-cert",
 ]
@@ -21452,6 +21454,7 @@ dependencies = [
  "config_tool",
  "config_types",
  "ic_sev",
+ "rand 0.8.5",
  "remote_attestation_shared",
  "sev",
  "tokio",
