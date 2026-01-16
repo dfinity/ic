@@ -143,10 +143,10 @@ ALIASES = {}
 DEV_DATA = [
     # Keep sorted.
     "src/neurons.csv",
+    "subnet_rental_canister.wasm.gz",
     ":canister-playground-canister",
     ":mem-utils-test-canister",
     ":unstoppable-canister",
-    "subnet_rental_canister.wasm.gz",
     "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
     "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
     "//rs/ledger_suite/icrc1/archive:archive_canister",

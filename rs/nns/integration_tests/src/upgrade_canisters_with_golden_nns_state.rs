@@ -20,9 +20,10 @@ use ic_nns_test_utils::state_test_helpers::{
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, manage_network_economics, nns_cast_vote,
-        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed, list_rental_agreements, get_principals_authorized_to_create_canisters_to_subnets, RentalAgreement,
+        RentalAgreement, get_canister_status,
+        get_principals_authorized_to_create_canisters_to_subnets, list_rental_agreements,
+        manage_network_economics, nns_cast_vote, nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -384,18 +385,33 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     }
 
     let rental_agreements_after_first_upgrade = list_rental_agreements(&state_machine);
-    assert_eq!(rental_agreements_after_first_upgrade.len(), 1, "{rental_agreements_after_first_upgrade:#?}");
-    let first_rental_agreement = rental_agreements_after_first_upgrade.first().unwrap().clone();
+    assert_eq!(
+        rental_agreements_after_first_upgrade.len(),
+        1,
+        "{rental_agreements_after_first_upgrade:#?}"
+    );
+    let first_rental_agreement = rental_agreements_after_first_upgrade
+        .first()
+        .unwrap()
+        .clone();
 
-    let auths_after_first_upgrade = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    let auths_after_first_upgrade =
+        get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
     assert_ne!(auths_after_first_upgrade, original_auths);
 
     // Second batch of upgrades.
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     let rental_agreements_after_second_upgrade = list_rental_agreements(&state_machine);
-    assert_eq!(rental_agreements_after_second_upgrade.len(), 1, "{rental_agreements_after_second_upgrade:#?}");
-    let second_rental_agreement = rental_agreements_after_second_upgrade.first().unwrap().clone();
+    assert_eq!(
+        rental_agreements_after_second_upgrade.len(),
+        1,
+        "{rental_agreements_after_second_upgrade:#?}"
+    );
+    let second_rental_agreement = rental_agreements_after_second_upgrade
+        .first()
+        .unwrap()
+        .clone();
     assert_eq!(
         second_rental_agreement,
         RentalAgreement {
@@ -406,10 +422,12 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     assert!(
         second_rental_agreement.total_cycles_burned > first_rental_agreement.total_cycles_burned,
         "{} vs. {}",
-        second_rental_agreement.total_cycles_burned, first_rental_agreement.total_cycles_burned,
+        second_rental_agreement.total_cycles_burned,
+        first_rental_agreement.total_cycles_burned,
     );
 
-    let auths_after_second_upgrade = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    let auths_after_second_upgrade =
+        get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
     assert_eq!(auths_after_second_upgrade, auths_after_first_upgrade);
 
     println!();

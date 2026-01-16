@@ -4,11 +4,11 @@ use crate::common::{
     build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
 use crate::state_test_helpers::nns_governance_pb::Visibility;
-use candid::{CandidType, Decode, Encode, encode_args, Nat, Principal, Deserialize};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal, encode_args};
 use canister_test::Wasm;
 use cycles_minting_canister::{
-    CyclesCanisterInitPayload, IcpXdrConversionRateCertifiedResponse,
-    SetAuthorizedSubnetworkListArgs, AuthorizedSubnetsResponse,
+    AuthorizedSubnetsResponse, CyclesCanisterInitPayload, IcpXdrConversionRateCertifiedResponse,
+    SetAuthorizedSubnetworkListArgs,
 };
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
@@ -344,7 +344,9 @@ pub fn list_rental_agreements(state_machine: &StateMachine) -> Vec<RentalAgreeme
     Decode!(&reply, Vec<RentalAgreement>).unwrap()
 }
 
-pub fn get_principals_authorized_to_create_canisters_to_subnets(state_machine: &StateMachine) -> AuthorizedSubnetsResponse {
+pub fn get_principals_authorized_to_create_canisters_to_subnets(
+    state_machine: &StateMachine,
+) -> AuthorizedSubnetsResponse {
     let reply = update(
         state_machine,
         CYCLES_MINTING_CANISTER_ID,
