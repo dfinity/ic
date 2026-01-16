@@ -13,6 +13,7 @@ use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
 use serde::Deserialize;
 use std::fs;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::PathBuf;
 use url::Url;
 
@@ -71,6 +72,27 @@ pub fn setup(env: TestEnv, config: IcConfig) {
                 .for_each(|un| ic = ic.clone().with_api_boundary_node(un)),
         }
     }
+    if let Some(bitcoind_addr_str) = config.bitcoind_addr {
+        // Try to parse as SocketAddr directly first (for IP addresses)
+        let bitcoind_addr: SocketAddr = match bitcoind_addr_str.parse() {
+            Ok(addr) => addr,
+            Err(_) => {
+                // If parsing fails, try DNS resolution (for hostnames)
+                bitcoind_addr_str
+                    .to_socket_addrs()
+                    .expect(&format!(
+                        "Failed to resolve bitcoind_addr hostname: {}",
+                        bitcoind_addr_str
+                    ))
+                    .next()
+                    .expect(&format!(
+                        "No addresses found for bitcoind_addr: {}",
+                        bitcoind_addr_str
+                    ))
+            }
+        };
+        ic = ic.with_bitcoind_addr(bitcoind_addr);
+    }
 
     PrometheusVm::default()
         .start(&env)
@@ -93,6 +115,10 @@ pub struct IcConfig {
     pub api_boundary_nodes: Option<ConfigurableApiBoundaryNodes>,
     pub initial_version: Option<ReplicaVersion>,
     pub target_version: ReplicaVersion,
+    /// Bitcoin node address in format "host:port" (e.g., "mathias.devenv.dfinity.network:18444")
+    /// This will configure the ic-btc-adapter to connect to a regtest bitcoind at this address.
+    #[serde(default)]
+    pub bitcoind_addr: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
