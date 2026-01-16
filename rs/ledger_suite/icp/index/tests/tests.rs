@@ -1590,7 +1590,6 @@ fn test_post_upgrade_start_timer() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    // Upgrade with no argument (None) should work and restart the timer
     env.upgrade_canister(
         index_id,
         index_wasm(),
