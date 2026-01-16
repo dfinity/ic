@@ -37,7 +37,7 @@ else
     PODMAN_ARGS=()
 fi
 
-IMAGE="ghcr.io/dfinity/ic-build"
+IMAGE="ghcr.io/dfinity/ic-build-dev"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
@@ -75,7 +75,7 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
             sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
         }
         export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
+        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh --target dev
         unset -f docker
     fi
 fi
