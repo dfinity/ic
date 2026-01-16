@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::ops::DerefMut;
 use std::sync::RwLock;
 use std::time::Duration;
 
@@ -686,6 +687,17 @@ impl Ledger {
         }
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
+        }
+        if let Some(change_archive_options) = args.change_archive_options {
+            let mut maybe_archive = self.blockchain.archive.write().expect(
+                "BUG: should be unreachable since upgrade has exclusive write access to the ledger",
+            );
+            if maybe_archive.is_none() {
+                trap("[ERROR]: Archive options cannot be changed, since there is no archive!");
+            }
+            if let Some(archive) = maybe_archive.deref_mut() {
+                change_archive_options.apply(archive);
+            }
         }
     }
 

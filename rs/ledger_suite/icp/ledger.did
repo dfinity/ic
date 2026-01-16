@@ -345,9 +345,21 @@ type Value = variant {
   Blob : blob
 };
 
+type ChangeArchiveOptions = record {
+  trigger_threshold : opt nat64;
+  num_blocks_to_archive : opt nat64;
+  node_max_memory_size_bytes : opt nat64;
+  max_message_size_bytes : opt nat64;
+  controller_id : opt principal;
+  more_controller_ids : opt vec principal;
+  cycles_for_archive_creation : opt nat64;
+  max_transactions_per_response : opt nat64
+};
+
 type UpgradeArgs = record {
   icrc1_minting_account : opt Account;
-  feature_flags : opt FeatureFlags
+  feature_flags : opt FeatureFlags;
+  change_archive_options : opt ChangeArchiveOptions
 };
 
 type LedgerCanisterPayload = variant {
