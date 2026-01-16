@@ -587,7 +587,7 @@ aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
-askama = { version = "0.15", features = ["serde-json"] }
+askama = { version = "0.15", features = ["serde_json"] }
 assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"

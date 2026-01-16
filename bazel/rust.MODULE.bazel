@@ -77,11 +77,11 @@ crate.spec(
     version = "^0.7.4",
 )
 crate.spec(
-    features = [
-        "serde-json",
-    ],
     package = "askama",
     version = "0.15",
+    features = [
+        "serde_json",
+    ],
 )
 crate.spec(
     package = "assert-json-diff",
