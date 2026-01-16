@@ -662,6 +662,15 @@ impl CallContextManager {
         self.next_callback_id += 1;
         let callback_id = CallbackId::from(self.next_callback_id);
 
+        self.insert_callback(callback_id, callback);
+
+        callback_id
+    }
+
+    /// Inserts a callback under the given ID. Returns an error if the canister is
+    /// `Stopped`.
+    #[doc(hidden)]
+    pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
         if callback.deadline != NO_DEADLINE {
             self.unexpired_callbacks
@@ -681,8 +690,6 @@ impl CallContextManager {
             self.outstanding_callbacks
         );
         debug_assert!(self.stats_ok());
-
-        callback_id
     }
 
     /// If we get a response for one of the outstanding calls, we unregister

@@ -47,6 +47,11 @@ impl TaskQueue {
         })
     }
 
+    #[doc(hidden)]
+    pub fn mut_paused_or_aborted_task(&mut self) -> Option<&mut ExecutionTask> {
+        self.paused_or_aborted_task.as_mut()
+    }
+
     pub fn remove(&mut self, task: ExecutionTask) {
         match task {
             ExecutionTask::OnLowWasmMemory => {
