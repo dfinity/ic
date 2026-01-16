@@ -16,7 +16,7 @@ use std::{env, fs};
     about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, checks SSH connection and injects key via IPMI if needed."
 )]
 struct Args {
-    /// Path to CSV file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.csv.
+    /// Path to INI file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.ini.
     /// Ask the node team for access to this file.
     #[arg(long)]
     login_info: PathBuf,
