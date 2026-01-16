@@ -2,9 +2,9 @@ use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     test_env_api::{
-        get_current_branch_version, get_guestos_initial_launch_measurements,
-        get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
-        get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
+        get_guestos_initial_launch_measurements, get_guestos_initial_update_img_sha256,
+        get_guestos_initial_update_img_url, get_guestos_launch_measurements,
+        get_guestos_update_img_sha256, get_guestos_update_img_url, get_ic_build_version,
         get_mainnet_nns_revision,
     },
 };
@@ -52,7 +52,7 @@ pub fn main() -> anyhow::Result<()> {
         Some(new_version) => (old_version.clone(), new_version.clone()),
         None => (
             // Should be: 0000000000000000000000000000000000000000
-            get_current_branch_version(),
+            get_ic_build_version(),
             old_version.clone(),
         ),
     };
