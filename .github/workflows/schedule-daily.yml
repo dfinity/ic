@@ -67,7 +67,7 @@ jobs:
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
-          echo "$ZH2_DLL01_CSV_SECRETS" > file1
+          echo "$ZH2_DLL01_INI_SECRET" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
@@ -76,7 +76,7 @@ jobs:
             bazel --output_base=/var/tmp/bazel-output run \
               //ic-os/setupos/envs/dev:launch_bare_metal -- \
                 --config_path "$(realpath  ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml)" \
-                --csv_filename "$(realpath file1)" \
+                --ini_filename "$(realpath file1)" \
                 --file_share_ssh_key "$(realpath file2)" \
                 --inject_image_pub_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3gjE/2K5nxIBbk3ohgs8J5LW+XiObwA+kGtSaF5+4c" \
                 --file_share_username ci_interim \
@@ -95,7 +95,7 @@ jobs:
 
           bazel clean
         env:
-          ZH2_DLL01_CSV_SECRETS: "${{ secrets.ZH2_DLL01_CSV_SECRETS }}"
+          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   nns-tests-nightly:
