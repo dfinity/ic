@@ -228,13 +228,13 @@ oci_tar(
 
 system_test_nns(
     name = "btc_get_balance_test",
-    data = [":btc_uvm_config_image"],
     flaky = True,  # flakiness rate of over 3% over the month from 2025-02-11 till 2025-03-11 only for the //rs/tests/execution:btc_get_balance_test_head_nns variant.
     tags = [
         "colocate",
     ],
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "BTC_WASM_PATH": "@btc_canister//file",
+        "BTC_UVM_CONFIG_IMAGE_PATH": ":btc_uvm_config_image",
     },
     deps = [
         "//rs/bitcoin/adapter/test_utils",
