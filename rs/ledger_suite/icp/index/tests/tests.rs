@@ -1701,7 +1701,7 @@ fn test_index_http_request_decoding_quota() {
 
 mod metrics {
     use crate::index_wasm;
-    use candid::{Encode, Principal};
+    use candid::Principal;
     use ic_icp_index::InitArg;
 
     #[test]
@@ -1712,7 +1712,7 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> Vec<u8> {
-        Encode!(&InitArg { ledger_id }).unwrap()
+    fn encode_init_args(ledger_id: Principal) -> InitArg {
+        InitArg { ledger_id }
     }
 }
