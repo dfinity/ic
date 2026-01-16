@@ -68,10 +68,10 @@ system_test_nns(
 
 system_test(
     name = "cup_compatibility_test",
-    data = [
-        "//rs/tests:cup_compatibility/binaries",
-    ],
     env = MAINNET_ENV,
+    runtime_deps = {
+        "TYPES_TEST_PATH": "//rs/types/types:types_test",
+    },
     deps = [
         # Keep sorted.
         "//rs/recovery",

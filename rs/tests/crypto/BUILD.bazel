@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -39,8 +39,7 @@ DEPENDENCIES = [
 
 system_test(
     name = "canister_sig_verification_cache_test",
-    data = COUNTER_CANISTER_DATA,
-    runtime_deps = {
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "II_WASM_PATH": "@ii_dev_canister//file",
     },
     deps = DEPENDENCIES,

@@ -1,9 +1,10 @@
 use crate::tls::SkipServerCertificateCheck;
 use anyhow::{Context, Error, Result, anyhow, bail};
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
 use attestation::registry::get_blessed_guest_launch_measurements_from_registry;
-use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
+use attestation::verification::{
+    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use config_types::GuestOSConfig;
 use der::asn1::OctetStringRef;
 use guest_upgrade_shared::STORE_DEVICE;
@@ -136,12 +137,12 @@ impl DiskEncryptionKeyExchangeClientAgent {
         my_public_key_der: &[u8],
         server_public_key_der: &[u8],
     ) -> Result<()> {
-        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(my_public_key_der)
                 .expect("Could not encode public key"),
             server_tls_public_key: OctetStringRef::new(server_public_key_der)
                 .expect("Could not encode server public key"),
-        });
+        };
         let my_attestation_package = generate_attestation_package(
             self.sev_firmware.as_mut(),
             self.guestos_config
@@ -180,13 +181,13 @@ impl DiskEncryptionKeyExchangeClientAgent {
         // trusted source. Without this check, an attacker could start with a malicious GuestOS,
         // inject malicious files into the data partition then trigger an upgrade to a
         // legit version. The malicious data would remain on the data partition.
-        verify_attestation_package(
-            &server_attestation_package,
+        ParsedSevAttestationPackage::parse(
+            server_attestation_package,
             self.sev_root_certificate_verification,
-            &blessed_measurements,
-            &custom_data,
-            Some(&[my_attestation_report.chip_id]),
         )
+        .verify_measurement(&blessed_measurements)
+        .verify_custom_data(&custom_data)
+        .verify_chip_id(&[my_attestation_report.chip_id])
         .context("Server attestation report verification failed")?;
 
         let disk_encryption_key = get_key_response
