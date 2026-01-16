@@ -100,7 +100,7 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version();
+    let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
     // Bless target version
