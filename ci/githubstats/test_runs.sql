@@ -15,9 +15,5 @@ JOIN bazel_invocations AS bi ON bt.build_id = bi.build_id
 WHERE
    bt.label = '$test_target'
    AND bt.overall_status IN ($overall_statuses)
-   AND
-     CASE
-       WHEN '$period' <> '' THEN bi.build_date > now() - ('1 $period'::interval)
-       ELSE TRUE
-     END
+   AND ('$period' = '' OR bi.build_date > now() - ('1 $period'::interval))
 ORDER BY bi.build_date DESC;

@@ -80,10 +80,7 @@ FROM
   bazel_tests
 
 WHERE
-  CASE
-    WHEN '$period' <> '' THEN first_start_time > now() - ('1 $period'::interval)
-    ELSE TRUE
-  END
+  '$period' = '' OR first_start_time > now() - ('1 $period'::interval)
 
 GROUP BY label
 
