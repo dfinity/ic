@@ -18,4 +18,3 @@ rust_test(
     name = "testing_test",
     crate = ":testing",
 )
-

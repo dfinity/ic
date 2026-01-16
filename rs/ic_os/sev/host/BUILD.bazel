@@ -33,4 +33,3 @@ rust_test(
     tags = ["requires-network"],
     deps = DEV_DEPENDENCIES,
 )
-

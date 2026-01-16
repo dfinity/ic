@@ -32,4 +32,3 @@ rust_test(
     name = "guest_test",
     crate = ":guest",
 )
-
