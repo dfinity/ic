@@ -295,7 +295,7 @@ mod test {
         });
         let key_config = KeyConfig {
             key_id,
-            pre_signatures_to_create_in_advance: 1,
+            pre_signatures_to_create_in_advance: Some(1),
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
@@ -352,7 +352,7 @@ mod test {
         });
         let key_config = KeyConfig {
             key_id,
-            pre_signatures_to_create_in_advance: 1,
+            pre_signatures_to_create_in_advance: Some(1),
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
@@ -419,7 +419,7 @@ mod test {
         });
         let key_config = KeyConfig {
             key_id,
-            pre_signatures_to_create_in_advance: 1,
+            pre_signatures_to_create_in_advance: Some(1),
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(ChainKeyConfig {
