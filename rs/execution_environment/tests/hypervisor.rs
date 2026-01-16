@@ -3552,8 +3552,14 @@ fn subnet_available_memory_is_updated() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_execution_memory()
+            - 10 * WASM_PAGE_SIZE as i64
+            - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3580,8 +3586,14 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(11)
     );
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_execution_memory()
+            - 10 * WASM_PAGE_SIZE as i64
+            - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3608,8 +3620,14 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         test.execution_state(canister_id).wasm_memory.size,
         NumWasmPages::new(11)
     );
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        initial_subnet_available_memory.get_execution_memory()
+            - 10 * WASM_PAGE_SIZE as i64
+            - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3631,7 +3649,7 @@ fn subnet_available_memory_is_not_updated_in_query() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.ingress(canister_id, "test", vec![]);
+    let result = test.system_query(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory(),
@@ -3732,10 +3750,15 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory()
             - 10 * WASM_PAGE_SIZE as i64
-            - extra_canister_history_memory,
+            - extra_canister_history_memory
+            - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3771,8 +3794,14 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory() - extra_canister_history_memory,
+        initial_subnet_available_memory.get_execution_memory()
+            - extra_canister_history_memory
+            - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
@@ -3836,8 +3865,13 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    // Execution memory changes due to canister logging.
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     assert_eq!(
-        initial_subnet_available_memory.get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - log_memory_usage,
         test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
