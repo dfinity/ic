@@ -60,6 +60,7 @@ mod tests {
         canister_state::{
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+            system_state::log_memory_store::LogMemoryStore,
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,
@@ -268,6 +269,7 @@ mod tests {
             ExportedFunctions::new(BTreeSet::new()),
             wasm_memory,
             Memory::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
             vec![Global::I32(1)],
             WasmMetadata::new(metadata),
         );
