@@ -10,8 +10,10 @@ use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 use std::fmt::Debug;
 
-/// Generate an SEV Attestation Package based on the given SEV firmware,
-/// trusted execution environment configuration, and custom data.
+/// Generate an SEV Attestation Package based on the given SEV firmware, trusted execution
+/// environment configuration, and custom data.
+/// The implementation verifies that the returned attestation package is signed by the certificate
+/// chain from `trusted_execution_environment_config` and contains the passed custom data.
 pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
     sev_firmware: &mut dyn SevGuestFirmware,
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
