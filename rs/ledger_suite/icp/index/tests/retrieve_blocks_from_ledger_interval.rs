@@ -106,7 +106,6 @@ fn install_index_with_interval(
     // Configure the interval via upgrade if specified
     if let Some(interval) = retrieve_blocks_from_ledger_interval_seconds {
         let upgrade_arg = UpgradeArg {
-            ledger_id: None,
             retrieve_blocks_from_ledger_interval_seconds: Some(interval),
         };
         env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())
@@ -140,7 +139,6 @@ fn install_and_upgrade(
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
     let upgrade_arg = UpgradeArg {
-        ledger_id: None,
         retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
     };
     env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
@@ -293,7 +291,6 @@ fn should_sync_according_to_interval() {
 
                 // Upgrade the index with a specific interval
                 let upgrade_arg = UpgradeArg {
-                    ledger_id: None,
                     retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
                 };
                 env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())

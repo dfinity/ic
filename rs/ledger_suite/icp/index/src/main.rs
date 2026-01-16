@@ -262,15 +262,10 @@ fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
         log!(P1, "Possible upgrade configuration changes: {:#?}", upgrade);
 
         let UpgradeArg {
-            ledger_id,
             retrieve_blocks_from_ledger_interval_seconds,
         } = upgrade;
 
         mutate_state(|state| {
-            if let Some(new_value) = ledger_id {
-                state.ledger_id = new_value;
-            }
-
             if let Some(new_value) = retrieve_blocks_from_ledger_interval_seconds {
                 state.retrieve_blocks_from_ledger_interval = Some(Duration::from_secs(new_value));
             }

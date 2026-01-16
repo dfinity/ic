@@ -36,7 +36,6 @@ type HttpResponse = record {
 type InitArg = record { ledger_id : principal };
 
 type UpgradeArg = record {
-  ledger_id : opt principal;
   // The interval in seconds in which to retrieve blocks from the ledger. A lower value makes the index more
   // responsive in showing new blocks, but increases the consumption of cycles of both the index and ledger canisters.
   // A higher values means that it takes longer for new blocks to show up in the index.

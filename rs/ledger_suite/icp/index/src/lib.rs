@@ -13,7 +13,6 @@ pub struct InitArg {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct UpgradeArg {
-    pub ledger_id: Option<Principal>,
     pub retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 }
 
