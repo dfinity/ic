@@ -4600,6 +4600,12 @@ pub enum SelfDescribingValue {
     Map(HashMap<String, SelfDescribingValue>),
 }
 
+impl From<String> for SelfDescribingValue {
+    fn from(value: String) -> Self {
+        SelfDescribingValue::Text(value)
+    }
+}
+
 impl From<&str> for SelfDescribingValue {
     fn from(value: &str) -> Self {
         SelfDescribingValue::Text(value.to_string())

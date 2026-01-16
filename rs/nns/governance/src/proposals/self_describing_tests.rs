@@ -382,7 +382,7 @@ fn test_derive_single_tuple_enum() {
         TestSingleTupleEnum::First(InnerValue { id: 123 }),
         SelfDescribingValue::Map(hashmap! {
             "First".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(123_u64)),
+                "id".to_string() => SelfDescribingValue::from(123_u64),
             }),
         }),
     );
@@ -390,10 +390,7 @@ fn test_derive_single_tuple_enum() {
 
 #[test]
 fn test_derive_mixed_enum_unit_variant() {
-    assert_self_describing_value_is(
-        TestMixedEnum::Empty,
-        SelfDescribingValue::Text("Empty".to_string()),
-    );
+    assert_self_describing_value_is(TestMixedEnum::Empty, SelfDescribingValue::from("Empty"));
 }
 
 #[test]
@@ -402,7 +399,7 @@ fn test_derive_mixed_enum_tuple_variant() {
         TestMixedEnum::WithValue(InnerValue { id: 456 }),
         SelfDescribingValue::Map(hashmap! {
             "WithValue".to_string() => SelfDescribingValue::Map(hashmap! {
-                "id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(456_u64)),
+                "id".to_string() => SelfDescribingValue::from(456_u64),
             }),
         }),
     );

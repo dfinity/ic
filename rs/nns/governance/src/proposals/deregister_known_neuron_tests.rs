@@ -200,7 +200,7 @@ fn test_deregister_known_neuron_to_self_describing() {
     assert_eq!(
         value,
         SelfDescribingValue::Map(hashmap! {
-            "neuron_id".to_string() => SelfDescribingValue::Nat(candid::Nat::from(456u64)),
+            "neuron_id".to_string() => SelfDescribingValue::from(456_u64),
         })
     );
 }
