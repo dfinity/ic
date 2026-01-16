@@ -1,10 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_DATA", "COUNTER_CANISTER_DATA", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-PROXY_CANISTER_RUNTIME_DEPS = [
+PROXY_CANISTER_DATA = [
     # Keep sorted.
     "//rs/rust_canisters/proxy_canister:proxy_canister",
 ]
@@ -53,27 +53,27 @@ HTTP_ENDPOINTS_DEPS = [
 
 system_test_nns(
     name = "canister_http_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(
     name = "canister_http_stress_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     enable_metrics = True,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = ["manual"],  # not meant to be run on CI
     test_timeout = "eternal",
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -88,6 +88,8 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_soak_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     enable_metrics = True,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
@@ -97,8 +99,6 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -114,6 +114,8 @@ system_test_nns(
 # NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 system_test_nns(
     name = "canister_http_socks_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
@@ -121,8 +123,6 @@ system_test_nns(
         "dynamic_testnet",
         "long_test",
     ],
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
@@ -132,11 +132,11 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_correctness_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -155,14 +155,14 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_fault_tolerance_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
         "manual",
     ],
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
@@ -175,31 +175,30 @@ system_test_nns(
 
 system_test_nns(
     name = "canister_http_non_replicated_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
 system_test_nns(
     name = "canister_http_time_out_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
         "long_test",
     ],
-    runtime_deps =
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS,
 )
 
 system_test_nns(
     name = "read_state_test",
-    env = MESSAGE_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/certification",
@@ -315,7 +314,6 @@ system_test_nns(
 
 system_test_nns(
     name = "http_endpoints_public_spec_test",
-    env = UNIVERSAL_CANISTER_ENV,
     flaky = False,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + HTTP_ENDPOINTS_DEPS + [
@@ -328,7 +326,6 @@ system_test_nns(
 system_test_nns(
     name = "network_large_test",
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
-    env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "system_test_large",
@@ -345,13 +342,13 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
+    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
         "system_test_large",
     ],
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/types/base_types",
         "@crate_index//:rand",
@@ -361,15 +358,15 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
+    data = COUNTER_CANISTER_DATA + [
+        "//rs/tests:jaeger_uvm_config_image",
+    ],
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     deps = COMMON_DEPS + [
         "@crate_index//:ic-agent",
     ],
@@ -384,6 +381,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     enable_metrics = True,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
@@ -392,7 +390,6 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -403,18 +400,15 @@ system_test_nns(
     colocated_test_driver_vm_required_host_features = ["performance"],
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     enable_metrics = True,
-    env = UNIVERSAL_CANISTER_ENV | {
-        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
-    },
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps =
-        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
-        UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/statesync_test:statesync-test-canister",
+    },
     deps = COMMON_DEPS + [
         "//rs/nns/constants",
         "//rs/nns/governance/api",
@@ -437,6 +431,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     enable_metrics = True,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
@@ -445,7 +440,6 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -453,17 +447,15 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
+    data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
-    env = {
-        "CLONER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/networking/canisters:cloner_canister)",
-    },
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests/networking/canisters:cloner_canister",
-    ],
+    runtime_deps = {
+        "CLONER_CANISTER_WASM_PATH": "//rs/tests/networking/canisters:cloner_canister",
+    },
     deps = [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

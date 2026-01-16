@@ -1,10 +1,16 @@
 use crate::attestation_package::generate_attestation_package;
 use crate::custom_data::{DerEncodedCustomData, EncodeSevCustomData};
 use crate::verification::{SevRootCertificateVerification, verify_attestation_package};
-use crate::{SevAttestationPackage, VerificationErrorDescription, VerificationErrorDetail};
+use crate::{
+    SevAttestationPackage, SevCertificateChain, VerificationErrorDescription,
+    VerificationErrorDetail,
+};
 use config_types::TrustedExecutionEnvironmentConfig;
+use ic_sev::guest::custom_data::SevCustomDataNamespace;
 use ic_sev::guest::firmware::MockSevGuestFirmware;
-use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use ic_sev::guest::testing::{
+    AttestationReportBuilder, FakeAttestationReportSigner, MockSevGuestFirmwareBuilder,
+};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 
@@ -17,10 +23,33 @@ struct FooCustomData {
     b: i64,
 }
 
+#[derive(der::Sequence, Debug)]
+struct NewFooCustomData {
+    a: i32,
+}
+
+impl DerEncodedCustomData for FooCustomData {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::Test
+    }
+
+    fn needs_legacy_encoding() -> bool {
+        true
+    }
+}
+
+impl DerEncodedCustomData for NewFooCustomData {
+    fn namespace(&self) -> SevCustomDataNamespace {
+        SevCustomDataNamespace::Test
+    }
+}
+
 const CUSTOM_DATA: FooCustomData = FooCustomData {
     a: 42,
     b: 1234567890,
 };
+
+const NEW_CUSTOM_DATA: NewFooCustomData = NewFooCustomData { a: 42 };
 
 fn valid_sev_firmware() -> MockSevGuestFirmware {
     let signer = FakeAttestationReportSigner::default();
@@ -37,7 +66,7 @@ fn generate_valid_attestation_package() -> SevAttestationPackage {
         &TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),
         },
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
     )
     .expect("Failed to generate attestation package")
 }
@@ -54,16 +83,16 @@ fn test_valid_attestation_package() {
     assert_eq!(attestation_report.measurement.as_slice(), MEASUREMENT);
     assert_eq!(
         attestation_report.report_data.as_slice(),
-        &DerEncodedCustomData(CUSTOM_DATA)
-            .encode_for_sev()
-            .expect("Failed to encode custom data for SEV"),
+        CUSTOM_DATA
+            .encode_for_sev_legacy()
+            .expect("Failed to encode custom data for SEV")
     );
 
     verify_attestation_package(
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect("Failed to verify attestation package");
@@ -72,7 +101,7 @@ fn test_valid_attestation_package() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         None, // Skip chip ID check
     )
     .expect("Failed to verify attestation package");
@@ -93,7 +122,7 @@ fn test_invalid_attestation_report() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid attestation report")
@@ -124,7 +153,7 @@ fn test_invalid_signature() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid signature")
@@ -150,7 +179,7 @@ fn test_invalid_custom_data() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(invalid_custom_data),
+        &invalid_custom_data,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid custom data")
@@ -171,7 +200,7 @@ fn test_invalid_measurement() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[[0; 48]], // Different from MEASUREMENT
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid measurement")
@@ -192,7 +221,7 @@ fn test_invalid_chip_id() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[[0; 64]]), // Different from CHIP_ID
     )
     .expect_err("Verification should fail due to invalid chip ID")
@@ -221,7 +250,7 @@ fn test_invalid_certificate_chain() {
         &attestation_package,
         SevRootCertificateVerification::TestOnlySkipVerification,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid certificate chain")
@@ -247,7 +276,7 @@ fn test_invalid_root_certificate() {
         &attestation_package,
         SevRootCertificateVerification::Verify,
         &[MEASUREMENT],
-        &DerEncodedCustomData(CUSTOM_DATA),
+        &CUSTOM_DATA,
         Some(&[CHIP_ID]),
     )
     .expect_err("Verification should fail due to invalid root certificate")
@@ -261,5 +290,86 @@ fn test_invalid_root_certificate() {
                 if message.contains("does not match expected root certificate")
         ),
         "Expected error about unexpected root certificate, got {error:?}",
+    );
+}
+
+#[test]
+fn test_legacy_custom_data_accepted() {
+    let signer = FakeAttestationReportSigner::default();
+
+    let legacy_custom_data = CUSTOM_DATA
+        .encode_for_sev_legacy()
+        .expect("Failed to encode custom data in legacy format");
+
+    let attestation_report_bytes = AttestationReportBuilder::new()
+        .with_custom_data(legacy_custom_data)
+        .with_measurement(MEASUREMENT)
+        .with_chip_id(CHIP_ID)
+        .build_signed(&signer)
+        .to_bytes()
+        .unwrap();
+
+    let attestation_package = SevAttestationPackage {
+        attestation_report: Some(attestation_report_bytes.to_vec()),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: None,
+    };
+
+    verify_attestation_package(
+        &attestation_package,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+        &[MEASUREMENT],
+        &CUSTOM_DATA,
+        Some(&[CHIP_ID]),
+    )
+    .expect("Failed to verify attestation package with legacy custom data format");
+}
+
+#[test]
+fn test_legacy_custom_data_not_accepted_for_new_types() {
+    let signer = FakeAttestationReportSigner::default();
+
+    let legacy_custom_data = NEW_CUSTOM_DATA
+        .encode_for_sev_legacy()
+        .expect("Failed to encode custom data in legacy format");
+
+    let attestation_report_bytes = AttestationReportBuilder::new()
+        .with_custom_data(legacy_custom_data)
+        .with_measurement(MEASUREMENT)
+        .with_chip_id(CHIP_ID)
+        .build_signed(&signer)
+        .to_bytes()
+        .unwrap();
+
+    let attestation_package = SevAttestationPackage {
+        attestation_report: Some(attestation_report_bytes.to_vec()),
+        certificate_chain: Some(SevCertificateChain {
+            vcek_pem: Some(signer.get_vcek_pem()),
+            ask_pem: Some(signer.get_ask_pem()),
+            ark_pem: Some(signer.get_ark_pem()),
+        }),
+        custom_data_debug_info: None,
+    };
+
+    let error = verify_attestation_package(
+        &attestation_package,
+        SevRootCertificateVerification::TestOnlySkipVerification,
+        &[MEASUREMENT],
+        &NEW_CUSTOM_DATA,
+        Some(&[CHIP_ID]),
+    )
+    .expect_err(
+        "Verification should fail because legacy custom data format is not accepted for new types",
+    )
+    .detail
+    .unwrap();
+
+    assert!(
+        matches!(error, VerificationErrorDetail::InvalidCustomData { .. }),
+        "Expected InvalidCustomData error, got {error:?}",
     );
 }

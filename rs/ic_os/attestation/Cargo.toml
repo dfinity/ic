@@ -10,6 +10,7 @@ hex = { workspace = true }
 itertools = { workspace = true }
 pem = { workspace = true }
 prost = { workspace = true }
+rand = { workspace = true }
 ring = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sev = { workspace = true }
