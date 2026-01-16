@@ -123,7 +123,7 @@ pub fn test_on_subnets(env: TestEnv, subnets: Vec<SubnetSnapshot>) {
     // Step 5: Reboot all nodes and wait till they become reachable again.
     info!(log, "Rebooting all nodes ...");
     for n in all_nodes.iter().cloned() {
-        n.vm().reboot();
+        block_on(async { n.vm().await.reboot().await });
         assert_nodes_health_statuses(log.clone(), &[n], EndpointsStatus::AllUnhealthy);
     }
     info!(log, "Waiting for endpoints to be reachable again ...");

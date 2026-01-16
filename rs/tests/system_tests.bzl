@@ -25,6 +25,10 @@ def system_test(
         tags = [],
         test_timeout = "long",
         flaky = False,
+        enable_metrics = False,
+        prometheus_vm_required_host_features = [],
+        prometheus_vm_resources = default_vm_resources,
+        prometheus_vm_scrape_interval_secs = 10,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         colocated_test_driver_vm_enable_ipv4 = False,
@@ -52,6 +56,15 @@ def system_test(
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      enable_metrics: if True, a PrometheusVm will be spawned running both p8s (configured to scrape the testnet) & Grafana.
+      prometheus_vm_required_host_features: a list of strings specifying the required host features of the PrometheusVm.
+      prometheus_vm_resources: a structure describing the required resources of the PrometheusVm. For example:
+        {
+          "vcpus": 32,
+          "memory_kibibytes": 125000000,
+          "boot_image_minimal_size_gibibytes": 500,
+        }
+      prometheus_vm_scrape_interval_secs: the scrape interval in seconds for the PrometheusVm. Defaults to 10 seconds.
       colocated_test_driver_vm_resources: a structure describing
       the required resources of the colocated test-driver VM. For example:
         {
@@ -279,6 +292,21 @@ def system_test(
     for dep in _runtime_deps.values():  # Bazel 7.X does not have 'set()', Bazel 8 does
         if dep not in data:
             data.append(dep)
+
+    if enable_metrics:
+        extra_args_simple.append("--enable-metrics")
+
+        # For colocated tests we want to --enable-metrics in the colocated test-driver
+        # but we don't want to --enable-metrics in the wrapper test-driver (otherwise we would get two p8s VMs).
+        # To implement this we set the ENABLE_METRICS environment variable.
+        # The wrapper test-driver will then set --enable-metrics for the colocated test-driver if this variable is set.
+        env |= {"ENABLE_METRICS": "1"}
+
+    env |= {
+        "PROMETHEUS_VM_REQUIRED_HOST_FEATURES": json.encode(prometheus_vm_required_host_features),
+        "PROMETHEUS_VM_RESOURCES": json.encode(prometheus_vm_resources),
+        "PROMETHEUS_VM_SCRAPE_INTERVAL_SECS": json.encode(prometheus_vm_scrape_interval_secs),
+    }
 
     # RUN_SCRIPT_ICOS_IMAGES:
     # Have the run script resolve repo based ICOS images.

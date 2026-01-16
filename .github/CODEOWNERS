@@ -35,6 +35,8 @@ go.sum                    @dfinity/idx
 # [DevEnv]
 .vscode/                  @dfinity/idx
 
+.claude/                  @dfinity/idx
+
 # [Publishing-Artifacts]
 /publish/ @dfinity/idx
 
