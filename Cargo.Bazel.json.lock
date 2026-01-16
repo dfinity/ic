@@ -1,5 +1,5 @@
 {
-  "checksum": "f13e1458face2df2ff47416ff4fbf5541a26beaaf7466d8b6b5d9561e4346eea",
+  "checksum": "991e5c00c24de9899282a68470c1a616fd82bbaddaf05d1e1672c757615fed19",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -353,7 +353,7 @@
               "target": "httpdate"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -941,7 +941,7 @@
               "target": "impl_more"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -3066,14 +3066,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama 0.12.1": {
+    "askama 0.15.1": {
       "name": "askama",
-      "version": "0.12.1",
-      "package_url": "https://github.com/djc/askama",
+      "version": "0.15.1",
+      "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama/0.12.1/download",
-          "sha256": "b79091df18a97caea757e28cd2d5fda49c6cd4bd01ddffd7ff01ace0c0ad2c28"
+          "url": "https://static.crates.io/crates/askama/0.15.1/download",
+          "sha256": "bb7125972258312e79827b60c9eb93938334100245081cf701a2dee981b17427"
         }
       },
       "targets": [
@@ -3097,16 +3097,12 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
             "config",
             "default",
-            "dep_humansize",
-            "dep_num_traits",
-            "humansize",
-            "num-traits",
-            "percent-encoding",
-            "serde",
-            "serde-json",
+            "derive",
             "serde_json",
+            "std",
             "urlencode"
           ],
           "selects": {}
@@ -3114,18 +3110,8 @@
         "deps": {
           "common": [
             {
-              "id": "askama_escape 0.10.3",
-              "target": "askama_escape"
-            },
-            {
-              "id": "humansize 2.1.3",
-              "target": "humansize",
-              "alias": "dep_humansize"
-            },
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits",
-              "alias": "dep_num_traits"
+              "id": "itoa 1.0.17",
+              "target": "itoa"
             },
             {
               "id": "percent-encoding 2.3.1",
@@ -3142,17 +3128,17 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
+        "edition": "2024",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "askama_derive 0.12.2",
-              "target": "askama_derive"
+              "id": "askama_macros 0.15.1",
+              "target": "askama_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.12.1"
+        "version": "0.15.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -3161,19 +3147,19 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_derive 0.12.2": {
+    "askama_derive 0.15.1": {
       "name": "askama_derive",
-      "version": "0.12.2",
-      "package_url": "https://github.com/djc/askama",
+      "version": "0.15.1",
+      "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_derive/0.12.2/download",
-          "sha256": "9a0fc7dcf8bd4ead96b1d36b41df47c14beedf7b0301fc543d8f2384e66a2ec0"
+          "url": "https://static.crates.io/crates/askama_derive/0.15.1/download",
+          "sha256": "8ba5e7259a1580c61571e3116ebaaa01e3c001b2132b17c4cc5c70780ca3e994"
         }
       },
       "targets": [
         {
-          "ProcMacro": {
+          "Library": {
             "crate_name": "askama_derive",
             "crate_root": "src/lib.rs",
             "srcs": {
@@ -3192,12 +3178,12 @@
         ],
         "crate_features": {
           "common": [
-            "basic-toml",
+            "alloc",
             "config",
-            "humansize",
-            "num-traits",
-            "serde",
-            "serde-json",
+            "external-sources",
+            "proc-macro",
+            "serde_json",
+            "std",
             "urlencode"
           ],
           "selects": {}
@@ -3205,7 +3191,7 @@
         "deps": {
           "common": [
             {
-              "id": "askama_parser 0.1.1",
+              "id": "askama_parser 0.15.1",
               "target": "askama_parser",
               "alias": "parser"
             },
@@ -3214,12 +3200,8 @@
               "target": "basic_toml"
             },
             {
-              "id": "mime 0.3.17",
-              "target": "mime"
-            },
-            {
-              "id": "mime_guess 2.0.4",
-              "target": "mime_guess"
+              "id": "memchr 2.7.4",
+              "target": "memchr"
             },
             {
               "id": "proc-macro2 1.0.103",
@@ -3228,6 +3210,10 @@
             {
               "id": "quote 1.0.42",
               "target": "quote"
+            },
+            {
+              "id": "rustc-hash 2.1.1",
+              "target": "rustc_hash"
             },
             {
               "id": "serde 1.0.228",
@@ -3240,30 +3226,39 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.12.2"
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_derive 1.0.228",
+              "target": "serde_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.15.1"
       },
-      "license": "MIT/Apache-2.0",
+      "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_escape 0.10.3": {
-      "name": "askama_escape",
-      "version": "0.10.3",
-      "package_url": "https://github.com/djc/askama",
+    "askama_macros 0.15.1": {
+      "name": "askama_macros",
+      "version": "0.15.1",
+      "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_escape/0.10.3/download",
-          "sha256": "619743e34b5ba4e9703bba34deac3427c72507c7159f5fd030aea8cac0cfe341"
+          "url": "https://static.crates.io/crates/askama_macros/0.15.1/download",
+          "sha256": "236ce20b77cb13506eaf5024899f4af6e12e8825f390bd943c4c37fd8f322e46"
         }
       },
       "targets": [
         {
-          "Library": {
-            "crate_name": "askama_escape",
+          "ProcMacro": {
+            "crate_name": "askama_macros",
             "crate_root": "src/lib.rs",
             "srcs": {
               "allow_empty": true,
@@ -3274,19 +3269,32 @@
           }
         }
       ],
-      "library_target_name": "askama_escape",
+      "library_target_name": "askama_macros",
       "common_attrs": {
         "compile_data_glob": [
           "**"
         ],
         "crate_features": {
           "common": [
-            "json"
+            "alloc",
+            "config",
+            "serde_json",
+            "std",
+            "urlencode"
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.10.3"
+        "deps": {
+          "common": [
+            {
+              "id": "askama_derive 0.15.1",
+              "target": "askama_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.15.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -3295,14 +3303,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "askama_parser 0.1.1": {
+    "askama_parser 0.15.1": {
       "name": "askama_parser",
-      "version": "0.1.1",
-      "package_url": "https://github.com/djc/askama",
+      "version": "0.15.1",
+      "package_url": "https://github.com/askama-rs/askama",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/askama_parser/0.1.1/download",
-          "sha256": "c268a96e01a4c47c8c5c2472aaa570707e006a875ea63e819f75474ceedaf7b4"
+          "url": "https://static.crates.io/crates/askama_parser/0.15.1/download",
+          "sha256": "f3c63392767bb2df6aa65a6e1e3b80fd89bb7af6d58359b924c0695620f1512e"
         }
       },
       "targets": [
@@ -3324,24 +3332,51 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "config"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
-              "id": "nom 7.1.3",
-              "target": "nom"
+              "id": "rustc-hash 2.1.1",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "unicode-ident 1.0.22",
+              "target": "unicode_ident"
+            },
+            {
+              "id": "winnow 0.7.14",
+              "target": "winnow"
             }
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.1.1"
+        "edition": "2024",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "serde_derive 1.0.228",
+              "target": "serde_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.15.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
         "Apache-2.0",
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE-APACHE"
     },
     "asn1-rs 0.6.1": {
       "name": "asn1-rs",
@@ -5173,7 +5208,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -5354,7 +5389,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -14696,7 +14731,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -18019,7 +18054,7 @@
               "target": "dtoa_short"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -18189,7 +18224,7 @@
               "target": "csv_core"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -21215,7 +21250,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "askama 0.12.1",
+              "id": "askama 0.15.1",
               "target": "askama"
             },
             {
@@ -33108,7 +33143,7 @@
               "target": "fnv"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             }
           ],
@@ -33171,7 +33206,7 @@
               "target": "fnv"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             }
           ],
@@ -33479,54 +33514,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "humansize 2.1.3": {
-      "name": "humansize",
-      "version": "2.1.3",
-      "package_url": "https://github.com/LeopoldArkham/humansize",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/humansize/2.1.3/download",
-          "sha256": "6cb51c9a029ddc91b07a787f1d86b53ccfa49b0e86688c946ebe8d3555685dd7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "humansize",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "humansize",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libm 0.2.15",
-              "target": "libm"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.1.3"
-      },
-      "license": "MIT/Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "humantime 2.2.0": {
       "name": "humantime",
       "version": "2.2.0",
@@ -33701,7 +33688,7 @@
               "target": "httpdate"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -33819,7 +33806,7 @@
               "target": "httpdate"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -40960,7 +40947,7 @@
               "target": "is_terminal"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -41074,7 +41061,7 @@
               "target": "indexmap"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -42431,14 +42418,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "itoa 1.0.9": {
+    "itoa 1.0.17": {
       "name": "itoa",
-      "version": "1.0.9",
+      "version": "1.0.17",
       "package_url": "https://github.com/dtolnay/itoa",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/itoa/1.0.9/download",
-          "sha256": "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
+          "url": "https://static.crates.io/crates/itoa/1.0.17/download",
+          "sha256": "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
         }
       },
       "targets": [
@@ -42460,8 +42447,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2018",
-        "version": "1.0.9"
+        "edition": "2021",
+        "version": "1.0.17"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -42941,7 +42928,7 @@
               "target": "idna"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -51931,7 +51918,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             }
           ],
@@ -60257,7 +60244,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "unicode-ident 1.0.11",
+              "id": "unicode-ident 1.0.22",
               "target": "unicode_ident"
             }
           ],
@@ -68131,7 +68118,7 @@
               "target": "syn"
             },
             {
-              "id": "unicode-ident 1.0.11",
+              "id": "unicode-ident 1.0.22",
               "target": "unicode_ident"
             }
           ],
@@ -72866,6 +72853,7 @@
         ],
         "crate_features": {
           "common": [
+            "alloc",
             "arbitrary_precision",
             "default",
             "raw_value",
@@ -72877,7 +72865,7 @@
         "deps": {
           "common": [
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -72959,7 +72947,7 @@
         "deps": {
           "common": [
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -73179,7 +73167,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -73686,7 +73674,7 @@
               "target": "indexmap"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -73750,7 +73738,7 @@
               "target": "indexmap"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -78247,7 +78235,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "unicode-ident 1.0.11",
+              "id": "unicode-ident 1.0.22",
               "target": "unicode_ident"
             }
           ],
@@ -78342,7 +78330,7 @@
               "target": "quote"
             },
             {
-              "id": "unicode-ident 1.0.11",
+              "id": "unicode-ident 1.0.22",
               "target": "unicode_ident"
             }
           ],
@@ -81164,7 +81152,7 @@
               "target": "deranged"
             },
             {
-              "id": "itoa 1.0.9",
+              "id": "itoa 1.0.17",
               "target": "itoa"
             },
             {
@@ -86510,14 +86498,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "unicode-ident 1.0.11": {
+    "unicode-ident 1.0.22": {
       "name": "unicode-ident",
-      "version": "1.0.11",
+      "version": "1.0.22",
       "package_url": "https://github.com/dtolnay/unicode-ident",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/unicode-ident/1.0.11/download",
-          "sha256": "301abaae475aa91687eb82514b328ab47a211a533026cb25fc3e519b86adfc3c"
+          "url": "https://static.crates.io/crates/unicode-ident/1.0.22/download",
+          "sha256": "9312f7c4f6ff9069b165498234ce8be658059c6728633667c526e27dc2cf1df5"
         }
       },
       "targets": [
@@ -86540,13 +86528,13 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.0.11"
+        "version": "1.0.22"
       },
-      "license": "(MIT OR Apache-2.0) AND Unicode-DFS-2016",
+      "license": "(MIT OR Apache-2.0) AND Unicode-3.0",
       "license_ids": [
         "Apache-2.0",
         "MIT",
-        "Unicode-DFS-2016"
+        "Unicode-3.0"
       ],
       "license_file": "LICENSE-APACHE"
     },
@@ -89181,7 +89169,7 @@
         "deps": {
           "common": [
             {
-              "id": "unicode-ident 1.0.11",
+              "id": "unicode-ident 1.0.22",
               "target": "unicode_ident"
             },
             {
@@ -95924,6 +95912,62 @@
       ],
       "license_file": "LICENSE-MIT"
     },
+    "winnow 0.7.14": {
+      "name": "winnow",
+      "version": "0.7.14",
+      "package_url": "https://github.com/winnow-rs/winnow",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/winnow/0.7.14/download",
+          "sha256": "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "winnow",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "winnow",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "default",
+            "simd",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.14"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE-MIT"
+    },
     "winreg 0.50.0": {
       "name": "winreg",
       "version": "0.50.0",
@@ -98367,7 +98411,7 @@
     "arbitrary 1.4.2",
     "arc-swap 1.7.1",
     "arrayvec 0.7.4",
-    "askama 0.12.1",
+    "askama 0.15.1",
     "assert-json-diff 2.0.2",
     "assert_cmd 2.0.16",
     "assert_matches 1.5.0",
