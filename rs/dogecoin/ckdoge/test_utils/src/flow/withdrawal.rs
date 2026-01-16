@@ -501,10 +501,6 @@ where
     }
 
     fn ensure_fee_rate_increase(&self, old_txid: &Txid, new_txid: &Txid) {
-        println!(
-            "Checking that fee rate increased for transaction {} -> {}",
-            old_txid, new_txid
-        );
         let minter = self.setup.as_ref().minter();
 
         let sent_old_tx_event = minter.assert_that_events().extract_exactly_one(|event| {
