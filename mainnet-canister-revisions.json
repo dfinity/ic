@@ -159,6 +159,10 @@
     "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
   },
+  "subnet_rental": {
+    "sha256": "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
+    "tag": "0.2.0"
+  },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
     "sha256": "dad7d704719615f9dc5165ce195b57abfa75a712034d703c5d46a6aec267bdd0"
