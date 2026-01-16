@@ -1,4 +1,5 @@
 use crate::{OutPoint, Txid, Utxo};
+use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::{Satoshi, state::utxos::UtxoSet};
 use proptest::collection::SizeRange;
 use proptest::prelude::Just;
@@ -37,6 +38,10 @@ pub fn utxo_set(
                 })
                 .collect::<UtxoSet>()
         })
+}
+
+pub fn fee_rate(rates: impl Strategy<Value = u64>) -> impl Strategy<Value = FeeRate> {
+    rates.prop_map(FeeRate::from_millis_per_byte)
 }
 
 fn txid() -> impl Strategy<Value = Txid> {

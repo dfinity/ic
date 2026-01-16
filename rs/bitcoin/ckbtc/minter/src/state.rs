@@ -25,6 +25,7 @@ use crate::reimbursement::{
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
@@ -185,7 +186,7 @@ pub struct SubmittedBtcTransaction {
     pub change_output: Option<ChangeOutput>,
     /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
     /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
-    pub effective_fee_per_vbyte: Option<u64>,
+    pub effective_fee_per_vbyte: Option<FeeRate>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
     /// Signed transaction if included.
@@ -537,10 +538,10 @@ pub struct CkBtcMinterState {
     /// The mode in which the minter runs.
     pub mode: Mode,
 
-    pub last_fee_per_vbyte: Vec<u64>,
+    pub last_fee_per_vbyte: Vec<FeeRate>,
 
     /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
-    pub last_median_fee_per_vbyte: Option<u64>,
+    pub last_median_fee_per_vbyte: Option<FeeRate>,
 
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
@@ -1999,8 +2000,8 @@ impl From<InitArgs> for CkBtcMinterState {
             is_timer_running: false,
             is_distributing_fee: false,
             mode: args.mode,
-            last_fee_per_vbyte: vec![1; 100],
-            last_median_fee_per_vbyte: Some(1),
+            last_fee_per_vbyte: vec![FeeRate::from_millis_per_byte(1); 100],
+            last_median_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1)),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),

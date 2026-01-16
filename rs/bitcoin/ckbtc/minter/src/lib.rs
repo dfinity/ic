@@ -21,12 +21,12 @@ use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
 use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
 use crate::state::utxos::UtxoSet;
 use crate::state::{CkBtcMinterState, mutate_state, read_state};
-use crate::tx::{BitcoinTransactionSigner, SignedRawTransaction, UnsignedTransaction};
+use crate::tx::{BitcoinTransactionSigner, FeeRate, SignedRawTransaction, UnsignedTransaction};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_checker::{CheckAddressArgs, CheckAddressResponse};
-pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, Utxo};
+pub use ic_btc_interface::{OutPoint, Page, Satoshi, Txid, Utxo};
 
 pub mod address;
 pub mod dashboard;
@@ -223,9 +223,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
-    runtime: &R,
-) -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(runtime: &R) -> Option<FeeRate> {
     let btc_network = state::read_state(|s| s.btc_network);
     match runtime
         .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
@@ -241,7 +239,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
                         fee_estimator.fee_based_minimum_withdrawal_amount(median_fee);
                     log!(
                         Priority::Debug,
-                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
+                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee:?} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
                     );
                     mutate_state(|s| {
                         s.last_fee_per_vbyte = fees;
@@ -267,9 +265,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
 /// Returns an estimate for transaction fees in the 25th percentile in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_25th_fee_per_vbyte<R: CanisterRuntime>(
-    runtime: &R,
-) -> Option<MillisatoshiPerByte> {
+pub async fn estimate_25th_fee_per_vbyte<R: CanisterRuntime>(runtime: &R) -> Option<FeeRate> {
     let btc_network = state::read_state(|s| s.btc_network);
     match runtime
         .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
@@ -583,7 +579,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 used_utxos,
                 change_output: Some(req.change_output),
                 submitted_at: runtime.time(),
-                effective_fee_per_vbyte: Some(fee_rate.millis()),
+                effective_fee_per_vbyte: Some(fee_rate),
                 withdrawal_fee: Some(total_fee),
                 signed_tx,
             },
@@ -807,7 +803,7 @@ pub async fn resubmit_transactions<
     Fee: FeeEstimator,
 >(
     key_name: &str,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     main_address: BitcoinAddress,
     ecdsa_public_key: ECDSAPublicKey,
     btc_network: Network,
@@ -864,9 +860,9 @@ pub async fn resubmit_transactions<
             Some(prev_fee) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
-                fee_per_vbyte.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
+                fee_rate.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
-            None => fee_per_vbyte,
+            None => fee_rate,
         };
 
         let outputs = match &submitted_tx.requests {
@@ -928,7 +924,7 @@ pub async fn resubmit_transactions<
                     outputs,
                     &main_address,
                     max_num_inputs_in_transaction,
-                    fee_per_vbyte, // Use normal fee
+                    fee_rate, // Use normal fee
                     fee_estimator,
                 )
             }
@@ -1003,7 +999,7 @@ pub async fn resubmit_transactions<
                     txid: new_txid,
                     submitted_at: runtime.time(),
                     change_output: Some(change_output),
-                    effective_fee_per_vbyte: Some(fee_rate.millis()),
+                    effective_fee_per_vbyte: Some(fee_rate),
                     withdrawal_fee: Some(total_fee),
                     // Do not fill signed_tx because this is not a consolidation transaction
                     signed_tx: None,
@@ -1184,7 +1180,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     fee_estimator: &F,
 ) -> Result<
     (
@@ -1206,7 +1202,7 @@ pub fn build_unsigned_transaction<F: FeeEstimator>(
         outputs,
         main_address,
         max_num_inputs_in_transaction,
-        fee_per_vbyte,
+        fee_rate,
         fee_estimator,
     ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
@@ -1225,7 +1221,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: &BitcoinAddress,
     max_num_inputs_in_transaction: usize,
-    fee_per_vbyte: u64,
+    fee_rate: FeeRate,
     fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     #[cfg(feature = "canbench-rs")]
@@ -1298,7 +1294,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
         lock_time: 0,
     };
 
-    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_per_vbyte);
+    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_rate);
 
     if fee + minter_fee > amount {
         return Err(BuildTxError::AmountTooLow);
@@ -1381,7 +1377,7 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
 pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
-    median_fee_millisatoshi_per_vbyte: u64,
+    median_fee_millisatoshi_per_vbyte: FeeRate,
     max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
@@ -1619,7 +1615,7 @@ pub trait CanisterRuntime {
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
-    ) -> Result<Vec<u64>, CallError>;
+    ) -> Result<Vec<FeeRate>, CallError>;
 
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
@@ -1691,7 +1687,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
-    ) -> Result<Vec<u64>, CallError> {
+    ) -> Result<Vec<FeeRate>, CallError> {
         management::bitcoin_get_current_fee_percentiles(request).await
     }
 

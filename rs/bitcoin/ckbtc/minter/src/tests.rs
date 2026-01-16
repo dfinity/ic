@@ -258,7 +258,7 @@ fn should_have_same_input_and_output_count() {
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
-    let fee_per_vbyte = 10000;
+    let fee_per_vbyte = FeeRate::from_millis_per_byte(10000);
 
     let fee_estimator = bitcoin_fee_estimator();
     let (tx, change_output, _, _) = build_unsigned_transaction(
@@ -306,7 +306,7 @@ fn test_min_change_amount() {
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
-    let fee_per_vbyte = 10000;
+    let fee_per_vbyte = FeeRate::from_millis_per_byte(10000);
 
     let fee_estimator = bitcoin_fee_estimator();
     let (tx, change_output, _, _) = build_unsigned_transaction(
@@ -323,7 +323,7 @@ fn test_min_change_amount() {
     .expect("failed to build a transaction");
     let change_value = 1;
 
-    let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
+    let fee = fee_per_vbyte.fee_ceil(fake_sign(&tx).vsize() as u64);
     let minter_fee =
         fee_estimator.evaluate_minter_fee(tx.inputs.len() as u64, tx.outputs.len() as u64);
 
@@ -383,7 +383,7 @@ fn test_no_dust_outputs() {
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
 
     for dust in 0..=P2PKH_DUST_THRESHOLD {
-        let fee_per_vbyte = 10000;
+        let fee_per_vbyte = FeeRate::from_millis_per_byte(10000);
         assert_eq!(
             build_bitcoin_unsigned_transaction(
                 &mut available_utxos,
@@ -398,7 +398,7 @@ fn test_no_dust_outputs() {
         );
         assert_eq!(available_utxos, initial_available_utxos);
 
-        let fee_per_vbyte = 4000;
+        let fee_per_vbyte = FeeRate::from_millis_per_byte(4000);
         assert_eq!(
             build_bitcoin_unsigned_transaction(
                 &mut available_utxos,
@@ -428,7 +428,7 @@ fn test_no_dust_in_change_output() {
 
     let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
     let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
-    let fee_per_vbyte = 1;
+    let fee_per_vbyte = FeeRate::from_millis_per_byte(1);
 
     let fee_estimator = bitcoin_fee_estimator();
     for change in 1..=100 {
@@ -607,7 +607,7 @@ proptest! {
         mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        fee_per_vbyte in 1000..2000u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -651,7 +651,7 @@ proptest! {
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         target in 50000..100000u64,
-        fee_per_vbyte in 1000..2000u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -673,7 +673,7 @@ proptest! {
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
         target in 50000..100000u64,
-        fee_per_vbyte in 1000..2000u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
@@ -723,7 +723,7 @@ proptest! {
         mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        fee_per_vbyte in 1000..2000u64,
+        fee_per_vbyte in arbitrary::fee_rate(1000..2000u64),
     ) {
         let utxos_copy = utxos.clone();
 
@@ -816,7 +816,7 @@ proptest! {
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos::<CheckInvariantsImpl>(accounts[acc_idx], vec![utxo]);
         }
-        let fee_per_vbyte = 100_000u64;
+        let fee_per_vbyte = FeeRate::from_millis_per_byte(100_000);
 
         let (tx, change_output, withdrawal_fee, used_utxos) = build_bitcoin_unsigned_transaction(
             &mut state.available_utxos,
@@ -837,7 +837,7 @@ proptest! {
             used_utxos: used_utxos.clone(),
             submitted_at,
             change_output: Some(change_output),
-            effective_fee_per_vbyte: Some(fee_rate.millis()),
+            effective_fee_per_vbyte: Some(fee_rate),
             withdrawal_fee: Some(withdrawal_fee),
             signed_tx: None,
         });
@@ -851,7 +851,7 @@ proptest! {
                 &mut used_utxos.clone().into_iter().collect(),
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
-                fee_per_vbyte + 1000 * i as u64,
+                fee_per_vbyte + FeeRate::from_millis_per_byte(1000 * i as u64),
             )
             .expect("failed to build transaction");
             let new_signed_tx = fake_sign(&tx);
@@ -865,7 +865,7 @@ proptest! {
                 used_utxos: used_utxos.clone(),
                 submitted_at,
                 change_output: Some(change_output),
-                effective_fee_per_vbyte: Some(new_fee_rate.millis()),
+                effective_fee_per_vbyte: Some(new_fee_rate),
                 withdrawal_fee: Some(withdrawal_fee),
                 signed_tx: None,
             });
@@ -1015,7 +1015,7 @@ proptest! {
     fn test_fee_range(
         mut utxos in arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40),
         amount in 0_u64..15_000, //can be covered by UTXOs
-        fee_per_vbyte in 2000..10000u64,
+        fee_per_vbyte in arbitrary::fee_rate(2000..10000u64),
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT;
@@ -1023,7 +1023,7 @@ proptest! {
         let fee_estimator = bitcoin_fee_estimator();
         let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
         let estimate = estimate_retrieve_btc_fee(&mut utxos, amount, fee_per_vbyte, DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, &fee_estimator).unwrap();
-        let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
+        let lower_bound = MIN_MINTER_FEE + fee_per_vbyte.fee_ceil(SMALLEST_TX_SIZE_VBYTES) ;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
             estimate_amount >= lower_bound,
@@ -1225,7 +1225,7 @@ fn test_build_consolidation_transaction() {
 
     let main_address = BitcoinAddress::P2wpkhV0([0; 20]);
     let fee_estimator = bitcoin_fee_estimator();
-    let fee_millisatoshi_per_vbyte = 10;
+    let fee_millisatoshi_per_vbyte = FeeRate::from_millis_per_byte(10);
 
     // Randomly generate a utxo set from proptest strategy
     let strategy = arbitrary::utxo_set(1_000_000u64..1_000_000_000, 1000..2000);

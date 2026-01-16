@@ -10,6 +10,7 @@ use crate::state::{
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use crate::storage::EventIterator;
+use crate::tx::FeeRate;
 use candid::Principal;
 pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
@@ -441,7 +442,8 @@ impl EventLogger for CkBtcEventLogger {
                         requests,
                         txid,
                         used_utxos: utxos,
-                        effective_fee_per_vbyte,
+                        effective_fee_per_vbyte: effective_fee_per_vbyte
+                            .map(FeeRate::from_millis_per_byte),
                         change_output,
                         submitted_at,
                         withdrawal_fee,
@@ -507,7 +509,9 @@ impl EventLogger for CkBtcEventLogger {
                             used_utxos: new_utxos.unwrap_or(old_utxos),
                             change_output: Some(change_output),
                             submitted_at,
-                            effective_fee_per_vbyte: Some(effective_fee_per_vbyte),
+                            effective_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(
+                                effective_fee_per_vbyte,
+                            )),
                             withdrawal_fee,
                             signed_tx: None,
                         },

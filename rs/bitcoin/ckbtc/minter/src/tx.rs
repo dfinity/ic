@@ -10,6 +10,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 use std::num::NonZeroU32;
+use std::ops::Add;
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
@@ -385,7 +386,7 @@ impl AsRef<[u8]> for SignedRawTransaction {
 }
 
 /// Fee rate in millis base unit per (v)byte.
-#[derive(Copy, Eq, PartialEq, Debug, Clone)]
+#[derive(Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Clone)]
 pub struct FeeRate(u64);
 
 impl FeeRate {
@@ -398,7 +399,7 @@ impl FeeRate {
         Self((fee * 1_000).div_ceil(signed_tx_len.get() as u64))
     }
 
-    pub fn from_millis_per_byte(millis_per_byte: u64) -> Self {
+    pub const fn from_millis_per_byte(millis_per_byte: u64) -> Self {
         Self(millis_per_byte)
     }
 
@@ -413,7 +414,7 @@ impl FeeRate {
     /// let fee_rate = FeeRate::from_tx_ceil(42_300, NonZeroU32::new(141).unwrap());
     /// assert_eq!(fee_rate.millis(), 300_000);
     /// ```
-    pub fn millis(&self) -> u64 {
+    pub fn millis(self) -> u64 {
         self.0
     }
 
@@ -431,8 +432,16 @@ impl FeeRate {
     /// let fee_rate = FeeRate::from_millis_per_byte(999);
     /// assert_eq!(fee_rate.fee_ceil(signed_tx_len), 141);
     /// ```
-    pub fn fee_ceil(&self, signed_tx_len: impl Into<u64>) -> u64 {
-        (signed_tx_len.into() * self.0).div_ceil(1_000)
+    pub fn fee_ceil(&self, signed_tx_len: u64) -> u64 {
+        (signed_tx_len * self.0).div_ceil(1_000)
+    }
+}
+
+impl Add for FeeRate {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0.saturating_add(rhs.0))
     }
 }
 

@@ -12,7 +12,6 @@ pub mod transaction;
 pub mod updates;
 
 use crate::address::DogecoinAddress;
-use crate::dogecoin_canister::MillikoinuPerByte;
 use crate::event::CkDogeEventLogger;
 use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
@@ -69,9 +68,14 @@ impl CanisterRuntime for DogeCanisterRuntime {
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
-    ) -> Result<Vec<MillikoinuPerByte>, CallError> {
+    ) -> Result<Vec<FeeRate>, CallError> {
         dogecoin_canister::dogecoin_get_fee_percentiles(request)
             .await
+            .map(|fees| {
+                fees.into_iter()
+                    .map(FeeRate::from_millis_per_byte)
+                    .collect()
+            })
             .map_err(|err| CallError::from_cdk_call_error("dogecoin_get_fee_percentiles", err))
     }
 
