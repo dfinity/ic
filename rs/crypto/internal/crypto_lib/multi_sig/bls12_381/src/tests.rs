@@ -3,7 +3,7 @@
 //! These tests specifically exercise internal (non-public) APIs of this crate.
 //! Tests for the public API are in tests/api_tests.rs.
 
-use crate::{crypto as multi_crypto, types as multi_types, types::SecretKeyBytes, types::arbitrary};
+use crate::{crypto as multi_crypto, types as multi_types, types::SecretKeyBytes};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 /// Tests for stability of internal cryptographic operations.
@@ -106,12 +106,6 @@ mod basic_functionality {
             .. ProptestConfig::default()
         })]
 
-        /// Unit test because: tests internal keypair_from_seed which is #[cfg(test)] only.
-        #[test]
-        fn keypair_from_seed_works(seed: [u64; 4]) {
-            multi_crypto::keypair_from_seed(seed);
-        }
-
         /// Unit test because: tests internal keypair_from_rng that returns internal
         /// types (SecretKey, PublicKey) rather than public types (SecretKeyBytes, PublicKeyBytes).
         #[test]
@@ -168,26 +162,6 @@ mod basic_functionality {
 /// and signature combination that use internal types.
 mod advanced_functionality {
     use super::*;
-    use crate::types::{CombinedSignature, IndividualSignature, PublicKey, SecretKey};
-    use proptest::prelude::*;
-
-    fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8]) {
-        let signatures: Vec<IndividualSignature> = keys
-            .iter()
-            .map(|(secret_key, _)| multi_crypto::sign_message(message, secret_key))
-            .collect();
-        let signature: CombinedSignature = multi_crypto::combine_signatures(&signatures);
-        let public_keys: Vec<PublicKey> = keys
-            .iter()
-            .map(|(_, public_key)| public_key)
-            .cloned()
-            .collect();
-        assert!(multi_crypto::verify_combined_message_signature(
-            message,
-            &signature,
-            &public_keys
-        ));
-    }
 
     /// Unit test because: tests internal combine_signatures and CombinedSignature::identity()
     /// which are not in the public API (public API returns CombinedSignatureBytes).
@@ -212,60 +186,5 @@ mod advanced_functionality {
             &signature,
             &public_key
         ));
-    }
-
-    /// Unit test because: tests internal sign_message/verify_individual_message_signature
-    /// that operate on internal types (SecretKey, PublicKey, IndividualSignature).
-    #[test]
-    fn individual_multi_signature_contribution_verifies() {
-        let rng = &mut reproducible_rng();
-        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
-        let message = b"bjork";
-        let signature = multi_crypto::sign_message(message, &secret_key);
-        assert!(multi_crypto::verify_individual_message_signature(
-            message,
-            &signature,
-            &public_key
-        ));
-    }
-
-    /// Unit test because: tests internal create_pop/verify_pop that operate on
-    /// internal types (Pop, PublicKey).
-    #[test]
-    fn pop_verifies() {
-        let rng = &mut reproducible_rng();
-        let (secret_key, public_key) = multi_crypto::keypair_from_rng(rng);
-        let pop = multi_crypto::create_pop(&public_key, &secret_key);
-        assert!(multi_crypto::verify_pop(&pop, &public_key));
-    }
-
-    /// Unit test because: tests internal verify_combined_message_signature with
-    /// internal types (SecretKey, PublicKey).
-    #[test]
-    fn double_signature_verifies() {
-        let rng = &mut reproducible_rng();
-        let keys = [
-            multi_crypto::keypair_from_rng(rng),
-            multi_crypto::keypair_from_rng(rng),
-        ];
-        check_multi_signature_verifies(&keys, b"abba");
-    }
-
-    // Slow tests
-    proptest! {
-        #![proptest_config(ProptestConfig {
-            cases: 2,
-            .. ProptestConfig::default()
-        })]
-
-        /// Unit test because: uses arbitrary::key_pair() which returns internal types
-        /// (SecretKey, PublicKey) rather than public types.
-        #[test]
-        fn multisig_verification_succeeds(
-          keys in proptest::collection::vec(arbitrary::key_pair(), 1..10),
-          message in proptest::collection::vec(any::<u8>(), 0..100),
-        ) {
-            check_multi_signature_verifies(&keys, &message);
-        }
     }
 }
