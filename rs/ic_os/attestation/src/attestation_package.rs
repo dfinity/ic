@@ -1,5 +1,8 @@
+use crate::SevCertificateChain;
 use crate::custom_data::EncodeSevCustomData;
-use crate::{SevAttestationPackage, SevCertificateChain};
+use crate::verification::{
+    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use anyhow::{Context, Result, anyhow, bail};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
@@ -13,7 +16,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
     sev_firmware: &mut dyn SevGuestFirmware,
     trusted_execution_environment_config: &TrustedExecutionEnvironmentConfig,
     custom_data: &T,
-) -> Result<SevAttestationPackage> {
+) -> Result<ParsedSevAttestationPackage> {
     let custom_data_bytes = if T::needs_legacy_encoding() {
         // TODO(NODE-1784): Move to new SEV encoding once clients are updated
         custom_data.encode_for_sev_legacy()?
@@ -23,24 +26,52 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
     let attestation_report = sev_firmware
         .get_report(None, Some(custom_data_bytes), None)
         .context("Failed to get attestation report from SEV firmware")?;
-    let parsed_attestation_report = AttestationReport::from_bytes(&attestation_report);
-    if let Err(err) = parsed_attestation_report {
-        // Fail in debug mode, but only print a warning in release mode.
-        debug_assert!(
-            false,
-            "Own generated attestation report could not be parsed: {err:?}"
-        );
-        eprintln!("Own generated attestation report could not be parsed: {err:?}",);
+
+    let attestation_report = AttestationReport::from_bytes(&attestation_report)
+        .context("Failed to parse attestation report")?;
+    let certificate_chain = certificate_chain_from_config(trusted_execution_environment_config)
+        .context("Failed to get SEV certificate chain")?;
+    let custom_data_debug_info = format!("{custom_data:?}");
+
+    // To ensure that the host did not tamper with the attestation report, verify the attestation
+    // report acquired from the SEV firmware. However, we may want to deliberately generate invalid
+    // attestation packages in tests.
+    // We can query the sev firmware object to determine if we should expect an invalid attestation.
+    let mut package = if sev_firmware.generates_report_with_wrong_signature() {
+        Ok(
+            ParsedSevAttestationPackage::new_with_unverified_certificate_chain(
+                attestation_report,
+                certificate_chain,
+                custom_data_debug_info,
+            ),
+        )
+    } else {
+        let sev_root_certificate_verification =
+            if sev_firmware.generates_report_with_fake_root_cert() {
+                SevRootCertificateVerification::TestOnlySkipVerification
+            } else {
+                SevRootCertificateVerification::Verify
+            };
+
+        ParsedSevAttestationPackage::new(
+            attestation_report,
+            certificate_chain,
+            sev_root_certificate_verification,
+            custom_data_debug_info,
+        )
+    };
+
+    if !sev_firmware.generates_report_with_wrong_custom_data() {
+        package = package.verify_custom_data(custom_data);
     }
 
-    Ok(SevAttestationPackage {
-        attestation_report: Some(attestation_report),
-        certificate_chain: Some(
-            certificate_chain_from_config(trusted_execution_environment_config)
-                .context("Failed to get SEV certificate chain")?,
-        ),
-        custom_data_debug_info: format!("{custom_data_bytes:?}").into(),
-    })
+    package
+        .context("Attestation report from firmware is invalid")
+        // Likely programming error so panic in debug mode
+        .inspect_err(|_err| {
+            #[cfg(all(debug_assertions, not(test)))]
+            panic!("{_err:?}")
+        })
 }
 
 fn certificate_chain_from_config(
@@ -74,4 +105,80 @@ fn certificate_chain_from_config(
         ask_pem: Some(ask_pem),
         ark_pem: Some(ark_pem),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::custom_data::SevCustomDataNamespace;
+    use crate::verification::AttestationVerifier;
+    use ic_sev::guest::custom_data::SevCustomData;
+    use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+    use rand::SeedableRng;
+
+    #[test]
+    fn test_generate_attestation_package_success() {
+        let custom_data = SevCustomData::random(
+            SevCustomDataNamespace::Test,
+            &mut rand::rngs::SmallRng::seed_from_u64(0),
+        );
+        let mut firmware = MockSevGuestFirmwareBuilder::new()
+            .with_signer(Some(FakeAttestationReportSigner::default()))
+            .build();
+        let config = TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),
+        };
+
+        let result = generate_attestation_package(&mut firmware, &config, &custom_data);
+
+        assert!(result.is_ok());
+        assert!(result.unwrap().verify_custom_data(&custom_data).is_ok());
+    }
+
+    #[test]
+    fn test_generate_attestation_package_with_wrong_custom_data() {
+        let custom_data =
+            SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::thread_rng());
+        let signer = FakeAttestationReportSigner::default();
+
+        let config = TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem: signer.get_certificate_chain_pem(),
+        };
+
+        let mut firmware = MockSevGuestFirmwareBuilder::new()
+            .with_custom_data_override(Some([99u8; 64]))
+            .with_signer(Some(signer))
+            // We make the mock firmware claim that it generates valid custom data, but it doesn't
+            // so the attestation package verification will fail.
+            .with_generates_report_with_wrong_custom_data(false)
+            .build();
+
+        let result = generate_attestation_package(&mut firmware, &config, &custom_data);
+        assert!(
+            format!("{:?}", result.as_ref().unwrap_err()).contains("InvalidCustomData"),
+            "{result:?}",
+        );
+    }
+
+    #[test]
+    fn test_generate_attestation_package_with_wrong_signature() {
+        let custom_data =
+            SevCustomData::random(SevCustomDataNamespace::Test, &mut rand::thread_rng());
+
+        let config = TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem: FakeAttestationReportSigner::default().get_certificate_chain_pem(),
+        };
+
+        let mut firmware = MockSevGuestFirmwareBuilder::new()
+            // We make the mock firmware claim that it generates valid signatures, but it doesn't
+            // (we don't pass the signer) so the attestation package verification will fail.
+            .with_generates_report_with_wrong_signature(false)
+            .build();
+
+        let result = generate_attestation_package(&mut firmware, &config, &custom_data);
+        assert!(
+            format!("{:?}", result.as_ref().unwrap_err()).contains("InvalidSignature"),
+            "{result:?}",
+        );
+    }
 }
