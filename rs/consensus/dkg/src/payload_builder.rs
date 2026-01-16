@@ -183,88 +183,65 @@ pub(crate) fn create_early_remote_transcripts(
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
 
-    // Collect map of the dealings remote target_ids to the dkg_ids
-    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = BTreeMap::new();
-    for (target_id, dkg_id) in
-        all_dealings
-            .iter()
-            .filter_map(|(dkg_id, _)| match dkg_id.target_subnet {
-                NiDkgTargetSubnet::Local => None,
-                NiDkgTargetSubnet::Remote(target_id) => Some((target_id, dkg_id)),
-            })
-    {
-        let entry = remote_contexts.entry(target_id).or_default();
-        entry.push(dkg_id.clone());
-    }
+    // Collect map of remote target_ids to dkg_ids
+    let remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = all_dealings
+        .iter()
+        .filter_map(|(dkg_id, _)| match dkg_id.target_subnet {
+            NiDkgTargetSubnet::Local => None,
+            NiDkgTargetSubnet::Remote(target_id) => Some((target_id, dkg_id.clone())),
+        })
+        .fold(BTreeMap::new(), |mut acc, (target_id, dkg_id)| {
+            acc.entry(target_id).or_default().push(dkg_id);
+            acc
+        });
 
+    let state_ref = state.get_ref();
     let mut selected_transcripts = vec![];
     for (_, dkg_ids) in remote_contexts {
         // For each target_id, try to build the necessary (dkg_id, callback_id, transcript) triple
-        let mut transcripts = dkg_ids
+        let mut transcripts: Vec<_> = dkg_ids
             .iter()
-            // Lookup the config from the summary
             .filter_map(|dkg_id| {
-                last_dkg_summary
-                    .configs
-                    .get(dkg_id)
-                    .map(|config| (dkg_id, config))
-            })
-            // Lookup the callback id
-            .filter_map(|(dkg_id, config)| {
-                get_callback_id_from_id(state.get_ref(), dkg_id)
-                    .map(|callback_id| (dkg_id, callback_id, config))
-            })
-            // Generate the transcripts. We just skip errors, they will
-            // be handled in the summary block, if we fail to create an early transcript
-            .filter_map(|(dkg_id, callback_id, config)| {
-                match create_transcript(crypto, config, &all_dealings, &logger) {
-                    Ok(transcript) => {
-                        Some((dkg_id.clone(), callback_id, Ok::<_, String>(transcript)))
-                    }
-                    Err(_) => None,
-                }
-            })
-            .collect::<Vec<_>>();
+                // Lookup the config from the summary
+                let config = last_dkg_summary.configs.get(dkg_id)?;
+                // Lookup the callback id
+                let callback_id = get_callback_id_from_id(state_ref, dkg_id)?;
+                // Generate the transcript. We just skip errors, they will
+                // be handled in the summary block, if we fail to create an early transcript
+                let transcript = create_transcript(crypto, config, &all_dealings, &logger).ok()?;
 
-        // For inital DKG transcripts, we need a pair of values while for VetKD we need a single config
+                Some((dkg_id.clone(), callback_id, Ok::<_, String>(transcript)))
+            })
+            .collect();
+
+        // For initial DKG transcripts, we need a pair of values while for VetKD we need a single config
         // Here we do some matching, to check that we have the right number of configs
-        match transcripts.len() {
+        let is_valid = match transcripts.len() {
             1 => {
                 // For VetKD, we need to check that these have a HighThresholdForKey tag
-                let dkg_id = &transcripts[0].0;
-                match &dkg_id.dkg_tag {
-                    NiDkgTag::HighThresholdForKey(_) => {
-                        // This is a valid VetKD transcript, include it
-                    }
-                    _ => {
-                        // Single transcript that is not VetKD, skip it
-                        continue;
-                    }
-                }
+                matches!(transcripts[0].0.dkg_tag, NiDkgTag::HighThresholdForKey(_))
             }
-            // If we have two transcripts for the same ID, we check that it is
-            // one low and one high threshold transcript
             2 => {
-                let tags = transcripts
+                // If we have two transcripts for the same ID, we check that it is
+                // one low and one high threshold transcript
+                let tags: BTreeSet<_> = transcripts
                     .iter()
                     .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
-                    .collect::<BTreeSet<_>>();
+                    .collect();
                 let expected_tags: BTreeSet<_> = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
                     .iter()
                     .cloned()
                     .collect();
-
-                if tags != expected_tags {
-                    continue;
-                }
+                tags == expected_tags
             }
-            // Other combinations are not supported
-            _ => continue,
-        }
+            _ => false, // Other combinations are not supported
+        };
 
-        selected_transcripts.append(&mut transcripts);
-        if selected_transcripts.len() >= num_transcripts {
-            break;
+        if is_valid {
+            selected_transcripts.append(&mut transcripts);
+            if selected_transcripts.len() >= num_transcripts {
+                break;
+            }
         }
     }
 
