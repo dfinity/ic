@@ -1,12 +1,12 @@
 use std::net::Ipv6Addr;
 
 use anyhow::{Result, anyhow};
-use config_types::DeploymentEnvironment;
 use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
-
-pub mod node_type;
 use node_type::NodeType;
+
+pub use config_types::DeploymentEnvironment;
+pub mod node_type;
 
 pub trait MacAddr6Ext {
     fn calculate_slaac(&self, prefix: &str) -> Result<Ipv6Addr>;

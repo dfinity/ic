@@ -22,7 +22,6 @@ use slog::{Logger, error, info};
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
@@ -75,9 +74,10 @@ pub fn test_with_rt_handle(
     });
 
     for _ in 0..canister_count {
-        canisters.push(
-            app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, /*arg=*/ None),
-        );
+        canisters.push(app_node.create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            /*arg=*/ None,
+        ));
     }
     info!(log, "{} canisters installed successfully.", canisters.len());
 
