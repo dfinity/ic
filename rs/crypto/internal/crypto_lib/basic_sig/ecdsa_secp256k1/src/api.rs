@@ -1,7 +1,6 @@
 //! ECDSA signature methods
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
-use ic_crypto_secrets_containers::SecretVec;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use simple_asn1::oid;
 
@@ -11,41 +10,6 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
         oid!(1, 2, 840, 10045, 2, 1),
         oid!(1, 3, 132, 0, 10),
     )
-}
-
-/// Create a secp256k1 secret key from raw bytes
-///
-/// # Arguments
-/// * `sk_raw_bytes` is the big-endian encoding of unsigned integer
-/// * `pk` is the public key associated with this secret key
-/// # Errors
-/// * `MalformedPublicKey` if the public key could not be parsed
-/// * `MalformedSecretKey` if the secret key does not correspond with the public
-///   key
-pub fn secret_key_from_components(
-    sk_raw_bytes: &[u8],
-    pk: &types::PublicKeyBytes,
-) -> CryptoResult<types::SecretKeyBytes> {
-    let sk = ic_secp256k1::PrivateKey::deserialize_sec1(sk_raw_bytes).map_err(|e| {
-        CryptoError::MalformedSecretKey {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
-            internal_error: format!("{e:?}"),
-        }
-    })?;
-
-    if pk.0 != sk.public_key().serialize_sec1(false) {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaSecp256k1,
-            key_bytes: Some(pk.0.to_vec()),
-            internal_error: "Public key does not match secret key".to_string(),
-        });
-    }
-
-    let mut sk_rfc5915 = sk.serialize_rfc5915_der();
-
-    Ok(types::SecretKeyBytes(SecretVec::new_and_zeroize_argument(
-        &mut sk_rfc5915,
-    )))
 }
 
 /// Parse a secp256k1 public key from the DER enncoding
