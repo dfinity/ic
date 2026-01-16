@@ -67,7 +67,7 @@ jobs:
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
-          echo "$ZH2_DLL01_INI_SECRETS" > file1
+          echo "$ZH2_DLL01_INI_SECRET" > file1
           echo "$ZH2_FILE_SHARE_KEY" > file2 && chmod 400 file2
 
           launch_bare_metal() {
@@ -95,7 +95,7 @@ jobs:
 
           bazel clean
         env:
-          ZH2_DLL01_INI_SECRETS: "${{ secrets.ZH2_DLL01_INI_SECRETS }}"
+          ZH2_DLL01_INI_SECRET: "${{ secrets.ZH2_DLL01_INI_SECRET }}"
           ZH2_FILE_SHARE_KEY: "${{ secrets.ZH2_FILE_SHARE_KEY }}"
 
   nns-tests-nightly:
