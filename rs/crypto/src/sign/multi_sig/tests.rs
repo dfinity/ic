@@ -437,6 +437,30 @@ mod test_multi_sig_verification {
     }
 
     #[test]
+    fn should_fail_verify_individual_with_wrong_registry_version() {
+        let crypto = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .with_rng(reproducible_rng())
+            .build();
+        let msg = SignableMock::new(b"test message".to_vec());
+
+        let signature = crypto.sign_multi(&msg, NODE_1, REG_V2).unwrap();
+
+        // Verify with REG_V1 instead of REG_V2 - key won't be found
+        let result = crypto.verify_multi_sig_individual(&signature, &msg, NODE_1, REG_V1);
+
+        assert_matches!(
+            result,
+            Err(CryptoError::PublicKeyNotFound {
+                node_id: _,
+                key_purpose: KeyPurpose::CommitteeSigning,
+                registry_version: _,
+            })
+        );
+    }
+
+    #[test]
     fn should_fail_verify_individual_with_wrong_node_id() {
         let mut rng = reproducible_rng();
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
