@@ -4,7 +4,7 @@ use crate::common::{
     build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
 use crate::state_test_helpers::nns_governance_pb::Visibility;
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, encode_args, Nat, Principal, Deserialize};
 use canister_test::Wasm;
 use cycles_minting_canister::{
     CyclesCanisterInitPayload, IcpXdrConversionRateCertifiedResponse,
@@ -299,6 +299,49 @@ pub fn update(
         payload,
         PrincipalId::new_anonymous(),
     )
+}
+
+/// Rental conditions are kept in a global HashMap and only changed via code upgrades.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
+pub enum RentalConditionId {
+    App13CH,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
+pub struct RentalAgreement {
+    /// The principal which paid the deposit and will be whitelisted.
+    pub user: Principal,
+    /// The id of the SubnetRentalRequest proposal.
+    pub rental_request_proposal_id: u64,
+    /// The id of the proposal that created the subnet. Optional in case
+    /// the subnet already existed at initial proposal time.
+    pub subnet_creation_proposal_id: Option<u64>,
+    /// The subnet's id.
+    pub subnet_id: Principal,
+    /// A key into the global RENTAL_CONDITIONS HashMap.
+    pub rental_condition_id: RentalConditionId,
+    /// Rental agreement creation time in nanoseconds since epoch.
+    pub creation_time_nanos: u64,
+    /// The time in nanos since epoch until which the rental agreement is paid for.
+    pub paid_until_nanos: u64,
+    /// Total amount of ICP that the user has paid.
+    pub total_icp_paid: Tokens,
+    /// Total amount of cycles that have been created for this agreement.
+    pub total_cycles_created: u128,
+    /// Total amount of cycles that have been burned for this agreement.
+    pub total_cycles_burned: u128,
+}
+
+pub fn list_rental_agreements(state_machine: &StateMachine) -> Vec<RentalAgreement> {
+    let reply = update(
+        state_machine,
+        SUBNET_RENTAL_CANISTER_ID,
+        "list_rental_agreements",
+        encode_args(()).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(&reply, Vec<RentalAgreement>).unwrap()
 }
 
 pub fn update_with_sender_bytes(
