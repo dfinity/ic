@@ -379,7 +379,8 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
     where
         C: LedgerContext<AccountId = Self::AccountId, Tokens = Tokens>,
     {
-        let fee_collector = context.fee_collector().as_ref();
+        let fee_collector = context.fee_collector();
+        let fee_collector = fee_collector.as_ref();
         match &self.operation {
             Operation::Transfer {
                 from,

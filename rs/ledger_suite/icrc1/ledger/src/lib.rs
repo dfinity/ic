@@ -809,10 +809,6 @@ impl LedgerContext for Ledger {
         &mut self.stable_approvals
     }
 
-    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
-        self.fee_collector.as_ref()
-    }
-
     fn fee_collector(&self) -> Option<Self::AccountId> {
         self.fee_collector_107
     }

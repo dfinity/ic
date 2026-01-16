@@ -5225,7 +5225,7 @@ where
     T: CandidType,
 {
     let from = PrincipalId::new_user_test_id(1);
-    let spender = PrincipalId::new_user_test_id(2);
+    // let spender = PrincipalId::new_user_test_id(2);
     let fee_collector_107 = Account::from(PrincipalId::new_user_test_id(3).0);
 
     let (env, canister_id) = setup(

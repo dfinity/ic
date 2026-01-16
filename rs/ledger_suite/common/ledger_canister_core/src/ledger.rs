@@ -275,13 +275,12 @@ where
             },
         })?;
 
-    let fee_collector = ledger.fee_collector().cloned();
     let block = L::Block::from_transaction(
         ledger.blockchain().last_hash,
         transaction,
         now,
         effective_fee,
-        fee_collector,
+        None,
     );
     let block_timestamp = block.timestamp();
 
