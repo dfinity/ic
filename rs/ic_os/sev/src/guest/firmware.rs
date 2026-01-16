@@ -18,10 +18,27 @@ pub trait SevGuestFirmware: Sync + Send {
         message_version: Option<u32>,
         derived_key_request: DerivedKey,
     ) -> Result<[u8; 32], UserApiError>;
+
+    /// Returns whether the generated attestation report has a fake root certificate.
+    /// This can be true only in mock firmwares.
+    fn generates_report_with_fake_root_cert(&self) -> bool {
+        false
+    }
+
+    /// Returns whether the generated attestation report may have a wrong custom data.
+    /// This can be true only in mock firmwares.
+    fn generates_report_with_wrong_custom_data(&self) -> bool {
+        false
+    }
+    /// Returns whether the generated attestation report may have a wrong signature.
+    /// This can be true only in mock firmwares.
+    fn generates_report_with_wrong_signature(&self) -> bool {
+        false
+    }
 }
 
-#[cfg(target_os = "linux")]
 /// Implementation for the actual AMD firmware.
+#[cfg(target_os = "linux")]
 impl SevGuestFirmware for Firmware {
     fn get_report(
         &mut self,
