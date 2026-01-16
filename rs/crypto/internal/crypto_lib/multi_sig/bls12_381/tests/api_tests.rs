@@ -199,7 +199,7 @@ proptest! {
 }
 
 #[test]
-fn individual_signature_verifies() {
+fn verify_individual_accepts_a_valid_signature() {
     let rng = &mut reproducible_rng();
     let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
     let message = b"test message";
@@ -208,7 +208,7 @@ fn individual_signature_verifies() {
 }
 
 #[test]
-fn pop_verifies() {
+fn verify_pop_accepts_a_valid_pop() {
     let rng = &mut reproducible_rng();
     let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
     let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
@@ -266,7 +266,7 @@ fn verify_pop_fails_on_public_key_bytes_not_in_subgroup() {
 }
 
 #[test]
-fn individual_signature_fails_with_wrong_message() {
+fn verify_individual_signature_fails_with_wrong_message() {
     let rng = &mut reproducible_rng();
     let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
     let message = b"correct message";
@@ -284,7 +284,7 @@ fn individual_signature_fails_with_wrong_message() {
 }
 
 #[test]
-fn individual_signature_fails_with_wrong_public_key() {
+fn verify_individual_signature_fails_with_wrong_public_key() {
     let rng = &mut reproducible_rng();
     let (secret_key, _public_key) = multi_sig::keypair_from_rng(rng);
     let (_other_secret_key, other_public_key) = multi_sig::keypair_from_rng(rng);
@@ -302,7 +302,7 @@ fn individual_signature_fails_with_wrong_public_key() {
 }
 
 #[test]
-fn combined_signature_fails_with_wrong_message() {
+fn verify_combined_signature_fails_with_wrong_message() {
     let rng = &mut reproducible_rng();
     let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
     let message = b"correct message";
@@ -325,7 +325,7 @@ fn combined_signature_fails_with_wrong_message() {
 }
 
 #[test]
-fn combined_signature_fails_with_missing_public_key() {
+fn verify_combined_signature_fails_with_missing_public_key() {
     let rng = &mut reproducible_rng();
     let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
     let message = b"test message";
@@ -348,7 +348,7 @@ fn combined_signature_fails_with_missing_public_key() {
 }
 
 #[test]
-fn combined_signature_fails_with_extra_public_key() {
+fn verify_combined_signature_fails_with_extra_public_key() {
     let rng = &mut reproducible_rng();
     let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
     let (_, extra_public_key) = multi_sig::keypair_from_rng(rng);
@@ -372,7 +372,7 @@ fn combined_signature_fails_with_extra_public_key() {
 }
 
 #[test]
-fn combined_signature_verifies_with_reordered_public_keys() {
+fn verify_combined_signature_accepts_with_reordered_public_keys() {
     let rng = &mut reproducible_rng();
     let keys: Vec<_> = (0..3).map(|_| multi_sig::keypair_from_rng(rng)).collect();
     let message = b"test message";
@@ -394,7 +394,7 @@ fn combined_signature_verifies_with_reordered_public_keys() {
 }
 
 #[test]
-fn pop_fails_with_wrong_public_key() {
+fn verify_pop_fails_with_wrong_public_key() {
     let rng = &mut reproducible_rng();
     let (secret_key, public_key) = multi_sig::keypair_from_rng(rng);
     let (_, other_public_key) = multi_sig::keypair_from_rng(rng);
@@ -487,7 +487,7 @@ fn verify_combined_fails_with_malformed_public_key_bytes() {
 }
 
 #[test]
-fn combine_fails_with_malformed_individual_signature_bytes() {
+fn combine_signature_fails_with_malformed_individual_signature_bytes() {
     let rng = &mut reproducible_rng();
     let (secret_key, _) = multi_sig::keypair_from_rng(rng);
     let message = b"test message";
