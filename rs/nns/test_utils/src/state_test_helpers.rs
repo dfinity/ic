@@ -8,7 +8,7 @@ use candid::{CandidType, Decode, Encode, encode_args, Nat, Principal, Deserializ
 use canister_test::Wasm;
 use cycles_minting_canister::{
     CyclesCanisterInitPayload, IcpXdrConversionRateCertifiedResponse,
-    SetAuthorizedSubnetworkListArgs,
+    SetAuthorizedSubnetworkListArgs, AuthorizedSubnetsResponse,
 };
 use dfn_http::types::{HttpRequest, HttpResponse};
 use dfn_protobuf::ToProto;
@@ -342,6 +342,18 @@ pub fn list_rental_agreements(state_machine: &StateMachine) -> Vec<RentalAgreeme
     .unwrap();
 
     Decode!(&reply, Vec<RentalAgreement>).unwrap()
+}
+
+pub fn get_principals_authorized_to_create_canisters_to_subnets(state_machine: &StateMachine) -> AuthorizedSubnetsResponse {
+    let reply = update(
+        state_machine,
+        CYCLES_MINTING_CANISTER_ID,
+        "get_principals_authorized_to_create_canisters_to_subnets",
+        encode_args(()).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(&reply, AuthorizedSubnetsResponse).unwrap()
 }
 
 pub fn update_with_sender_bytes(

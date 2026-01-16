@@ -22,7 +22,7 @@ use ic_nns_test_utils::{
     state_test_helpers::{
         get_canister_status, manage_network_economics, nns_cast_vote,
         nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed, list_rental_agreements,
+        wait_for_canister_upgrade_to_succeed, list_rental_agreements, get_principals_authorized_to_create_canisters_to_subnets,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -367,7 +367,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let metrics_before = sanity_check::fetch_metrics(&state_machine);
 
     // assert_eq!(list_rental_agreements(&state_machine), vec![]);
+    let original_auths = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
 
+    // First batch of upgrades.
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     // Modify all WASMs, but preserve their behavior.
@@ -378,17 +380,52 @@ fn test_upgrade_canisters_with_golden_nns_state() {
     let rental_agreements_after_first_upgrade = list_rental_agreements(&state_machine);
     assert_eq!(rental_agreements_after_first_upgrade.len(), 1, "{rental_agreements_after_first_upgrade:#?}");
 
+    let auths_after_first_upgrade = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    assert_ne!(auths_after_first_upgrade, original_auths);
+
+    // Second batch of upgrades.
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     let rental_agreements_after_second_upgrade = list_rental_agreements(&state_machine);
     assert_eq!(rental_agreements_after_second_upgrade.len(), 1, "{rental_agreements_after_second_upgrade:#?}");
+    assert_eq!(rental_agreements_after_second_upgrade, rental_agreements_after_first_upgrade);
 
+    let auths_after_second_upgrade = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    assert_eq!(auths_after_second_upgrade, auths_after_first_upgrade);
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
     println!("first:");
     println!("{rental_agreements_after_first_upgrade:#?}");
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
     println!();
     println!("second:");
     println!("{rental_agreements_after_second_upgrade:#?}");
+
     println!();
+    println!("================================================================================");
+    println!();
+    println!("original_auths:");
+    println!("{original_auths:#?}");
+    println!();
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("auths_after_first_upgrade:");
+    println!("{auths_after_first_upgrade:#?}");
+    println!();
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("auths_after_second_upgrade:");
+    println!("{auths_after_second_upgrade:#?}");
+    println!();
+
     return;
 
     sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
