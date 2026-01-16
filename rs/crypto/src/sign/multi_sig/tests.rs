@@ -200,7 +200,7 @@ mod test_multi_sig_verification {
     }
 
     #[test]
-    fn should_fail_verify_combined_with_corrupted_individual_signature() {
+    fn should_fail_to_combine_when_individual_signature_is_not_a_valid_point() {
         let mut rng = reproducible_rng();
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =
@@ -217,21 +217,31 @@ mod test_multi_sig_verification {
 
         // Corrupt sig_1 by modifying bytes
         let mut corrupted_sig_bytes = sig_1.get_ref().0.clone();
-        corrupted_sig_bytes[2] ^= 0xFF;
+        corrupted_sig_bytes[13] ^= 0x01;
         let corrupted_sig = IndividualMultiSigOf::new(IndividualMultiSig(corrupted_sig_bytes));
 
         let signatures: BTreeMap<_, _> = vec![(NODE_1, corrupted_sig), (NODE_2, sig_2)]
             .into_iter()
             .collect();
 
-        // Combine may succeed (it's just aggregation), but verify should fail
+        /*
+         * The probability that any random x has a solution (y,x) which is
+         * within the prime-order subgroup is, cryptographically speaking, negligible.
+         * That being the case, combination should fail.
+         *
+         * The case where the point encoding is valid but the individual signature
+         * is incorrect is checked by should_fail_verify_combined_with_wrong_message
+         */
         let combined = crypto_1.combine_multi_sig_individuals(signatures, REG_V2);
-        if let Ok(combined) = combined {
-            let signers: BTreeSet<_> = vec![NODE_1, NODE_2].into_iter().collect();
-            let result = crypto_1.verify_multi_sig_combined(&combined, &msg, signers, REG_V2);
-            assert_matches!(result, Err(_));
-        }
-        // If combine itself fails due to malformed point, that's also acceptable
+
+        assert_matches!(
+            combined,
+            Err(CryptoError::MalformedSignature {
+                algorithm: AlgorithmId::MultiBls12_381,
+                sig_bytes: _,
+                internal_error: _
+            })
+        );
     }
 
     #[test]
@@ -265,7 +275,14 @@ mod test_multi_sig_verification {
         let signers: BTreeSet<_> = vec![NODE_1, NODE_2].into_iter().collect();
         let result = crypto_1.verify_multi_sig_combined(&corrupted_combined, &msg, signers, REG_V2);
 
-        assert_matches!(result, Err(_));
+        assert_matches!(
+            result,
+            Err(CryptoError::MalformedSignature {
+                algorithm: AlgorithmId::MultiBls12_381,
+                sig_bytes: _,
+                internal_error: _
+            })
+        );
     }
 
     #[test]
@@ -295,7 +312,14 @@ mod test_multi_sig_verification {
         // Verify with REG_V1 instead of REG_V2 - keys won't be found
         let result = crypto_1.verify_multi_sig_combined(&combined, &msg, signers, REG_V1);
 
-        assert_matches!(result, Err(_));
+        assert_matches!(
+            result,
+            Err(CryptoError::PublicKeyNotFound {
+                node_id: _,
+                key_purpose: KeyPurpose::CommitteeSigning,
+                registry_version: _,
+            })
+        );
     }
 
     #[test]
