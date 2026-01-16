@@ -32,6 +32,10 @@ pub struct GetSuccessorMetrics {
     pub processed_block_hashes: Histogram,
     pub response_blocks: Histogram,
     pub prune_headers_anchor_height: IntGauge,
+    /// Time spent building the GetSuccessors response.
+    pub response_build_duration: Histogram,
+    /// Size of blocks in the response in bytes.
+    pub response_blocks_size: Histogram,
 }
 
 impl GetSuccessorMetrics {
@@ -53,6 +57,18 @@ impl GetSuccessorMetrics {
                 "prune_headers_anchor_height",
                 "Anchor height used to prune headers",
             ),
+            response_build_duration: metrics_registry.histogram(
+                "response_build_duration_seconds",
+                "Time spent building the GetSuccessors response.",
+                // 1ms, 10ms, 100ms, 500ms, 1s, 5s
+                vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0],
+            ),
+            response_blocks_size: metrics_registry.histogram(
+                "response_blocks_size_bytes",
+                "Total size of blocks in the GetSuccessors response in bytes.",
+                // 1KB, 10KB, 100KB, 500KB, 1MB, 2MB
+                vec![1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0],
+            ),
         }
     }
 }
@@ -65,6 +81,8 @@ pub struct RouterMetrics {
     pub available_connections: IntGauge,
     pub connections: IntCounter,
     pub known_peer_addresses: IntGauge,
+    /// Time spent processing each Bitcoin network message type.
+    pub message_processing_duration: HistogramVec,
 }
 
 impl RouterMetrics {
@@ -90,6 +108,13 @@ impl RouterMetrics {
                 .int_counter("connection_total", "Connection setup attempts."),
             known_peer_addresses: metrics_registry
                 .int_gauge("known_peer_addresses", "Known peer addresses."),
+            message_processing_duration: metrics_registry.histogram_vec(
+                "message_processing_duration_seconds",
+                "Time spent processing each Bitcoin network message type.",
+                // 100us, 1ms, 10ms, 100ms, 1s, 10s
+                vec![0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
+                &[LABEL_REQUEST_TYPE],
+            ),
         }
     }
 }
@@ -100,6 +125,10 @@ pub struct BlockchainStateMetrics {
     pub block_cache_size: IntGauge,
     pub block_cache_elements: IntGauge,
     pub tips: IntGauge,
+    /// Time spent processing (deserializing and validating) received blocks.
+    pub block_processing_duration: Histogram,
+    /// Size of blocks received in bytes.
+    pub block_received_size: Histogram,
 }
 
 impl BlockchainStateMetrics {
@@ -113,6 +142,18 @@ impl BlockchainStateMetrics {
                 "Number of blocks currently stored in the block cache.",
             ),
             tips: metrics_registry.int_gauge("blockchain_tips", "Number of active tips."),
+            block_processing_duration: metrics_registry.histogram(
+                "block_processing_duration_seconds",
+                "Time spent processing (deserializing and validating) received blocks.",
+                // 1ms, 10ms, 100ms, 500ms, 1s, 5s, 10s
+                vec![0.001, 0.01, 0.1, 0.5, 1.0, 5.0, 10.0],
+            ),
+            block_received_size: metrics_registry.histogram(
+                "block_received_size_bytes",
+                "Size of blocks received from Bitcoin network in bytes.",
+                // 1KB, 10KB, 100KB, 500KB, 1MB, 2MB, 4MB
+                vec![1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0, 4194304.0],
+            ),
         }
     }
 }
