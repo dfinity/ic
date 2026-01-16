@@ -24,11 +24,7 @@ def query(title, log_query: bool, query: str):
 {query}
 EOF
 """)
-    subprocess.run(
-        args,
-        check=True,
-        input=query.encode(),
-    )
+    subprocess.run(args, input=query.encode(), check=True)
 
 
 def last_runs(args):
