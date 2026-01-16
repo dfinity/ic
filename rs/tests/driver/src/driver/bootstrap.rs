@@ -621,12 +621,12 @@ pub fn setup_baremetal_instance(
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
 
-    let hostos_uri = get_hostos_initial_update_img_url().as_str().parse()?;
-    let guestos_uri = get_guestos_img_url().as_str().parse()?;
+    let hostos_url = get_hostos_initial_update_img_url().as_str().parse()?;
+    let guestos_url = get_guestos_img_url().as_str().parse()?;
 
     let config = DeploymentConfig {
-        hostos_upgrade_image: Some(ImageSource::Url(hostos_uri)),
-        guestos_image: Some(ImageSource::Url(guestos_uri)),
+        hostos_upgrade_image: Some(ImageSource::Url(hostos_url)),
+        guestos_image: Some(ImageSource::Url(guestos_url)),
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 
