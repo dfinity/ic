@@ -69,6 +69,7 @@ use ic_utils_thread::{JoinOnDrop, deallocator_thread::DeallocatorThread};
 use ic_wasm_types::ModuleLoadingStatus;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use prost::Message;
+use std::cmp::min;
 use std::convert::{From, TryFrom};
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -82,7 +83,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     sync::Mutex,
 };
 use tempfile::tempfile;
@@ -173,6 +174,8 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
+    latest_subnet_certified_height: IntGauge,
+    no_clone_count: IntCounter,
     tip_hash_count: IntCounter,
 }
 
@@ -459,6 +462,16 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
+        let latest_subnet_certified_height = metrics_registry.int_gauge(
+            "state_manager_latest_subnet_certified_height",
+            "Height of the latest validated certification.",
+        );
+
+        let no_clone_count = metrics_registry.int_counter(
+            "state_manager_no_clone_count",
+            "Number of heights whose states were not cloned and not stored by this node.",
+        );
+
         let tip_hash_count = metrics_registry.int_counter(
             "state_manager_tip_hash_count",
             "Number of tip heights whose state snapshot was not stored by this node and whose state hash was computed by this node.",
@@ -489,6 +502,8 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
+            latest_subnet_certified_height,
+            no_clone_count,
             tip_hash_count,
         }
     }
@@ -746,6 +761,7 @@ impl StateSyncMetrics {
 type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
+type Certifications = BTreeMap<Height, Certification>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
 #[derive(Clone, Debug)]
@@ -867,6 +883,8 @@ impl StateSyncRefs {
 struct SharedState {
     /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
+    /// Certifications delivered optimistically to optimize state hashing.
+    certifications: Certifications,
     /// Metadata for each checkpoint
     states_metadata: StatesMetadata,
     /// A list of states present in the memory.  This list is guaranteed to not be
@@ -916,6 +934,8 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
+    latest_subnet_certified_height: AtomicU64,
+    tip_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1478,6 +1498,8 @@ impl StateManagerImpl {
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
+        let latest_subnet_certified_height = AtomicU64::new(0);
+        let tip_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1534,6 +1556,7 @@ impl StateManagerImpl {
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
+            certifications: BTreeMap::new(),
             states_metadata,
             snapshots,
             last_advertised: Self::INITIAL_STATE_HEIGHT,
@@ -1592,6 +1615,8 @@ impl StateManagerImpl {
             deallocator_thread,
             latest_state_height,
             latest_certified_height,
+            latest_subnet_certified_height,
+            tip_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -2291,6 +2316,10 @@ impl StateManagerImpl {
             .latest_certified_height
             .set(latest_certified_height.get() as i64);
 
+        let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        std::mem::swap(&mut certifications, &mut states.certifications);
+        self.deallocator_thread.send(Box::new(certifications));
+
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
         for h in checkpoint_heights_to_keep.iter() {
@@ -2685,12 +2714,10 @@ impl StateManager for StateManagerImpl {
                     states.certifications_metadata.get(&tip_height)
                 {
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
+                } else if let Some(tip_certification) = states.certifications.get(&tip_height) {
+                    tip_certification.signed.content.hash.clone()
                 } else {
                     std::mem::drop(states);
-
-                    if tip_height != Self::INITIAL_STATE_HEIGHT {
-                        fatal!(self.log, "Bug: missing tip metadata @{}", tip_height);
-                    }
 
                     let mut tip_certification_metadata =
                         Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
@@ -2959,6 +2986,23 @@ impl StateManager for StateManagerImpl {
             .collect()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        let states = self.states.read();
+        let heights_with_certification: HashSet<_> =
+            states.certifications.keys().cloned().collect();
+        drop(states);
+
+        let tip_height = self.tip_height.load(Ordering::Relaxed);
+        let latest_subnet_certified_height =
+            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        let state_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
+        state_heights
+            .into_iter()
+            .map(Height::new)
+            .filter(|h| !heights_with_certification.contains(h))
+            .collect()
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         let _timer = self
             .metrics
@@ -2987,9 +3031,9 @@ impl StateManager for StateManagerImpl {
                     hash, certification.signed.content.hash
                 );
             }
+
             let latest_certified =
                 update_latest_height(&self.latest_certified_height, certification.height);
-
             self.metrics
                 .latest_certified_height
                 .set(latest_certified as i64);
@@ -3010,6 +3054,9 @@ impl StateManager for StateManagerImpl {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
+        } else {
+            let height = certification.height;
+            states.certifications.insert(height, certification);
         }
     }
 
@@ -3126,6 +3173,14 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["remove_inmemory_states_below"])
             .start_timer();
 
+        let latest_subnet_certified_height =
+            update_latest_height(&self.latest_subnet_certified_height, requested_height);
+        self.metrics
+            .latest_subnet_certified_height
+            .set(latest_subnet_certified_height as i64);
+
+        let requested_height = min(requested_height, self.latest_state_height());
+
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
         let oldest_height_to_keep = latest_state_height
@@ -3184,10 +3239,6 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        self.metrics
-            .tip_handler_queue_length
-            .set(self.tip_channel.len() as i64);
-
         self.populate_extra_metadata(&mut state, height);
 
         if let CertificationScope::Metadata = scope {
@@ -3205,6 +3256,43 @@ impl StateManager for StateManagerImpl {
                 flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
             }
         }
+
+        let assert_tip_is_none = |states: &SharedState| {
+            // The following assert validates that we don't have two clients
+            // modifying TIP at the same time and that each commit_and_certify()
+            // is preceded by a call to take_tip().
+            if let Some((tip_height, _)) = &states.tip {
+                fatal!(
+                    self.log,
+                    "Attempt to commit state not borrowed from this StateManager, height = {}, tip_height = {}",
+                    height,
+                    tip_height,
+                );
+            }
+        };
+
+        let latest_subnet_certified_height =
+            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        if matches!(scope, CertificationScope::Metadata)
+            && height.get() < latest_subnet_certified_height
+            && !height.get().is_multiple_of(10)
+        {
+            let mut states = self.states.write();
+            #[cfg(debug_assertions)]
+            check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
+
+            assert_tip_is_none(&states);
+
+            self.metrics.no_clone_count.inc();
+
+            states.tip = Some((height, state));
+            self.tip_height.store(height.get(), Ordering::Relaxed);
+            return;
+        }
+
+        self.metrics
+            .tip_handler_queue_length
+            .set(self.tip_channel.len() as i64);
 
         let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
             None;
@@ -3254,17 +3342,7 @@ impl StateManager for StateManagerImpl {
         #[cfg(debug_assertions)]
         check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
-        // The following assert validates that we don't have two clients
-        // modifying TIP at the same time and that each commit_and_certify()
-        // is preceded by a call to take_tip().
-        if let Some((tip_height, _)) = &states.tip {
-            fatal!(
-                self.log,
-                "Attempt to commit state not borrowed from this StateManager, height = {}, tip_height = {}",
-                height,
-                tip_height,
-            );
-        }
+        assert_tip_is_none(&states);
 
         // It's possible that we already computed this state before.  We
         // validate that hashes agree to spot bugs causing non-determinism as
@@ -3342,6 +3420,7 @@ impl StateManager for StateManagerImpl {
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip = next_tip;
+        self.tip_height.store(height.get(), Ordering::Relaxed);
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
@@ -4023,5 +4102,252 @@ pub mod testing {
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::StateManagerImpl;
+    use ic_config::state_manager::Config;
+    use ic_interfaces_state_manager::{CertificationScope, StateManager};
+    use ic_logger::ReplicaLogger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::ReplicatedState;
+    use ic_test_utilities_consensus::fake::FakeVerifier;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_metrics::fetch_int_counter_vec;
+    use ic_test_utilities_tmpdir::tmpdir;
+    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_types::Height;
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    fn no_clone_count(metrics: &MetricsRegistry) -> u64 {
+        fetch_int_counter_vec(metrics, "state_manager_no_clone_count")
+            .values()
+            .sum::<u64>()
+    }
+
+    fn state_manager_for_tests(log: ReplicaLogger) -> (MetricsRegistry, StateManagerImpl) {
+        let metrics = MetricsRegistry::new();
+        let tmp = tmpdir("sm");
+        let config = Config::new(tmp.path().into());
+        let sm = StateManagerImpl::new(
+            Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
+            log.clone(),
+            &metrics,
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        );
+        (metrics, sm)
+    }
+
+    #[test]
+    fn commit_and_certify_optimization_conditions() {
+        with_test_replica_logger(|log| {
+            let (metrics, sm) = state_manager_for_tests(log);
+
+            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                42
+            );
+
+            // all conditions are satisfied => optimization triggers
+            let state = sm.take_tip().1;
+            sm.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+
+            // `CertificationScope::Full` => optimization does not trigger
+            let state = sm.take_tip().1;
+            sm.commit_and_certify(state, Height::new(3), CertificationScope::Full, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+
+            // height of 20 is divisible by 10 => optimization does not trigger
+            let state = sm.take_tip().1;
+            sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+
+            // height of 42 is not less than `latest_subnet_certified_height` => optimization does not trigger
+            assert_eq!(sm.latest_subnet_certified_height.load(Ordering::Relaxed), 0);
+            let state = sm.take_tip().1;
+            sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+        });
+    }
+
+    #[test]
+    fn commit_and_certify_optimization_semantics() {
+        with_test_replica_logger(|log| {
+            let (metrics, sm) = state_manager_for_tests(log);
+
+            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                42
+            );
+
+            // just the initial state is stored in `SharedState` at the beginning
+            let only_initial_state = || {
+                let states = sm.states.read();
+
+                assert_eq!(states.snapshots.len(), 1);
+                assert_eq!(
+                    states.snapshots[0].height,
+                    StateManagerImpl::INITIAL_STATE_HEIGHT
+                );
+
+                assert!(states.certifications_metadata.is_empty());
+
+                assert!(states.certifications.is_empty());
+            };
+            only_initial_state();
+
+            // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state
+            let mut state = sm.take_tip().1;
+            state.metadata.batch_time += Duration::from_secs(1);
+            let batch_time_opt = state.metadata.batch_time;
+            let opt_height = Height::new(1);
+            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+            only_initial_state();
+
+            // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
+            let mut state = sm.take_tip().1;
+            assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
+            state.metadata.batch_time += Duration::from_secs(1);
+            let batch_time_no_opt = state.metadata.batch_time;
+            let no_opt_height = Height::new(10);
+            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+
+            let states = sm.states.read();
+
+            assert_eq!(states.snapshots.len(), 2);
+            assert_eq!(
+                states.snapshots[0].height,
+                StateManagerImpl::INITIAL_STATE_HEIGHT
+            );
+            assert_eq!(states.snapshots[1].height, no_opt_height);
+            let new_snapshot = &states.snapshots[1].state;
+            assert_eq!(new_snapshot.metadata.batch_time, batch_time_no_opt);
+
+            assert_eq!(
+                states
+                    .certifications_metadata
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>(),
+                vec![no_opt_height]
+            );
+            let new_certification_metadata =
+                states.certifications_metadata.get(&no_opt_height).unwrap();
+            assert!(new_certification_metadata.hash_tree.is_some());
+            assert!(new_certification_metadata.certification.is_none());
+
+            assert!(states.certifications.is_empty());
+        });
+    }
+
+    #[test]
+    fn latest_subnet_certified_height() {
+        with_test_replica_logger(|log| {
+            let (_metrics, sm) = state_manager_for_tests(log);
+
+            assert_eq!(sm.latest_subnet_certified_height.load(Ordering::Relaxed), 0);
+
+            // `StateManagerImpl::remove_inmemory_states_below` updates `latest_subnet_certified_height`
+            sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                100
+            );
+
+            // `StateManagerImpl::remove_inmemory_states_below` does not update `latest_subnet_certified_height`
+            // to a lower value
+            sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                100
+            );
+
+            // `StateManagerImpl::remove_states_below` does not update `latest_subnet_certified_height`
+            sm.remove_states_below(Height::new(200));
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                100
+            );
+        });
+    }
+
+    #[test]
+    fn tip_height() {
+        with_test_replica_logger(|log| {
+            let (metrics, sm) = state_manager_for_tests(log);
+
+            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                42
+            );
+
+            assert_eq!(sm.tip_height.load(Ordering::Relaxed), 0);
+
+            // optimization triggers
+            let state = sm.take_tip().1;
+            let opt_height = Height::new(1);
+            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+            assert_eq!(sm.tip_height.load(Ordering::Relaxed), opt_height.get());
+
+            // optimization does not trigger
+            let state = sm.take_tip().1;
+            let no_opt_height = Height::new(10);
+            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+            assert_eq!(no_clone_count(&metrics), 1);
+            assert_eq!(sm.tip_height.load(Ordering::Relaxed), no_opt_height.get());
+        });
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Attempt to commit state not borrowed from this StateManager, height = 10, tip_height = 0"
+    )]
+    fn commit_and_certify_tip_set_panic() {
+        with_test_replica_logger(|log| {
+            let (_metrics, sm) = state_manager_for_tests(log);
+
+            // optimization does not trigger
+            let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+            let no_opt_height = Height::new(10);
+            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        });
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+    )]
+    fn commit_and_certify_optimization_tip_set_panic() {
+        with_test_replica_logger(|log| {
+            let (_metrics, sm) = state_manager_for_tests(log);
+
+            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+            assert_eq!(
+                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
+                42
+            );
+
+            // optimization triggers
+            let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+            let opt_height = Height::new(1);
+            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        });
     }
 }
