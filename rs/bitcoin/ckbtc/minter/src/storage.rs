@@ -236,6 +236,7 @@ mod benches {
     use crate::state::eventlog::{CkBtcEventLogger, EventLogger};
     use crate::state::replace_state;
     use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
+    use crate::tx::FeeRate;
     use crate::{IC_CANISTER_RUNTIME, state};
     use canbench_rs::bench;
 
@@ -288,7 +289,7 @@ mod benches {
 
         let dummy_minter_address = crate::BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
         let dummy_recipient_address = crate::BitcoinAddress::P2wpkhV0([42_u8; 20]);
-        let median_fee_millisatoshi_per_vbyte = 1_000; //1 sat/vbyte
+        let median_fee_millisatoshi_per_vbyte = FeeRate::from_millis_per_byte(1_000); //1 sat/vbyte
         let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
 
         canbench_rs::bench_fn(|| {

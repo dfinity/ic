@@ -4,6 +4,7 @@ use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use crate::{CKBTC_LEDGER_MEMO_SIZE, memo};
@@ -45,7 +46,7 @@ pub fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
-    median_fee_millisatoshi_per_vbyte: u64,
+    median_fee_millisatoshi_per_vbyte: FeeRate,
     minter_address: BitcoinAddress,
     recipient_address: BitcoinAddress,
     max_num_inputs_in_transaction: usize,
