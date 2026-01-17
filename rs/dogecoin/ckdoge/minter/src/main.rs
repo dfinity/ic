@@ -12,6 +12,7 @@ use ic_ckdoge_minter::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    ckdoge_dashboard,
     event::CkDogeMinterEvent,
     lifecycle::MinterArg,
     updates,
@@ -234,7 +235,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req)
+    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard())
 }
 
 fn main() {}
