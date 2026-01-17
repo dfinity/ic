@@ -1,12 +1,23 @@
+use crate::CKETH_LEDGER_MEMO_SIZE;
 use crate::cbor::tests::check_roundtrip;
+use crate::checked_amount::CheckedAmountOf;
+use crate::endpoints::{
+    BurnMemo as EndpointsBurn, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult,
+    DecodedMemo, MemoType, MintMemo as EndpointsMint,
+};
+use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
-use crate::memo::BurnMemo;
-use crate::memo::{Address, MintMemo};
+use crate::memo::{Address, BurnMemo, MintMemo, decode_ledger_memo};
 use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei};
 use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
-use candid::Principal;
+use assert_matches::assert_matches;
+use candid::{Nat, Principal};
+use ic_cketh_test_utils::{
+    DEFAULT_DEPOSIT_TRANSACTION_HASH, DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS,
+    USDC_ERC20_CONTRACT_ADDRESS, USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE,
+};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
 use std::str::FromStr;
@@ -122,6 +133,307 @@ fn encode_burn_memo_is_stable() {
     );
 }
 
+#[test]
+fn should_decode_ledger_mint_convert_memo() {
+    for index in [
+        "0x23",
+        "0xffffffffffffffff",                 // u64 max
+        "0xffffffffffffffffffffffffffffffff", // u128 max
+    ] {
+        let log_index = CheckedAmountOf::from_str_hex(index).expect("should decode number");
+        let memo = MintMemo::Convert {
+            from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+            log_index,
+        };
+        let mut buf = vec![];
+        minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+        let args = DecodeLedgerMemoArgs {
+            memo_type: MemoType::Mint,
+            encoded_memo: buf,
+        };
+        let result = decode_ledger_memo(args);
+        let expected: DecodeLedgerMemoResult =
+            Ok(Some(DecodedMemo::Mint(Some(EndpointsMint::Convert {
+                from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+                log_index: Nat::from(log_index),
+            }))));
+        assert_eq!(
+            result, expected,
+            "Decoded Memo mismatch: {:?} vs {:?}",
+            result, expected
+        );
+    }
+}
+
+#[test]
+fn should_decode_ledger_mint_reimburse_tx_memo() {
+    let memo = MintMemo::ReimburseTransaction {
+        withdrawal_id: 123u64,
+        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseTransaction {
+            withdrawal_id: 123u64,
+            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_decode_ledger_mint_reimburse_withdrawal_memo() {
+    let memo = MintMemo::ReimburseWithdrawal {
+        withdrawal_id: 123u64,
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
+        EndpointsMint::ReimburseWithdrawal {
+            withdrawal_id: 123u64,
+        },
+    ))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_return_error_for_invalid_mint_memo() {
+    // empty array
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: vec![],
+    };
+    let result = decode_ledger_memo(args);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+    // bogus memo
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: vec![10u8],
+    };
+    let result = decode_ledger_memo(args);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+}
+
+#[test]
+fn should_decode_ledger_burn_convert_memo() {
+    let memo = BurnMemo::Convert {
+        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Convert {
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_decode_ledger_burn_gas_fee_memo() {
+    for amount in [
+        "0x23",
+        "0xffffffffffffffff",                 // u64 max
+        "0xffffffffffffffffffffffffffffffff", // u128 max
+        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", // u256 max
+    ] {
+        let ckerc20_withdrawal_amount =
+            CheckedAmountOf::from_str_hex(amount).expect("should decode number");
+        let memo = BurnMemo::Erc20GasFee {
+            ckerc20_token_symbol: CkTokenSymbol::from_str("ckTEST")
+                .expect("failed to create token symbol"),
+            ckerc20_withdrawal_amount,
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+        };
+        let mut buf = vec![];
+        minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+        let args = DecodeLedgerMemoArgs {
+            memo_type: MemoType::Burn,
+            encoded_memo: buf,
+        };
+        let result = decode_ledger_memo(args);
+        let expected: DecodeLedgerMemoResult =
+            Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
+                ckerc20_token_symbol: "ckTEST".to_string(),
+                ckerc20_withdrawal_amount: Nat::from(ckerc20_withdrawal_amount),
+                to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+            }))));
+        assert_eq!(
+            result, expected,
+            "Decoded Memo mismatch: {:?} vs {:?}",
+            result, expected
+        );
+    }
+}
+
+#[test]
+fn should_decode_ledger_burn_erc20_convert_memo() {
+    let memo = BurnMemo::Erc20Convert {
+        ckerc20_withdrawal_id: 123u64,
+        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
+            ckerc20_withdrawal_id: 123u64,
+            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_use_mixed_case_checksum_while_decoding_address() {
+    let memo = BurnMemo::Erc20Convert {
+        ckerc20_withdrawal_id: 123u64,
+        to_address: USDC_ERC20_CONTRACT_ADDRESS_LOWERCASE.parse().unwrap(),
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    let expected: DecodeLedgerMemoResult =
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20Convert {
+            ckerc20_withdrawal_id: 123u64,
+            to_address: USDC_ERC20_CONTRACT_ADDRESS.to_string(),
+        }))));
+    assert_eq!(
+        result, expected,
+        "Decoded Memo mismatch: {:?} vs {:?}",
+        result, expected
+    );
+}
+
+#[test]
+fn should_return_error_for_invalid_burn_memo() {
+    // empty array
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: vec![],
+    };
+    let result = decode_ledger_memo(args);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding BurnMemo")
+    );
+    // bogus memo
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Burn,
+        encoded_memo: vec![10u8],
+    };
+    let result = decode_ledger_memo(args);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding BurnMemo")
+    );
+}
+
+#[test]
+fn should_decode_memo_only_if_size_below_limit() {
+    let memo_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize];
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: memo_max_bytes,
+    };
+    let result = decode_ledger_memo(args);
+    assert_matches!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
+        if msg.contains("Error decoding MintMemo")
+    );
+    let memo_more_than_max_bytes = vec![0u8; CKETH_LEDGER_MEMO_SIZE as usize + 1];
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: memo_more_than_max_bytes,
+    };
+    let result = decode_ledger_memo(args);
+    assert_eq!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+            "Memo longer than permitted length {}",
+            CKETH_LEDGER_MEMO_SIZE
+        ))))
+    );
+
+    // Mint convert memo with u256::MAX log_index is above the size limit.
+    // We accept that since u128::MAX is still within the limit and should
+    // be orders of magnitude larger that the maximum possible log_index.
+    let log_index = CheckedAmountOf::from_str_hex(
+        "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    )
+    .expect("should decode number");
+    let memo = MintMemo::Convert {
+        from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
+        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
+        log_index,
+    };
+    let mut buf = vec![];
+    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let args = DecodeLedgerMemoArgs {
+        memo_type: MemoType::Mint,
+        encoded_memo: buf,
+    };
+    let result = decode_ledger_memo(args);
+    assert_eq!(
+        result,
+        Err(Some(DecodeLedgerMemoError::InvalidMemo(format!(
+            "Memo longer than permitted length {}",
+            CKETH_LEDGER_MEMO_SIZE
+        ))))
+    );
+}
+
 mod arbitrary {
     use crate::eth_rpc::Hash;
     use crate::memo::{BurnMemo, MintMemo};
@@ -146,7 +458,7 @@ mod arbitrary {
     }
 
     fn arb_mint_convert_memo() -> impl Strategy<Value = MintMemo> {
-        (arb_hash(), arb_address(), any::<u8>()).prop_map(|(tx_hash, from_address, log_index)| {
+        (arb_hash(), arb_address(), any::<u128>()).prop_map(|(tx_hash, from_address, log_index)| {
             MintMemo::Convert {
                 from_address,
                 log_index: LogIndex::from(log_index),
