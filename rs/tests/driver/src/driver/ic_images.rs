@@ -1,7 +1,7 @@
 //! The following are helpers for tests that use ICOS images. Each artifact has the triplet (version, URL, hash).
 
 use crate::driver::test_env_api::read_dependency_from_env_to_string;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_types::{ReplicaVersion, hostos_version::HostosVersion};
 use url::Url;
@@ -98,12 +98,14 @@ pub fn get_guestos_launch_measurements() -> GuestLaunchMeasurements {
 
 /// Pull the version of the initial SetupOS image from the environment.
 pub fn get_setupos_img_version() -> ReplicaVersion {
+    try_get_setupos_img_version().unwrap()
+}
+
+pub fn try_get_setupos_img_version() -> Result<ReplicaVersion> {
     let env = "ENV_DEPS__SETUPOS_DISK_IMG_VERSION";
 
-    ReplicaVersion::try_from(
-        std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")),
-    )
-    .expect("Invalid ReplicaVersion")
+    ReplicaVersion::try_from(std::env::var(env).with_context(|| format!("Failed to read {env}"))?)
+        .context("Invalid ReplicaVersion")
 }
 
 /// Pull the URL of the initial SetupOS image from the environment.
@@ -140,6 +142,21 @@ pub fn get_hostos_update_img_url() -> Url {
 /// Pull the hash of the target HostOS update image from the environment.
 pub fn get_hostos_update_img_sha256() -> String {
     let env = "ENV_DEPS__HOSTOS_UPDATE_IMG_HASH";
+
+    std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+}
+
+/// Pull the URL of the initial HostOS update image from the environment.
+pub fn get_hostos_initial_update_img_url() -> Url {
+    let env = "ENV_DEPS__HOSTOS_INITIAL_UPDATE_IMG_URL";
+
+    Url::parse(&std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'")))
+        .expect("Invalid Url")
+}
+
+/// Pull the hash of the initial HostOS update image from the environment.
+pub fn get_hostos_initial_update_img_sha256() -> String {
+    let env = "ENV_DEPS__HOSTOS_INITIAL_UPDATE_IMG_HASH";
 
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
 }

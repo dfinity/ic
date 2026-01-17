@@ -14811,6 +14811,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "backon",
+ "bare_metal_deployment",
  "base64 0.13.1",
  "bincode",
  "candid",
@@ -18328,6 +18329,7 @@ name = "nested"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "bare_metal_deployment",
  "canister-test",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
@@ -18340,9 +18342,11 @@ dependencies = [
  "ic-system-test-driver",
  "ic-types",
  "ic_consensus_system_test_utils",
+ "nix 0.24.3",
  "prost 0.13.4",
  "regex",
  "reqwest 0.12.24",
+ "serde",
  "slog",
 ]
 

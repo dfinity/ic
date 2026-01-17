@@ -18,6 +18,7 @@ use nested::util::{
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(nested::setup)
+        .with_teardown(nested::teardown)
         .add_test(systest!(upgrade_hostos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
