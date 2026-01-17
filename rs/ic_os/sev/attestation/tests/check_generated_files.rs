@@ -25,6 +25,7 @@ fn check_generated_files() {
     let proto_dir = manifest_dir.join("proto");
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     generate_prost_files(&proto_dir, out.path());
+    ic_utils_rustfmt::rustfmt(out.path()).expect("Failed to run rustfmt");
 
     let committed_file = manifest_dir.join("src/proto_gen/attestation.rs");
     let generated_file = out.path().join("attestation.rs");
