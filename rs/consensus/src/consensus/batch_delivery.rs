@@ -331,6 +331,12 @@ fn generate_responses_to_subnet_calls(
         ))
     } else {
         let block_payload = block_payload.as_ref().as_data();
+
+        consensus_responses.append(&mut generate_responses_to_remote_dkgs(
+            &block_payload.dkg.transcripts_for_remote_subnets,
+            log,
+        ));
+
         if let Some(payload) = &block_payload.idkg {
             consensus_responses.append(&mut generate_responses_to_signature_request_contexts(
                 payload,
