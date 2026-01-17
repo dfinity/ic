@@ -14,7 +14,8 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
 use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
-use ic_types::time::UNIX_EPOCH;
+use ic_types::methods::{Callback, WasmClosure};
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use itertools::Itertools;
 use proptest::prelude::*;
 use std::fs::File;
@@ -301,6 +302,18 @@ fn test_encode_decode_task_queue() {
             .respondent(canister_test_id(42))
             .build(),
     );
+    let callback = Arc::new(Callback {
+        call_context_id: 1.into(),
+        originator: canister_test_id(42),
+        respondent: canister_test_id(43),
+        cycles_sent: Cycles::new(6),
+        prepayment_for_response_execution: Cycles::new(169),
+        prepayment_for_response_transmission: Cycles::new(2197),
+        on_reply: WasmClosure::new(13, 14),
+        on_reject: WasmClosure::new(15, 16),
+        on_cleanup: Some(WasmClosure::new(17, 18)),
+        deadline: CoarseTime::from_secs_since_unix_epoch(44),
+    });
     for task in [
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
@@ -317,7 +330,10 @@ fn test_encode_decode_task_queue() {
             call_id: InstallCodeCallId::new(3u64),
         },
         ExecutionTask::AbortedExecution {
-            input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),
+            input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                response: Arc::clone(&response),
+                callback: Arc::clone(&callback),
+            }),
             prepaid_execution_cycles: Cycles::new(4),
         },
         ExecutionTask::AbortedExecution {

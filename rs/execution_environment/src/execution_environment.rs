@@ -80,9 +80,10 @@ use ic_types::{
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
-        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, SubnetMessage,
+        extract_effective_canister_id,
     },
-    methods::SystemMethod,
+    methods::{Callback, SystemMethod},
     nominal_cycles::NominalCycles,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
@@ -491,7 +492,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
         &self,
-        msg: CanisterMessage,
+        msg: SubnetMessage,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
@@ -505,7 +506,7 @@ impl ExecutionEnvironment {
         let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
-            CanisterMessage::Response(response) => {
+            SubnetMessage::Response(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
@@ -595,8 +596,8 @@ impl ExecutionEnvironment {
                 };
             }
 
-            CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
-            CanisterMessage::Request(msg) => CanisterCall::Request(msg),
+            SubnetMessage::Ingress(msg) => CanisterCall::Ingress(msg),
+            SubnetMessage::Request(msg) => CanisterCall::Request(msg),
         };
 
         let timestamp_nanos = state.time();
@@ -2009,10 +2010,11 @@ impl ExecutionEnvironment {
                     subnet_size,
                 );
             }
-            CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+            CanisterMessageOrTask::Message(CanisterMessage::Response { response, callback }) => {
                 return self.execute_canister_response(
                     canister,
                     response,
+                    callback,
                     instruction_limits,
                     time,
                     network_topology,
@@ -2907,6 +2909,7 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         response: Arc<Response>,
+        callback: Arc<Callback>,
         instruction_limits: InstructionLimits,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -2944,6 +2947,7 @@ impl ExecutionEnvironment {
         execute_response(
             canister,
             response,
+            callback,
             time,
             execution_parameters,
             round,

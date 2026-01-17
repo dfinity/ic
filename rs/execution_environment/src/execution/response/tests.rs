@@ -56,7 +56,7 @@ fn execute_response_when_stopping_status() {
         .build();
 
     // Execute response when canister status is Stopping.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -113,7 +113,7 @@ fn execute_response_refunds_cycles() {
     // Execute response.
     let balance_before = test.canister_state(a_id).system_state.balance();
     let instructions_before = test.canister_executed_instructions(a_id);
-    test.execute_response(a_id, response);
+    test.execute_responsez(a_id, response);
     let instructions_after = test.canister_executed_instructions(a_id);
     let instructions_executed = instructions_after - instructions_before;
     let balance_after = test.canister_state(a_id).system_state.balance();
@@ -183,7 +183,7 @@ fn execute_response_when_call_context_deleted() {
     );
 
     // Execute response with deleted call context.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     assert_matches!(result, ExecutionResponse::Empty);
 }
 
@@ -224,7 +224,7 @@ fn execute_response_successfully() {
     );
 
     // Execute response returns successfully.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((_, ingress_status)) => {
             let user_id = ingress_status.user_id().unwrap();
@@ -272,7 +272,7 @@ fn execute_response_traps() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((
             _,
@@ -329,7 +329,7 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Execute response returns failed status due to trap.
-    let result = test.execute_response(a_id, response);
+    let result = test.execute_responsez(a_id, response);
     match result {
         ExecutionResponse::Ingress((
             _,
@@ -514,16 +514,19 @@ fn dts_works_in_response_callback() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
         test.execute_slice(a_id);
     }
@@ -589,16 +592,19 @@ fn dts_works_in_cleanup_callback() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
         test.execute_slice(a_id);
     }
@@ -688,18 +694,21 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
-        // memory changes not reflected in global state
+        // Memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
             test.subnet_available_memory().get_execution_memory()
@@ -796,18 +805,21 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
-        // memory changes not reflected in global state
+        // Memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
             test.subnet_available_memory().get_execution_memory()
@@ -829,7 +841,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(100_000)
         .with_manual_execution()
         .build();
 
@@ -884,16 +896,19 @@ fn dts_abort_works_in_response_callback() {
     );
 
     // The canister state should be clean. Specifically, no changes in the
-    // cycles balance and call contexts.
+    // cycles balance.
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         original_system_state.balance()
     );
-    assert_eq!(
+    // Callback should have been consumed.
+    assert!(
         test.canister_state(a_id)
             .system_state
-            .call_context_manager(),
-        original_system_state.call_context_manager()
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .is_empty()
     );
 
     // Aborting doesn't change the clean canister state.
@@ -906,11 +921,14 @@ fn dts_abort_works_in_response_callback() {
         test.canister_state(a_id).system_state.balance(),
         original_system_state.balance()
     );
-    assert_eq!(
+    // Callback is gone.
+    assert!(
         test.canister_state(a_id)
             .system_state
-            .call_context_manager(),
-        original_system_state.call_context_manager()
+            .call_context_manager()
+            .unwrap()
+            .callbacks()
+            .is_empty()
     );
 
     // Execute the response callback again and it should succeed.
@@ -924,7 +942,7 @@ fn dts_abort_works_in_response_callback() {
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(100_000_000)
-        .with_slice_instruction_limit(1_000_000)
+        .with_slice_instruction_limit(100_000)
         .with_manual_execution()
         .build();
 
@@ -972,22 +990,25 @@ fn dts_abort_works_in_cleanup_callback() {
     // until there are no more slices.
     let mut i = 0;
     'outer: loop {
-        for _ in 0..i {
+        for _ in 0..=i {
             test.execute_slice(a_id);
             if test.canister_state(a_id).next_execution() == NextExecution::None {
                 break 'outer;
             }
             // The canister state should be clean. Specifically, no changes in the
-            // cycles balance and call contexts.
+            // cycles balance.
             assert_eq!(
                 test.canister_state(a_id).system_state.balance(),
                 original_system_state.balance()
             );
-            assert_eq!(
+            // Callback should have been consumed.
+            assert!(
                 test.canister_state(a_id)
                     .system_state
-                    .call_context_manager(),
-                original_system_state.call_context_manager()
+                    .call_context_manager()
+                    .unwrap()
+                    .callbacks()
+                    .is_empty()
             );
         }
         // Aborting doesn't change the clean canister state.
@@ -996,11 +1017,14 @@ fn dts_abort_works_in_cleanup_callback() {
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback is gone as soon as we've started executing.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
         i += 1;
     }
@@ -2059,16 +2083,19 @@ fn response_callback_succeeds_with_memory_reservation() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
         // Memory changes not reflected in global state.
         assert_eq!(
@@ -2186,16 +2213,19 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
         // The canister state should be clean. Specifically, no changes in the
-        // cycles balance and call contexts.
+        // cycles balance.
         assert_eq!(
             test.canister_state(a_id).system_state.balance(),
             original_system_state.balance()
         );
-        assert_eq!(
+        // Callback should have been consumed.
+        assert!(
             test.canister_state(a_id)
                 .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
+                .call_context_manager()
+                .unwrap()
+                .callbacks()
+                .is_empty()
         );
         // Memory changes not reflected in global state.
         assert_eq!(

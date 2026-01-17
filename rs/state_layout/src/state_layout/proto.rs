@@ -6,6 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
+use ic_replicated_state::page_map::int_map::MutableIntMap;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -125,7 +126,20 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
-        let task_queue = TaskQueue::try_from(tasks)?;
+        let mut status: CanisterStatus =
+            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
+        let callbacks = match &mut status {
+            CanisterStatus::Running {
+                call_context_manager,
+                ..
+            }
+            | CanisterStatus::Stopping {
+                call_context_manager,
+                ..
+            } => call_context_manager.callbacks_mut(),
+            CanisterStatus::Stopped => &mut MutableIntMap::new(),
+        };
+        let task_queue = TaskQueue::try_from((tasks, callbacks))?;
 
         Ok(Self {
             controllers,
@@ -151,10 +165,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             cycles_debit,
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
-            status: try_from_option_field(
-                value.canister_status,
-                "CanisterStateBits::canister_status",
-            )?,
+            status,
             scheduled_as_first: value.scheduled_as_first,
             skipped_round_due_to_no_messages: value.skipped_round_due_to_no_messages,
             executed: value.executed,
