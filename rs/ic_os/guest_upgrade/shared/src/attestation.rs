@@ -38,6 +38,7 @@ mod tests {
             server_tls_public_key,
         };
 
+        #[allow(deprecated)]
         let result = custom_data.encode_for_sev_legacy().unwrap();
         assert_eq!(
             &result,
