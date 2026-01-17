@@ -146,11 +146,11 @@
                     </tr>
                    <tr id="latest-entry-time">
                         <th>Latest entry initiated at</th>
-                        <td><code>{% call show_datetime_opt(latest_entry_time) %}</code></td>
+                        <td><code>{% call show_datetime_opt(latest_entry_time) %}{% endcall %}</code></td>
                     </tr>
                     <tr id="oldest-entry-time">
                         <th>Oldest entry initiated at</th>
-                        <td><code>{% call show_datetime_opt(oldest_entry_time) %}</code></td>
+                        <td><code>{% call show_datetime_opt(oldest_entry_time) %}{% endcall %}</code></td>
                     </tr>
                 </tbody>
             </table>
@@ -164,7 +164,7 @@
                 <tbody>
                     {% for (txid, timestamp, status) in fetch_tx_status %}
                     <tr>
-                        <td>{% call btc_tx_link(txid) %}</td>
+                        <td>{% call btc_tx_link(txid) %}{% endcall %}</td>
                         <td><code>{{ timestamp|timestamp_to_datetime }}</code></td>
                         <td>
                             {% if let Some(fetched) = status.fetched() %}
@@ -177,7 +177,7 @@
                             ><summary>{{ status }}</summary>
                                 <ul>
                                 {% for address in fetched.input_addresses %}
-                                    <li>{% call btc_address(address) %}</li>
+                                    <li>{% call btc_address(address) %}{% endcall %}</li>
                                 {% endfor %}
                                 </ul>
                             </details>
