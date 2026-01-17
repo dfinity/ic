@@ -77,10 +77,13 @@ SELECT
   ) AS p90_duration
 
 FROM
-  bazel_tests
+  bazel_tests            AS bt
+  JOIN bazel_invocations AS bi ON bt.build_id = bi.build_id
+  JOIN workflow_runs     AS wr ON bi.run_id = wr.id
 
 WHERE
-  '$period' = '' OR first_start_time > now() - ('1 $period'::interval)
+  ('$period' = '' OR first_start_time > now() - ('1 $period'::interval))
+  AND (NOT $only_prs OR wr.event_type = 'pull_request')
 
 GROUP BY label
 

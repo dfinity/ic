@@ -78,6 +78,7 @@ def top(args):
 
     query = Template((THIS_SCRIPT_DIR / "top_tests.sql").read_text()).substitute(
         period=period,
+        only_prs="TRUE" if args.prs else "FALSE",
         N=args.N,
         order_by=args.order_by,
     )
@@ -127,6 +128,7 @@ def last_runs(args):
         test_target=args.test_target,
         overall_statuses=",".join(map(str, overall_statuses)),
         period=period,
+        only_prs="TRUE" if args.prs else "FALSE",
     )
 
     log_psql_query(
@@ -165,13 +167,16 @@ def main():
     period_group.add_argument("--week", action="store_true", help="Limit to last week (default)")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
+    prs_parser = argparse.ArgumentParser(add_help=False)
+    prs_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
+
     subparsers = parser.add_subparsers(required=True)
 
     ## top ####################################################################
 
     top_parser = subparsers.add_parser(
         "top",
-        parents=[common_parser, period_parser],
+        parents=[common_parser, period_parser, prs_parser],
         help="Get the top N non-successful/flaky/failed/timed-out tests in the last period",
     )
     top_parser.add_argument("N", type=int, nargs="?", default=100, help="Number of tests to show (default: 100)")
@@ -201,7 +206,7 @@ def main():
 
     last_runs_parser = subparsers.add_parser(
         "last-runs",
-        parents=[common_parser, period_parser],
+        parents=[common_parser, period_parser, prs_parser],
         help="Get all runs of the specified test in the last period",
     )
     last_runs_parser.add_argument("--success", action="store_true")
