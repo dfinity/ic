@@ -1,5 +1,8 @@
-use super::*;
-use ic_interfaces::crypto::{BasicSigner, SignableMock};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_test_utils_tls::registry::REG_V1;
+use ic_interfaces::crypto::BasicSigner;
+use ic_types::crypto::SignableMock;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Creates a TempCryptoComponent with a remote vault, starts multiple tokio
@@ -8,7 +11,7 @@ use std::time::{Duration, Instant};
 #[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
-    const NUM_TASKS: i32 = 3;
+    const NUM_TASKS: i32 = 10;
     let registry_version = REG_V1;
     let tokio_rt = new_tokio_runtime();
     let temp_crypto = TempCryptoComponent::builder()
@@ -28,7 +31,7 @@ fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
         let temp_crypto = Arc::clone(&temp_crypto);
         join_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let task_duration = start.elapsed();
             (result, task_duration)
         }));
@@ -52,7 +55,7 @@ fn should_run_parallel_vault_calls_from_tokio_tasks_in_parallel() {
 #[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
-    const NUM_TASKS: i32 = 3;
+    const NUM_TASKS: i32 = 10;
     let registry_version = REG_V1;
     let temp_crypto = TempCryptoComponent::builder()
         .with_remote_vault()
@@ -70,7 +73,7 @@ fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
         let temp_crypto = Arc::clone(&temp_crypto);
         thread_handles.push(std::thread::spawn(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let thread_duration = start.elapsed();
             (result, thread_duration)
         }));
@@ -95,7 +98,7 @@ fn should_run_parallel_vault_calls_from_std_threads_in_parallel() {
 #[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel() {
-    const NUM_TASKS_PER_CLIENT: i32 = 3;
+    const NUM_TASKS_PER_CLIENT: i32 = 10;
     let registry_version = REG_V1;
     let tokio_rt = new_tokio_runtime();
     let temp_crypto = TempCryptoComponent::builder()
@@ -115,7 +118,7 @@ fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel(
         let temp_crypto = Arc::clone(&temp_crypto);
         task_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let task_duration = start.elapsed();
             (result, task_duration)
         }));
@@ -127,7 +130,7 @@ fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel(
         let temp_crypto = Arc::clone(&temp_crypto);
         thread_handles.push(std::thread::spawn(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let thread_duration = start.elapsed();
             (result, thread_duration)
         }));
@@ -159,7 +162,7 @@ fn should_run_parallel_vault_calls_from_tokio_tasks_and_std_threads_in_parallel(
 #[test]
 #[ignore] // The test is ignored because its time-based test approach makes it flaky on CI.
 fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
-    const NUM_TASKS_PER_CLIENT: i32 = 3;
+    const NUM_TASKS_PER_CLIENT: i32 = 10;
     let registry_version = REG_V1;
     let tokio_rt = new_tokio_runtime();
     let temp_crypto_1 = TempCryptoComponent::builder()
@@ -171,7 +174,7 @@ fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
         )
         .build_arc();
     let temp_crypto_2 = TempCryptoComponent::builder()
-        .with_existing_remote_vault(temp_crypto_1.vault_server().unwrap())
+        .with_override_vault(temp_crypto_1.remote_vault_client().unwrap())
         .with_vault_client_runtime(tokio_rt.handle().clone())
         .with_node_id(temp_crypto_1.get_node_id())
         .with_registry(Arc::clone(temp_crypto_1.registry_client()))
@@ -185,7 +188,7 @@ fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
         let temp_crypto = Arc::clone(&temp_crypto_1);
         task_handles.push(tokio_rt.spawn_blocking(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let task_duration = start.elapsed();
             (result, task_duration)
         }));
@@ -197,7 +200,7 @@ fn should_run_parallel_vault_calls_from_multiple_clients_in_parallel() {
         let temp_crypto = Arc::clone(&temp_crypto_2);
         thread_handles.push(std::thread::spawn(move || {
             let start = Instant::now();
-            let result = temp_crypto.sign_basic(&msg, temp_crypto.get_node_id(), registry_version);
+            let result = temp_crypto.sign_basic(&msg);
             let thread_duration = start.elapsed();
             (result, thread_duration)
         }));
