@@ -76,7 +76,8 @@ pub trait LedgerContext {
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData>;
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData>;
 
-    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>>;
+    fn fee_collector(&self) -> Option<Self::AccountId>;
+    fn set_fee_collector(&mut self, fee_collector: Option<Self::AccountId>);
 }
 
 pub trait LedgerTransaction: Sized {
@@ -274,13 +275,12 @@ where
             },
         })?;
 
-    let fee_collector = ledger.fee_collector().cloned();
     let block = L::Block::from_transaction(
         ledger.blockchain().last_hash,
         transaction,
         now,
         effective_fee,
-        fee_collector,
+        None,
     );
     let block_timestamp = block.timestamp();
 

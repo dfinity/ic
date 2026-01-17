@@ -611,6 +611,9 @@ pub struct Ledger {
 
     #[serde(default = "wasm_token_type")]
     pub token_type: String,
+
+    #[serde(default)]
+    fee_collector_107: Option<Account>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -697,7 +700,7 @@ impl Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
-            fee_collector: fee_collector_account.map(FeeCollector::from),
+            fee_collector: None,
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 panic!("failed to convert transfer fee {transfer_fee} to tokens: {e}")
             }),
@@ -712,6 +715,7 @@ impl Ledger {
             ledger_version: LEDGER_VERSION,
             index_principal,
             token_type: wasm_token_type(),
+            fee_collector_107: fee_collector_account,
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -805,8 +809,12 @@ impl LedgerContext for Ledger {
         &mut self.stable_approvals
     }
 
-    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
-        self.fee_collector.as_ref()
+    fn fee_collector(&self) -> Option<Self::AccountId> {
+        self.fee_collector_107
+    }
+
+    fn set_fee_collector(&mut self, fee_collector: Option<Self::AccountId>) {
+        self.fee_collector_107 = fee_collector;
     }
 }
 
