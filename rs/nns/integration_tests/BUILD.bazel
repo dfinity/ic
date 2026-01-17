@@ -143,6 +143,7 @@ ALIASES = {}
 DEV_DATA = [
     # Keep sorted.
     "src/neurons.csv",
+    "subnet_rental_canister.wasm.gz",
     ":canister-playground-canister",
     ":mem-utils-test-canister",
     ":unstoppable-canister",
@@ -201,7 +202,8 @@ DEV_ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
-    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    # "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath subnet_rental_canister.wasm.gz)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
 }

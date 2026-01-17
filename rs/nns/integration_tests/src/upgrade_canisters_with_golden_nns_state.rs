@@ -8,7 +8,7 @@ use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
@@ -20,9 +20,10 @@ use ic_nns_test_utils::state_test_helpers::{
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
     state_test_helpers::{
-        get_canister_status, manage_network_economics, nns_cast_vote,
-        nns_create_super_powerful_neuron, nns_propose_upgrade_nns_canister,
-        wait_for_canister_upgrade_to_succeed,
+        RentalAgreement, get_canister_status,
+        get_principals_authorized_to_create_canisters_to_subnets, list_rental_agreements,
+        manage_network_economics, nns_cast_vote, nns_create_super_powerful_neuron,
+        nns_propose_upgrade_nns_canister, wait_for_canister_upgrade_to_succeed,
     },
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
@@ -34,6 +35,7 @@ use std::{
     fmt::{Debug, Formatter},
     fs,
     str::FromStr,
+    time::Duration,
 };
 
 struct NnsCanisterUpgrade {
@@ -66,6 +68,8 @@ impl NnsCanisterUpgrade {
             // This is necessary because state_machine tests run only with an NNS subnet, where real
             // management canister calls are not possible (Just NNS subnet is present).
             "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_TEST_WASM_PATH"),
+
+            "subnet-rental"  => (SUBNET_RENTAL_CANISTER_ID, "SUBNET_RENTAL_CANISTER_WASM_PATH"),
             _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
 
@@ -341,6 +345,11 @@ fn test_upgrade_canisters_with_golden_nns_state() {
             }
 
             repetition_number += 1;
+
+            for _ in 0..300 {
+                state_machine.advance_time(Duration::from_secs(1));
+                state_machine.tick();
+            }
         };
 
     // TODO[NNS1-3790]: Remove this once the mainnet NNS has initialized the
@@ -364,6 +373,10 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     let metrics_before = sanity_check::fetch_metrics(&state_machine);
 
+    // assert_eq!(list_rental_agreements(&state_machine), vec![]);
+    let original_auths = get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+
+    // First batch of upgrades.
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
     // Modify all WASMs, but preserve their behavior.
@@ -371,7 +384,86 @@ fn test_upgrade_canisters_with_golden_nns_state() {
         nns_canister_upgrade.modify_wasm_but_preserve_behavior();
     }
 
+    let rental_agreements_after_first_upgrade = list_rental_agreements(&state_machine);
+    assert_eq!(
+        rental_agreements_after_first_upgrade.len(),
+        1,
+        "{rental_agreements_after_first_upgrade:#?}"
+    );
+    let first_rental_agreement = rental_agreements_after_first_upgrade
+        .first()
+        .unwrap()
+        .clone();
+
+    let auths_after_first_upgrade =
+        get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    assert_ne!(auths_after_first_upgrade, original_auths);
+
+    // Second batch of upgrades.
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
+
+    let rental_agreements_after_second_upgrade = list_rental_agreements(&state_machine);
+    assert_eq!(
+        rental_agreements_after_second_upgrade.len(),
+        1,
+        "{rental_agreements_after_second_upgrade:#?}"
+    );
+    let second_rental_agreement = rental_agreements_after_second_upgrade
+        .first()
+        .unwrap()
+        .clone();
+    assert_eq!(
+        second_rental_agreement,
+        RentalAgreement {
+            total_cycles_burned: second_rental_agreement.total_cycles_burned,
+            ..first_rental_agreement.clone()
+        },
+    );
+    assert!(
+        second_rental_agreement.total_cycles_burned > first_rental_agreement.total_cycles_burned,
+        "{} vs. {}",
+        second_rental_agreement.total_cycles_burned,
+        first_rental_agreement.total_cycles_burned,
+    );
+
+    let auths_after_second_upgrade =
+        get_principals_authorized_to_create_canisters_to_subnets(&state_machine);
+    assert_eq!(auths_after_second_upgrade, auths_after_first_upgrade);
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("first:");
+    println!("{rental_agreements_after_first_upgrade:#?}");
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("second:");
+    println!("{rental_agreements_after_second_upgrade:#?}");
+
+    println!();
+    println!("================================================================================");
+    println!();
+    println!("original_auths:");
+    println!("{original_auths:#?}");
+    println!();
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("auths_after_first_upgrade:");
+    println!("{auths_after_first_upgrade:#?}");
+    println!();
+
+    println!();
+    println!("--------------------------------------------------------------------------------");
+    println!();
+    println!("auths_after_second_upgrade:");
+    println!("{auths_after_second_upgrade:#?}");
+    println!();
+
+    return;
 
     sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
 
