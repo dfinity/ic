@@ -33,6 +33,13 @@ def terminal_hyperlink(text: str, url: str) -> str:
     return f"\033]8;;{url}\033\\{text}\033]8;;\033\\" if sys.stdout.isatty() else text
 
 
+def sourcegraph_url(label: str) -> str:
+    parts = label.rsplit(":", 1)
+    dir = parts[0].replace("//", "")
+    test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
+    return f"https://sourcegraph.com/search?q=repo:^github\\.com/dfinity/ic$+file:{dir}/BUILD.bazel+{test}"
+
+
 def log(*args, **kwargs):
     print(*args, **kwargs, file=sys.stderr)
 
@@ -83,6 +90,8 @@ def top(args):
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
+
+    df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     print(tabulate(df, headers="keys", tablefmt="github"))
 
