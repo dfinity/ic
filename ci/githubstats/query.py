@@ -134,6 +134,7 @@ def last_runs(args):
         df["buildbuddy_url"].apply(get_redirect_location).apply(lambda url: f"{url}?target={args.test_target}")
     )
     df["buildbuddy_log_link"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
+
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["head_sha"] = df["head_sha"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/dfinity/ic/commit/{commit}")
