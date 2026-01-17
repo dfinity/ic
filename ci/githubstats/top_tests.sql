@@ -86,4 +86,4 @@ GROUP BY label
 
 ORDER BY $order_by DESC
 
-LIMIT $N;
+LIMIT $N
