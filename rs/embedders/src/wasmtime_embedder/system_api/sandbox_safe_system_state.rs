@@ -333,6 +333,12 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
+        // Append non-empty delta log to the total canister log.
+        let delta = &mut self.canister_log;
+        if !delta.is_empty() {
+            system_state.canister_log.append_delta_log(delta);
+        }
+
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.apply_balance_changes(system_state);
@@ -512,11 +518,6 @@ impl SystemStateModifications {
         if let Some(new_global_timer) = self.new_global_timer {
             system_state.global_timer = new_global_timer;
         }
-
-        // Append delta log to the total canister log.
-        system_state
-            .canister_log
-            .append_delta_log(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
