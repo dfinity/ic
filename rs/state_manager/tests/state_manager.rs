@@ -83,12 +83,14 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::convert::{TryFrom, TryInto};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
 pub mod common;
 use common::*;
 
 const NUM_THREADS: u32 = 3;
+
+const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
 fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
     t.try_into().unwrap()
@@ -8922,4 +8924,164 @@ fn random_canister_input(
     for op in ops {
         env = execute_op(env, canister_id, op.clone());
     }
+}
+
+fn no_clone_count(metrics: &MetricsRegistry) -> u64 {
+    fetch_int_counter_vec(metrics, "state_manager_no_clone_count")
+        .values()
+        .sum::<u64>()
+}
+
+#[test]
+fn commit_and_certify_optimization_conditions() {
+    state_manager_test(|metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // all conditions are satisfied => optimization triggers
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+
+        // `CertificationScope::Full` => optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(3), CertificationScope::Full, None);
+        assert_eq!(no_clone_count(metrics), 1);
+
+        // height of 20 is divisible by 10 => optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+
+        // height of 42 is not less than `latest_subnet_certified_height` => optimization does not trigger
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+    });
+}
+
+#[test]
+fn commit_and_certify_optimization_semantics() {
+    state_manager_test(|metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // just the initial state is stored in `SharedState` at the beginning
+        let only_initial_state = || {
+            assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
+            assert!(sm.certifications_metadata_heights().is_empty());
+            assert!(sm.certifications().is_empty());
+        };
+        only_initial_state();
+
+        // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state
+        let mut state = sm.take_tip().1;
+        state.metadata.batch_time += Duration::from_secs(1);
+        let batch_time_opt = state.metadata.batch_time;
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+        only_initial_state();
+
+        // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
+        let mut state = sm.take_tip().1;
+        assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
+        state.metadata.batch_time += Duration::from_secs(1);
+        let batch_time_no_opt = state.metadata.batch_time;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+
+        assert_eq!(
+            sm.state_snapshot_heights(),
+            vec![INITIAL_STATE_HEIGHT, no_opt_height]
+        );
+        let new_snapshot = sm.state_snapshot(no_opt_height);
+        assert_eq!(new_snapshot.metadata.batch_time, batch_time_no_opt);
+
+        assert_eq!(sm.certifications_metadata_heights(), vec![no_opt_height]);
+        assert!(
+            sm.certifications_metadata_hash_tree(no_opt_height)
+                .is_some()
+        );
+        assert!(
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_none()
+        );
+        assert!(sm.certifications().is_empty());
+    });
+}
+
+#[test]
+fn latest_subnet_certified_height() {
+    state_manager_test(|_metrics, sm| {
+        assert_eq!(sm.latest_subnet_certified_height(), 0);
+
+        // `StateManagerImpl::remove_inmemory_states_below` updates `latest_subnet_certified_height`
+        sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 100);
+
+        // `StateManagerImpl::remove_inmemory_states_below` does not update `latest_subnet_certified_height`
+        // to a lower value
+        sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 100);
+
+        // `StateManagerImpl::remove_states_below` does not update `latest_subnet_certified_height`
+        sm.remove_states_below(Height::new(200));
+        assert_eq!(sm.latest_subnet_certified_height(), 100);
+    });
+}
+
+#[test]
+fn tip_height() {
+    state_manager_test(|metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        assert_eq!(sm.tip_height(), 0);
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+        assert_eq!(sm.tip_height(), opt_height.get());
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+        assert_eq!(sm.tip_height(), no_opt_height.get());
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 10, tip_height = 0"
+)]
+fn commit_and_certify_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        // optimization does not trigger
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
+)]
+fn commit_and_certify_optimization_tip_set_panic() {
+    state_manager_test(|_metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // optimization triggers
+        let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+    });
 }

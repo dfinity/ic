@@ -4075,6 +4075,36 @@ pub mod testing {
 
         /// Testing only: Wait till deallocation queue is empty.
         fn flush_deallocation_channel(&self);
+
+        /// Testing only: Returns state heights in `states.snapshots`.
+        fn state_snapshot_heights(&self) -> Vec<Height>;
+
+        /// Testing only: Returns state at a given height in `states.snapshots`.
+        fn state_snapshot(&self, height: Height) -> Arc<ReplicatedState>;
+
+        /// Testing only: Returns heights in `states.certifications_metadata`.
+        fn certifications_metadata_heights(&self) -> Vec<Height>;
+
+        /// Testing only: Returns hash tree at a given height in `states.certifications_metadata`.
+        fn certifications_metadata_hash_tree(
+            &self,
+            height: Height,
+        ) -> Option<(Arc<HashTree>, Instant)>;
+
+        /// Testing only: Returns state hash at a given height in `states.certifications_metadata`.
+        fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash;
+
+        /// Testing only: Returns certification at a given height in `states.certifications_metadata`.
+        fn certifications_metadata_certification(&self, height: Height) -> Option<Certification>;
+
+        /// Testing only: Returns certifications in `states.certifications`.
+        fn certifications(&self) -> BTreeMap<Height, Certification>;
+
+        /// Testing only: Returns `latest_subnet_certified_height`.
+        fn latest_subnet_certified_height(&self) -> u64;
+
+        /// Testing only: Returns `tip_height`.
+        fn tip_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4102,252 +4132,72 @@ pub mod testing {
         fn flush_deallocation_channel(&self) {
             self.deallocator_thread.flush_deallocation_channel();
         }
-    }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::StateManagerImpl;
-    use ic_config::state_manager::Config;
-    use ic_interfaces_state_manager::{CertificationScope, StateManager};
-    use ic_logger::ReplicaLogger;
-    use ic_metrics::MetricsRegistry;
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::ReplicatedState;
-    use ic_test_utilities_consensus::fake::FakeVerifier;
-    use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_metrics::fetch_int_counter_vec;
-    use ic_test_utilities_tmpdir::tmpdir;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::Height;
-    use std::collections::BTreeSet;
-    use std::sync::Arc;
-    use std::sync::atomic::Ordering;
-    use std::time::Duration;
+        fn state_snapshot_heights(&self) -> Vec<Height> {
+            let states = self.states.read();
+            states.snapshots.iter().map(|s| s.height).collect()
+        }
 
-    fn no_clone_count(metrics: &MetricsRegistry) -> u64 {
-        fetch_int_counter_vec(metrics, "state_manager_no_clone_count")
-            .values()
-            .sum::<u64>()
-    }
+        fn state_snapshot(&self, height: Height) -> Arc<ReplicatedState> {
+            let states = self.states.read();
+            states
+                .snapshots
+                .iter()
+                .find(|s| s.height == height)
+                .expect("Did not find state at given height")
+                .state
+                .clone()
+        }
 
-    fn state_manager_for_tests(log: ReplicaLogger) -> (MetricsRegistry, StateManagerImpl) {
-        let metrics = MetricsRegistry::new();
-        let tmp = tmpdir("sm");
-        let config = Config::new(tmp.path().into());
-        let sm = StateManagerImpl::new(
-            Arc::new(FakeVerifier::new()),
-            subnet_test_id(42),
-            SubnetType::Application,
-            log.clone(),
-            &metrics,
-            &config,
-            None,
-            ic_types::malicious_flags::MaliciousFlags::default(),
-        );
-        (metrics, sm)
-    }
+        fn certifications_metadata_heights(&self) -> Vec<Height> {
+            let states = self.states.read();
+            states.certifications_metadata.keys().cloned().collect()
+        }
 
-    #[test]
-    fn commit_and_certify_optimization_conditions() {
-        with_test_replica_logger(|log| {
-            let (metrics, sm) = state_manager_for_tests(log);
+        fn certifications_metadata_hash_tree(
+            &self,
+            height: Height,
+        ) -> Option<(Arc<HashTree>, Instant)> {
+            let states = self.states.read();
+            states
+                .certifications_metadata
+                .get(&height)
+                .expect("Did not find metadata at given height")
+                .hash_tree
+                .clone()
+        }
 
-            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                42
-            );
+        fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash {
+            let states = self.states.read();
+            states
+                .certifications_metadata
+                .get(&height)
+                .expect("Did not find metadata at given height")
+                .certified_state_hash
+                .clone()
+        }
 
-            // all conditions are satisfied => optimization triggers
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, Height::new(2), CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
+        fn certifications_metadata_certification(&self, height: Height) -> Option<Certification> {
+            let states = self.states.read();
+            states
+                .certifications_metadata
+                .get(&height)
+                .expect("Did not find metadata at given height")
+                .certification
+                .clone()
+        }
 
-            // `CertificationScope::Full` => optimization does not trigger
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, Height::new(3), CertificationScope::Full, None);
-            assert_eq!(no_clone_count(&metrics), 1);
+        fn certifications(&self) -> BTreeMap<Height, Certification> {
+            let states = self.states.read();
+            states.certifications.clone()
+        }
 
-            // height of 20 is divisible by 10 => optimization does not trigger
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
+        fn latest_subnet_certified_height(&self) -> u64 {
+            self.latest_subnet_certified_height.load(Ordering::Relaxed)
+        }
 
-            // height of 42 is not less than `latest_subnet_certified_height` => optimization does not trigger
-            assert_eq!(sm.latest_subnet_certified_height.load(Ordering::Relaxed), 0);
-            let state = sm.take_tip().1;
-            sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
-        });
-    }
-
-    #[test]
-    fn commit_and_certify_optimization_semantics() {
-        with_test_replica_logger(|log| {
-            let (metrics, sm) = state_manager_for_tests(log);
-
-            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                42
-            );
-
-            // just the initial state is stored in `SharedState` at the beginning
-            let only_initial_state = || {
-                let states = sm.states.read();
-
-                assert_eq!(states.snapshots.len(), 1);
-                assert_eq!(
-                    states.snapshots[0].height,
-                    StateManagerImpl::INITIAL_STATE_HEIGHT
-                );
-
-                assert!(states.certifications_metadata.is_empty());
-
-                assert!(states.certifications.is_empty());
-            };
-            only_initial_state();
-
-            // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state
-            let mut state = sm.take_tip().1;
-            state.metadata.batch_time += Duration::from_secs(1);
-            let batch_time_opt = state.metadata.batch_time;
-            let opt_height = Height::new(1);
-            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
-            only_initial_state();
-
-            // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
-            let mut state = sm.take_tip().1;
-            assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
-            state.metadata.batch_time += Duration::from_secs(1);
-            let batch_time_no_opt = state.metadata.batch_time;
-            let no_opt_height = Height::new(10);
-            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
-
-            let states = sm.states.read();
-
-            assert_eq!(states.snapshots.len(), 2);
-            assert_eq!(
-                states.snapshots[0].height,
-                StateManagerImpl::INITIAL_STATE_HEIGHT
-            );
-            assert_eq!(states.snapshots[1].height, no_opt_height);
-            let new_snapshot = &states.snapshots[1].state;
-            assert_eq!(new_snapshot.metadata.batch_time, batch_time_no_opt);
-
-            assert_eq!(
-                states
-                    .certifications_metadata
-                    .keys()
-                    .cloned()
-                    .collect::<Vec<_>>(),
-                vec![no_opt_height]
-            );
-            let new_certification_metadata =
-                states.certifications_metadata.get(&no_opt_height).unwrap();
-            assert!(new_certification_metadata.hash_tree.is_some());
-            assert!(new_certification_metadata.certification.is_none());
-
-            assert!(states.certifications.is_empty());
-        });
-    }
-
-    #[test]
-    fn latest_subnet_certified_height() {
-        with_test_replica_logger(|log| {
-            let (_metrics, sm) = state_manager_for_tests(log);
-
-            assert_eq!(sm.latest_subnet_certified_height.load(Ordering::Relaxed), 0);
-
-            // `StateManagerImpl::remove_inmemory_states_below` updates `latest_subnet_certified_height`
-            sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                100
-            );
-
-            // `StateManagerImpl::remove_inmemory_states_below` does not update `latest_subnet_certified_height`
-            // to a lower value
-            sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                100
-            );
-
-            // `StateManagerImpl::remove_states_below` does not update `latest_subnet_certified_height`
-            sm.remove_states_below(Height::new(200));
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                100
-            );
-        });
-    }
-
-    #[test]
-    fn tip_height() {
-        with_test_replica_logger(|log| {
-            let (metrics, sm) = state_manager_for_tests(log);
-
-            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                42
-            );
-
-            assert_eq!(sm.tip_height.load(Ordering::Relaxed), 0);
-
-            // optimization triggers
-            let state = sm.take_tip().1;
-            let opt_height = Height::new(1);
-            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
-            assert_eq!(sm.tip_height.load(Ordering::Relaxed), opt_height.get());
-
-            // optimization does not trigger
-            let state = sm.take_tip().1;
-            let no_opt_height = Height::new(10);
-            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
-            assert_eq!(no_clone_count(&metrics), 1);
-            assert_eq!(sm.tip_height.load(Ordering::Relaxed), no_opt_height.get());
-        });
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Attempt to commit state not borrowed from this StateManager, height = 10, tip_height = 0"
-    )]
-    fn commit_and_certify_tip_set_panic() {
-        with_test_replica_logger(|log| {
-            let (_metrics, sm) = state_manager_for_tests(log);
-
-            // optimization does not trigger
-            let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
-            let no_opt_height = Height::new(10);
-            sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
-        });
-    }
-
-    #[test]
-    #[should_panic(
-        expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
-    )]
-    fn commit_and_certify_optimization_tip_set_panic() {
-        with_test_replica_logger(|log| {
-            let (_metrics, sm) = state_manager_for_tests(log);
-
-            sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-            assert_eq!(
-                sm.latest_subnet_certified_height.load(Ordering::Relaxed),
-                42
-            );
-
-            // optimization triggers
-            let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
-            let opt_height = Height::new(1);
-            sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
-        });
+        fn tip_height(&self) -> u64 {
+            self.tip_height.load(Ordering::Relaxed)
+        }
     }
 }
