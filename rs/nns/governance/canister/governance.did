@@ -380,6 +380,7 @@ type GovernanceCachedMetrics = record {
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
   spawning_neurons_count : nat64;
+  total_maturity_disbursements_in_progress_e8s_equivalent : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
