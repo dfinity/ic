@@ -42,7 +42,7 @@
 //! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
-    CanisterId, CountBytes, RegistryVersion, ReplicaVersion, Time,
+    CanisterId, CountBytes, Cycles, RegistryVersion, ReplicaVersion, Time,
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -134,6 +134,26 @@ pub struct CanisterHttpRequestContext {
     /// The replication strategy for this request.
     pub replication: Replication,
     pub pricing_version: PricingVersion,
+    pub payment_info: PaymentInfo,
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+pub struct PaymentInfo {
+    pub per_replica_allowance: Cycles,
+    /// The amount of cycles that have already been refunded for this request.
+    /// Invariant: already_refunded <= per_replica_allowance * number_of_replicas
+    pub already_refunded: Cycles,
+    pub refunded_nodes: BTreeSet<NodeId>,
+}
+
+impl Default for PaymentInfo {
+    fn default() -> Self {
+        Self {
+            per_replica_allowance: Cycles::new(0),
+            already_refunded: Cycles::new(0),
+            refunded_nodes: BTreeSet::new(),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -177,6 +197,18 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             version: Some(pricing_version),
         };
 
+        let payment_info = pb_metadata::PaymentInfo {
+            per_replica_allowance: Some(context.payment_info.per_replica_allowance.into()),
+            already_refunded: Some(context.payment_info.already_refunded.into()),
+            refunded_nodes: context
+                .payment_info
+                .refunded_nodes
+                .iter()
+                .copied()
+                .map(node_id_into_protobuf)
+                .collect(),
+        };
+
         pb_metadata::CanisterHttpRequestContext {
             request: Some((&context.request).into()),
             url: context.url.clone(),
@@ -205,6 +237,7 @@ impl From<&CanisterHttpRequestContext> for pb_metadata::CanisterHttpRequestConte
             time: context.time.as_nanos_since_unix_epoch(),
             replication: Some(replication_message),
             pricing_version: Some(pricing_message),
+            payment_info: Some(payment_info),
         }
     }
 }
@@ -243,6 +276,25 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
                 None => default_pricing_version(),
             },
             None => default_pricing_version(),
+        };
+
+        let payment_info = match context.payment_info {
+            Some(payment_info) => PaymentInfo {
+                per_replica_allowance: payment_info
+                    .per_replica_allowance
+                    .map(Into::into)
+                    .unwrap_or_default(),
+                already_refunded: payment_info
+                    .already_refunded
+                    .map(Into::into)
+                    .unwrap_or_default(),
+                refunded_nodes: payment_info
+                    .refunded_nodes
+                    .into_iter()
+                    .map(node_id_try_from_protobuf)
+                    .collect::<Result<BTreeSet<NodeId>, ProxyDecodeError>>()?,
+            },
+            None => PaymentInfo::default(),
         };
 
         let transform_method_name = context.transform_method_name;
@@ -294,6 +346,7 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
             time: Time::from_nanos_since_unix_epoch(context.time),
             replication,
             pricing_version,
+            payment_info,
         })
     }
 }
@@ -371,6 +424,7 @@ impl CanisterHttpRequestContext {
         request: &Request,
         args: CanisterHttpRequestArgs,
         node_ids: &BTreeSet<NodeId>,
+        subnet_size: usize,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
         if let Some(transform_principal_id) = args.transform_principal()
@@ -459,6 +513,11 @@ impl CanisterHttpRequestContext {
                     .filter(|v| ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS.contains(v))
                     .unwrap_or(DEFAULT_HTTP_OUTCALLS_PRICING_VERSION);
                 PricingVersion::from_repr(final_version_u32).unwrap_or(PricingVersion::Legacy)
+            },
+            payment_info: PaymentInfo {
+                per_replica_allowance: request.payment / subnet_size.max(1),
+                already_refunded: Cycles::new(0),
+                refunded_nodes: BTreeSet::new(),
             },
         })
     }
@@ -795,6 +854,7 @@ mod tests {
 
     use super::*;
 
+    use ic_types_test_utils::ids::node_test_id;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -825,6 +885,7 @@ mod tests {
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
+            payment_info: PaymentInfo::default(),
         };
 
         let expected_size = context.url.len()
@@ -869,6 +930,7 @@ mod tests {
             time: UNIX_EPOCH,
             replication: Replication::FullyReplicated,
             pricing_version: PricingVersion::Legacy,
+            payment_info: PaymentInfo::default(),
         };
 
         let expected_size = context.url.len()
@@ -901,6 +963,46 @@ mod tests {
                 .collect::<Vec<i32>>(),
             [1, 2, 3]
         );
+    }
+
+    #[test]
+    fn canister_http_request_context_proto_round_trip() {
+        let initial = CanisterHttpRequestContext {
+            url: "https://example.com".to_string(),
+            headers: vec![CanisterHttpHeader {
+                name: "Content-Type".to_string(),
+                value: "application/json".to_string(),
+            }],
+            body: Some(b"{\"hello\":\"world\"}".to_vec()),
+            max_response_bytes: Some(NumBytes::from(1234)),
+            http_method: CanisterHttpMethod::POST,
+            transform: Some(Transform {
+                method_name: "transform_response".to_string(),
+                context: vec![1, 2, 3],
+            }),
+            request: Request {
+                receiver: CanisterId::ic_00(),
+                sender: CanisterId::ic_00(),
+                sender_reply_callback: CallbackId::from(3),
+                payment: Cycles::new(10),
+                method_name: "transform".to_string(),
+                method_payload: Vec::new(),
+                metadata: Default::default(),
+                deadline: NO_DEADLINE,
+            },
+            time: UNIX_EPOCH,
+            replication: Replication::NonReplicated(node_test_id(42)),
+            pricing_version: PricingVersion::PayAsYouGo,
+            payment_info: PaymentInfo {
+                per_replica_allowance: Cycles::new(1_000_000),
+                already_refunded: Cycles::new(123),
+                refunded_nodes: BTreeSet::from([node_test_id(1), node_test_id(2)]),
+            },
+        };
+
+        let pb: pb_metadata::CanisterHttpRequestContext = (&initial).into();
+        let round_trip: CanisterHttpRequestContext = pb.try_into().unwrap();
+        assert_eq!(initial, round_trip);
     }
 }
 
