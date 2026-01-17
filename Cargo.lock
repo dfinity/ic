@@ -857,6 +857,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-types",
+ "ic-utils-rustfmt",
  "itertools 0.12.1",
  "prost 0.13.4",
  "prost-build 0.13.4",
