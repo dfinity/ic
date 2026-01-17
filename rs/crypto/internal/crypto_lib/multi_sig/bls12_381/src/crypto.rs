@@ -35,25 +35,6 @@ pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
     G1Projective::hash(DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP, public_key)
 }
 
-// Once upon a time we had placed the `seed` values directly into the output
-// `FrRepr` value, but this places a large burden on the caller, who must
-// guarantee `seed` represents a number strictly less than the group order, or
-// risk generating from a non-uniform distribution. Now, we use `seed` to seed a
-// RNG, then use this to generate a uniform random element.
-#[cfg(test)]
-pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-    let mut seed_as_u8: [u8; 32] = [0; 32];
-    for i in 0..4 {
-        let bs = seed[i].to_be_bytes();
-        for j in 0..8 {
-            seed_as_u8[i * 8 + j] = bs[j];
-        }
-    }
-    keypair_from_rng(&mut ChaCha20Rng::from_seed(seed_as_u8))
-}
-
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {
     let secret_key = Scalar::random(rng);
     let public_key = (G2Affine::generator() * &secret_key).to_affine();
