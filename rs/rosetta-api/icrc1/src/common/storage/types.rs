@@ -7,6 +7,7 @@ use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::{
     icrc::generic_value::Value,
@@ -543,11 +544,11 @@ pub struct MetadataEntry {
 }
 
 impl MetadataEntry {
-    pub fn from_metadata_value(key: &str, value: &MetadataValue) -> anyhow::Result<Self> {
+    pub fn from_metadata_value(key: &MetadataKey, value: &MetadataValue) -> anyhow::Result<Self> {
         let value = candid::encode_one(value)?;
 
         Ok(Self {
-            key: key.to_string(),
+            key: key.as_str().to_string(),
             value,
         })
     }
