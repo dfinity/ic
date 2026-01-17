@@ -54,6 +54,7 @@ fn create_test_rosetta_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
@@ -108,6 +109,7 @@ fn create_test_approve_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
@@ -438,6 +440,20 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     // Test 2: Repair functionality with broken state simulation
     // Manually create broken balances (missing fee collector credits for block 2)
     connection.execute("DELETE FROM account_balances", params![])?;
+
+    // Insert metadata that needs to be cleared
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![METADATA_BLOCK_IDX, 100_000_000u64.to_le_bytes()],
+    )?;
+    let no_fee_col: Option<Account> = None;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_FEE_COL,
+            candid::encode_one(no_fee_col).expect("failed to encode fee collector")
+        ],
+    )?;
 
     // Correct balances for mint and block 1
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')",
