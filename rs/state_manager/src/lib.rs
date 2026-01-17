@@ -1964,8 +1964,8 @@ impl StateManagerImpl {
         } else {
             info!(
                 self.log,
-                "The previous certification metadata at height {} has been removed. This can happen when the replica \
-                syncs a newer state concurrently and removes the states below.",
+                "The previous certification metadata at height {} are not available. This can happen when the replica \
+                (i) catches up or (ii) syncs a newer state concurrently and removes the states below.",
                 prev_height,
             );
         }
