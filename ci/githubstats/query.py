@@ -188,16 +188,16 @@ def last(args):
     df["buildbuddy_url"] = (
         df["buildbuddy_url"].apply(get_redirect_location).apply(lambda url: f"{url}?target={args.test_target}")
     )
-    df["buildbuddy_log"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
+    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
-    df["head_sha"] = df["head_sha"].apply(
+    df["commit"] = df["commit"].apply(
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["build_date"] = df["build_date"].apply(lambda build_date: build_date.strftime("%a %Y-%m-%d %X"))
+    df["time"] = df["time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
-    df["head_branch"] = df["head_branch"].apply(
+    df["branch"] = df["branch"].apply(
         lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 

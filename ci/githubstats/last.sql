@@ -1,21 +1,21 @@
 SELECT
-  bi.build_date,
-  bt.total_run_duration * INTERVAL '1 second' AS total_run_duration,
+  bi.build_date AS "time",
+  bt.total_run_duration * INTERVAL '1 second' AS "duration",
   CASE
       WHEN bt.overall_status = 1 THEN 'SUCCESS'
       WHEN bt.overall_status = 2 THEN 'FLAKY'
       WHEN bt.overall_status = 3 THEN 'TIMEOUT'
       WHEN bt.overall_status = 4 THEN 'FAILED'
-  END AS status,
-  'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS buildbuddy_url,
-  bi.head_branch,
+  END AS "status",
+  'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS "buildbuddy_url",
+  bi.head_branch AS "branch",
   CASE
       -- This is to fix the weird reality that all master commits have pull_request_number 855
       -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
       WHEN wr.event_type = 'pull_request' THEN CAST(wr.pull_request_number AS TEXT)
       ELSE ''
-  END AS pr,
-  bi.head_sha
+  END AS "pr",
+  bi.head_sha AS "commit"
 
 FROM
   workflow_runs     AS wr JOIN
