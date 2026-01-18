@@ -23,12 +23,26 @@ THIS_SCRIPT_PATH = Path(__file__)
 THIS_SCRIPT_DIR = THIS_SCRIPT_PATH.parent
 
 
-# Structure to hold DB connection info
 @dataclass
 class DBConfig:
     host: str
     user: str
     db: str
+
+
+@contextlib.contextmanager
+def githubstats_db_cursor(db_config: DBConfig):
+    """Context manager that yields a cursor connected to the github PostgreSQL database."""
+    conn = psycopg.connect(
+        host=db_config.host,
+        user=db_config.user,
+        dbname=db_config.db,
+    )
+    try:
+        with conn.cursor() as cursor:
+            yield cursor
+    finally:
+        conn.close()
 
 
 def get_redirect_location(url):
@@ -45,6 +59,7 @@ def terminal_hyperlink(text: str, url: str) -> str:
 
 
 def sourcegraph_url(label: str) -> str:
+    """Return a URL to SourceGraph that will search for the given Bazel label."""
     parts = label.rsplit(":", 1)
     dir = parts[0].replace("//", "")
     test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
@@ -52,6 +67,7 @@ def sourcegraph_url(label: str) -> str:
 
 
 def owner_link(owner: codeowners.OwnerTuple):
+    """Return a URL to the right GitHub page (team / user) based on the type of code owner."""
     if owner[0] == "TEAM":
         parts = owner[1][1:].rsplit("/")
         org = parts[0]
@@ -62,31 +78,6 @@ def owner_link(owner: codeowners.OwnerTuple):
         return f"https://github.com/{username}"
     else:  # owner[0] == "EMAIL":
         return owner[1]
-
-
-def find_owner_of_target(owners, label: str) -> str:
-    parts = label.rsplit(":", 1)
-    directory = parts[0].replace("//", "") + "/"
-    return ", ".join([terminal_hyperlink(owner[1], owner_link(owner)) for owner in owners.of(directory)])
-
-
-def log(*args, **kwargs):
-    print(*args, **kwargs, file=sys.stderr)
-
-
-@contextlib.contextmanager
-def githubstats_db_cursor(db_config: DBConfig):
-    """Context manager that yields a cursor connected to the github database."""
-    conn = psycopg.connect(
-        host=db_config.host,
-        user=db_config.user,
-        dbname=db_config.db,
-    )
-    try:
-        with conn.cursor() as cursor:
-            yield cursor
-    finally:
-        conn.close()
 
 
 def log_psql_query(log_query: bool, title: str, query: str, db_config: DBConfig):
@@ -100,11 +91,14 @@ def log_psql_query(log_query: bool, title: str, query: str, db_config: DBConfig)
             "-d",
             db_config.db,
         ]
-        log(f"""# {title}:
+        print(
+            f"""# {title}:
 {shlex.join(args) } << EOF
 {query}
 EOF
-""")
+""",
+            file=sys.stderr,
+        )
 
 
 def top(args, db_config):
@@ -133,9 +127,18 @@ def top(args, db_config):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    # Find the CODEOWNERS for each test target and turn them into terminal hyperlinks to the GitHub user/team page:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
-    df["owners"] = df["label"].apply(lambda label: find_owner_of_target(owners, label))
+    df["owners"] = df["label"].apply(
+        lambda label: ", ".join(
+            [
+                terminal_hyperlink(owner[1], owner_link(owner))
+                for owner in owners.of(label.rsplit(":")[0].replace("//", "") + "/")
+            ]
+        )
+    )
 
+    # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
     print(tabulate(df, headers="keys", tablefmt="github"))
@@ -191,7 +194,7 @@ def last(args, db_config):
     df["buildbuddy_url"] = (
         df["buildbuddy_url"].apply(get_redirect_location).apply(lambda url: f"{url}?target={args.test_target}")
     )
-    df["buildbuddy_log_link"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
+    df["buildbuddy_log"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["head_sha"] = df["head_sha"].apply(
@@ -206,6 +209,7 @@ def last(args, db_config):
 def main():
     parser = argparse.ArgumentParser()
 
+    # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument("--verbose", action="store_true", help="Log queries")
     common_parser.add_argument(
