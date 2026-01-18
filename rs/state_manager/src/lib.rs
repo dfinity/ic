@@ -175,7 +175,7 @@ pub struct StateManagerMetrics {
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
     latest_subnet_certified_height: IntGauge,
-    no_clone_count: IntCounter,
+    no_state_clone_count: IntCounter,
     tip_hash_count: IntCounter,
 }
 
@@ -467,8 +467,8 @@ impl StateManagerMetrics {
             "Height of the latest validated certification.",
         );
 
-        let no_clone_count = metrics_registry.int_counter(
-            "state_manager_no_clone_count",
+        let no_state_clone_count = metrics_registry.int_counter(
+            "state_manager_no_state_clone_count",
             "Number of heights whose states were not cloned and not stored by this node.",
         );
 
@@ -503,7 +503,7 @@ impl StateManagerMetrics {
             latest_hash_tree_size,
             latest_hash_tree_max_index,
             latest_subnet_certified_height,
-            no_clone_count,
+            no_state_clone_count,
             tip_hash_count,
         }
     }
@@ -3253,7 +3253,7 @@ impl StateManager for StateManagerImpl {
 
             assert_tip_is_none(&states);
 
-            self.metrics.no_clone_count.inc();
+            self.metrics.no_state_clone_count.inc();
 
             states.tip = Some((height, state));
             self.tip_height.store(height.get(), Ordering::Relaxed);
