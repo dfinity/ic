@@ -7,6 +7,7 @@
 import argparse
 import contextlib
 import os
+import re
 import shlex
 import sys
 from dataclasses import dataclass
@@ -129,15 +130,17 @@ def top(args, db_config):
 
     # Find the CODEOWNERS for each test target and turn them into terminal hyperlinks to the GitHub user/team page:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
-    df["owners"] = df["label"].apply(
-        lambda label: ", ".join(
-            [
-                terminal_hyperlink(owner[1], owner_link(owner))
-                for owner in owners.of(label.rsplit(":")[0].replace("//", "") + "/")
-            ]
-        )
-    )
+    df["owners"] = df["label"].apply(lambda label: owners.of(label.rsplit(":")[0].replace("//", "") + "/"))
 
+    # Optionally filter by owner regex:
+    if args.owner:
+        df = df[
+            df["owners"].apply(lambda owners: any(re.search(args.owner, owner[1], re.IGNORECASE) for owner in owners))
+        ]
+
+    df["owners"] = df["owners"].apply(
+        lambda owners: ", ".join([terminal_hyperlink(owner[1], owner_link(owner)) for owner in owners])
+    )
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
@@ -268,6 +271,8 @@ def main():
         default="flaky_rate",
         help="Column to order by (default: flaky_rate)",
     )
+
+    top_parser.add_argument("--owner", type=str, help="Filter by owner (a regex for the GitHub username or team name)")
 
     top_parser.set_defaults(func=top)
 
