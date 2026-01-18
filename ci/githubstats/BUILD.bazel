@@ -1,0 +1,14 @@
+# BUILD.bazel for githubstats query script
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@python_deps//:requirements.bzl", "requirement")
+
+py_binary(
+    name = "query",
+    srcs = ["query.py"],
+    deps = [
+        requirement("pandas"),
+        requirement("psycopg"),
+        requirement("requests"),
+        requirement("tabulate"),
+    ],
+)
