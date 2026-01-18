@@ -8941,6 +8941,18 @@ fn tip_hash_count(metrics: &MetricsRegistry) -> u64 {
         .sum::<u64>()
 }
 
+fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
+    let mut labels = BTreeMap::new();
+    labels.insert("request".to_string(), "flush_unflushed_delta".to_string());
+    fetch_histogram_vec_stats(
+        metrics,
+        "state_manager_tip_handler_request_duration_seconds",
+    )
+    .get(&labels)
+    .map(|stats| stats.count)
+    .unwrap_or_default()
+}
+
 fn fake_certification_for_height(height: Height) -> Certification {
     let hash = CryptoHashOfPartialState::from(CryptoHash(vec![42; 32]));
     Certification {
@@ -9268,5 +9280,130 @@ fn remove_inmemory_states_below_does_not_prune_certification() {
             sm.certifications().keys().cloned().collect::<Vec<_>>(),
             vec![opt_height]
         );
+    });
+}
+
+#[test]
+fn get_state_hash_at() {
+    state_manager_test(|metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        let checkpoint_height = Height::new(500);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 0);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(21);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_clone_count(metrics), 1);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let another_no_opt_height = Height::new(30);
+        sm.commit_and_certify(
+            state,
+            another_no_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_clone_count(metrics), 1);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, checkpoint_height, CertificationScope::Full, None);
+        assert_eq!(no_clone_count(metrics), 1);
+
+        wait_for_checkpoint(&sm, checkpoint_height);
+        assert!(sm.get_state_hash_at(checkpoint_height).is_ok());
+    });
+}
+
+#[test]
+fn flush_with_optimization() {
+    state_manager_test(|metrics, sm| {
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        assert_eq!(flush_unflushed_delta_count(metrics), 0);
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(1);
+        let batch_summary = BatchSummary {
+            next_checkpoint_height: opt_height
+                + Height::new(NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY),
+            current_interval_length: height(500),
+        };
+        sm.commit_and_certify(
+            state,
+            opt_height,
+            CertificationScope::Metadata,
+            Some(batch_summary),
+        );
+        assert_eq!(no_clone_count(metrics), 1);
+
+        sm.flush_tip_channel();
+        assert_eq!(flush_unflushed_delta_count(metrics), 1);
+    });
+}
+
+#[test]
+fn list_state_heights_to_certify() {
+    state_manager_test(|_metrics, sm| {
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+
+        assert!(sm.list_state_heights_to_certify().is_empty());
+
+        sm.remove_inmemory_states_below(Height::new(13), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 13);
+
+        assert_eq!(
+            sm.list_state_heights_to_certify(),
+            (10..13).map(Height::new).collect::<Vec<_>>()
+        );
+
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        let mut state_heights_to_certify: Vec<_> = (10..30).map(Height::new).collect();
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+
+        let certification_height = Height::new(12);
+        let certification = fake_certification_for_height(certification_height);
+        sm.deliver_state_certification(certification.clone());
+        state_heights_to_certify.retain(|h| *h != certification_height);
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
     });
 }
