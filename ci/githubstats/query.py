@@ -11,12 +11,12 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from string import Template
 
 import codeowners
 import pandas as pd
 import psycopg
 import requests
+from psycopg import sql
 from tabulate import tabulate
 
 THIS_SCRIPT_DIR = Path(__file__).parent
@@ -98,18 +98,18 @@ def top(args):
     """
     period = "month" if args.month else "week" if args.week else ""
 
-    query = Template((THIS_SCRIPT_DIR / "top.sql").read_text()).substitute(
-        N=args.N,
-        order_by=args.order_by,
-        period=period,
-        only_prs="TRUE" if args.prs else "FALSE",
-        branch=args.branch if args.branch else "",
+    query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
+        N=sql.Literal(args.N),
+        order_by=sql.Identifier(args.order_by),
+        period=sql.SQL(period),
+        only_prs=sql.Literal(args.prs),
+        branch=sql.Literal(args.branch if args.branch else ""),
     )
 
     log_psql_query(
         args.verbose,
         f"Top {args.N} {args.order_by} tests{f' in the last {period}' if period else ''}",
-        query,
+        query.as_string(),
         args.conninfo,
     )
 
@@ -166,18 +166,18 @@ def last(args):
 
     period = "month" if args.month else "week" if args.week else ""
 
-    query = Template((THIS_SCRIPT_DIR / "last.sql").read_text()).substitute(
-        test_target=args.test_target,
-        overall_statuses=",".join(map(str, overall_statuses)),
-        period=period,
-        only_prs="TRUE" if args.prs else "FALSE",
-        branch=args.branch if args.branch else "",
+    query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
+        test_target=sql.Literal(args.test_target),
+        overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
+        period=sql.SQL(period),
+        only_prs=sql.Literal(args.prs),
+        branch=sql.Literal(args.branch if args.branch else ""),
     )
 
     log_psql_query(
         args.verbose,
         f"Last {statuses}runs of {args.test_target}{f' in the last {period}' if period else ''}",
-        query,
+        query.as_string(),
         args.conninfo,
     )
 

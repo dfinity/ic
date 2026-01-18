@@ -23,10 +23,10 @@ FROM
   bazel_tests       AS bt ON bi.build_id = bt.build_id
 
 WHERE
-   bt.label = '$test_target'
-   AND bt.overall_status IN ($overall_statuses)
-   AND ('$period' = '' OR bt.first_start_time > now() - ('1 $period'::interval))
-   AND (NOT $only_prs OR wr.event_type = 'pull_request')
-   AND ('$branch' = '' OR wr.head_branch LIKE '$branch')
+   bt.label = {test_target}
+   AND bt.overall_status IN ({overall_statuses})
+   AND ('{period}' = '' OR bt.first_start_time > now() - ('1 {period}'::interval))
+   AND (NOT {only_prs} OR wr.event_type = 'pull_request')
+   AND ({branch} = '' OR wr.head_branch LIKE {branch})
 
-ORDER BY bi.build_date DESC
+ORDER BY bt.first_start_time DESC
