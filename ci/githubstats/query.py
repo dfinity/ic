@@ -81,6 +81,12 @@ def owner_link(owner: codeowners.OwnerTuple):
         return owner[1]
 
 
+def shorten_owner(owner: str) -> str:
+    """Shorten a code owner string for display. For example '@dfinity/node' -> 'node'."""
+    parts = owner.split("/", 1)
+    return parts[1] if len(parts) == 2 else owner
+
+
 def log_psql_query(log_query: bool, title: str, query: str, db_config: DBConfig):
     """Optionally log the given query to stderr in a form that can be copy-pasted into psql."""
     if log_query:
@@ -141,7 +147,7 @@ def top(args, db_config):
 
     # Turn the owners into terminal hyperlinks to their GitHub user/team page:
     df["owners"] = df["owners"].apply(
-        lambda owners: ", ".join([terminal_hyperlink(owner[1], owner_link(owner)) for owner in owners])
+        lambda owners: ", ".join([terminal_hyperlink(shorten_owner(owner[1]), owner_link(owner)) for owner in owners])
     )
 
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
