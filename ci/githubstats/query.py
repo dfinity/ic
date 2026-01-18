@@ -99,10 +99,11 @@ def top(args):
     period = "month" if args.month else "week" if args.week else ""
 
     query = Template((THIS_SCRIPT_DIR / "top.sql").read_text()).substitute(
-        period=period,
-        only_prs="TRUE" if args.prs else "FALSE",
         N=args.N,
         order_by=args.order_by,
+        period=period,
+        only_prs="TRUE" if args.prs else "FALSE",
+        branch=args.branch if args.branch else "",
     )
 
     log_psql_query(
@@ -170,6 +171,7 @@ def last(args):
         overall_statuses=",".join(map(str, overall_statuses)),
         period=period,
         only_prs="TRUE" if args.prs else "FALSE",
+        branch=args.branch if args.branch else "",
     )
 
     log_psql_query(
@@ -223,13 +225,13 @@ def main():
         help="PostgreSQL connection string",
     )
 
-    period_parser = argparse.ArgumentParser(add_help=False)
-    period_group = period_parser.add_mutually_exclusive_group()
+    filter_parser = argparse.ArgumentParser(add_help=False)
+    period_group = filter_parser.add_mutually_exclusive_group()
     period_group.add_argument("--week", action="store_true", help="Limit to last week")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
-    prs_parser = argparse.ArgumentParser(add_help=False)
-    prs_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
+    filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
+    filter_parser.add_argument("--branch", type=str, help="Filter by branch SQL LIKE pattern")
 
     subparsers = parser.add_subparsers(required=True)
 
@@ -237,7 +239,7 @@ def main():
 
     top_parser = subparsers.add_parser(
         "top",
-        parents=[common_parser, period_parser, prs_parser],
+        parents=[common_parser, filter_parser],
         help="Get the top N non-successful / flaky / failed / timed-out tests in the last period",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -270,7 +272,7 @@ def main():
 
     last_runs_parser = subparsers.add_parser(
         "last",
-        parents=[common_parser, period_parser, prs_parser],
+        parents=[common_parser, filter_parser],
         help="Get the last runs of the specified test in the given period",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )

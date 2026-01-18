@@ -8,7 +8,7 @@ SELECT
       WHEN bt.overall_status = 4 THEN 'FAILED'
   END AS "status",
   'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS "buildbuddy_url",
-  bi.head_branch AS "branch",
+  wr.head_branch AS "branch",
   CASE
       -- This is to fix the weird reality that all master commits have pull_request_number 855
       -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
@@ -25,7 +25,8 @@ FROM
 WHERE
    bt.label = '$test_target'
    AND bt.overall_status IN ($overall_statuses)
-   AND ('$period' = '' OR bi.build_date > now() - ('1 $period'::interval))
+   AND ('$period' = '' OR bt.first_start_time > now() - ('1 $period'::interval))
    AND (NOT $only_prs OR wr.event_type = 'pull_request')
+   AND ('$branch' = '' OR wr.head_branch LIKE '$branch')
 
 ORDER BY bi.build_date DESC
