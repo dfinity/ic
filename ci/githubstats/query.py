@@ -6,12 +6,14 @@
 #
 import argparse
 import contextlib
+import os
 import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 
+import codeowners
 import pandas as pd
 import psycopg
 import requests
@@ -47,6 +49,25 @@ def sourcegraph_url(label: str) -> str:
     dir = parts[0].replace("//", "")
     test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
     return f"https://sourcegraph.com/search?q=repo:^github\\.com/dfinity/ic$+file:{dir}/BUILD.bazel+{test}"
+
+
+def owner_link(owner: codeowners.OwnerTuple):
+    if owner[0] == "TEAM":
+        parts = owner[1][1:].rsplit("/")
+        org = parts[0]
+        team = parts[1]
+        return f"https://github.com/orgs/{org}/teams/{team}"
+    elif owner[0] == "USERNAME":
+        username = owner[1][1:]
+        return f"https://github.com/{username}"
+    else:  # owner[0] == "EMAIL":
+        return owner[1]
+
+
+def find_owner_of_target(owners, label: str) -> str:
+    parts = label.rsplit(":", 1)
+    directory = parts[0].replace("//", "") + "/"
+    return ", ".join([terminal_hyperlink(owner[1], owner_link(owner)) for owner in owners.of(directory)])
 
 
 def log(*args, **kwargs):
@@ -111,6 +132,9 @@ def top(args, db_config):
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
+
+    owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
+    df["owners"] = df["label"].apply(lambda label: find_owner_of_target(owners, label))
 
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
@@ -226,14 +250,14 @@ def main():
         "order_by",
         type=str,
         choices=[
-            "total_count",
-            "non_success_count",
+            "total",
+            "non_success",
             "non_success_rate",
-            "flaky_count",
+            "flaky",
             "flaky_rate",
-            "timeout_count",
+            "timeout",
             "timeout_rate",
-            "fail_count",
+            "fail",
             "fail_rate",
             "p90_duration",
         ],

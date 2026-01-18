@@ -39,3 +39,4 @@ typing_extensions>=4.6.0
 pandas
 psycopg
 tabulate
+codeowners

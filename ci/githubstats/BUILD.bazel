@@ -5,11 +5,13 @@ load("@rules_shell//shell:sh_test.bzl", "sh_test")
 py_binary(
     name = "query",
     srcs = ["query.py"],
-    data = glob(["*.sql"]),
+    data = glob(["*.sql"]) + ["//.github:CODEOWNERS"],
+    env = {"CODEOWNERS_PATH": "$(rootpath //.github:CODEOWNERS)"},
     deps = [
         requirement("pandas"),
         requirement("psycopg"),
         requirement("requests"),
+        requirement("codeowners"),
         requirement("tabulate"),
     ],
 )

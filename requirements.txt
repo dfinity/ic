@@ -293,6 +293,10 @@ charset-normalizer==3.4.2 \
     --hash=sha256:fcbe676a55d7445b22c10967bceaaf0ee69407fbe0ece4d032b6eb8d4565982a \
     --hash=sha256:fdb20a30fe1175ecabed17cbf7812f7b804b8a315a25f24678bcdf120a90077f
     # via requests
+codeowners==0.8.0 \
+    --hash=sha256:6505727574b67db4832a3d0d5e41c0f7eb80f8858ee27996e85b1e046f9266f8 \
+    --hash=sha256:b92ce6f6c36dd9de5295c4dc285b2a3b14c81cae8b5eb3b05f0cfdbc4d93995a
+    # via -r requirements.in
 configargparse==1.7.1 \
     --hash=sha256:79c2ddae836a1e5914b71d58e4b9adbd9f7779d4e6351a637b7d2d9b6c46d3d9 \
     --hash=sha256:8b586a31f9d873abd1ca527ffbe58863c99f36d896e2829779803125e83be4b6
@@ -960,6 +964,7 @@ typing-extensions==4.14.0 \
     # via
     #   -r requirements.in
     #   anyio
+    #   codeowners
     #   jira
     #   mypy
     #   psycopg
