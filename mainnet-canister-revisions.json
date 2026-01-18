@@ -160,8 +160,8 @@
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
   },
   "subnet_rental": {
-    "sha256": "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
-    "tag": "0.2.0"
+    "sha256": "f18e2effe4a0495c3b08b546bb4c63428dac9852ad7dd4316afb5daf210c4ab5",
+    "tag": "0.4.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",
