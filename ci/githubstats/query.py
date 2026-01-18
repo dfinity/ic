@@ -8,6 +8,7 @@ import argparse
 import contextlib
 import shlex
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 
@@ -19,9 +20,13 @@ from tabulate import tabulate
 THIS_SCRIPT_PATH = Path(__file__)
 THIS_SCRIPT_DIR = THIS_SCRIPT_PATH.parent
 
-POSTGRESQL_SERVER = "githubstats.idx.dfinity.network"
-POSTGRESQL_USER = "githubstats_read"
-POSTGRESQL_DB = "github"
+
+# Structure to hold DB connection info
+@dataclass
+class DBConfig:
+    host: str
+    user: str
+    db: str
 
 
 def get_redirect_location(url):
@@ -49,12 +54,12 @@ def log(*args, **kwargs):
 
 
 @contextlib.contextmanager
-def githubstats_db_cursor():
+def githubstats_db_cursor(db_config: DBConfig):
     """Context manager that yields a cursor connected to the github database."""
     conn = psycopg.connect(
-        host=POSTGRESQL_SERVER,
-        user=POSTGRESQL_USER,
-        dbname=POSTGRESQL_DB,
+        host=db_config.host,
+        user=db_config.user,
+        dbname=db_config.db,
     )
     try:
         with conn.cursor() as cursor:
@@ -63,9 +68,17 @@ def githubstats_db_cursor():
         conn.close()
 
 
-def log_psql_query(log_query: bool, title: str, query: str):
+def log_psql_query(log_query: bool, title: str, query: str, db_config: DBConfig):
     if log_query:
-        args = ["psql", "-h", POSTGRESQL_SERVER, "-U", POSTGRESQL_USER, "-d", POSTGRESQL_DB]
+        args = [
+            "psql",
+            "-h",
+            db_config.host,
+            "-U",
+            db_config.user,
+            "-d",
+            db_config.db,
+        ]
         log(f"""# {title}:
 {shlex.join(args) } << EOF
 {query}
@@ -73,7 +86,7 @@ EOF
 """)
 
 
-def top(args):
+def top(args, db_config):
     """
     Get the top N non-successful/flaky/failed/timed-out tests
     in the last specified period.
@@ -88,10 +101,13 @@ def top(args):
     )
 
     log_psql_query(
-        args.verbose, f"Top {args.N} {args.order_by} tests{f' in the last {period}' if period else ''}", query
+        args.verbose,
+        f"Top {args.N} {args.order_by} tests{f' in the last {period}' if period else ''}",
+        query,
+        db_config,
     )
 
-    with githubstats_db_cursor() as cursor:
+    with githubstats_db_cursor(db_config) as cursor:
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
@@ -101,7 +117,7 @@ def top(args):
     print(tabulate(df, headers="keys", tablefmt="github"))
 
 
-def last(args):
+def last(args, db_config):
     """
     Get the last runs of the specified test
     that have either succeeded, flaked, timed out or failed
@@ -136,10 +152,13 @@ def last(args):
     )
 
     log_psql_query(
-        args.verbose, f"Last {statuses}runs of {args.test_target}{f' in the last {period}' if period else ''}", query
+        args.verbose,
+        f"Last {statuses}runs of {args.test_target}{f' in the last {period}' if period else ''}",
+        query,
+        db_config,
     )
 
-    with githubstats_db_cursor() as cursor:
+    with githubstats_db_cursor(db_config) as cursor:
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
@@ -165,6 +184,24 @@ def main():
 
     common_parser = argparse.ArgumentParser(add_help=False)
     common_parser.add_argument("--verbose", action="store_true", help="Log queries")
+    common_parser.add_argument(
+        "--postgresql-server",
+        type=str,
+        default="githubstats.idx.dfinity.network",
+        help="PostgreSQL server hostname (default: githubstats.idx.dfinity.network)",
+    )
+    common_parser.add_argument(
+        "--postgresql-user",
+        type=str,
+        default="githubstats_read",
+        help="PostgreSQL user (default: githubstats_read)",
+    )
+    common_parser.add_argument(
+        "--postgresql-db",
+        type=str,
+        default="github",
+        help="PostgreSQL database name (default: github)",
+    )
 
     period_parser = argparse.ArgumentParser(add_help=False)
     period_group = period_parser.add_mutually_exclusive_group()
@@ -224,7 +261,12 @@ def main():
     ###########################################################################
 
     args = parser.parse_args()
-    args.func(args)
+    db_config = DBConfig(
+        host=args.postgresql_server,
+        user=args.postgresql_user,
+        db=args.postgresql_db,
+    )
+    args.func(args, db_config)
 
 
 if __name__ == "__main__":

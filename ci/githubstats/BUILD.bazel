@@ -4,6 +4,7 @@ load("@rules_python//python:defs.bzl", "py_binary")
 py_binary(
     name = "query",
     srcs = ["query.py"],
+    data = glob(["*.sql"]),
     deps = [
         requirement("pandas"),
         requirement("psycopg"),
