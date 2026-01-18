@@ -1,3 +1,6 @@
 virtio_blk
 dm_verity
 msr
+nvme
+nvme_core
+nvme_auth

@@ -23,8 +23,8 @@ end::catalog[] */
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::test_env_api::{
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path,
-    get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_mainnet_application_subnet_revision,
+    get_mainnet_nns_revision,
 };
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv};
 use ic_system_test_driver::systest;
@@ -137,7 +137,7 @@ fn test(env: TestEnv, mainnet_version: &ReplicaVersion) {
         fs::remove_dir_all(&output_dir)
             .expect("Should have all the permissions to remove the existing directory");
     }
-    let branch_test = get_dependency_path("rs/tests/cup_compatibility/binaries/types_test");
+    let branch_test = PathBuf::from(&std::env::var("TYPES_TEST_PATH").unwrap());
     let tmp_dir = tempfile::tempdir().unwrap();
     let mainnet_test = download_mainnet_binary(mainnet_version, &log, tmp_dir.path());
 

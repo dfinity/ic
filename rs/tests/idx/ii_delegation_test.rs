@@ -55,8 +55,10 @@ pub fn test(env: TestEnv) {
         non_nns_node.subnet_id().unwrap()
     );
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let counter_canister_id =
-        app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let counter_canister_id = app_node.create_and_install_canister_with_arg(
+        &env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+        None,
+    );
     info!(
         log,
         "Counter canister with id={counter_canister_id} installed on subnet with id={}",

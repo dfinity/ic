@@ -1,5 +1,7 @@
 pub mod deploy;
 
+pub use deploy::SshAuthMethod;
+
 use anyhow::{Context, Result, bail};
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{DeploymentEnvironment, IpVariant, MacAddr6Ext};
