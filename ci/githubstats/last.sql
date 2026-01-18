@@ -9,12 +9,18 @@ SELECT
   END AS status,
   'https://dash.idx.dfinity.network/invocation/' || bi.build_id AS buildbuddy_url,
   bi.head_branch,
+  CASE
+      -- This is to fix the weird reality that all master commits have pull_request_number 855
+      -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
+      WHEN wr.event_type = 'pull_request' THEN CAST(wr.pull_request_number AS TEXT)
+      ELSE ''
+  END as pr,
   bi.head_sha
 
 FROM
-  bazel_tests            AS bt
-  JOIN bazel_invocations AS bi ON bt.build_id = bi.build_id
-  JOIN workflow_runs     AS wr ON bi.run_id = wr.id
+  workflow_runs     AS wr JOIN
+  bazel_invocations AS bi ON wr.id = bi.run_id JOIN
+  bazel_tests       AS bt ON bi.build_id = bt.build_id
 
 WHERE
    bt.label = '$test_target'

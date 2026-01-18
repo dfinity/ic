@@ -21,6 +21,9 @@ from tabulate import tabulate
 
 THIS_SCRIPT_DIR = Path(__file__).parent
 
+ORG = "dfinity"
+REPO = "ic"
+
 
 @contextlib.contextmanager
 def githubstats_db_cursor(conninfo: str):
@@ -48,7 +51,7 @@ def sourcegraph_url(label: str) -> str:
     """Return a URL to SourceGraph that will search for the given Bazel label."""
     parts = label.rsplit(":", 1)
     dir = parts[0].replace("//", "")
-    url = f"https://sourcegraph.com/search?q=repo:^github\\.com/dfinity/ic$+file:{dir}/BUILD.bazel"
+    url = f"https://sourcegraph.com/search?q=repo:^github\\.com/{ORG}/{REPO}$+file:{dir}/BUILD.bazel"
     if len(parts) == 2:
         test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
         url += f"+{test}"
@@ -95,7 +98,7 @@ def top(args):
     """
     period = "month" if args.month else "week" if args.week else ""
 
-    query = Template((THIS_SCRIPT_DIR / "top_tests.sql").read_text()).substitute(
+    query = Template((THIS_SCRIPT_DIR / "top.sql").read_text()).substitute(
         period=period,
         only_prs="TRUE" if args.prs else "FALSE",
         N=args.N,
@@ -162,7 +165,7 @@ def last(args):
 
     period = "month" if args.month else "week" if args.week else ""
 
-    query = Template((THIS_SCRIPT_DIR / "test_runs.sql").read_text()).substitute(
+    query = Template((THIS_SCRIPT_DIR / "last.sql").read_text()).substitute(
         test_target=args.test_target,
         overall_statuses=",".join(map(str, overall_statuses)),
         period=period,
@@ -189,7 +192,17 @@ def last(args):
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["head_sha"] = df["head_sha"].apply(
-        lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/dfinity/ic/commit/{commit}")
+        lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
+    )
+
+    df["build_date"] = df["build_date"].apply(lambda build_date: build_date.strftime("%a %Y-%m-%d %X"))
+
+    df["head_branch"] = df["head_branch"].apply(
+        lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
+    )
+
+    df["pr"] = df["pr"].apply(
+        lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 
     df = df.drop(columns=["buildbuddy_url"])

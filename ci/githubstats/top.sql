@@ -18,9 +18,9 @@ SELECT
   percentile_disc(0.9) WITHIN GROUP (ORDER BY total_run_duration) * INTERVAL '1 second' AS p90_duration
 
 FROM
-  bazel_tests            AS bt
-  JOIN bazel_invocations AS bi ON bt.build_id = bi.build_id
-  JOIN workflow_runs     AS wr ON bi.run_id = wr.id
+  workflow_runs     AS wr JOIN
+  bazel_invocations AS bi ON wr.id = bi.run_id JOIN
+  bazel_tests       AS bt ON bi.build_id = bt.build_id
 
 WHERE
   ('$period' = '' OR first_start_time > now() - ('1 $period'::interval))
