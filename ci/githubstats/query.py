@@ -129,7 +129,7 @@ def top(args, db_config):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    # Find the CODEOWNERS for each test target and turn them into terminal hyperlinks to the GitHub user/team page:
+    # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
     df["owners"] = df["label"].apply(lambda label: owners.of(label.rsplit(":")[0].replace("//", "") + "/"))
 
@@ -139,9 +139,11 @@ def top(args, db_config):
             df["owners"].apply(lambda owners: any(re.search(args.owner, owner[1], re.IGNORECASE) for owner in owners))
         ]
 
+    # Turn the owners into terminal hyperlinks to their GitHub user/team page:
     df["owners"] = df["owners"].apply(
         lambda owners: ", ".join([terminal_hyperlink(owner[1], owner_link(owner)) for owner in owners])
     )
+
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
