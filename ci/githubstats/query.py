@@ -198,7 +198,7 @@ def last(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="azel run //ci/githubstats:query --")
+    parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
     # Arguments common to all subcommands:
     common_parser = argparse.ArgumentParser(add_help=False)
