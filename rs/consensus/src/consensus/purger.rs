@@ -316,11 +316,7 @@ impl Purger {
 
     /// Ask state manager to purge all states below the given height
     fn purge_replicated_state_by_finalized_certified_height(&self, pool: &PoolReader<'_>) {
-        let height = pool
-            .get_finalized_tip()
-            .context
-            .certified_height
-            .min(self.state_manager.latest_state_height());
+        let height = pool.get_finalized_tip().context.certified_height;
 
         let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
