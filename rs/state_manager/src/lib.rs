@@ -4046,7 +4046,7 @@ pub mod testing {
         /// Testing only: Wait till deallocation queue is empty.
         fn flush_deallocation_channel(&self);
 
-        /// Testing only: Returns state heights in `states.snapshots`.
+        /// Testing only: Returns heights in `states.snapshots`.
         fn state_snapshot_heights(&self) -> Vec<Height>;
 
         /// Testing only: Returns state at a given height in `states.snapshots`.

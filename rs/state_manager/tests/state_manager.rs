@@ -8953,8 +8953,12 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 #[test]
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
 
         // all conditions are satisfied => optimization triggers
         let state = sm.take_tip().1;
@@ -8982,17 +8986,21 @@ fn commit_and_certify_optimization_conditions() {
 #[test]
 fn commit_and_certify_optimization_semantics() {
     state_manager_test(|metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
-        // just the initial state is stored in `SharedState` at the beginning
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // just the initial state is stored in `states` at the beginning
         let only_initial_state = || {
             assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
             assert!(sm.certifications_metadata_heights().is_empty());
         };
         only_initial_state();
 
-        // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state
+        // optimization triggers => no state snapshot and certifications metadata are stored => still just the initial state in `states`
         let mut state = sm.take_tip().1;
         state.metadata.batch_time += Duration::from_secs(1);
         let batch_time_opt = state.metadata.batch_time;
@@ -9032,18 +9040,19 @@ fn commit_and_certify_optimization_semantics() {
 #[test]
 fn latest_subnet_certified_height() {
     state_manager_test(|_metrics, sm| {
+        // initial value
         assert_eq!(sm.latest_subnet_certified_height(), 0);
 
-        // `StateManagerImpl::remove_inmemory_states_below` updates `latest_subnet_certified_height`
+        // `remove_inmemory_states_below` updates `latest_subnet_certified_height`
         sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 100);
 
-        // `StateManagerImpl::remove_inmemory_states_below` does not update `latest_subnet_certified_height`
+        // `remove_inmemory_states_below` does not update `latest_subnet_certified_height`
         // to a lower value
         sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 100);
 
-        // `StateManagerImpl::remove_states_below` does not update `latest_subnet_certified_height`
+        // `remove_states_below` never updates `latest_subnet_certified_height`
         sm.remove_states_below(Height::new(200));
         assert_eq!(sm.latest_subnet_certified_height(), 100);
     });
@@ -9052,19 +9061,24 @@ fn latest_subnet_certified_height() {
 #[test]
 fn tip_height() {
     state_manager_test(|metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // initial value
         assert_eq!(sm.tip_height(), 0);
 
-        // optimization triggers
+        // tip height is updated correctly if optimization triggers
         let state = sm.take_tip().1;
         let opt_height = Height::new(1);
         sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
         assert_eq!(sm.tip_height(), opt_height.get());
 
-        // optimization does not trigger
+        // tip height is updated correctly if optimization does not trigger
         let state = sm.take_tip().1;
         let no_opt_height = Height::new(10);
         sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
@@ -9092,6 +9106,7 @@ fn commit_and_certify_tip_set_panic() {
 )]
 fn commit_and_certify_optimization_tip_set_panic() {
     state_manager_test(|_metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
@@ -9105,11 +9120,15 @@ fn commit_and_certify_optimization_tip_set_panic() {
 #[test]
 fn take_tip_does_not_hash_without_optimization() {
     state_manager_test(|metrics, sm| {
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
         // the initial state is always hashed in `take_tip`
         assert_eq!(tip_hash_count(metrics), 0);
         let (initial_height, initial_state) = sm.take_tip();
         assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
         assert_eq!(tip_hash_count(metrics), 1);
+
         // optimization does not trigger
         let no_opt_height = Height::new(1);
         sm.commit_and_certify(
@@ -9120,7 +9139,7 @@ fn take_tip_does_not_hash_without_optimization() {
         );
         assert_eq!(no_state_clone_count(metrics), 0);
 
-        // the state at height 1 is not hashed in `take_tip` since certification was delivered
+        // the state at height 1 is not hashed in `take_tip` since certification metadata are computed
         assert_eq!(tip_hash_count(metrics), 1);
         let (height, _state) = sm.take_tip();
         assert_eq!(tip_hash_count(metrics), 1);
@@ -9131,15 +9150,19 @@ fn take_tip_does_not_hash_without_optimization() {
 #[test]
 fn take_tip_hashes_with_optimization() {
     state_manager_test(|metrics, sm| {
-        // set latest subnet certified height so that optimization triggers
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
 
         // the initial state is always hashed in `take_tip`
         assert_eq!(tip_hash_count(metrics), 0);
         let (initial_height, initial_state) = sm.take_tip();
         assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
         assert_eq!(tip_hash_count(metrics), 1);
+
         // optimization triggers
         let opt_height = Height::new(1);
         sm.commit_and_certify(
@@ -9150,7 +9173,7 @@ fn take_tip_hashes_with_optimization() {
         );
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // the state at height 1 is hashed in `take_tip` since certification was not delivered
+        // the state at height 1 is hashed in `take_tip` since certification metadata are not computed
         assert_eq!(tip_hash_count(metrics), 1);
         let (height, _state) = sm.take_tip();
         assert_eq!(tip_hash_count(metrics), 2);
@@ -9161,9 +9184,14 @@ fn take_tip_hashes_with_optimization() {
 #[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // update `latest_subnet_certified_height` to enable optimization
+        sm.remove_inmemory_states_below(Height::new(500), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 500);
 
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // future checkpoints yield transient error
         let checkpoint_height = Height::new(500);
         assert_eq!(
             sm.get_state_hash_at(checkpoint_height),
@@ -9174,7 +9202,7 @@ fn get_state_hash_at() {
 
         // optimization does not trigger
         let state = sm.take_tip().1;
-        let no_opt_height = Height::new(10);
+        let no_opt_height = Height::new(480);
         sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 0);
         assert_eq!(
@@ -9186,7 +9214,7 @@ fn get_state_hash_at() {
 
         // optimization triggers
         let state = sm.take_tip().1;
-        let opt_height = Height::new(21);
+        let opt_height = Height::new(485);
         sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
         assert_eq!(
@@ -9198,7 +9226,7 @@ fn get_state_hash_at() {
 
         // optimization does not trigger
         let state = sm.take_tip().1;
-        let another_no_opt_height = Height::new(30);
+        let another_no_opt_height = Height::new(490);
         sm.commit_and_certify(
             state,
             another_no_opt_height,
@@ -9213,11 +9241,29 @@ fn get_state_hash_at() {
             ))
         );
 
-        // optimization does not trigger
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let another_opt_height = Height::new(495);
+        sm.commit_and_certify(
+            state,
+            another_opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 2);
+        assert_eq!(
+            sm.get_state_hash_at(checkpoint_height),
+            Err(StateHashError::Transient(
+                TransientStateHashError::StateNotCommittedYet(checkpoint_height)
+            ))
+        );
+
+        // optimization does not trigger on checkpoint height
         let state = sm.take_tip().1;
         sm.commit_and_certify(state, checkpoint_height, CertificationScope::Full, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
+        assert_eq!(no_state_clone_count(metrics), 2);
 
+        // finally hash for checkpoint height is available
         wait_for_checkpoint(&sm, checkpoint_height);
         assert!(sm.get_state_hash_at(checkpoint_height).is_ok());
     });
@@ -9226,9 +9272,14 @@ fn get_state_hash_at() {
 #[test]
 fn flush_with_optimization() {
     state_manager_test(|metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // no delta has been flushed
         assert_eq!(flush_unflushed_delta_count(metrics), 0);
 
         // optimization triggers
@@ -9247,6 +9298,7 @@ fn flush_with_optimization() {
         );
         assert_eq!(no_state_clone_count(metrics), 1);
 
+        // delta has been flushed
         sm.flush_tip_channel();
         assert_eq!(flush_unflushed_delta_count(metrics), 1);
     });
