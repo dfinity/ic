@@ -1,5 +1,6 @@
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 py_binary(
     name = "query",
@@ -11,4 +12,11 @@ py_binary(
         requirement("requests"),
         requirement("tabulate"),
     ],
+)
+
+sh_test(
+    name = "query_help_test",
+    srcs = ["query_help_test.sh"],
+    data = [":query"],
+    env = {"QUERY_PATH": "$(rootpath :query)"},
 )
