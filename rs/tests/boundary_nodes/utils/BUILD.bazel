@@ -1,7 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_DATA")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+COUNTER_CANISTER_DATA = [v for _, v in COUNTER_CANISTER_RUNTIME_DEPS.items()]
 
 rust_library(
     name = "utils",

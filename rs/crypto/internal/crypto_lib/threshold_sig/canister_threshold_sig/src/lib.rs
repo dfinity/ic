@@ -205,7 +205,6 @@ use ic_types::crypto::canister_threshold_sig::error::{
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterThresholdError {
     CurveMismatch,
-    InconsistentCiphertext,
     InconsistentOpeningAndCommitment,
     InsufficientDealings,
     InsufficientOpenings(usize, usize),
@@ -223,6 +222,7 @@ pub enum CanisterThresholdError {
     InvalidSignature,
     InvalidSignatureShare,
     InvalidThreshold(usize, usize),
+    MalformedCiphertext,
     UnexpectedCommitmentType,
 }
 
@@ -581,6 +581,7 @@ pub fn compute_secret_shares_with_openings(
 pub enum IDkgVerifyDealingInternalError {
     UnsupportedAlgorithm,
     InvalidCommitment,
+    InvalidCiphertext,
     InvalidProof,
     InvalidRecipients,
     InternalError(String),
@@ -591,7 +592,9 @@ impl From<CanisterThresholdError> for IDkgVerifyDealingInternalError {
         match e {
             CanisterThresholdError::InvalidProof => Self::InvalidProof,
             CanisterThresholdError::InvalidCommitment => Self::InvalidCommitment,
+            CanisterThresholdError::UnexpectedCommitmentType => Self::InvalidCommitment,
             CanisterThresholdError::InvalidRecipients => Self::InvalidRecipients,
+            CanisterThresholdError::MalformedCiphertext => Self::InvalidCiphertext,
             x => Self::InternalError(format!("{x:?}")),
         }
     }
@@ -602,9 +605,10 @@ impl From<IDkgVerifyDealingInternalError> for IDkgVerifyDealingPrivateError {
         type Vdie = IDkgVerifyDealingInternalError;
         type Vdpe = IDkgVerifyDealingPrivateError;
         match error {
-            Vdie::InvalidCommitment | Vdie::InvalidProof | Vdie::InvalidRecipients => {
-                Vdpe::InvalidDealing(format!("{error:?}"))
-            }
+            Vdie::InvalidCommitment
+            | Vdie::InvalidProof
+            | Vdie::InvalidRecipients
+            | Vdie::InvalidCiphertext => Vdpe::InvalidDealing(format!("{error:?}")),
             Vdie::UnsupportedAlgorithm => Vdpe::InvalidArgument(format!("{error:?}")),
             Vdie::InternalError(e) => Vdpe::InternalError(e),
         }
@@ -1349,7 +1353,7 @@ impl From<CanisterThresholdError> for DeriveThresholdPublicKeyError {
         match e {
             CanisterThresholdError::InvalidArguments(s) => Self::InvalidArgument(s),
             CanisterThresholdError::CurveMismatch
-            | CanisterThresholdError::InconsistentCiphertext
+            | CanisterThresholdError::MalformedCiphertext
             | CanisterThresholdError::InconsistentOpeningAndCommitment
             | CanisterThresholdError::InsufficientDealings
             | CanisterThresholdError::InsufficientOpenings(_, _)
