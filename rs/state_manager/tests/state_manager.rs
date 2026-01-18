@@ -9010,7 +9010,8 @@ fn commit_and_certify_optimization_semantics() {
         only_initial_state();
 
         // optimization does not trigger => state snapshot and certifications metadata with hash tree are stored
-        let mut state = sm.take_tip().1;
+        let (height, mut state) = sm.take_tip();
+        assert_eq!(height, opt_height); // tip height is set correctly if optimization triggers
         assert_eq!(state.metadata.batch_time, batch_time_opt); // tip is set correctly if optimization triggers
         state.metadata.batch_time += Duration::from_secs(1);
         let batch_time_no_opt = state.metadata.batch_time;
