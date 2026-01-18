@@ -61,8 +61,11 @@ def sourcegraph_url(label: str) -> str:
     """Return a URL to SourceGraph that will search for the given Bazel label."""
     parts = label.rsplit(":", 1)
     dir = parts[0].replace("//", "")
-    test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
-    return f"https://sourcegraph.com/search?q=repo:^github\\.com/dfinity/ic$+file:{dir}/BUILD.bazel+{test}"
+    url = f"https://sourcegraph.com/search?q=repo:^github\\.com/dfinity/ic$+file:{dir}/BUILD.bazel"
+    if len(parts) == 2:
+        test = parts[1].removesuffix("_head_nns").removesuffix("_colocate")
+        url += f"+{test}"
+    return url
 
 
 def owner_link(owner: codeowners.OwnerTuple):
