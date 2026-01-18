@@ -4051,10 +4051,7 @@ pub mod testing {
         fn certifications_metadata_heights(&self) -> Vec<Height>;
 
         /// Testing only: Returns hash tree at a given height in `states.certifications_metadata`.
-        fn certifications_metadata_hash_tree(
-            &self,
-            height: Height,
-        ) -> Option<(Arc<HashTree>, Instant)>;
+        fn certifications_metadata_hash_tree(&self, height: Height) -> Option<Arc<HashTree>>;
 
         /// Testing only: Returns state hash at a given height in `states.certifications_metadata`.
         fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash;
@@ -4113,10 +4110,7 @@ pub mod testing {
             states.certifications_metadata.keys().cloned().collect()
         }
 
-        fn certifications_metadata_hash_tree(
-            &self,
-            height: Height,
-        ) -> Option<(Arc<HashTree>, Instant)> {
+        fn certifications_metadata_hash_tree(&self, height: Height) -> Option<Arc<HashTree>> {
             let states = self.states.read();
             states
                 .certifications_metadata
@@ -4124,6 +4118,7 @@ pub mod testing {
                 .expect("Did not find metadata at given height")
                 .hash_tree
                 .clone()
+                .map(|(hash_tree, _)| hash_tree)
         }
 
         fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash {
