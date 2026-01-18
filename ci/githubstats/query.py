@@ -82,6 +82,7 @@ def owner_link(owner: codeowners.OwnerTuple):
 
 
 def log_psql_query(log_query: bool, title: str, query: str, db_config: DBConfig):
+    """Optionally log the given query to stderr in a form that can be copy-pasted into psql."""
     if log_query:
         args = [
             "psql",
