@@ -932,7 +932,6 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     latest_subnet_certified_height: AtomicU64,
-    tip_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1496,7 +1495,6 @@ impl StateManagerImpl {
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let latest_subnet_certified_height = AtomicU64::new(0);
-        let tip_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1612,7 +1610,6 @@ impl StateManagerImpl {
             latest_state_height,
             latest_certified_height,
             latest_subnet_certified_height,
-            tip_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -3256,7 +3253,6 @@ impl StateManager for StateManagerImpl {
             self.metrics.no_state_clone_count.inc();
 
             states.tip = Some((height, state));
-            self.tip_height.store(height.get(), Ordering::Relaxed);
             return;
         }
 
@@ -3390,7 +3386,6 @@ impl StateManager for StateManagerImpl {
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip = next_tip;
-        self.tip_height.store(height.get(), Ordering::Relaxed);
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
@@ -4069,9 +4064,6 @@ pub mod testing {
 
         /// Testing only: Returns `latest_subnet_certified_height`.
         fn latest_subnet_certified_height(&self) -> u64;
-
-        /// Testing only: Returns `tip_height`.
-        fn tip_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4156,10 +4148,6 @@ pub mod testing {
 
         fn latest_subnet_certified_height(&self) -> u64 {
             self.latest_subnet_certified_height.load(Ordering::Relaxed)
-        }
-
-        fn tip_height(&self) -> u64 {
-            self.tip_height.load(Ordering::Relaxed)
         }
     }
 }

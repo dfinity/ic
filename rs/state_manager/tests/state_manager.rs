@@ -9059,35 +9059,6 @@ fn latest_subnet_certified_height() {
 }
 
 #[test]
-fn tip_height() {
-    state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
-
-        // optimization has not triggered yet
-        assert_eq!(no_state_clone_count(metrics), 0);
-
-        // initial value
-        assert_eq!(sm.tip_height(), 0);
-
-        // tip height is updated correctly if optimization triggers
-        let state = sm.take_tip().1;
-        let opt_height = Height::new(1);
-        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        assert_eq!(sm.tip_height(), opt_height.get());
-
-        // tip height is updated correctly if optimization does not trigger
-        let state = sm.take_tip().1;
-        let no_opt_height = Height::new(10);
-        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
-        assert_eq!(no_state_clone_count(metrics), 1);
-        assert_eq!(sm.tip_height(), no_opt_height.get());
-    });
-}
-
-#[test]
 #[should_panic(
     expected = "Attempt to commit state not borrowed from this StateManager, height = 10, tip_height = 0"
 )]
