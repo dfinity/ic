@@ -10,7 +10,7 @@ The DB can be accessed in a read-only matter via the browser using Apache Supers
 
 * Or via the CLI with `psql` if you're on the VPN using:
 ```
-psql -h githubstats.idx.dfinity.network -U githubstats_read -d github
+psql postgresql://githubstats_read@githubstats.idx.dfinity.network/github
 ```
 
 Frequently Asked Queries
@@ -21,10 +21,13 @@ The following Python script can be used to run some frequently asked queries
 
 ```
 $ bazel run //ci/githubstats:query -- --help
-usage: query.py [-h] {top,last-runs} ...
+usage: bazel run //ci/githubstats:query -- [-h] {top,last} ...
 
 positional arguments:
-  {top,last-runs}
-    top            Get the top N non-successful/flaky/failed/timed-out tests in the last period
-    last-runs      Get all runs of the specified test in the last period
+  {top,last}
+    top       Get the top N non-successful / flaky / failed / timed-out tests in the last period
+    last      Get the last runs of the specified test in the given period
+
+options:
+  -h, --help  show this help message and exit
 ```
