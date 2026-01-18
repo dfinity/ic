@@ -49,9 +49,7 @@ def githubstats_db_cursor(db_config: DBConfig):
 def get_redirect_location(url):
     """Request a URL and return its redirect location."""
     response = requests.get(url, allow_redirects=False)
-    if response.is_redirect:
-        return response.headers.get("location")
-    return None
+    return response.headers.get("location") if response.is_redirect else None
 
 
 def terminal_hyperlink(text: str, url: str) -> str:
