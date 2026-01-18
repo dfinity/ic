@@ -14,7 +14,7 @@ SELECT
       -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
       WHEN wr.event_type = 'pull_request' THEN CAST(wr.pull_request_number AS TEXT)
       ELSE ''
-  END as pr,
+  END AS pr,
   bi.head_sha
 
 FROM
