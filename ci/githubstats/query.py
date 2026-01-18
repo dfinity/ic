@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-
+#
+# Run via:
+#
+#   bazel run //ci/githubstats:query -- --help
+#
 import argparse
 import contextlib
 import shlex
@@ -97,11 +101,11 @@ def top(args):
     print(tabulate(df, headers="keys", tablefmt="github"))
 
 
-def last_runs(args):
+def last(args):
     """
-    Get all runs of the specified test
+    Get the last runs of the specified test
     that have either succeeded, flaked, timed out or failed
-    in the last specified period.
+    in the specified period.
     """
     overall_statuses = []
     statuses = []
@@ -202,12 +206,12 @@ def main():
 
     top_parser.set_defaults(func=top)
 
-    ## last-runs ##############################################################
+    ## last ###################################################################
 
     last_runs_parser = subparsers.add_parser(
-        "last-runs",
+        "last",
         parents=[common_parser, period_parser, prs_parser],
-        help="Get all runs of the specified test in the last period",
+        help="Get the last runs of the specified test in the given period",
     )
     last_runs_parser.add_argument("--success", action="store_true")
     last_runs_parser.add_argument("--flaky", action="store_true")
@@ -215,7 +219,7 @@ def main():
     last_runs_parser.add_argument("--timeout", action="store_true")
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
-    last_runs_parser.set_defaults(func=last_runs)
+    last_runs_parser.set_defaults(func=last)
 
     ###########################################################################
 

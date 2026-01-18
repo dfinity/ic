@@ -20,11 +20,11 @@ The following Python script can be used to run some frequently asked queries
 (use `--verbose` to log the queries):
 
 ```
-$ ci/githubstats/query.py --help
-usage: query.py [-h] {last-runs,top} ...
+$ bazel run //ci/githubstats:query -- --help
+usage: query.py [-h] {top,last-runs} ...
 
 positional arguments:
-  {last-runs,top}
-    last-runs      Get all runs of the specified test in the last period
+  {top,last-runs}
     top            Get the top N non-successful/flaky/failed/timed-out tests in the last period
+    last-runs      Get all runs of the specified test in the last period
 ```
