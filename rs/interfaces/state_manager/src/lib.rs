@@ -226,6 +226,9 @@ pub trait StateManager: StateReader {
     /// Notify the state manager that states committed with partial certification
     /// state and heights strictly less than the specified `height` can be removed, except
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
+    /// The specified `height` is expected to be the *latest certified height*
+    /// of the subnet, i.e., the latest height for which a valid certification is available
+    /// to consensus.
     ///
     /// Note that:
     ///  * The initial state (height = 0) is not removed.

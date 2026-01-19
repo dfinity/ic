@@ -3125,6 +3125,9 @@ impl StateManager for StateManagerImpl {
 
     /// Variant of `remove_states_below()` that only removes states committed with
     /// partial certification scope.
+    /// The specified `requested_height` is expected to be the *latest certified height*
+    /// of the subnet, i.e., the latest height for which a valid certification is available
+    /// to consensus.
     ///
     /// The following states are NOT removed:
     /// * Any state with height >= min(requested_height, latest state height)
