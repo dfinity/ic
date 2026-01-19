@@ -342,8 +342,8 @@ impl StreamBuilderImpl {
                     StreamMessage::Request(req) => {
                         state.metadata.network_topology.route(req.sender.get())
                     }
-                    StreamMessage::Response(rep) => {
-                        state.metadata.network_topology.route(rep.originator.get())
+                    StreamMessage::Response(resp) => {
+                        state.metadata.network_topology.route(resp.originator.get())
                     }
                     StreamMessage::Refund(_) => {
                         // Refunds don't have explicit senders. Always assume they are local.
