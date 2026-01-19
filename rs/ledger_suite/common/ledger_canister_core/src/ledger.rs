@@ -187,8 +187,6 @@ pub trait LedgerData: LedgerContext {
     /// The callback that the ledger framework calls when it purges a transaction.
     fn on_purged_transaction(&mut self, height: BlockIndex);
 
-    fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
-
     fn increment_archiving_failure_metric(&mut self);
 
     fn get_archiving_failure_metric(&self) -> u64;

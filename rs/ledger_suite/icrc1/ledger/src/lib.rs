@@ -711,10 +711,10 @@ impl Ledger {
             fee_collector_107: fee_collector_account,
         };
 
-        if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
-        {
+        if ledger.fee_collector_107 == Some(ledger.minting_account) {
             ic_cdk::trap("The fee collector account cannot be the same as the minting account");
         }
+        ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
 
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
@@ -725,7 +725,6 @@ impl Ledger {
                 panic!("failed to mint {balance} tokens to {account}: {err:?}")
             });
         }
-        ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
 
         ledger
     }
@@ -802,6 +801,10 @@ impl Ledger {
                 "failed to add fee collector block to the ledger: {e}"
             ));
         }
+    }
+
+    pub fn legacy_fee_collector(&self) -> Option<Account> {
+        self.fee_collector.as_ref().map(|fc| fc.fee_collector)
     }
 }
 
@@ -896,10 +899,6 @@ impl LedgerData for Ledger {
     }
 
     fn on_purged_transaction(&mut self, _height: BlockIndex) {}
-
-    fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
-        self.fee_collector.as_mut()
-    }
 
     fn increment_archiving_failure_metric(&mut self) {
         ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
