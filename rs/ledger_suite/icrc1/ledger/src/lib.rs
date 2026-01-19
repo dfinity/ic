@@ -715,7 +715,9 @@ impl Ledger {
         if ledger.fee_collector_107 == Some(ledger.minting_account) {
             ic_cdk::trap("The fee collector account cannot be the same as the minting account");
         }
-        ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
+        if ledger.fee_collector_107.is_some() {
+            ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
+        }
 
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {

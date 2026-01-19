@@ -16,7 +16,6 @@ use ic_ledger_suite_state_machine_helpers::{
 };
 use ic_ledger_suite_state_machine_tests::MINTER;
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
-use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
     INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
@@ -414,24 +413,6 @@ fn check_fee_collector() {
 }
 
 #[test]
-fn check_fee_collector_blocks() {
-    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
-        ledger_wasm(),
-        encode_init_args,
-        BlockRetrieval::Legacy,
-    );
-}
-
-#[test]
-fn check_fee_collector_icrc3_blocks() {
-    ic_ledger_suite_state_machine_tests::fee_collector::test_fee_collector_blocks(
-        ledger_wasm(),
-        encode_init_args,
-        BlockRetrieval::Icrc3,
-    );
-}
-
-#[test]
 fn check_memo_max_len() {
     ic_ledger_suite_state_machine_tests::test_memo_max_len(ledger_wasm(), encode_init_args);
 }
@@ -799,7 +780,7 @@ fn icrc1_test_downgrade_from_incompatible_version() {
         ledger_wasm_nextledgerversion(),
         ledger_wasm(),
         encode_init_args,
-        true,
+        false,
     );
 }
 

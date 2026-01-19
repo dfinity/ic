@@ -284,7 +284,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     // Migrate the legacy fee collector, only do it if wasn't already set by upgrade args
     if upgrade_from_version < 4 && !fee_collector_changed_with_args {
         Access::with_ledger_mut(|ledger| {
-            ledger.ledger_set_107_fee_collector(ledger.legacy_fee_collector());
+            if ledger.legacy_fee_collector().is_some() {
+                ledger.ledger_set_107_fee_collector(ledger.legacy_fee_collector());
+            }
         });
     }
     if upgrade_from_version < 3 {
