@@ -368,7 +368,7 @@ fn equal_ignoring_timestamp(left: &[PublicKey], right: &[PublicKey]) -> bool {
 
 fn assert_pubkey_eq_ignoring_timestamp(actual: Option<PublicKey>, expected: Option<PublicKey>) {
     match (actual.as_ref(), expected.as_ref()) {
-        (Some(actual), Some(expected)) => assert!(actual.equal_ignoring_timestamp(&expected)),
+        (Some(actual), Some(expected)) => assert!(actual.equal_ignoring_timestamp(expected)),
         (None, None) => (),
         (a, e) => panic!("public keys are not equal: actual={a:?}, expected={e:?}",),
     }
