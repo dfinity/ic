@@ -334,6 +334,7 @@ impl SignedRequestBytes {
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessage {
+    // TODO(DSM-95): Switch to `NewResponse` (in the next replica release) and drop.
     Response(Arc<Response>),
     /// Forward compatibility: a response as an input for Execution, consisting of
     /// the response itself plus its associated callback.

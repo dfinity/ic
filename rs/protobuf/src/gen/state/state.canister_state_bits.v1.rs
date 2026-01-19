@@ -336,6 +336,7 @@ pub mod execution_task {
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
+            /// TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "6")]
