@@ -104,12 +104,11 @@ pub enum AccessKind {
 /// Specifies the kind of handler for missing pages.
 #[derive(Clone, Copy)]
 pub enum MissingPageHandlerKind {
-    /// The legacy `old` handler, which does not prefetch pages or use
-    /// `AccessKind` information.
-    Old,
-    /// The `new` handler, which leverages `AccessKind` and prefetching
+    /// The generic handler, which does not use `AccessKind` information.
+    Generic,
+    /// The prefetching handler, which leverages `AccessKind` and prefetching
     /// for improved performance.
-    New,
+    Prefetching,
     /// A handler that provides deterministic prefetching behavior
     /// and works on all platforms.
     Deterministic,

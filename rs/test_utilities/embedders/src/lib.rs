@@ -126,11 +126,11 @@ impl WasmtimeInstanceBuilder {
     }
 
     pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
-        if enabled {
-            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Enabled;
+        self.config.feature_flags.deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
         } else {
-            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
-        }
+            FlagStatus::Disabled
+        };
         self
     }
 

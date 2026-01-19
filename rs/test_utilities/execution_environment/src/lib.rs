@@ -2432,12 +2432,14 @@ impl ExecutionTestBuilder {
     }
 
     pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
-        let feature_flags = &mut self.execution_config.embedders_config.feature_flags;
-        if enabled {
-            feature_flags.deterministic_memory_tracker = FlagStatus::Enabled;
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
         } else {
-            feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
-        }
+            FlagStatus::Disabled
+        };
         self
     }
 
