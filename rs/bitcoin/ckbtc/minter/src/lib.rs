@@ -858,8 +858,14 @@ pub async fn resubmit_transactions<
         }
         let tx_fee_per_vbyte = match submitted_tx.effective_fee_per_vbyte {
             Some(prev_fee_rate) => {
-                // Ensure that the fee is at least min relay fee higher than the previous
-                // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
+                // There are 2 requirements on the fee of a replacement transaction:
+                // 1) The fee rate strictly increases. Although not required from [BIP-125](https://en.bitcoin.it/wiki/BIP_0125),
+                // it is actually required by the [implementation](https://github.com/bitcoin/bitcoin/blob/d2ecd6815d89c9b089b55bc96fdf93b023be8dda/src/policy/rbf.cpp#L149).
+                // 2) The total fee of the replacement transaction must be at least as high as the previous transaction fee plus the minimum relay fee.
+                //
+                // To satisfy both conditions, we choose the new fee rate to be the previous one plus the minimum relay fee rate increase.
+                // This will satisfy 2) because the computed total fee of a transaction is not dependent on the variable signature sizes
+                // (see `FeeEstimator::evaluate_transaction_fee` and `fake_sign`)
                 fee_rate.max(prev_fee_rate + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
             None => fee_rate,
