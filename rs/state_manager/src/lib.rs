@@ -118,8 +118,14 @@ const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// The maximum number of consecutive rounds for which the optimization of
-/// skipping state cloning and certification metadata computation triggers.
+/// skipping state cloning and computing certification metadata triggers
+/// while catching up.
 const MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING: u64 = 10;
+
+/// The maximum number of future heights starting at tip height
+/// that the state manager optimistically asks consensus to certify
+/// in advance while catching up.
+const MAX_FUTURE_HEIGHTS_TO_CERTIFY: u64 = 20;
 
 /// Write an overlay file this many rounds before each checkpoint.
 pub const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
@@ -2999,7 +3005,11 @@ impl StateManager for StateManagerImpl {
         let tip_height = self.tip_height.load(Ordering::Relaxed);
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
-        let state_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
+        let state_heights = tip_height
+            ..min(
+                tip_height + MAX_FUTURE_HEIGHTS_TO_CERTIFY,
+                latest_subnet_certified_height,
+            );
         state_heights
             .into_iter()
             .map(Height::new)
