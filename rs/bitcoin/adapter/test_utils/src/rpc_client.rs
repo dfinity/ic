@@ -348,6 +348,12 @@ impl<T: RpcClientType> RpcClient<T> {
         self.send_raw_transaction::<&[u8]>(tx.hex.as_ref())
     }
 
+    /// Adds a private key (as returned by `dumpprivkey`) to your wallet.
+    pub fn import_private_key(&self, private_key: &str, label: &str) -> Result<()> {
+        let args = [into_json(private_key)?, into_json(label)?];
+        self.call("importprivkey", &args)
+    }
+
     fn create_wallet(
         &self,
         wallet: &str,
@@ -514,6 +520,29 @@ impl<T: RpcClientType> RpcClient<T> {
 
     pub fn get_mempool_entry(&self, txid: &Txid) -> Result<T::GetMempoolEntryResult> {
         self.call("getmempoolentry", &[into_json(txid)?])
+    }
+
+    pub fn get_raw_transaction_from_mempool(&self, txid: &Txid) -> Result<Transaction> {
+        let result: String = self.call("getrawtransaction", &[into_json(txid)?])?;
+        let tx_hex = hex::decode(result).expect("BUG: invalid hex string");
+        Ok(bitcoin::consensus::deserialize(&tx_hex)
+            .expect("BUG: Failed to deserialize transaction"))
+    }
+
+    pub fn set_transaction_priority_in_mempool(
+        &self,
+        txid: &Txid,
+        priority_delta: i32,
+        fee_delta: i32,
+    ) -> Result<bool> {
+        self.call(
+            "prioritisetransaction",
+            &[
+                into_json(txid)?,
+                into_json(priority_delta)?,
+                into_json(fee_delta)?,
+            ],
+        )
     }
 
     pub fn add_node(&self, addr: &str) -> Result<()> {
