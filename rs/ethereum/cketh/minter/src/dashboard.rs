@@ -27,7 +27,10 @@ use std::str::FromStr;
 
 mod filters {
     #[askama::filter_fn]
-    pub fn timestamp_to_datetime<T: std::fmt::Display>(timestamp: T, _env: &dyn askama::Values) -> askama::Result<String> {
+    pub fn timestamp_to_datetime<T: std::fmt::Display>(
+        timestamp: T,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         let input = timestamp.to_string();
         let ts: i128 = input
             .parse()
@@ -41,7 +44,10 @@ mod filters {
     }
 
     #[askama::filter_fn]
-    pub fn lower_alphanumeric<T: std::fmt::Display>(input: T, _env: &dyn askama::Values) -> askama::Result<String> {
+    pub fn lower_alphanumeric<T: std::fmt::Display>(
+        input: T,
+        _env: &dyn askama::Values,
+    ) -> askama::Result<String> {
         let mut input = input.to_string();
         input.make_ascii_lowercase();
         input.retain(|c| c.is_ascii_alphanumeric());
