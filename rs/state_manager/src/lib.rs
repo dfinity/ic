@@ -117,6 +117,10 @@ const CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT: &str =
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
+/// The maximum number of consecutive rounds for which the optimization of
+/// skipping state cloning and certification metadata computation triggers.
+const MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING: u64 = 10;
+
 /// Write an overlay file this many rounds before each checkpoint.
 pub const NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY: u64 = 50;
 
@@ -3242,7 +3246,9 @@ impl StateManager for StateManagerImpl {
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
             && height.get() < latest_subnet_certified_height
-            && !height.get().is_multiple_of(10)
+            && !height
+                .get()
+                .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
         {
             let mut states = self.states.write();
             #[cfg(debug_assertions)]
