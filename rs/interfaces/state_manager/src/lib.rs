@@ -229,6 +229,8 @@ pub trait StateManager: StateReader {
     /// The specified `height` is expected to be the *latest certified height*
     /// of the subnet, i.e., the latest height for which a valid certification is available
     /// to consensus.
+    /// There are no guarantees for future heights in `extra_heights_to_keep`
+    /// w.r.t. the height of the latest state snapshot stored by the state manager.
     ///
     /// Note that:
     ///  * The initial state (height = 0) is not removed.

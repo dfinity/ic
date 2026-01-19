@@ -3128,6 +3128,9 @@ impl StateManager for StateManagerImpl {
     /// The specified `requested_height` is expected to be the *latest certified height*
     /// of the subnet, i.e., the latest height for which a valid certification is available
     /// to consensus.
+    /// There are no guarantees for future heights in `extra_heights_to_keep`
+    /// w.r.t. the height of the latest state snapshot stored by the state manager, i.e.,
+    /// for heights greater than `self.latest_state_height`.
     ///
     /// The following states are NOT removed:
     /// * Any state with height >= min(requested_height, latest state height)
