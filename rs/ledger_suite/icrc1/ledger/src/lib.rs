@@ -11,8 +11,8 @@ use ic_certification::{
     HashTree,
     hash_tree::{Label, empty, fork, label, leaf},
 };
-use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
+use ic_icrc1::{Operation, blocks::encoded_block_to_generic_block};
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::runtime::{CdkRuntime, Runtime};
 use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
@@ -36,6 +36,7 @@ use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
+    icrc107::schema::BTYPE_107,
 };
 use icrc_ledger_types::{
     icrc::generic_value::ICRC3Value,
@@ -93,11 +94,12 @@ pub type Tokens = ic_icrc1_tokens_u256::U256;
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
 ///   * 3 - the blocks are stored in stable structures.
+///   * 4 - the ledger uses the ICRC-107 fee collector.
 #[cfg(not(feature = "next-ledger-version"))]
-pub const LEDGER_VERSION: u64 = 3;
+pub const LEDGER_VERSION: u64 = 4;
 
 #[cfg(feature = "next-ledger-version")]
-pub const LEDGER_VERSION: u64 = 4;
+pub const LEDGER_VERSION: u64 = 5;
 
 #[derive(Clone, Debug)]
 pub struct Icrc1ArchiveWasm;
@@ -285,15 +287,6 @@ pub struct InitArgs {
 pub enum ChangeFeeCollector {
     Unset,
     SetTo(Account),
-}
-
-impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
-    fn from(value: ChangeFeeCollector) -> Self {
-        match value {
-            ChangeFeeCollector::Unset => None,
-            ChangeFeeCollector::SetTo(account) => Some(FeeCollector::from(account)),
-        }
-    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
@@ -732,6 +725,7 @@ impl Ledger {
                 panic!("failed to mint {balance} tokens to {account}: {err:?}")
             });
         }
+        ledger.ledger_set_107_fee_collector(ledger.fee_collector_107);
 
         ledger
     }
@@ -780,6 +774,34 @@ impl Ledger {
 
     pub fn copy_token_pool(&mut self) {
         self.stable_balances.token_pool = self.balances.token_pool;
+    }
+
+    pub fn ledger_set_107_fee_collector(&mut self, fee_collector: Option<Account>) {
+        self.fee_collector_107 = fee_collector;
+        let op: Operation<Tokens> = Operation::FeeCollector {
+            fee_collector,
+            caller: None,
+            mthd: None,
+        };
+        let tx = Transaction {
+            operation: op,
+            created_at_time: None,
+            memo: None,
+        };
+        let block = Block {
+            parent_hash: self.blockchain.last_hash,
+            transaction: tx,
+            effective_fee: None,
+            timestamp: ic_cdk::api::time(),
+            fee_collector: None,
+            fee_collector_block_index: None,
+            btype: Some(BTYPE_107.to_string()),
+        };
+        if let Err(e) = self.blockchain.add_block(block) {
+            ic_cdk::trap(format!(
+                "failed to add fee collector block to the ledger: {e}"
+            ));
+        }
     }
 }
 
@@ -977,9 +999,13 @@ impl Ledger {
             self.max_memo_length = max_memo_length;
         }
         if let Some(change_fee_collector) = args.change_fee_collector {
-            self.fee_collector = change_fee_collector.into();
-            if self.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(self.minting_account)
-            {
+            let fee_collector = match change_fee_collector {
+                ChangeFeeCollector::Unset => None,
+                ChangeFeeCollector::SetTo(account) => Some(account),
+            };
+
+            self.ledger_set_107_fee_collector(fee_collector);
+            if self.fee_collector_107 == Some(self.minting_account) {
                 ic_cdk::trap(
                     "The fee collector account cannot be the same account as the minting account",
                 );

@@ -259,23 +259,34 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         upgrade_from_version
     });
 
-    if let Some(args) = args {
+    let fee_collector_changed = if let Some(args) = args {
         match args {
             LedgerArgument::Init(_) => panic!(
                 "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."
             ),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
-                    Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
+                    Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args.clone()));
+                    upgrade_args.change_fee_collector.is_some()
+                } else {
+                    false
                 }
             }
         }
-    }
+    } else {
+        false
+    };
 
     PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
 
     initialize_total_volume();
 
+    // Migrate the legacy fee collector, only do it if wasn't already set by upgrade args
+    if upgrade_from_version < 4 && !fee_collector_changed {
+        Access::with_ledger_mut(|ledger| {
+            ledger.ledger_set_107_fee_collector(None);
+        });
+    }
     if upgrade_from_version < 3 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
         log_message(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
