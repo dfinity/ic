@@ -360,7 +360,7 @@ type flexible_http_request_args = record {
     method : variant { get; head; post };
     body : opt blob;
     transform : opt record {
-        function : func (record {response : http_response; context : blob}) -> (http_response) query;
+        function : func (record {response : http_request_result; context : blob}) -> (http_request_result) query;
         context : blob;
     };
     requested_counts: opt record {
