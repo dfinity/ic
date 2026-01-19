@@ -949,8 +949,7 @@ impl SystemState {
                 CanisterMessage::Response {
                     response,
                     callback: call_context_manager_mut(&mut self.status)
-                        .map(|ccm| ccm.unregister_callback(callback_id))
-                        .flatten()
+                        .and_then(|ccm| ccm.unregister_callback(callback_id))
                         .unwrap_or_else(invalid_callback),
                 }
             }
@@ -1002,8 +1001,7 @@ impl SystemState {
             }
             .into(),
             callback: call_context_manager_mut(&mut self.status)
-                .map(|ccm| ccm.unregister_callback(callback_id))
-                .flatten()
+                .and_then(|ccm| ccm.unregister_callback(callback_id))
                 .unwrap_or_else(invalid_callback),
         }
     }
