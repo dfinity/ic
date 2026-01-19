@@ -53,15 +53,14 @@ HTTP_ENDPOINTS_DEPS = [
 
 system_test_nns(
     name = "canister_http_flexible_test",
+    data =
+        CANISTER_HTTP_DATA + PROXY_CANISTER_DATA,
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],
-    runtime_deps =
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
     deps = CANISTER_HTTP_BASE_DEPS + ["//rs/rust_canisters/canister_test"],
 )
 
