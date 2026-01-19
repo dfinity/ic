@@ -99,11 +99,12 @@ def top(args):
     period = "month" if args.month else "week" if args.week else ""
 
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
-        N=sql.Literal(args.N),
-        order_by=sql.Identifier(args.order_by),
+        hide=sql.Literal(args.hide if args.hide else ""),
         period=sql.SQL(period),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
+        order_by=sql.Identifier(args.order_by),
+        N=sql.Literal(args.N),
     )
 
     log_psql_query(
@@ -265,6 +266,8 @@ def main():
     )
 
     top_parser.add_argument("--owner", type=str, help="Filter tests by owner (a regex for the GitHub username or team)")
+
+    top_parser.add_argument("--hide", type=str, help="Hide tests matching this SQL LIKE pattern")
 
     top_parser.set_defaults(func=top)
 
