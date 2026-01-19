@@ -8,7 +8,6 @@ import argparse
 import contextlib
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
 
@@ -79,17 +78,15 @@ def shorten_owner(owner: str) -> str:
     return parts[1] if len(parts) == 2 else owner
 
 
-def log_psql_query(log_query: bool, title: str, query: str, conninfo: str):
+def log_psql_query(log_query: bool, query: str, conninfo: str):
     """Optionally log the given query to stderr in a form that can be copy-pasted into psql."""
     if log_query:
-        print(
-            f"""# {title}:
-{shlex.join(["psql", conninfo])} << EOF
-{query}
-EOF
-""",
-            file=sys.stderr,
-        )
+        print(f"psql {conninfo} << EOF\n{query}\nEOF", file=sys.stderr)
+
+
+def period(args) -> str:
+    """Return the period string based on the given args."""
+    return "month" if args.month else "week" if args.week else "day" if args.day else "week"
 
 
 def top(args):
@@ -97,7 +94,6 @@ def top(args):
     Get the top N non-successful / flaky / failed / timed-out tests
     in the last specified period.
     """
-    period = "month" if args.month else "week" if args.week else ""
 
     operator, value = (
         (">", args.gt)
@@ -117,7 +113,7 @@ def top(args):
 
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
         hide=sql.Literal(args.hide if args.hide else ""),
-        period=sql.SQL(period),
+        period=sql.SQL(period(args)),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
         order_by=order_by,
@@ -131,12 +127,7 @@ def top(args):
         ),
     )
 
-    log_psql_query(
-        args.verbose,
-        f"Top {args.N} {args.order_by} tests{f' in the last {period}' if period else ''}",
-        query.as_string(),
-        args.conninfo,
-    )
+    log_psql_query(args.verbose, query.as_string(), args.conninfo)
 
     with githubstats_db_cursor(args.conninfo, args.timeout) as cursor:
         cursor.execute(query)
@@ -171,40 +162,26 @@ def last(args):
     in the specified period.
     """
     overall_statuses = []
-    statuses = []
     if args.success:
         overall_statuses.append(1)
-        statuses.append("successful")
     if args.flaky:
         overall_statuses.append(2)
-        statuses.append("flaky")
     if args.timedout:
         overall_statuses.append(3)
-        statuses.append("timed out")
     if args.failed:
         overall_statuses.append(4)
-        statuses.append("failed")
     if len(overall_statuses) == 0:
         overall_statuses = [1, 2, 3, 4]
-
-    statuses = f"{', '.join(statuses)} " if statuses else ""
-
-    period = "month" if args.month else "week" if args.week else ""
 
     query = sql.SQL((THIS_SCRIPT_DIR / "last.sql").read_text()).format(
         test_target=sql.Literal(args.test_target),
         overall_statuses=sql.SQL(",".join(map(str, overall_statuses))),
-        period=sql.SQL(period),
+        period=sql.SQL(period(args)),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
     )
 
-    log_psql_query(
-        args.verbose,
-        f"Last {statuses}runs of {args.test_target}{f' in the last {period}' if period else ''}",
-        query.as_string(),
-        args.conninfo,
-    )
+    log_psql_query(args.verbose, query.as_string(), args.conninfo)
 
     with githubstats_db_cursor(args.conninfo, args.timeout) as cursor:
         cursor.execute(query)
@@ -263,7 +240,8 @@ def main():
 
     filter_parser = argparse.ArgumentParser(add_help=False)
     period_group = filter_parser.add_mutually_exclusive_group()
-    period_group.add_argument("--week", action="store_true", default=True, help="Limit to last week")
+    period_group.add_argument("--day", action="store_true", help="Limit to last day")
+    period_group.add_argument("--week", action="store_true", help="Limit to last week (default)")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
