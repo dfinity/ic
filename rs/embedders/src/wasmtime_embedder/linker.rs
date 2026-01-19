@@ -53,20 +53,18 @@ fn process_err(
 }
 
 fn add_backtrace(e: &mut HypervisorError, store: impl AsContext<Data = StoreData>) {
-    if store.as_context().data().canister_backtrace == FlagStatus::Enabled {
-        match e {
-            HypervisorError::Trapped {
-                trap_code: _,
-                backtrace,
-            }
-            | HypervisorError::CalledTrap {
-                message: _,
-                backtrace,
-            } => {
-                *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
-            }
-            _ => {}
+    match e {
+        HypervisorError::Trapped {
+            trap_code: _,
+            backtrace,
         }
+        | HypervisorError::CalledTrap {
+            message: _,
+            backtrace,
+        } => {
+            *backtrace = convert_backtrace(&WasmBacktrace::capture(store));
+        }
+        _ => {}
     }
 }
 

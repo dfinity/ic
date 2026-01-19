@@ -579,28 +579,12 @@ impl PocketIcSubnets {
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {
             beta_features,
-            canister_backtrace,
             function_name_length_limits,
             canister_execution_rate_limiting,
         } = icp_config;
         let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
             IcpConfigFlag::Disabled => execution_environment::Config::default(),
             IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
-        };
-        match canister_backtrace {
-            None => (),
-            Some(IcpConfigFlag::Enabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Enabled;
-            }
-            Some(IcpConfigFlag::Disabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Disabled;
-            }
         };
         match function_name_length_limits {
             None | Some(IcpConfigFlag::Enabled) => (),
