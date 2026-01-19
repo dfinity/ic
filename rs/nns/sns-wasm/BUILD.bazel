@@ -83,7 +83,6 @@ rust_library(
     name = "sns-wasm",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_wasm",

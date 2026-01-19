@@ -17,6 +17,7 @@ use axum::{
 };
 use axum_server::Handle;
 use clap::Parser;
+use ic_admin::get_routing_table;
 use ic_canister_sandbox_backend_lib::{
     RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
     canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
@@ -25,6 +26,8 @@ use ic_canister_sandbox_backend_lib::{
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_types::{RegistryVersion, SubnetId};
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
@@ -34,7 +37,7 @@ use pocket_ic_server::state_api::{
     state::{ApiState, PocketIcApiStateBuilder},
 };
 use std::cmp::max;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
@@ -49,6 +52,7 @@ use tower_http::trace::TraceLayer;
 use tracing::{debug, error, info};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::EnvFilter;
+use url::Url;
 
 const TTL_SEC: u64 = 60;
 // axum logs rejections from built-in extractors with the `axum::rejection`
@@ -57,9 +61,11 @@ const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::re
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!(env!("MAINNET_ROUTING_TABLE"));
+
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
-#[clap(version = "10.0.0")]
+#[clap(version = "11.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -76,6 +82,17 @@ struct Args {
     /// The time-to-live of the PocketIC server in seconds
     #[clap(long, default_value_t = TTL_SEC)]
     ttl: u64,
+    /// A json file storing the mainnet routing table.
+    #[clap(long)]
+    mainnet_routing_table: Option<PathBuf>,
+    /// Specifies to fetch the mainnet routing table from the mainnet registry and
+    /// write it to the file path specified as `--mainnet-routing-table`, if provided.
+    #[clap(long, default_value_t = false)]
+    fetch_mainnet_routing_table: bool,
+    /// The mainnet registry version to use for fetching the mainnet routing table.
+    /// Defaults to the latest registry version.
+    #[clap(long, requires = "fetch_mainnet_routing_table")]
+    mainnet_registry_version: Option<u64>,
 }
 
 /// Get the path of the current running binary.
@@ -205,11 +222,37 @@ async fn start(runtime: Arc<Runtime>) {
             .unwrap()
             .as_nanos() as u64,
     ));
+    let mainnet_routing_table_json = if args.fetch_mainnet_routing_table {
+        let nns_url = Url::parse("https://icp0.io").unwrap();
+        let registry_version = args.mainnet_registry_version.map(RegistryVersion::from);
+        let (routing_table, _) = get_routing_table(vec![nns_url], registry_version);
+        let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+        if let Some(mainnet_routing_table_path) = args.mainnet_routing_table {
+            std::fs::write(mainnet_routing_table_path, &routing_table_json)
+                .expect("Failed to write mainnet routing table file");
+        }
+        routing_table_json.into_bytes()
+    } else if let Some(mainnet_routing_table_path) = args.mainnet_routing_table {
+        std::fs::read(mainnet_routing_table_path)
+            .expect("Failed to read mainnet routing table file")
+    } else {
+        MAINNET_ROUTING_TABLE.to_vec()
+    };
+    let mainnet_routing_table_vec: Vec<(CanisterIdRange, SubnetId)> =
+        serde_json::from_slice(&mainnet_routing_table_json)
+            .expect("Failed to parse mainnet routing table");
+    let mainnet_routing_table = RoutingTable::try_from(
+        mainnet_routing_table_vec
+            .into_iter()
+            .collect::<BTreeMap<_, _>>(),
+    )
+    .expect("Failed to build mainnet routing table");
     let app_state = AppState {
         api_state,
         pending_requests: Arc::new(AtomicU64::new(0)),
         min_alive_until,
         runtime,
+        mainnet_routing_table,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 

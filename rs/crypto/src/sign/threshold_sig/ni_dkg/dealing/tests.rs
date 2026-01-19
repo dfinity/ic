@@ -266,7 +266,7 @@ mod create_dealing {
         assert_eq!(
             error,
             DkgCreateDealingError::MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError {
-                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string()
+                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string()
             })
         );
     }
@@ -321,7 +321,7 @@ mod create_dealing {
         CspDkgCreateDealingError::MalformedFsPublicKeyError {
             receiver_index: 0,
             error: MalformedPublicKeyError {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_bytes: None,
                 internal_error: "some error".to_string(),
             },
@@ -412,7 +412,7 @@ mod create_dealing_with_resharing_transcript {
         assert_eq!(
             error,
             DkgCreateDealingError::MalformedFsEncryptionPublicKey(MalformedFsEncryptionPublicKeyError {
-                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string()
+                internal_error: "error for receiver index 0: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string()
             })
         );
     }
@@ -450,7 +450,7 @@ mod create_dealing_with_resharing_transcript {
         CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
             receiver_index: 0,
             error: MalformedPublicKeyError {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_bytes: None,
                 internal_error: "some error".to_string(),
             },

@@ -20,11 +20,12 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
+use crate::util::block_on;
 use anyhow::{Context, Result, bail};
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::setupos::{
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::setupos::{
     config_ini::ConfigIniSettings,
-    deployment_json::{self, CompatDeploymentSettings},
+    deployment_json::{self, DeploymentSettings},
 };
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
@@ -41,7 +42,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{Logger, info, warn};
+use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -213,7 +214,7 @@ pub fn init_ic(
         ic_config.skip_unassigned_record();
     }
 
-    info!(test_env.logger(), "Initializing via {:?}", &ic_config);
+    debug!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
 }
@@ -271,13 +272,13 @@ pub fn setup_and_start_vms(
                         &node,
                         &t_farm,
                     )?);
-                    t_farm.attach_disk_images(
+                    block_on(t_farm.attach_disk_images(
                         &group_name,
                         &vm_name,
                         "usb-storage",
                         vec![image_spec],
-                    )?;
-                    t_farm.start_vm(&group_name, &vm_name)?;
+                    ))?;
+                    block_on(t_farm.start_vm(&group_name, &vm_name))?;
                 }
             }
             std::fs::remove_file(conf_img_path)?;
@@ -346,19 +347,19 @@ pub fn setup_and_start_nested_vms(
                 &t_ic_gateway_url,
                 t_nns_public_key_override.as_deref(),
             )?;
-            let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+            let config_image_spec = AttachImageSpec::new(block_on(t_farm.upload_file(
                 &t_group_name,
                 config_image,
                 NESTED_CONFIG_IMAGE_PATH,
-            )?);
+            ))?);
 
-            t_farm.attach_disk_images(
+            block_on(t_farm.attach_disk_images(
                 &t_group_name,
                 &vm_name,
                 "usb-storage",
                 vec![t_setupos_image_spec, config_image_spec],
-            )?;
-            t_farm.start_vm(&t_group_name, &vm_name)?;
+            ))?;
+            block_on(t_farm.start_vm(&t_group_name, &vm_name))?;
 
             Ok(())
         }));
@@ -413,7 +414,7 @@ pub fn upload_config_disk_image(
 ) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = farm.upload_file(group_name, target_file, &compressed_img_path)?;
+    let image_id = block_on(farm.upload_file(group_name, target_file, &compressed_img_path))?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }
@@ -533,7 +534,6 @@ fn create_guestos_config_for_node(
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
-        use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key: true,
         enable_trusted_execution_environment: false,
@@ -670,38 +670,29 @@ fn create_setupos_config_image(
         node_operator_private_key.as_deref(),
         nns_public_key_override,
         Some(&ssh_authorized_pub_keys_dir.join("admin")),
-        CompatDeploymentSettings {
+        DeploymentSettings {
             deployment: deployment_json::Deployment {
                 deployment_environment: DeploymentEnvironment::Testnet,
                 mgmt_mac: Some(mac.to_string()),
             },
-            logging: deployment_json::Logging::default(),
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },
-            vm_resources: Some(deployment_json::VmResources {
+            dev_vm_resources: deployment_json::VmResources {
                 memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
                 cpu: cpu.to_string(),
                 nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
-            }),
-            dev_vm_resources: Some(deployment_json::VmResources {
-                memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
-                cpu: cpu.to_string(),
-                nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
-            }),
+            },
         },
     )
     .context("Could not create SetupOS config")?;
 
     // Pack dirs into config image
     let config_image = nested_vm.get_setupos_config_image_path()?;
-    let path_key = "PATH";
-    let new_path = format!("{}:{}", "/usr/sbin", std::env::var(path_key)?);
     let status = Command::new(build_setupos_config_image)
         .arg(config_dir)
         .arg(data_dir)
         .arg(&config_image)
-        .env(path_key, &new_path)
         .status()?;
 
     if !status.success() {

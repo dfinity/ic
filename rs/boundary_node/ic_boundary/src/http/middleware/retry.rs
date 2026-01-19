@@ -134,7 +134,7 @@ mod test {
         routing::method_routing::post,
     };
     use http::StatusCode;
-    use ic_bn_lib::principal;
+    use ic_bn_lib_common::principal;
     use ic_types::CanisterId;
     use tower::Service;
 

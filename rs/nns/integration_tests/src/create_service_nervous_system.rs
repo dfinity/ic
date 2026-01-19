@@ -9,19 +9,9 @@ use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 use ic_nns_governance_api::{
-    ListProposalInfoRequest,
-    MakeProposalRequest,
-    // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
-    // this file, because we simply use a constant of that type
-    ManageNeuron,
-    ManageNeuronResponse,
-    ProposalActionRequest,
-    ProposalStatus,
-    Vote,
-    governance_error::ErrorType,
-    manage_neuron::{self, RegisterVote},
-    manage_neuron_response,
-    proposal::Action,
+    ListProposalInfoRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, ProposalActionRequest, ProposalStatus, Vote, governance_error::ErrorType,
+    manage_neuron::RegisterVote, manage_neuron_response, proposal::Action,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -301,11 +291,11 @@ fn execute_proposal(state_machine: &StateMachine, proposal_id: ProposalId) {
             *TEST_NEURON_1_OWNER_PRINCIPAL,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
-            Encode!(&ManageNeuron {
+            Encode!(&ManageNeuronRequest {
                 id: Some(nns_common_pb::NeuronId {
                     id: TEST_NEURON_1_ID
                 }),
-                command: Some(manage_neuron::Command::RegisterVote(RegisterVote {
+                command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
                     proposal: Some(proposal_id),
                     vote: Vote::Yes as i32,
                 })),

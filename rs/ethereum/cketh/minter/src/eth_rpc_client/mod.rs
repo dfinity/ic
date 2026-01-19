@@ -1,10 +1,11 @@
 use crate::{lifecycle::EthereumNetwork, logs::INFO, state::State};
-use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use evm_rpc_types::{
     ConsensusStrategy, EthSepoliaService, HttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
     RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
 };
 use ic_canister_log::log;
+use ic_canister_runtime::IcRuntime;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
@@ -52,7 +53,7 @@ pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConver
         "BUG: min_threshold too high"
     );
 
-    EvmRpcClient::builder(IcRuntime, evm_rpc_id)
+    EvmRpcClient::builder(IcRuntime::new(), evm_rpc_id)
         .with_rpc_sources(providers)
         .with_consensus_strategy(ConsensusStrategy::Threshold {
             total: Some(TOTAL_NUMBER_OF_PROVIDERS),

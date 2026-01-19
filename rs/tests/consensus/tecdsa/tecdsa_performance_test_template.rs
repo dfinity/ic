@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1 --test_env NODES_COUNT=40
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -70,7 +70,7 @@ use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
@@ -91,7 +91,6 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
@@ -166,13 +165,21 @@ fn make_key_ids() -> Vec<MasterPublicKeyId> {
 }
 
 pub fn setup(env: TestEnv) {
+    let nodes_count: usize = std::env::var("NODES_COUNT")
+        .or(std::env::var("DEFAULT_NODES_COUNT"))
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .expect(
+            "Failed to parse NODES_COUNT or DEFAULT_NODES_COUNT environment variable as an usize!",
+        );
+
+    info!(
+        env.logger(),
+        "Deploying a testnet with a {nodes_count}-node application subnet ...",
+    );
+
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
-
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
 
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
@@ -200,7 +207,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: MAX_QUEUE_SIZE,
-                            pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE,
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(PRE_SIGNATURES_TO_CREATE),
                             key_id,
                         })
                         .collect(),
@@ -208,7 +217,7 @@ pub fn setup(env: TestEnv) {
                     idkg_key_rotation_period_ms: None,
                     max_parallel_pre_signature_transcripts_in_creation: None,
                 })
-                .add_nodes(NODES_COUNT),
+                .add_nodes(nodes_count),
         )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
@@ -217,7 +226,6 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv) {

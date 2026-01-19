@@ -12,6 +12,7 @@ use ic_nervous_system_agent::{
 use ic_nervous_system_common::{
     E8, ONE_MONTH_SECONDS, ledger::compute_distribution_subaccount_bytes,
 };
+use ic_nervous_system_common_test_utils::wasm_helpers::SMALLEST_VALID_WASM_BYTES;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
@@ -35,6 +36,7 @@ use ic_sns_governance_api::pb::v1::{
     ExtensionUpgradeArg, GovernanceError, NeuronId, PreciseValue, Proposal, RegisterExtension,
     UpgradeExtension, Wasm as ApiWasm, governance_error, proposal::Action,
 };
+use ic_sns_root::pb::v1::ListSnsCanistersRequest;
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_test_utilities::universal_canister::{
     get_universal_canister_wasm, get_universal_canister_wasm_sha256,
@@ -45,8 +47,8 @@ use maplit::btreemap;
 use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use pretty_assertions::assert_eq;
 use sns_treasury_manager::{Asset, AuditTrailRequest, BalanceBook, BalancesRequest};
-use std::{path::PathBuf, str::FromStr, time::Duration};
-use tempfile::TempDir;
+use std::{io::Write, path::PathBuf, str::FromStr, time::Duration};
+use tempfile::{NamedTempFile, TempDir};
 use url::Url;
 
 mod src {
@@ -70,6 +72,122 @@ async fn test_treasury_manager() {
 #[tokio::test]
 async fn test_existing_extension_wasm_rejected() {
     run_existing_extension_wasm_rejected_test().await
+}
+
+#[tokio::test]
+async fn test_clean_up_failed_register_extension() {
+    // Step 1: Prepare the world. This mainly consists of creating NNS canister,
+    // and creating an SNS.
+
+    let state_dir = TempDir::new().unwrap().path().to_path_buf();
+
+    let World {
+        pocket_ic,
+        fiduciary_subnet_id,
+        sns,
+        sns_root_canister_id,
+        initial_treasury_allocation_icp_e8s,
+        initial_treasury_allocation_sns_e8s,
+        neuron_id,
+        sender,
+
+        sns_ledger_canister_id: _,
+        initial_icp_balance_e8s: _,
+        initial_sns_balance_e8s: _,
+    } = prepare_the_world(state_dir).await;
+
+    let agent = PocketIcAgent::new(&pocket_ic, sender);
+
+    // Step 2: Run the code under test, i.e. clean_up_failed_register_extension.
+
+    // This triggers an injected fault during execution of the RegisterExtension
+    // proposal. That way, we can trigger clean_up_failed_register_extension,
+    // the code under test.
+    let mut smallest_wasm_file = NamedTempFile::new().unwrap();
+    smallest_wasm_file
+        .write_all(SMALLEST_VALID_WASM_BYTES)
+        .unwrap();
+
+    let icp = Tokens::from_tokens(10).unwrap();
+    cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
+
+    let RegisterExtensionInfo {
+        proposal_id,
+        extension_canister_id,
+        wasm_module_hash: _,
+    } = register_extension::exec(
+        RegisterExtensionArgs {
+            sns_neuron_id: Some(ParsedSnsNeuron(neuron_id.clone())),
+            sns_root_canister_id,
+            subnet_id: Some(PrincipalId(fiduciary_subnet_id)),
+            wasm_path: smallest_wasm_file.path().to_path_buf(),
+            proposal_url: Url::try_from("https://example.com").unwrap(),
+            summary: "Register KongSwap Adaptor".to_string(),
+            extension_init: make_deposit_allowances(
+                initial_treasury_allocation_icp_e8s,
+                initial_treasury_allocation_sns_e8s,
+            ),
+            network: None,
+        },
+        &agent,
+    )
+    .await
+    .unwrap();
+
+    let proposal_id = proposal_id.unwrap();
+
+    for _ in 0..100 {
+        pocket_ic.tick().await;
+        pocket_ic.advance_time(Duration::from_secs(1)).await;
+    }
+
+    // Step 3: Verify results.
+
+    // Step 3.1: First of all, the code under test is only triggered when there
+    // is a problem with RegisterExtension proposal execution, so before we even
+    // attempt to verify that clean_up_failed_register_extension did what it is
+    // supposed to, let's look at whether it would have even been triggered at
+    // all.
+    let _err = sns::governance::wait_for_proposal_execution(
+        &pocket_ic,
+        sns.governance.canister_id,
+        proposal_id,
+    )
+    .await
+    .unwrap_err();
+
+    // Step 3.2: One of the main things that clean_up_failed_register_extension
+    // does is delete the extension canister itself, so let's make sure that
+    // actually happened.
+    let extension_canister_status_err = pocket_ic
+        .canister_status(
+            Principal::from(PrincipalId::from(extension_canister_id)),
+            Some(Principal::from(PrincipalId::from(sns_root_canister_id))),
+        )
+        .await
+        // When a canister is deleted, calling canister_status to fetch its status results in an Err.
+        .unwrap_err();
+    assert_eq!(
+        extension_canister_status_err.error_code,
+        pocket_ic::ErrorCode::CanisterNotFound
+    );
+
+    // Step 3.3: Another thing that clean_up_failed_register_extension is
+    // supposed to do is "de-register" it from Root. That is, Root should not
+    // consider the canister to be an extension of the SNS.
+    let list_sns_canisters_response = agent
+        .call(sns_root_canister_id, ListSnsCanistersRequest {})
+        .await
+        .unwrap();
+    assert_eq!(
+        list_sns_canisters_response
+            .extensions
+            .clone()
+            .unwrap()
+            .extension_canister_ids,
+        vec![],
+        "{list_sns_canisters_response:#?}",
+    );
 }
 
 async fn do_test_treasury_manager() {

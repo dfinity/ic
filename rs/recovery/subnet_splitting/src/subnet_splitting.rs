@@ -18,14 +18,15 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs,
+    CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    steps::{AdminStep, Step, UploadAndRestartStep},
+    ssh_helper::SshHelper,
+    steps::{AdminStep, Step, UploadStateAndRestartStep},
     util::{DataLocation, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -342,12 +343,12 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(
+    fn upload_state_and_restart_step(
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
-            Some(node_ip) => Ok(UploadAndRestartStep {
+            Some(node_ip) => Ok(UploadStateAndRestartStep {
                 logger: self.recovery.logger.clone(),
                 upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
@@ -583,31 +584,34 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 let Some(node_ip) = self.params.download_node_source else {
                     return Err(RecoveryError::StepSkipped);
                 };
-
                 let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                     (SshUser::Readonly, self.params.readonly_key_file.clone())
                 } else {
                     (SshUser::Admin, self.recovery.admin_key_file.clone())
                 };
+                let ssh_helper = SshHelper::new(
+                    self.recovery.logger.clone(),
+                    ssh_user,
+                    node_ip,
+                    self.recovery.ssh_confirmation,
+                    key_file,
+                );
+                let mut includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
+                includes.push(PathBuf::from(CUPS_DIR));
 
                 self.recovery
-                    .get_download_state_step(
-                        node_ip,
-                        ssh_user,
-                        key_file,
+                    .get_download_data_step(
+                        ssh_helper,
                         self.params.keep_downloaded_state == Some(true),
-                        /*additional_excludes=*/
-                        vec![
-                            "orchestrator",
-                            IC_CONSENSUS_POOL_PATH,
-                            IC_REGISTRY_LOCAL_STORE,
-                        ],
-                    )
+                        includes,
+                        /*include_config=*/ true,
+                    )?
                     .into()
             }
             StepType::CopyDir => CopyWorkDirStep {
                 layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
+                data_includes: vec![PathBuf::from(IC_STATE_DIR)],
             }
             .into(),
 
@@ -617,14 +621,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
 
             StepType::ProposeCupForSourceSubnet => self.propose_cup(TargetSubnet::Source)?.into(),
-            StepType::UploadStateToSourceSubnet => {
-                self.upload_and_restart_step(TargetSubnet::Source)?.into()
-            }
+            StepType::UploadStateToSourceSubnet => self
+                .upload_state_and_restart_step(TargetSubnet::Source)?
+                .into(),
             StepType::ProposeCupForDestinationSubnet => {
                 self.propose_cup(TargetSubnet::Destination)?.into()
             }
             StepType::UploadStateToDestinationSubnet => self
-                .upload_and_restart_step(TargetSubnet::Destination)?
+                .upload_state_and_restart_step(TargetSubnet::Destination)?
                 .into(),
             StepType::WaitForCUPOnSourceSubnet => {
                 self.wait_for_cup_step(TargetSubnet::Source)?.into()

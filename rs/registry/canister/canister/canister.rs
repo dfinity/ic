@@ -1125,7 +1125,11 @@ fn add_node_(payload: AddNodePayload) -> NodeId {
     let node_id = registry_mut()
         .do_add_node(payload)
         .unwrap_or_else(|error_message| {
-            trap_with(&format!("{LOG_PREFIX} Add node failed: {error_message}"))
+            let msg = format!("{LOG_PREFIX} Add node failed: {error_message}");
+            // TODO(NNS1-4290): Delete once we figure why it seems like clients
+            // are throwing this away.
+            println!("{}", msg);
+            trap_with(&msg);
         });
 
     recertify_registry();

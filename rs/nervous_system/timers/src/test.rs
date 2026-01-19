@@ -3,6 +3,7 @@ use slotmap::SlotMap;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::mem;
+use std::pin::Pin;
 use std::time::{Duration, SystemTime};
 
 enum TimerTask {
@@ -25,10 +26,20 @@ impl TimerTask {
     }
 }
 
+trait RepeatedClosure {
+    fn call_mut<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = ()> + 'a>>;
+}
+
+impl<F: AsyncFnMut()> RepeatedClosure for F {
+    fn call_mut<'a>(&'a mut self) -> Pin<Box<dyn Future<Output = ()> + 'a>> {
+        Box::pin(self())
+    }
+}
+
 struct RecurringTimerTask {
     pub interval: Duration,
     pub run_at_duration_after_epoch: Duration,
-    pub func: Box<dyn FnMut()>,
+    pub func: Box<dyn RepeatedClosure>,
 }
 
 impl Default for RecurringTimerTask {
@@ -36,21 +47,21 @@ impl Default for RecurringTimerTask {
         Self {
             interval: Duration::from_secs(u64::MAX),
             run_at_duration_after_epoch: Duration::default(),
-            func: Box::new(|| {}),
+            func: Box::new(async || {}),
         }
     }
 }
 
 struct OneShotTimerTask {
     pub run_at_duration_after_epoch: Duration,
-    pub func: Box<dyn FnOnce()>,
+    pub fut: Pin<Box<dyn Future<Output = ()>>>,
 }
 
 impl Default for OneShotTimerTask {
     fn default() -> Self {
         Self {
             run_at_duration_after_epoch: Duration::default(),
-            func: Box::new(|| {}),
+            fut: Box::pin(async {}),
         }
     }
 }
@@ -65,19 +76,19 @@ thread_local! {
     pub static TIMER_TASKS: RefCell<SlotMap<TimerId, TimerTask >> = RefCell::default();
 }
 
-pub fn set_timer(delay: Duration, func: impl FnOnce() + 'static) -> TimerId {
+pub fn set_timer(delay: Duration, fut: impl Future<Output = ()> + 'static) -> TimerId {
     let current_time = CURRENT_TIME.with(|current_time| *current_time.borrow());
     TIMER_TASKS.with(|timer_tasks| {
         timer_tasks
             .borrow_mut()
             .insert(TimerTask::OneShot(OneShotTimerTask {
                 run_at_duration_after_epoch: current_time + delay,
-                func: Box::new(func),
+                fut: Box::pin(fut),
             }))
     })
 }
 
-pub fn set_timer_interval(interval: Duration, func: impl FnMut() + 'static) -> TimerId {
+pub fn set_timer_interval(interval: Duration, func: impl AsyncFnMut() + 'static) -> TimerId {
     let current_time = CURRENT_TIME.with(|current_time| *current_time.borrow());
     TIMER_TASKS.with(|timer_tasks| {
         timer_tasks
@@ -112,7 +123,7 @@ pub fn advance_time_for_timers(duration: Duration) {
     });
 }
 
-pub fn run_pending_timers() {
+pub async fn run_pending_timers() {
     let current_time = CURRENT_TIME.with(|current_time| *current_time.borrow());
 
     let tasks: BTreeMap<TimerId, TimerTask> = TIMER_TASKS.with(|timer_tasks| {
@@ -132,13 +143,13 @@ pub fn run_pending_timers() {
     for (id, task) in tasks.into_iter() {
         match task {
             TimerTask::OneShot(task) => {
-                (task.func)();
+                task.fut.await;
                 TIMER_TASKS.with(|timer_tasks| {
                     timer_tasks.borrow_mut().remove(id);
                 });
             }
             TimerTask::Recurring(mut task) => {
-                (task.func)();
+                task.func.call_mut().await;
                 task.run_at_duration_after_epoch += task.interval;
                 TIMER_TASKS.with(|timer_tasks| {
                     if let Some(slot) = timer_tasks.borrow_mut().get_mut(id) {
@@ -150,10 +161,10 @@ pub fn run_pending_timers() {
     }
 }
 
-pub fn run_pending_timers_every_interval_for_count(interval: Duration, count: u64) {
+pub async fn run_pending_timers_every_interval_for_count(interval: Duration, count: u64) {
     for _ in 0..count {
         advance_time_for_timers(interval);
-        run_pending_timers();
+        run_pending_timers().await;
     }
 }
 
@@ -169,19 +180,19 @@ pub fn existing_timer_ids() -> Vec<TimerId> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_timers_setting_running_and_clearing() {
+    #[tokio::test]
+    async fn test_timers_setting_running_and_clearing() {
         thread_local! {
             static TIMER_1_COUNT: RefCell<u64> = const { RefCell::new(0) };
             static TIMER_2_COUNT: RefCell<u64> = const { RefCell::new(0) };
         }
 
-        let timer_1_id = set_timer(Duration::from_secs(10), || {
+        let timer_1_id = set_timer(Duration::from_secs(10), async {
             TIMER_1_COUNT.with(|count| {
                 *count.borrow_mut() += 1;
             });
         });
-        let timer_2_id = set_timer_interval(Duration::from_secs(5), || {
+        let timer_2_id = set_timer_interval(Duration::from_secs(5), async || {
             TIMER_2_COUNT.with(|count| {
                 *count.borrow_mut() += 1;
             });
@@ -192,7 +203,7 @@ mod tests {
         let current_time = get_time_for_timers();
 
         // Run the timers
-        run_pending_timers();
+        run_pending_timers().await;
 
         // Check nothing ran yet
         TIMER_1_COUNT.with(|count| {
@@ -207,7 +218,7 @@ mod tests {
         advance_time_for_timers(Duration::from_secs(4));
 
         // Run the timers
-        run_pending_timers();
+        run_pending_timers().await;
 
         // Check that the second timer ran
         TIMER_1_COUNT.with(|count| {
@@ -217,7 +228,7 @@ mod tests {
             assert_eq!(*count.borrow(), 1);
         });
 
-        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2);
+        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2).await;
 
         // Check that the first timer ran
         TIMER_1_COUNT.with(|count| {
@@ -235,7 +246,7 @@ mod tests {
 
         assert!(!has_timer_task(timer_2_id));
 
-        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2);
+        run_pending_timers_every_interval_for_count(Duration::from_secs(5), 2).await;
 
         // Check that second timer is in fact not running
         TIMER_2_COUNT.with(|count| {

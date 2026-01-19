@@ -515,6 +515,8 @@ pub struct SystemMetadata {
     pub own_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     #[prost(message, optional, tag = "8")]
     pub subnet_call_context_manager: ::core::option::Option<SubnetCallContextManager>,
+    #[prost(message, optional, tag = "23")]
+    pub subnet_split_from: ::core::option::Option<super::super::super::types::v1::SubnetId>,
     /// Canister ID ranges allocated (exclusively) to this subnet, to generate
     /// canister IDs from.
     #[prost(message, optional, tag = "16")]
@@ -552,12 +554,6 @@ pub struct SystemMetadata {
     pub blockmaker_metrics_time_series: ::core::option::Option<BlockmakerMetricsTimeSeries>,
     #[prost(message, repeated, tag = "21")]
     pub api_boundary_nodes: ::prost::alloc::vec::Vec<ApiBoundaryNodeEntry>,
-    /// TODO: deprecate in favour of information in NetworkTopology
-    #[prost(
-        enumeration = "super::super::super::registry::subnet::v1::CanisterCyclesCostSchedule",
-        tag = "22"
-    )]
-    pub canister_cycles_cost_schedule: i32,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StableMemory {

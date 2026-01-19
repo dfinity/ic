@@ -55,7 +55,7 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::get,
 };
 use crossbeam::atomic::AtomicCell;
@@ -117,6 +117,12 @@ const TLS_HANDHAKE_BYTES: u8 = 22;
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (self.status, self.message).into_response()
+    }
 }
 
 /// Struct that holds all endpoint services.
@@ -728,7 +734,7 @@ async fn collect_timer_metric(
 
     metrics
         .request_body_size_bytes
-        .with_label_values(&[&path, LABEL_UNKNOWN])
+        .with_label_values(&[path.as_str(), LABEL_UNKNOWN])
         .observe(request.body().size_hint().lower() as f64);
 
     let request_timer = HistogramVecTimer::start_timer(

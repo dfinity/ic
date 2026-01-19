@@ -6,7 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
-- Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint.
+- Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint. ([#7416](https://github.com/dfinity/ic/pull/7416))
+- Added new `self_describing_action` field in the `Proposal` struct, returned e.g, by the `get_pending_proposals` endpoint. ([#7643](https://github.com/dfinity/ic/pull/7643))
 
 ## [2.1.8] - 2025-10-09
 ### Added

@@ -25,6 +25,7 @@ rust_library(
         "//packages/ic-error-types",
         "@crate_index//:bincode",
         "@crate_index//:candid",
+        "@crate_index//:comparable",
         "@crate_index//:erased-serde",
         "@crate_index//:hex",
         "@crate_index//:prost",

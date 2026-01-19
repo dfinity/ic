@@ -47,7 +47,7 @@ fn should_verify_combined_signature_with_usual_basic_sig_verification() {
             .expect("Master key extraction failed");
         let canister_public_key = derive_threshold_public_key(
             &master_public_key,
-            &ExtendedDerivationPath {
+            ExtendedDerivationPath {
                 caller: inputs.caller,
                 derivation_path: inputs.derivation_path.clone(),
             },

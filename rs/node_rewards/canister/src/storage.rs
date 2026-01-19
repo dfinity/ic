@@ -1,4 +1,8 @@
-use crate::metrics::{ICCanisterClient, MetricsManager};
+#[cfg(not(feature = "test"))]
+use crate::metrics::ICCanisterClient;
+use crate::metrics::MetricsManager;
+#[cfg(feature = "test")]
+use crate::metrics::management_canister_client_test::ICCanisterClient;
 use ic_registry_canister_client::{
     RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue,
 };

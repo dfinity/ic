@@ -1,15 +1,15 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
-    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    CkBtcMinterState, ConsolidateUtxosRequest, FinalizedBtcRequest, FinalizedStatus,
+    LedgerBurnIndex, RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    WithdrawalCancellation,
     eventlog::{EventType, ReplacedReason},
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::storage::record_event;
 use crate::{CanisterRuntime, Timestamp};
-use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -33,6 +33,15 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
     if let Some(kyt_provider) = request.kyt_provider {
         *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.check_fee;
     }
+}
+
+pub fn create_consolidate_utxos_request<R: CanisterRuntime>(
+    state: &mut CkBtcMinterState,
+    request: ConsolidateUtxosRequest,
+    runtime: &R,
+) {
+    state.push_consolidate_utxos_request(request.clone());
+    record_event(EventType::CreatedConsolidateUtxosRequest(request), runtime);
 }
 
 pub fn add_utxos<R: CanisterRuntime>(
@@ -67,8 +76,8 @@ pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
         runtime,
     );
 
-    state.push_finalized_request(FinalizedBtcRetrieval {
-        request,
+    state.push_finalized_request(FinalizedBtcRequest {
+        request: request.into(),
         state: status,
     });
 }
@@ -80,13 +89,14 @@ pub fn sent_transaction<R: CanisterRuntime>(
 ) {
     record_event(
         EventType::SentBtcTransaction {
-            request_block_indices: tx.requests.iter().map(|r| r.block_index).collect(),
+            request_block_indices: tx.requests.iter_block_index().collect(),
             txid: tx.txid,
             utxos: tx.used_utxos.clone(),
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
             fee_per_vbyte: tx.fee_per_vbyte,
             withdrawal_fee: tx.withdrawal_fee,
+            signed_tx: tx.signed_tx.clone(),
         },
         runtime,
     );
@@ -223,24 +233,6 @@ pub fn replace_transaction<R: CanisterRuntime>(
         runtime,
     );
     state.replace_transaction(&old_txid, new_tx);
-}
-
-pub fn distributed_kyt_fee<R: CanisterRuntime>(
-    state: &mut CkBtcMinterState,
-    kyt_provider: Principal,
-    amount: u64,
-    block_index: u64,
-    runtime: &R,
-) -> Result<(), super::Overdraft> {
-    record_event(
-        EventType::DistributedKytFee {
-            kyt_provider,
-            amount,
-            block_index,
-        },
-        runtime,
-    );
-    state.distribute_kyt_fee(kyt_provider, amount)
 }
 
 pub fn reimburse_withdrawal<R: CanisterRuntime>(

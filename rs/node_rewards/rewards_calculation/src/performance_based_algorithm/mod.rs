@@ -1,3 +1,5 @@
+use crate::AlgorithmVersion;
+use crate::REWARDS_TABLE_DAYS;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
     NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
@@ -9,7 +11,7 @@ use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use itertools::Itertools;
 use rust_decimal::Decimal;
-use rust_decimal::prelude::{ToPrimitive, Zero};
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive, Zero};
 use rust_decimal_macros::dec;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
@@ -84,7 +86,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-trait PerformanceBasedAlgorithm {
+trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -101,12 +103,6 @@ trait PerformanceBasedAlgorithm {
 
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
-
-    /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
-    /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
-    /// const SECONDS_IN_DAY: u64 = 86400;
-    /// 2629800 / 86400 = 30.4375 days of rewards
-    const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
     fn calculate_rewards(
         from_date: NaiveDate,
@@ -138,6 +134,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
             total_rewards_xdr_permyriad,
             daily_results,
         })
@@ -430,7 +427,8 @@ trait PerformanceBasedAlgorithm {
         for node in rewardable_nodes {
             let (base_rewards_monthly, coefficient) =
                 get_monthly_rate(node_rewards_table, &node.region, &node.node_reward_type);
-            let base_rewards_daily = base_rewards_monthly / Self::REWARDS_TABLE_DAYS;
+            let base_rewards_daily =
+                base_rewards_monthly / Decimal::from_f64(REWARDS_TABLE_DAYS).unwrap();
 
             base_rewards
                 .entry((node.node_reward_type, node.region.clone()))

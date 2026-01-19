@@ -272,7 +272,7 @@ fn should_return_error_if_update_forward_secure_key_with_wrong_algorithm_id() {
     assert_matches!(
         result,
         Err(CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(
-            AlgorithmId::Placeholder
+            AlgorithmId::Unspecified
         ))
     );
 }

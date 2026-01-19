@@ -7,7 +7,7 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-basic-sig-ed25519 = { path = "../basic_sig/ed25519" }
+ic-ed25519 = { path = "../../../../../packages/ic-ed25519" }
 ic-crypto-secrets-containers = { path = "../../../secrets_containers" }
 ic-types = { path = "../../../../types/types" }
 rand = { workspace = true }

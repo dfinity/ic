@@ -11,6 +11,7 @@ rust_library(
         "//rs/crypto:__subpackages__",
         "//rs/p2p/quic_transport:__subpackages__",
         "//rs/test_utilities:__pkg__",
+        "//rs/tests/crypto:__subpackages__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [

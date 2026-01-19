@@ -16,12 +16,12 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
-    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
     NeuronState, ProposalActionRequest, Topic,
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
-    manage_neuron::{Command, DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron::{DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
 };
@@ -112,12 +112,12 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
         // Let us transfer ICP into the main account, and stake two neurons
         // owned by TEST_NEURON_1_OWNER_PRINCIPAL.
 
-        let mgmt_request = ManageNeuron {
+        let mgmt_request = ManageNeuronRequest {
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
                 id: TEST_NEURON_1_ID,
             })),
             id: None,
-            command: Some(Command::Merge(Merge {
+            command: Some(ManageNeuronCommandRequest::Merge(Merge {
                 source_neuron_id: Some(neuron_id_4),
             })),
         };
@@ -206,10 +206,10 @@ fn test_spawn_neuron() {
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
+                ManageNeuronRequest {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
                     id: None,
-                    command: Some(Command::Spawn(Spawn {
+                    command: Some(ManageNeuronCommandRequest::Spawn(Spawn {
                         new_controller: None,
                         nonce: None,
                         percentage_to_spawn: None,

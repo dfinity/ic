@@ -1,15 +1,18 @@
-use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
+use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    EstimateFeeArg, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
-        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+        EstimateWithdrawalFeeError, GetDogeAddressArgs, MinterInfo, RetrieveDogeOk,
+        RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError, WithdrawalFee,
     },
+    event::{CkDogeMinterEvent, CkDogeMinterEventType},
+    lifecycle::{MinterArg, upgrade::UpgradeArgs},
 };
-use ic_management_canister_types::CanisterId;
+use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::common::rest::RawMessageId;
@@ -111,6 +114,51 @@ impl MinterCanister {
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
     }
 
+    pub fn get_canister_status(&self) -> CanisterStatusResult {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "get_canister_status",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call get_canister_status");
+        Decode!(&call_result, CanisterStatusResult).unwrap()
+    }
+
+    pub fn get_minter_info(&self) -> MinterInfo {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "get_minter_info",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call get_minter_info");
+        Decode!(&call_result, MinterInfo).unwrap()
+    }
+
+    pub fn estimate_withdrawal_fee(
+        &self,
+        withdrawal_amount: u64,
+    ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
+        let call_result = self
+            .env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "estimate_withdrawal_fee",
+                Encode!(&EstimateFeeArg {
+                    amount: Some(withdrawal_amount)
+                })
+                .unwrap(),
+            )
+            .expect("BUG: failed to call estimate_withdrawal_fee");
+        Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
+    }
+
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
         let call_result = self
             .env
@@ -142,11 +190,14 @@ impl MinterCanister {
             .expect("BUG: minter self-check failed")
     }
 
-    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+    pub fn await_submitted_doge_transaction<P>(&self, ledger_burn_index: u64, predicate: P) -> Txid
+    where
+        P: Fn(&Txid) -> bool,
+    {
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
         let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
-            matches!(tx_status, RetrieveDogeStatus::Submitted { .. })
+            matches!(tx_status, RetrieveDogeStatus::Submitted { txid } if predicate(txid))
         });
         match status {
             RetrieveDogeStatus::Submitted { txid, .. } => txid,
@@ -173,7 +224,7 @@ impl MinterCanister {
         F: Fn(&RetrieveDogeStatus) -> bool,
     {
         let mut last_status = None;
-        let max_ticks = 10;
+        let max_ticks = 20;
         for _ in 0..max_ticks {
             let status = self.retrieve_doge_status(ledger_burn_index);
             if filter(&status) {
@@ -210,7 +261,7 @@ impl MinterCanister {
             .entries
     }
 
-    pub fn assert_that_events(&self) -> MinterEventAssert<EventType> {
+    pub fn assert_that_events(&self) -> MinterEventAssert<CkDogeMinterEventType> {
         MinterEventAssert {
             events: self
                 .get_all_events()
@@ -224,7 +275,7 @@ impl MinterCanister {
         MetricsAssert::from_http_query(self)
     }
 
-    pub fn get_all_events(&self) -> Vec<Event> {
+    pub fn get_all_events(&self) -> Vec<CkDogeMinterEvent> {
         const FIRST_BATCH_SIZE: u64 = 100;
         let mut all_events = self.get_events(0, FIRST_BATCH_SIZE);
         loop {
@@ -237,7 +288,7 @@ impl MinterCanister {
         }
     }
 
-    fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events(&self, start: u64, length: u64) -> Vec<CkDogeMinterEvent> {
         use ic_ckdoge_minter::GetEventsArg;
 
         let call_result = self
@@ -249,11 +300,25 @@ impl MinterCanister {
                 Encode!(&GetEventsArg { start, length }).unwrap(),
             )
             .expect("BUG: failed to call get_events");
-        Decode!(&call_result, Vec<Event>).unwrap()
+        Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
     }
 
     pub fn id(&self) -> CanisterId {
         self.id
+    }
+
+    pub fn upgrade(&self, upgrade_args: Option<UpgradeArgs>) {
+        let minter_args = MinterArg::Upgrade(upgrade_args);
+        self.env
+            .upgrade_canister(
+                self.id,
+                crate::minter_wasm(),
+                Encode!(&minter_args).unwrap(),
+                Some(NNS_ROOT_PRINCIPAL),
+            )
+            .expect("BUG: failed to upgrade minter");
+        // run immediate tasks after upgrade, like refreshing fee percentiles.
+        self.env.tick();
     }
 }
 

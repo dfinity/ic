@@ -24,10 +24,10 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
-    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuron, ManageNeuronCommandRequest,
+    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuronCommandRequest,
     ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
     ProposalStatus, Vote,
-    manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+    manage_neuron::{NeuronIdOrSubaccount, RegisterVote},
     manage_neuron_response,
     subnet_rental::{RentalConditionId, SubnetRentalRequest},
 };
@@ -382,14 +382,14 @@ pub async fn vote_execute_proposal_assert_failed(
 
 pub async fn vote_on_proposal(governance_canister: &Canister<'_>, proposal_id: ProposalId) {
     // Cast votes.
-    let input = ManageNeuron {
+    let input = ManageNeuronRequest {
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
             ic_nns_common::pb::v1::NeuronId {
                 id: TEST_NEURON_1_ID,
             },
         )),
         id: None,
-        command: Some(Command::RegisterVote(RegisterVote {
+        command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
             vote: Vote::Yes as i32,
             proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id.0 }),
         })),

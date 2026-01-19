@@ -5,8 +5,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 
 use crate::pb::v1::{
-    CanisterCallError, Extensions, RegisterExtensionRequest, RegisterExtensionResponse,
-    register_extension_response,
+    CanisterCallError, CleanUpFailedRegisterExtensionResponse, Extensions,
+    RegisterExtensionRequest, RegisterExtensionResponse,
+    clean_up_failed_register_extension_response, register_extension_response,
 };
 
 /// A general trait for the environment in which governance is running.
@@ -96,6 +97,20 @@ impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
                 result: Some(Result::Ok(Ok {})),
             },
             Err(err) => RegisterExtensionResponse {
+                result: Some(Result::Err(err)),
+            },
+        }
+    }
+}
+
+impl From<Result<(), CanisterCallError>> for CleanUpFailedRegisterExtensionResponse {
+    fn from(result: Result<(), CanisterCallError>) -> Self {
+        use clean_up_failed_register_extension_response::{Ok, Result};
+        match result {
+            Ok(_) => CleanUpFailedRegisterExtensionResponse {
+                result: Some(Result::Ok(Ok {})),
+            },
+            Err(err) => CleanUpFailedRegisterExtensionResponse {
                 result: Some(Result::Err(err)),
             },
         }

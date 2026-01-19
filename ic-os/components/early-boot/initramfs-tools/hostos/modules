@@ -3,3 +3,8 @@ nvme
 ahci
 msr
 megaraid_sas
+aacraid
+mpt3sas
+mpi3mr
+mvsas
+smartpqi

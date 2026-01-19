@@ -156,6 +156,9 @@ pub struct DailyResults {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct RewardsCalculatorResults {
+    // Algorithm version used to calculate the results.
+    pub algorithm_version: u32,
+
     /// Total rewards for each provider across the entire reward period
     pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,
 

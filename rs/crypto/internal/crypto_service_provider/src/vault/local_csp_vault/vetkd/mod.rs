@@ -57,10 +57,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         context: VetKdDerivationContext,
         input: Vec<u8>,
     ) -> Result<VetKdEncryptedKeyShareContent, VetKdEncryptedKeyShareCreationVaultError> {
-        let master_public_key =
-            G2Affine::deserialize(&master_public_key).map_err(|_: PairingInvalidPoint| {
+        let master_public_key = G2Affine::deserialize_cached(&master_public_key).map_err(
+            |_: PairingInvalidPoint| {
                 VetKdEncryptedKeyShareCreationVaultError::InvalidArgumentMasterPublicKey
-            })?;
+            },
+        )?;
 
         let transport_public_key =
             TransportPublicKey::deserialize(&transport_public_key).map_err(|e| match e {

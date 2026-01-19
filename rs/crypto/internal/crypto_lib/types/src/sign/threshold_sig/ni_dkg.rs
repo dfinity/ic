@@ -13,57 +13,6 @@ use strum_macros::IntoStaticStr;
 pub enum CspNiDkgDealing {
     Groth20_Bls12_381(ni_dkg_groth20_bls12_381::Dealing),
 }
-impl CspNiDkgDealing {
-    /// Generates an instance of a dealing, for use in stub implementations.
-    /// TODO (CRP-824): Delete when stub implementations are complete.
-    pub fn placeholder_to_delete(seed: u8) -> Self {
-        use ni_dkg_groth20_bls12_381 as scheme;
-        fn fr(seed: u8) -> scheme::FrBytes {
-            scheme::FrBytes([seed; scheme::FrBytes::SIZE])
-        }
-        fn g1(seed: u8) -> scheme::G1Bytes {
-            scheme::G1Bytes([seed; scheme::G1Bytes::SIZE])
-        }
-        fn g2(seed: u8) -> scheme::G2Bytes {
-            scheme::G2Bytes([seed; scheme::G2Bytes::SIZE])
-        }
-        const NUM_RECEIVERS: usize = 1;
-        CspNiDkgDealing::Groth20_Bls12_381(scheme::Dealing {
-            public_coefficients: scheme::PublicCoefficientsBytes {
-                coefficients: Vec::new(),
-            },
-            ciphertexts: scheme::EncryptedShares {
-                rand_r: [g1(seed); scheme::NUM_CHUNKS],
-                rand_s: [g1(seed); scheme::NUM_CHUNKS],
-                rand_z: [g2(seed); scheme::NUM_CHUNKS],
-                ciphertext_chunks: (0..NUM_RECEIVERS)
-                    .map(|i| [g1(seed ^ (i as u8)); scheme::NUM_CHUNKS])
-                    .collect(),
-            },
-            zk_proof_decryptability: ni_dkg_groth20_bls12_381::ZKProofDec {
-                // TODO(CRP-530): Populate this when it has been defined in the spec.
-                first_move_y0: g1(seed),
-                first_move_b: [g1(seed); scheme::NUM_ZK_REPETITIONS],
-                first_move_c: [g1(seed); scheme::NUM_ZK_REPETITIONS],
-                second_move_d: (0..NUM_RECEIVERS + 1)
-                    .map(|i| g1(seed ^ (i as u8)))
-                    .collect(),
-                second_move_y: g1(seed),
-                response_z_r: (0..NUM_RECEIVERS).map(|i| fr(seed | (i as u8))).collect(),
-                response_z_s: [fr(seed); scheme::NUM_ZK_REPETITIONS],
-                response_z_b: fr(seed),
-            },
-            zk_proof_correct_sharing: ni_dkg_groth20_bls12_381::ZKProofShare {
-                first_move_f: g1(seed),
-                first_move_a: g2(seed),
-                first_move_y: g1(seed),
-                response_z_r: fr(seed),
-                response_z_a: fr(seed),
-            },
-        })
-    }
-}
-
 /// All the public data needed for threshold key derivation.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, IntoStaticStr, Serialize)]
 #[allow(non_camel_case_types)]

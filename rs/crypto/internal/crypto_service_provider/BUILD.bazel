@@ -11,6 +11,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ed25519",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",

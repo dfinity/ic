@@ -86,7 +86,7 @@ pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    cup_provider: Arc<CatchUpPackageProvider>,
+    cup_provider: CatchUpPackageProvider,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
     pub ic_binary_dir: PathBuf,
@@ -106,7 +106,7 @@ impl Upgrade {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        cup_provider: Arc<CatchUpPackageProvider>,
+        cup_provider: CatchUpPackageProvider,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
         node_id: NodeId,
@@ -358,43 +358,47 @@ impl Upgrade {
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
     ) -> OrchestratorResult<()> {
-        if let Some(registry_contents) = self
+        let Some(registry_store_uri) = self
             .registry
             .registry_client
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
-            && let Some(registry_store_uri) = registry_contents.registry_store_uri
-        {
-            warn!(
-                self.logger,
-                "Downloading registry data from {} with hash {} for subnet recovery",
-                registry_store_uri.uri,
-                registry_store_uri.hash,
-            );
-            let downloader = FileDownloader::new(Some(self.logger.clone()));
-            let local_store_location = tempfile::tempdir()
-                .expect("temporary location for local store download could not be created")
-                .keep();
-            downloader
-                .download_and_extract_tar(
-                    &registry_store_uri.uri,
-                    &local_store_location,
-                    Some(registry_store_uri.hash),
-                )
-                .await
-                .map_err(OrchestratorError::FileDownloadError)?;
-            if let Err(e) = self.stop_replica() {
-                // Even though we fail to stop the replica, we should still
-                // replace the registry local store, so we simply issue a warning.
-                warn!(self.logger, "Failed to stop replica with error {:?}", e);
-            }
-            let new_local_store = LocalStoreImpl::new(local_store_location);
-            self.registry_replicator
-                .stop_polling_and_set_local_registry_data(&new_local_store);
-            reexec_current_process(&self.logger);
+            .and_then(|registry_contents| registry_contents.registry_store_uri)
+        else {
+            return Ok(());
+        };
+
+        warn!(
+            self.logger,
+            "Downloading registry data from {} with hash {} for subnet recovery",
+            registry_store_uri.uri,
+            registry_store_uri.hash,
+        );
+        let downloader = FileDownloader::new(Some(self.logger.clone()));
+        let local_store_location = tempfile::tempdir()
+            .expect("temporary location for local store download could not be created")
+            .keep();
+        downloader
+            .download_and_extract_tar(
+                &registry_store_uri.uri,
+                &local_store_location,
+                Some(registry_store_uri.hash),
+            )
+            .await
+            .map_err(OrchestratorError::FileDownloadError)?;
+        if let Err(e) = self.stop_replica() {
+            // Even though we fail to stop the replica, we should still
+            // replace the registry local store, so we simply issue a warning.
+            warn!(self.logger, "Failed to stop replica with error {:?}", e);
         }
-        Ok(())
+        let new_local_store = LocalStoreImpl::new(local_store_location);
+        self.registry_replicator
+            .stop_polling_and_set_local_registry_data(&new_local_store)
+            .await;
+        // Restart the current process to pick up the new local store.
+        // The call should not return. If it does, it is an error.
+        Err(reexec_current_process(&self.logger))
     }
 
     async fn remove_state(&self) -> OrchestratorResult<()> {
@@ -520,6 +524,7 @@ impl Upgrade {
             return Ok(());
         }
         info!(self.logger, "Starting new replica process");
+        self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
             .ic_binary_dir

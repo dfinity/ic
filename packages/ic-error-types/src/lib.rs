@@ -375,6 +375,26 @@ impl UserError {
             description
         );
     }
+
+    /// Panics if the error doesn't have the expected code or the description
+    /// doesn't match the given regex.  Useful for tests to avoid matching exact
+    /// error messages. Regex search is configured to allow '.' to match newlines.
+    pub fn assert_matches(&self, code: ErrorCode, regex: &str) {
+        assert_eq!(
+            self.code, code,
+            "Failed to match actual error \"{self:?}\" with expected \"{code}\""
+        );
+        assert!(
+            regex_lite::RegexBuilder::new(regex)
+                .dot_matches_new_line(true)
+                .build()
+                .unwrap()
+                .is_match(&self.description),
+            "Error matching description \"{}\" with regex pattern \"{}\"",
+            self.description,
+            regex
+        );
+    }
 }
 
 impl std::error::Error for UserError {

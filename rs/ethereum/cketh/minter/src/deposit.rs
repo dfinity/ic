@@ -16,9 +16,10 @@ use crate::{
         mutate_state, read_state,
     },
 };
-use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use evm_rpc_types::{Hex32, LogEntry};
 use ic_canister_log::log;
+use ic_canister_runtime::IcRuntime;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
@@ -132,9 +133,7 @@ async fn mint() {
             INFO,
             "Failed to mint {error_count} events, rescheduling the minting"
         );
-        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || {
-            ic_cdk::futures::spawn_017_compat(mint())
-        });
+        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, async { mint().await });
     }
 }
 
@@ -342,9 +341,7 @@ pub fn register_deposit_events(
         }
     }
     if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-            ic_cdk::futures::spawn_017_compat(mint())
-        });
+        ic_cdk_timers::set_timer(Duration::from_secs(0), async { mint().await });
     }
     for error in errors {
         if let ReceivedEventError::InvalidEventSource { source, error } = &error {

@@ -1,0 +1,26 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_SRCS = glob(
+    ["src/**"],
+)
+
+rust_library(
+    name = "access_list",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_access_list",
+    deps = [],
+)
+
+rust_doc_test(
+    name = "doc_test",
+    crate = ":access_list",
+    deps = [],
+)
+
+rust_test_suite(
+    name = "test",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":access_list"],
+)

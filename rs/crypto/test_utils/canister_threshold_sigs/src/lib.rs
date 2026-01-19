@@ -124,13 +124,13 @@ pub fn swap_two_dealings_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_a.id())
-        .build_with_signature(params, dealer_a, dealer_a.id());
+        .build_with_signature(dealer_a, dealer_a.id());
 
     let dealing_ab = dealing_a
         .content
         .into_builder()
         .with_dealer_id(dealer_b.id())
-        .build_with_signature(params, dealer_b, dealer_b.id());
+        .build_with_signature(dealer_b, dealer_b.id());
 
     let dealing_ab_signed = env
         .nodes
@@ -174,7 +174,7 @@ pub fn copy_dealing_in_transcript(
         .content
         .into_builder()
         .with_dealer_id(dealer_to.id())
-        .build_with_signature(params, dealer_to, dealer_to.id());
+        .build_with_signature(dealer_to, dealer_to.id());
 
     let dealing_to_signed = env
         .nodes
@@ -431,14 +431,8 @@ pub mod node {
     }
 
     impl<T: Signable> BasicSigner<T> for Node {
-        fn sign_basic(
-            &self,
-            message: &T,
-            signer: NodeId,
-            registry_version: RegistryVersion,
-        ) -> CryptoResult<BasicSigOf<T>> {
-            self.crypto_component
-                .sign_basic(message, signer, registry_version)
+        fn sign_basic(&self, message: &T) -> CryptoResult<BasicSigOf<T>> {
+            self.crypto_component.sign_basic(message)
         }
     }
 
@@ -896,7 +890,7 @@ pub mod node {
                 let mut signatures_map = BTreeMap::new();
                 for signer in self.filter_by_receivers(&params) {
                     let signature = signer
-                        .sign_basic(&signed_dealing, signer.id(), params.registry_version())
+                        .sign_basic(&signed_dealing)
                         .expect("failed to generate basic-signature");
                     signatures_map.insert(signer.id(), signature);
                 }
@@ -1393,9 +1387,9 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     }
     nodes
 }
-
+// Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
+    RegistryVersion::new(rng.gen_range(1..u64::MAX - 10_000))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
@@ -1884,7 +1878,7 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
     Ok(idkg_dealing
         .into_builder()
         .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], rng)
-        .build_with_signature(transcript_params, basic_signer, signer_id))
+        .build_with_signature(basic_signer, signer_id))
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -2368,13 +2362,12 @@ impl SignedIDkgDealingBuilder {
 
     pub fn build_with_signature<T: BasicSigner<IDkgDealing>>(
         mut self,
-        params: &IDkgTranscriptParams,
         basic_signer: &T,
         signer_id: NodeId,
     ) -> SignedIDkgDealing {
         self.signature = BasicSignature {
             signature: basic_signer
-                .sign_basic(&self.content, signer_id, params.registry_version())
+                .sign_basic(&self.content)
                 .expect("Failed to sign a dealing"),
             signer: signer_id,
         };
@@ -2729,7 +2722,7 @@ impl IDkgTranscriptBuilder {
     }
 
     pub fn corrupt_algorithm_id(mut self) -> Self {
-        self.algorithm_id = AlgorithmId::Placeholder;
+        self.algorithm_id = AlgorithmId::Unspecified;
         self
     }
 
@@ -2870,9 +2863,37 @@ pub fn corrupt_dealings_and_generate_complaints_for_random_complainer<
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
-    let complainer = env
-        .nodes
-        .random_filtered_by_receivers(params.receivers().clone(), rng);
+    // For reshare operations, dealers have already loaded the previous transcript.
+    // If reconstruction_threshold is small (e.g., 1), the reshared transcript may have
+    // the same commitment (and thus same KeyId) as the original, causing the complainer
+    // to skip loading if they were a dealer. So we prefer receivers who are not dealers.
+    let receiver_ids_not_dealers: Vec<_> = params
+        .receivers()
+        .get()
+        .iter()
+        .filter(|node_id| !params.dealers().contains(**node_id))
+        .copied()
+        .collect();
+
+    let complainer = if receiver_ids_not_dealers.is_empty() {
+        // All receivers are also dealers - just pick any receiver
+        // (This may fail if KeyId collides, but it's the best we can do)
+        println!(
+            "WARNING: All receivers are also dealers, may hit KeyId collision with reconstruction_threshold={}",
+            params.reconstruction_threshold().get()
+        );
+        env.nodes
+            .random_filtered_by_receivers(params.receivers().clone(), rng)
+    } else {
+        let chosen_id = receiver_ids_not_dealers
+            .choose(rng)
+            .expect("receiver_ids_not_dealers should not be empty");
+        env.nodes
+            .iter()
+            .find(|node| node.id() == *chosen_id)
+            .expect("Node should exist for receiver ID")
+    };
+
     let (dealing_indices_to_corrupt, complaints) = corrupt_dealings_and_generate_complaints(
         params,
         transcript,
@@ -2911,6 +2932,7 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
     let complainer_index = params
         .receiver_index(complainer.id())
         .unwrap_or_else(|| panic!("Missing receiver {complainer:?}"));
+
     dealing_indices_to_corrupt
         .iter()
         .for_each(|index_to_corrupt| {
@@ -2927,7 +2949,12 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
         let complaints = complainer
             .load_transcript(transcript)
             .expect("expected complaints");
-        assert_eq!(complaints.len(), number_of_complaints);
+
+        assert_eq!(
+            complaints.len(),
+            number_of_complaints,
+            "Got an unexpected number of complaints"
+        );
         complaints
     };
 

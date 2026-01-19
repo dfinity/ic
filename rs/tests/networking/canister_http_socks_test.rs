@@ -27,7 +27,7 @@ use ic_management_canister_types_private::HttpMethod;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::test_env_api::HasTopologySnapshot;
+use ic_system_test_driver::driver::test_env_api::{HasTopologySnapshot, IcNodeSnapshot};
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
@@ -43,11 +43,11 @@ use slog::info;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 
-// NOTE: This test is currently non-functional because API boundary nodes running GuestOS on Farm VMs do not support IPv4.
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(test))
+        .add_test(systest!(test_system_subnet))
+        .add_test(systest!(test_application_subnet))
         .execute_from_args()?;
 
     Ok(())
@@ -86,7 +86,8 @@ pub fn setup(env: TestEnv) {
                 })
                 .add_nodes(4),
         )
-        .with_api_boundary_nodes(1)
+        // 2 api boundary nodes, one for system subnets, one for application subnets
+        .with_api_boundary_nodes(2)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
@@ -96,24 +97,37 @@ pub fn setup(env: TestEnv) {
     canister_http::whitelist_nodes_access_to_apibns(&env);
 }
 
-pub fn test(env: TestEnv) {
-    // This test verifies that outcalls are routed through the correct API Boundary nodes when necessary.
-    //
-    // Test steps:
-    //  1. block direct access to the webserver from the system subnet node using nftables rules.
-    //  2. make an outcall from a canister on the system subnet to the webserver at the /ip endpoint
-    //  3. verify that the returned IP address is that of the API boundary node (indicating the outcall was routed correctly)
-    //  4. undo the nftables rule to allow direct access again.
-    //  5. make the outcall again
-    //  6. verify that the returned IP address is that of the node itself (indicating direct access).
-    //
-    // The order of the assertiongs can't easily be flipped (ie first allow direct access, then block it) because
-    // the TCP connection persists after the first request, and hyper will just try to reuse it for the second request.
-    // This will result in the second request timing out instead of failing early and using the fallback.
-    //
-    // The reason we are not testing IPv4 outcalls here is that currently IC nodes can't easily get IPv4 connectivity.
+pub fn test_system_subnet(env: TestEnv) {
+    let subnet_nodes: Vec<IcNodeSnapshot> = get_system_subnet_node_snapshots(&env).collect();
+    let api_bn_ips: Vec<String> = env
+        .topology_snapshot()
+        .system_api_boundary_nodes()
+        .map(|bn| bn.get_ip_addr().to_string())
+        .collect();
 
+    setup_and_run_subnet_test(env, "system", subnet_nodes, api_bn_ips);
+}
+
+/// Tests that an outcall from the APPLICATION subnet is routed via an APPLICATION API BN.
+pub fn test_application_subnet(env: TestEnv) {
+    let subnet_nodes: Vec<IcNodeSnapshot> = get_node_snapshots(&env).collect();
+    let api_bn_ips: Vec<String> = env
+        .topology_snapshot()
+        .app_api_boundary_nodes()
+        .map(|bn| bn.get_ip_addr().to_string())
+        .collect();
+
+    setup_and_run_subnet_test(env, "application", subnet_nodes, api_bn_ips);
+}
+
+fn setup_and_run_subnet_test(
+    env: TestEnv,
+    subnet_type_str: &str,
+    subnet_nodes: Vec<IcNodeSnapshot>,
+    api_bn_ips: Vec<String>,
+) {
     let logger = env.logger();
+    info!(&logger, "Running test for {} subnet...", subnet_type_str);
 
     let webserver_ipv6 = get_universal_vm_address(&env).to_string();
 
@@ -126,62 +140,109 @@ pub fn test(env: TestEnv) {
         IpAddr::from_str(&webserver_ipv6).expect("Invalid webserver IPv6 address string");
     let httpbin_socket_addr = SocketAddr::new(httpbin_ip_addr, 443);
 
-    let mut system_nodes = get_system_subnet_node_snapshots(&env);
-    let system_node = system_nodes.next().expect("there is no system subnet node");
+    assert!(
+        !subnet_nodes.is_empty(),
+        "No {} subnet nodes found",
+        subnet_type_str
+    );
 
-    let runtime_system = get_runtime_from_node(&system_node);
-    let proxy_canister_system = create_proxy_canister(&env, &runtime_system, &system_node);
+    let canister_node = &subnet_nodes[0];
+    let runtime = get_runtime_from_node(canister_node);
+    let proxy_canister = create_proxy_canister(&env, &runtime, canister_node);
 
-    // Block the direct connection to the UVM
-    system_node
-        .insert_egress_reject_rule_for_outcalls_adapter(httpbin_socket_addr)
-        .expect("Failed to add reject firewall rule on system node");
-
-    // Direct connection is blocked. Hence the request should go through the API boundary node.
-    // Verify that the outcall works and returns the expected IP address (that of the API boundary node).
-    let apibn_ip = env
-        .topology_snapshot()
-        .api_boundary_nodes()
-        .next()
-        .unwrap()
-        .get_ip_addr()
-        .to_string();
-    assert_outcall_result(&logger, &proxy_canister_system, &webserver_url, apibn_ip);
-
-    // Now allow direct connection again.
-    system_node
-        .insert_egress_accept_rule_for_outcalls_adapter(httpbin_socket_addr)
-        .expect("Failed to add accept firewall rule on system node");
-
-    // Direct connection is allowed again. Hence the request should go directly to the webserver.
-    // Verify that the outcall works and returns the expected IP address (that of the system node itself).
-    assert_outcall_result(
+    info!(
         &logger,
-        &proxy_canister_system,
+        "Expecting {} API BN IPs: {:?}", subnet_type_str, api_bn_ips
+    );
+    assert!(
+        !api_bn_ips.is_empty(),
+        "No {} API boundary nodes found!",
+        subnet_type_str
+    );
+
+    run_http_outcall_test(
+        &logger,
+        &subnet_nodes,
+        &proxy_canister,
         &webserver_url,
-        system_node.get_ip_addr().to_string(),
+        httpbin_socket_addr,
+        api_bn_ips,
     );
 }
 
-// Makes a non replicated outcall from the given proxy canister to the given webserver URL
-// Asserts that the response code is 200 and that the body matches the expected body.
-fn assert_outcall_result(
+/// Helper function to run the core test logic:
+/// 1. Block direct access from all nodes in the subnet.
+/// 2. Assert the outcall goes through one of the expected API BNs.
+/// 3. Unblock direct access from all nodes.
+/// 4. Assert the outcall goes directly from one of the nodes itself.
+fn run_http_outcall_test(
     logger: &Logger,
-    proxy_canister_system: &Canister<'_>,
+    subnet_nodes: &[IcNodeSnapshot],
+    proxy_canister: &Canister<'_>,
     webserver_url: &str,
-    expected_body: String,
+    httpbin_socket_addr: SocketAddr,
+    expected_api_bn_ips: Vec<String>,
+) {
+    // Block the direct connection to the UVM for all nodes in the subnet.
+    for node in subnet_nodes {
+        node.insert_egress_reject_rule_for_outcalls_adapter(httpbin_socket_addr)
+            .expect("Failed to add reject firewall rule on node");
+    }
+
+    // Direct connection is blocked. Hence the request should go through the API boundary node.
+    // Verify that the outcall works and returns an expected IP address.
+    info!(
+        logger,
+        "Testing with direct connection blocked. Expecting one of {:?}.", expected_api_bn_ips
+    );
+    assert_outcall_result_in_list(logger, proxy_canister, webserver_url, &expected_api_bn_ips);
+
+    // Now allow direct connection again for all nodes.
+    for node in subnet_nodes {
+        node.insert_egress_accept_rule_for_outcalls_adapter(httpbin_socket_addr)
+            .expect("Failed to add accept firewall rule on node");
+    }
+
+    // Derive the expected node IPs from the slice.
+    let expected_subnet_node_ips: Vec<String> = subnet_nodes
+        .iter()
+        .map(|n| n.get_ip_addr().to_string())
+        .collect();
+
+    // Direct connection is allowed again. Hence the request should go directly to the webserver.
+    // Verify that the outcall works and returns one of the subnet node's IP addresses.
+    info!(
+        logger,
+        "Testing with direct connection allowed. Expecting one of node IPs {:?}.",
+        expected_subnet_node_ips
+    );
+    assert_outcall_result_in_list(
+        logger,
+        proxy_canister,
+        webserver_url,
+        &expected_subnet_node_ips,
+    );
+}
+
+/// Makes a non replicated outcall from the given proxy canister to the given webserver URL
+/// Asserts that the response code is 200 and that the body is one of the expected IPs.
+fn assert_outcall_result_in_list(
+    logger: &Logger,
+    proxy_canister: &Canister<'_>,
+    webserver_url: &str,
+    expected_ips: &[String],
 ) {
     block_on(ic_system_test_driver::retry_with_msg_async!(
         format!(
             "calling send_request of proxy canister {} with URL {}",
-            proxy_canister_system.canister_id(),
+            proxy_canister.canister_id(),
             webserver_url.to_string()
         ),
         &logger,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         || async {
-            let res = proxy_canister_system
+            let res = proxy_canister
                 .update_(
                     "send_request",
                     candid_one::<
@@ -211,7 +272,12 @@ fn assert_outcall_result(
             info!(&logger, "Update call succeeded! {:?}", res);
             match res {
                 Ok(response) => {
-                    assert_eq!(response.body, expected_body);
+                    assert!(
+                        expected_ips.contains(&response.body),
+                        "Returned IP '{}' was not in the expected list of IPs: {:?}",
+                        response.body,
+                        expected_ips
+                    );
                 }
                 Err((code, message)) => {
                     info!(logger, "Error code: {:?}, message: {}", code, message)

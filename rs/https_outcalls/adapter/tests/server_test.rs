@@ -8,7 +8,9 @@ mod test {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
-        HttpMethod, HttpsOutcallRequest, https_outcalls_service_client::HttpsOutcallsServiceClient,
+        CanisterHttpAdapterMetrics, CanisterHttpError, CanisterHttpErrorKind, HttpMethod,
+        HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result,
+        https_outcalls_service_client::HttpsOutcallsServiceClient,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -45,6 +47,37 @@ mod test {
         net::{TcpListener, TcpStream},
     };
 
+    fn unwrap_response(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (HttpsOutcallResponse, CanisterHttpAdapterMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Response(r) => (r, metrics),
+            https_outcall_result::Result::Error(e) => {
+                panic!(
+                    "Expected Http Response, got Error: {:?} - {}",
+                    e.kind, e.message
+                )
+            }
+        }
+    }
+
+    fn unwrap_error(
+        response: tonic::Response<HttpsOutcallResult>,
+    ) -> (CanisterHttpError, CanisterHttpAdapterMetrics) {
+        let inner = response.into_inner();
+        let metrics = inner.metrics.expect("Metrics must be present");
+        let result = inner.result.expect("Result must be present");
+        match result {
+            https_outcall_result::Result::Error(e) => (e, metrics),
+            https_outcall_result::Result::Response(r) => {
+                panic!("Expected Error, got Success Response: status {}", r.status)
+            }
+        }
+    }
+
     // Selfsigned localhost cert
     const CERT: &str = "
 -----BEGIN CERTIFICATE-----
@@ -67,6 +100,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 /gstNPpWdElI4hozjpew8DlKCxytESDhIrKvX3HGUVgr74E6f94ZGYF2
 -----END PRIVATE KEY-----
 ";
+
+    const INVALID_HEADER_KEY: &str = "invalid-ascii-value";
+    const INVALID_HEADER_VALUE: &str = "x√ab c";
+    const VALID_HEADER_KEY: &str = "valid-ascii-value";
+    const VALID_HEADER_VALUE: &str = "abc";
 
     // Variable that stores the directory of our cert/key files.
     // This is a oncecell because we don't want each test to call
@@ -108,8 +146,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let invalid_header = warp::get().and(warp::path("invalid")).map(|| unsafe {
             Response::builder()
                 .header(
-                    "invalid-ascii-value",
-                    HeaderValue::from_maybe_shared_unchecked("x√ab c".as_bytes()),
+                    INVALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(INVALID_HEADER_VALUE.as_bytes()),
+                )
+                .header(
+                    VALID_HEADER_KEY,
+                    HeaderValue::from_maybe_shared_unchecked(VALID_HEADER_VALUE.as_bytes()),
                 )
                 .body("hi")
         });
@@ -271,43 +313,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[cfg(feature = "http")]
     #[tokio::test]
-    async fn test_canister_http_app_subnet_proxies_requests_to_config_address() {
-        let url = start_http_server("127.0.0.1".parse().unwrap());
-
-        // ipv6 socks proxy.
-        let socks_addr = spawn_forward_socks5_server("[::1]:0", url.clone())
-            .await
-            .expect("Failed to bind socks");
-
-        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
-        // Suppose the server does not have a socks client set.
-        let server_config = Config {
-            incoming_source: IncomingSource::Path(path.into()),
-            socks_proxy: format!("socks5h://[{0}]:{1}", socks_addr.ip(), socks_addr.port()),
-            ..Default::default()
-        };
-        let mut client = spawn_grpc_server(server_config);
-        let unreachable_url = "10.255.255.1:9999";
-
-        // Make a request with socks proxy/
-        let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
-            headers: Vec::new(),
-            method: HttpMethod::Get as i32,
-            body: "hello".to_string().as_bytes().to_vec(),
-            max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
-            // If there is no socks proxy passed, it means we are an app subnet, we should try the config.
-            socks_proxy_addrs: vec![],
-        });
-        // The requests succeeds.
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
-        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
-    }
-
-    #[cfg(feature = "http")]
-    #[tokio::test]
     /// This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
     /// The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
     /// This tests the socks proxy passed to the adapter via the request.
@@ -335,12 +340,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: true,
             ..Default::default()
         });
         // Everything should fail.
-        let response = client.https_outcall(request).await;
-        assert!(response.is_err());
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
         // Make a request with socks proxy/
         let request = tonic::Request::new(HttpsOutcallRequest {
@@ -349,7 +354,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: true,
             // Suppose there are two socks proxies passed, one broken, and one working.
             socks_proxy_addrs: vec![
                 format!("socks5://{}", unreachable_url),
@@ -357,9 +361,34 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             ],
         });
         // The requests succeeds.
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+    }
+
+    #[tokio::test]
+    async fn test_metrics_on_connection_failure() {
+        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
+        let server_config = Config {
+            incoming_source: IncomingSource::Path(path.into()),
+            ..Default::default()
+        };
+        let mut client = spawn_grpc_server(server_config);
+
+        let request = tonic::Request::new(HttpsOutcallRequest {
+            url: "https://127.0.0.1:54321".to_string(), // Random closed port
+            headers: Vec::new(),
+            method: HttpMethod::Get as i32,
+            body: "hello".to_string().as_bytes().to_vec(),
+            max_response_size_bytes: 512,
+            ..Default::default()
+        });
+
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
+        assert_eq!(metrics.downloaded_bytes, 0);
     }
 
     #[tokio::test]
@@ -378,12 +407,22 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, metrics) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
+
+        let headers_size: u64 = http_response
+            .headers
+            .iter()
+            .map(|h| (h.name.len() + h.value.len()) as u64)
+            .sum();
+        // Check that downloaded bytes includes headers + body.
+        assert_eq!(
+            metrics.downloaded_bytes,
+            http_response.content.len() as u64 + headers_size
+        );
     }
 
     #[cfg(not(feature = "http"))]
@@ -405,20 +444,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::InvalidArgument
-        );
-        assert!(
-            response
-                .unwrap_err()
-                .message()
-                .contains(&"Url need to specify https scheme".to_string())
-        );
+        let response: tonic::Response<HttpsOutcallResult> =
+            client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::InvalidInput as i32);
+        assert!(error.message.contains("Url need to specify https scheme"));
     }
 
     #[cfg(feature = "http")]
@@ -440,11 +473,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -465,12 +497,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Post as i32,
             body: "420".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
         assert_eq!(String::from_utf8_lossy(&http_response.content), "420");
     }
@@ -492,12 +523,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -520,21 +550,17 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::OutOfRange
-        );
-        assert!(
-            response
-                .unwrap_err()
-                .message()
-                .contains(&"Http body exceeds size limit of".to_string())
-        );
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::LimitExceeded as i32);
+        assert!(error.message.contains("Http body exceeds size limit of"));
+
+        // Check that we report we've downloaded the response, even though the final result is an error.
+        assert!(metrics.downloaded_bytes >= response_limit);
     }
 
     #[tokio::test]
@@ -555,12 +581,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{response_size}").as_bytes().to_vec(),
             max_response_size_bytes: response_size * 2,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
+        let response = client.https_outcall(request).await.unwrap();
+        let (http_response, _) = unwrap_response(response);
         assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
     }
 
@@ -583,7 +608,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{delay}").as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -622,18 +646,14 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 64,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        assert_eq!(
-            response.as_ref().unwrap_err().code(),
-            tonic::Code::Unavailable
-        );
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, _) = unwrap_error(response);
 
-        let response_error = response.unwrap_err();
-        let actual_error_message = response_error.message();
+        assert_eq!(error.kind, CanisterHttpErrorKind::Connection as i32);
 
+        let actual_error_message = error.message;
         let expected_error_message = "Error(Connect, ConnectError(\"tcp connect error\", Custom { kind: TimedOut, error: Elapsed(()) }))";
 
         assert!(
@@ -660,12 +680,22 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (error, metrics) = unwrap_error(response);
+
+        assert_eq!(error.kind, CanisterHttpErrorKind::Internal as i32);
+        assert!(error.message.contains("Failed to parse headers"));
+
+        // Important: check that even though parsing headers failed and the adapter returned an error,
+        // we still report how much data was downloaded (all the headers)
+        let minimum_expected_downloaded_bytes = (INVALID_HEADER_KEY.len()
+            + INVALID_HEADER_VALUE.len()
+            + VALID_HEADER_KEY.len()
+            + VALID_HEADER_VALUE.len()) as u64;
+        assert!(metrics.downloaded_bytes >= minimum_expected_downloaded_bytes);
     }
 
     #[tokio::test]
@@ -686,11 +716,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
-        let response = client.https_outcall(request).await;
-        let _ = response.unwrap_err();
+        let response = client.https_outcall(request).await.unwrap();
+        let (_, _) = unwrap_error(response);
     }
 
     #[rstest]
@@ -790,13 +819,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     method: HttpMethod::Get as i32,
                     body: "hello".to_string().as_bytes().to_vec(),
                     max_response_size_bytes: 512,
-                    socks_proxy_allowed: false,
                     ..Default::default()
                 });
 
-                let response = client.https_outcall(request).await;
+                let response = client.https_outcall(request).await.unwrap();
 
-                let http_response = response.unwrap().into_inner();
+                let (http_response, _) = unwrap_response(response);
                 assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
             });
     }

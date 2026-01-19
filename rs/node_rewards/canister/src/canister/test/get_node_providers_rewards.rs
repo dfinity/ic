@@ -8,6 +8,7 @@ use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use crate::storage::NaiveDateStorable;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
@@ -318,11 +319,13 @@ fn test_get_node_providers_rewards() {
     let request = GetNodeProvidersRewardsRequest {
         from_day: from.into(),
         to_day: to.into(),
+        algorithm_version: None,
     };
     let result_endpoint =
         NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
 
     let expected = NodeProvidersRewards {
+        algorithm_version: RewardsCalculationAlgorithmVersion::default(),
         rewards_xdr_permyriad: btreemap! {
             test_provider_id(1).0 => 137200,
             test_provider_id(2).0 => 10000,

@@ -19,7 +19,7 @@ use bitcoin::{
     },
 };
 use hashlink::{LinkedHashMap, LinkedHashSet};
-use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
+use ic_logger::{ReplicaLogger, debug, info, trace, warn};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,

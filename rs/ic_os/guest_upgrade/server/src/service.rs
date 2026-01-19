@@ -1,16 +1,20 @@
 use crate::SevFirmwareFactory;
 use crate::server::ConnInfo;
 use attestation::attestation_package::generate_attestation_package;
-use attestation::custom_data::DerEncodedCustomData;
-use attestation::verification::{SevRootCertificateVerification, verify_attestation_package};
+use attestation::verification::{
+    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
 use config_types::TrustedExecutionEnvironmentConfig;
 use der::asn1::OctetStringRef;
-use guest_upgrade_shared::api::{
-    GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
-    SignalStatusResponse,
-    disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
-};
 use guest_upgrade_shared::attestation::GetDiskEncryptionKeyTokenCustomData;
+use guest_upgrade_shared::{
+    STORE_DEVICE,
+    api::{
+        GetDiskEncryptionKeyRequest, GetDiskEncryptionKeyResponse, SignalStatusRequest,
+        SignalStatusResponse,
+        disk_encryption_key_exchange_service_server::DiskEncryptionKeyExchangeService,
+    },
+};
 use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
@@ -100,23 +104,24 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         &self,
         request: Request<GetDiskEncryptionKeyRequest>,
     ) -> Result<Response<GetDiskEncryptionKeyResponse>, Status> {
-        let Some(client_attestation_package) = &request.get_ref().sev_attestation_package else {
-            return Err(Status::invalid_argument(
-                "sev_attestation_package must not be empty",
-            ));
-        };
+        let client_public_key = Self::client_public_key_from_request(&request)?;
+        let client_attestation_package =
+            request
+                .into_inner()
+                .sev_attestation_package
+                .ok_or_else(|| {
+                    Status::invalid_argument("Missing sev_attestation_package in request")
+                })?;
 
         let mut sev_firmware = self.sev_firmware_factory.deref()()
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e:?}")))?;
 
-        let client_public_key = Self::client_public_key_from_request(&request)?;
-
-        let custom_data = DerEncodedCustomData(GetDiskEncryptionKeyTokenCustomData {
+        let custom_data = GetDiskEncryptionKeyTokenCustomData {
             client_tls_public_key: OctetStringRef::new(&client_public_key)
                 .expect("Could not encode client public key"),
             server_tls_public_key: OctetStringRef::new(&self.my_public_key)
                 .expect("Could not encode server public key"),
-        });
+        };
 
         let my_attestation_package = generate_attestation_package(
             sev_firmware.as_mut(),
@@ -133,13 +138,13 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         )
         .map_err(|e| Status::internal(format!("Failed to parse own attestation report: {e:?}")))?;
 
-        verify_attestation_package(
+        ParsedSevAttestationPackage::parse(
             client_attestation_package,
             self.sev_root_certificate_verification,
-            &self.blessed_measurements,
-            &custom_data,
-            Some(my_attestation_report.chip_id.as_slice()),
         )
+        .verify_measurement(&self.blessed_measurements)
+        .verify_custom_data(&custom_data)
+        .verify_chip_id(&[my_attestation_report.chip_id])
         .map_err(|e| {
             Status::invalid_argument(format!("Attestation report verification failed: {e:?}"))
         })?;
@@ -152,7 +157,7 @@ impl DiskEncryptionKeyExchangeServiceImpl {
                 derive_key_from_sev_measurement(
                     sev_firmware.as_mut(),
                     Key::DiskEncryptionKey {
-                        device_path: Path::new("/dev/vda10"),
+                        device_path: Path::new(STORE_DEVICE),
                     },
                 )
                 .map_err(|e| Status::internal(format!("Failed to get disk encryption key: {e:?}")))?

@@ -1,8 +1,6 @@
 //! Generating and verifying Proofs of Possession (PoP)
 
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    HashedMap, UniqueHash, random_oracle_to_g1, random_oracle_to_scalar,
-};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, UniqueHash, random_oracle_to_scalar};
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FrBytes, FsEncryptionPop, G1Bytes,
@@ -10,6 +8,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 use rand::{CryptoRng, RngCore};
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
+// DOMAIN_POP_ENCRYPTION_KEY with a prefix of the length (17 == 0x11)
+const DOMAIN_POP_ENCRYPTION_KEY_WITH_PREFIX: &str = "\x11ic-pop-encryption";
 
 /// Proof of Possession (PoP) of the Encryption Key.
 #[derive(Clone, Debug)]
@@ -88,6 +88,11 @@ fn generate_pop_challenge(
     random_oracle_to_scalar(DOMAIN_POP_ENCRYPTION_KEY, &map)
 }
 
+/// Compute the PoP base point
+fn compute_pop_base(data: &dyn UniqueHash) -> G1Affine {
+    G1Affine::hash(DOMAIN_POP_ENCRYPTION_KEY_WITH_PREFIX, &data.unique_hash())
+}
+
 /// Prove the Possession of an EncryptionKey.
 pub fn prove_pop<R: RngCore + CryptoRng>(
     instance: &EncryptionKeyInstance,
@@ -100,7 +105,7 @@ pub fn prove_pop<R: RngCore + CryptoRng>(
     }
 
     // First Move
-    let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
+    let pop_base = compute_pop_base(instance);
     let pop_key = G1Affine::from(&pop_base * witness);
 
     let random_scalar = Scalar::random(rng);
@@ -133,21 +138,17 @@ pub fn verify_pop(
     pop: &EncryptionKeyPop,
 ) -> Result<(), EncryptionKeyPopError> {
     let minus_challenge = pop.challenge.neg();
-    let pop_base = random_oracle_to_g1(DOMAIN_POP_ENCRYPTION_KEY, instance);
+    let pop_base = compute_pop_base(instance);
 
-    let blinder_public_key = G1Projective::mul2(
-        &G1Projective::from(&instance.public_key),
+    let blinder_public_key = G1Projective::mul2_affine_vartime(
+        &instance.public_key,
         &minus_challenge,
-        &G1Projective::from(&instance.g1_gen),
+        &instance.g1_gen,
         &pop.response,
     );
 
-    let blinder_pop_key = G1Projective::mul2(
-        &G1Projective::from(&pop.pop_key),
-        &minus_challenge,
-        &G1Projective::from(&pop_base),
-        &pop.response,
-    );
+    let blinder_pop_key =
+        G1Projective::mul2_affine_vartime(&pop.pop_key, &minus_challenge, &pop_base, &pop.response);
 
     let challenge = generate_pop_challenge(
         &instance.public_key,

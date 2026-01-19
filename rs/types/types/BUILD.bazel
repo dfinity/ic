@@ -69,6 +69,7 @@ rust_test(
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha2",
         "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/ni-dkg",
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/crypto/tree_hash",
         "//rs/limits",
