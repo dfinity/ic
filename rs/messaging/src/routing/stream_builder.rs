@@ -308,9 +308,8 @@ impl StreamBuilderImpl {
                 subnets_with_canister_migrations.insert(*subnet);
             }
         }
-
         let relevant_subnets = if subnets_with_canister_migrations.contains(&self.subnet_id) {
-            // This subnet is involved in a migration, scan all its streams.
+            // This subnet is the source or target of a migration, scan all its streams.
             state
                 .metadata
                 .streams()
@@ -318,6 +317,8 @@ impl StreamBuilderImpl {
                 .cloned()
                 .collect::<BTreeSet<_>>()
         } else {
+            // This is a third-party subnet, only scan streams to subnets involved in
+            // canister migrations.
             subnets_with_canister_migrations
         };
 
