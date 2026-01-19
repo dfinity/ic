@@ -31,7 +31,6 @@ while test $# -gt 0; do
             exit 1
             ;;
     esac
-    shift
 done
 
 if [ -z "$BUILD_TARGET" ]; then
