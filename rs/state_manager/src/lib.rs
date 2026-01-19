@@ -3315,7 +3315,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
+        let mut certification_metadata =
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
@@ -3361,6 +3361,10 @@ impl StateManager for StateManagerImpl {
                     "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
+        }
+
+        if let Some(certification) = states.certifications.get(&height) {
+            certification_metadata.certification = Some(certification.clone());
         }
 
         if !states

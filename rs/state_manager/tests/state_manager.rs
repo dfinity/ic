@@ -9455,3 +9455,35 @@ fn list_state_heights_to_certify() {
         assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
     });
 }
+
+#[test]
+fn commit_and_certify_reuses_certification() {
+    state_manager_test(|metrics, sm| {
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // consensus delivers certification for the next height
+        let no_opt_height = Height::new(10);
+        let certification = fake_certification_for_height(no_opt_height);
+        sm.deliver_state_certification(certification.clone());
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // `commit_and_certify` reused certification from `states.certifications`
+        assert!(
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_some()
+        );
+
+        // `list_state_hashes_to_certify` does not include `no_opt_height` because certification was reused
+        assert!(
+            sm.list_state_hashes_to_certify()
+                .into_iter()
+                .find(|(height, _)| *height == no_opt_height)
+                .is_none()
+        );
+    });
+}
