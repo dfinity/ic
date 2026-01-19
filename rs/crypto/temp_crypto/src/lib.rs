@@ -285,6 +285,12 @@ pub mod internal {
                 .build(),
             );
             let opt_remote_vault_environment = self.start_remote_vault.then(|| {
+                if self.override_vault.is_some() {
+                    panic!(
+                        "Invalid builder configuration: Starting a remote vault and \
+                        at the same time overriding the vault is not allowed."
+                    );
+                }
                 let vault_server =
                     TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&local_vault));
                 config.csp_vault_type = CspVaultType::UnixSocket {
@@ -299,9 +305,6 @@ pub mod internal {
                 }
             });
             let vault: Arc<dyn CspVault> = if let Some(vault) = self.override_vault {
-                if self.start_remote_vault {
-                    panic!("Cannot override a remote vault with a local vault");
-                }
                 vault
             } else if let Some(env) = &opt_remote_vault_environment {
                 let remote_vault = env
