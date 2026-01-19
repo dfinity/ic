@@ -3127,7 +3127,7 @@ impl StateManager for StateManagerImpl {
     /// partial certification scope.
     ///
     /// The following states are NOT removed:
-    /// * Any state with height >= requested_height
+    /// * Any state with height >= min(requested_height, latest state height)
     /// * Checkpoint heights
     /// * The latest state
     /// * The latest certified state

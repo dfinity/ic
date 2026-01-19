@@ -228,7 +228,8 @@ pub trait StateManager: StateReader {
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
     ///
     /// Note that:
-    ///  * The initial state (height = 0) cannot be removed.
+    ///  * The initial state (height = 0) is not removed.
+    ///  * The latest state is not removed.
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
