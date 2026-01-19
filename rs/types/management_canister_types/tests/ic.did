@@ -354,22 +354,6 @@ type http_request_args = record {
     pricing_version : opt nat32;
 };
 
-type flexible_http_request_args = record {
-    url : text;
-    headers : vec http_header;
-    method : variant { get; head; post };
-    body : opt blob;
-    transform : opt record {
-        function : func (record {response : http_request_result; context : blob}) -> (http_request_result) query;
-        context : blob;
-    };
-    requested_counts: opt record {
-        min_responses : nat64;
-        max_responses : nat64;
-        total_requests : nat64;
-    };
-};
-
 type ecdsa_public_key_args = record {
     canister_id : opt canister_id;
     derivation_path : vec blob;
