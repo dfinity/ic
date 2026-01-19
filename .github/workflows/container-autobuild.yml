@@ -67,7 +67,7 @@ jobs:
             image: ic-build
           - name: Dev
             target: dev
-            image: ic-build-dev
+            image: ic-dev
     outputs:
       ci_imageid: ${{ steps.set-imageid.outputs.imageid }}
       dev_imageid: ${{ steps.set-imageid.outputs.imageid }}

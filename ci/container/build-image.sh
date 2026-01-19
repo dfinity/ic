@@ -33,7 +33,7 @@ while test $# -gt 0; do
 done
 
 if [ "$BUILD_TARGET" == "dev" ]; then
-    IMAGE_NAME="ic-build-dev"
+    IMAGE_NAME="ic-dev"
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
