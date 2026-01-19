@@ -121,7 +121,6 @@ impl CanisterStateFixture {
             .system_state
             .register_callback(Callback::new(
                 call_context_id,
-                CANISTER_ID,
                 respondent,
                 Cycles::zero(),
                 Cycles::new(42),
@@ -911,7 +910,6 @@ fn canister_state_callback_round_trip() {
 
     let minimal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::zero(),
         Cycles::zero(),
@@ -923,7 +921,6 @@ fn canister_state_callback_round_trip() {
     );
     let maximal_callback = Callback::new(
         CallContextId::new(1),
-        CANISTER_ID,
         OTHER_CANISTER_ID,
         Cycles::new(21),
         Cycles::new(42),
@@ -935,7 +932,6 @@ fn canister_state_callback_round_trip() {
     );
     let u64_callback = Callback::new(
         CallContextId::new(u64::MAX - 1),
-        CanisterId::from_u64(u64::MAX - 2),
         CanisterId::from_u64(u64::MAX - 3),
         Cycles::new(u128::MAX - 4),
         Cycles::new(u128::MAX - 5),

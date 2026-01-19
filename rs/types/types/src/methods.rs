@@ -268,8 +268,6 @@ pub const UNKNOWN_CANISTER_ID: CanisterId =
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct Callback {
     pub call_context_id: CallContextId,
-    /// The request sender's ID.
-    pub originator: CanisterId,
     /// The ID of the principal that the request was addressed to.
     pub respondent: CanisterId,
     /// The number of cycles that were sent in the original request.
@@ -296,7 +294,6 @@ pub struct Callback {
 impl Callback {
     pub fn new(
         call_context_id: CallContextId,
-        originator: CanisterId,
         respondent: CanisterId,
         cycles_sent: Cycles,
         prepayment_for_response_execution: Cycles,
@@ -308,7 +305,6 @@ impl Callback {
     ) -> Self {
         Self {
             call_context_id,
-            originator,
             respondent,
             cycles_sent,
             prepayment_for_response_execution,
@@ -325,7 +321,6 @@ impl From<&Callback> for pb::Callback {
     fn from(item: &Callback) -> Self {
         Self {
             call_context_id: item.call_context_id.get(),
-            originator: Some(pb_types::CanisterId::from(item.originator)),
             respondent: Some(pb_types::CanisterId::from(item.respondent)),
             cycles_sent: Some(item.cycles_sent.into()),
             prepayment_for_response_execution: Some(item.prepayment_for_response_execution.into()),
@@ -371,7 +366,6 @@ impl TryFrom<pb::Callback> for Callback {
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator")?,
             respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,
