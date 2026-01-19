@@ -222,13 +222,13 @@ def last(args):
         lambda commit: terminal_hyperlink(commit[:7], f"https://github.com/{ORG}/{REPO}/commit/{commit}")
     )
 
-    df["time"] = df["time"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
+    df["last started at (UTC)"] = df["last started at (UTC)"].apply(lambda t: t.strftime("%a %Y-%m-%d %X"))
 
     df["branch"] = df["branch"].apply(
         lambda branch: terminal_hyperlink(branch, f"https://github.com/{ORG}/{REPO}/tree/{branch}")
     )
 
-    df["pr"] = df["pr"].apply(
+    df["PR"] = df["PR"].apply(
         lambda pr: terminal_hyperlink(f"#{pr}", f"https://github.com/{ORG}/{REPO}/pull/{pr}") if pr else ""
     )
 

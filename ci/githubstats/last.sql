@@ -1,5 +1,6 @@
 SELECT
-  bi.build_date AS "time",
+  -- Bazel's first_start_time is really the time the last attempt started.
+  bt.first_start_time AS "last started at (UTC)",
 
   bt.total_run_duration * INTERVAL '1 second' AS "duration",
 
@@ -19,7 +20,7 @@ SELECT
       -- and pull_request_url https://api.github.com/repos/bit-cook/ic/pulls/855.
       WHEN wr.event_type = 'pull_request' THEN CAST(wr.pull_request_number AS TEXT)
       ELSE ''
-  END AS "pr",
+  END AS "PR",
 
   bi.head_sha AS "commit"
 
