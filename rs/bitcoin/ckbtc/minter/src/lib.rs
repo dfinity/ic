@@ -857,10 +857,10 @@ pub async fn resubmit_transactions<
             continue;
         }
         let tx_fee_per_vbyte = match submitted_tx.effective_fee_per_vbyte {
-            Some(prev_fee) => {
+            Some(prev_fee_rate) => {
                 // Ensure that the fee is at least min relay fee higher than the previous
                 // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
-                fee_rate.max(prev_fee + Fee::MIN_RELAY_FEE_RATE_INCREASE)
+                fee_rate.max(prev_fee_rate + Fee::MIN_RELAY_FEE_RATE_INCREASE)
             }
             None => fee_rate,
         };
