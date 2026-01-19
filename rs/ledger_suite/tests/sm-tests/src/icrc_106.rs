@@ -151,7 +151,7 @@ pub fn test_upgrade_downgrade_with_mainnet_ledger<T, U>(
 
     // Downgrade to mainnet is currently not possible. The rest of the test can
     // be uncommented again, once the PR that introduced this line is on mainnet.
-    
+
     // // Downgrade the ledger to the mainnet version that does not support ICRC-106
     // env.upgrade_canister(canister_id, mainnet_ledger_wasm, encoded_empty_upgrade_args)
     //     .expect("should successfully downgrade ledger canister");
