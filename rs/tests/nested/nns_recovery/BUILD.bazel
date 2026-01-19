@@ -49,7 +49,7 @@ system_test_nns(
     guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
+    setupos = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -73,7 +73,7 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_setupos_img = True,
+    setupos = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -91,7 +91,7 @@ system_test_nns(
     guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
+    setupos = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -111,7 +111,7 @@ system_test_nns(
     guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
+    setupos = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -131,7 +131,7 @@ system_test_nns(
     guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
+    setupos = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.

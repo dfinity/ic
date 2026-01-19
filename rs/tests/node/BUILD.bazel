@@ -102,7 +102,7 @@ system_test(
         "dynamic_testnet",
         "manual",
     ],
-    uses_setupos_img = True,
+    setupos = True,
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",

@@ -310,7 +310,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    uses_setupos_img = True,
+    setupos = True,
     deps = [
         # Keep sorted.
         "//rs/limits",
