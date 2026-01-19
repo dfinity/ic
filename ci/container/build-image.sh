@@ -2,6 +2,9 @@
 
 set -eEuo pipefail
 
+BUILD_TARGET="ci"
+IMAGE_NAME="ic-build"
+
 usage() {
     echo "Build ic-build docker image."
     echo " "
