@@ -175,7 +175,7 @@ pub struct StateManagerMetrics {
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
     latest_subnet_certified_height: IntGauge,
-    no_clone_count: IntCounter,
+    no_state_clone_count: IntCounter,
     tip_hash_count: IntCounter,
 }
 
@@ -467,8 +467,8 @@ impl StateManagerMetrics {
             "Height of the latest validated certification.",
         );
 
-        let no_clone_count = metrics_registry.int_counter(
-            "state_manager_no_clone_count",
+        let no_state_clone_count = metrics_registry.int_counter(
+            "state_manager_no_state_clone_count",
             "Number of heights whose states were not cloned and not stored by this node.",
         );
 
@@ -503,7 +503,7 @@ impl StateManagerMetrics {
             latest_hash_tree_size,
             latest_hash_tree_max_index,
             latest_subnet_certified_height,
-            no_clone_count,
+            no_state_clone_count,
             tip_hash_count,
         }
     }
@@ -3283,7 +3283,7 @@ impl StateManager for StateManagerImpl {
 
             assert_tip_is_none(&states);
 
-            self.metrics.no_clone_count.inc();
+            self.metrics.no_state_clone_count.inc();
 
             states.tip = Some((height, state));
             self.tip_height.store(height.get(), Ordering::Relaxed);
@@ -4076,7 +4076,7 @@ pub mod testing {
         /// Testing only: Wait till deallocation queue is empty.
         fn flush_deallocation_channel(&self);
 
-        /// Testing only: Returns state heights in `states.snapshots`.
+        /// Testing only: Returns heights in `states.snapshots`.
         fn state_snapshot_heights(&self) -> Vec<Height>;
 
         /// Testing only: Returns state at a given height in `states.snapshots`.
@@ -4086,10 +4086,7 @@ pub mod testing {
         fn certifications_metadata_heights(&self) -> Vec<Height>;
 
         /// Testing only: Returns hash tree at a given height in `states.certifications_metadata`.
-        fn certifications_metadata_hash_tree(
-            &self,
-            height: Height,
-        ) -> Option<(Arc<HashTree>, Instant)>;
+        fn certifications_metadata_hash_tree(&self, height: Height) -> Option<Arc<HashTree>>;
 
         /// Testing only: Returns state hash at a given height in `states.certifications_metadata`.
         fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash;
@@ -4154,10 +4151,7 @@ pub mod testing {
             states.certifications_metadata.keys().cloned().collect()
         }
 
-        fn certifications_metadata_hash_tree(
-            &self,
-            height: Height,
-        ) -> Option<(Arc<HashTree>, Instant)> {
+        fn certifications_metadata_hash_tree(&self, height: Height) -> Option<Arc<HashTree>> {
             let states = self.states.read();
             states
                 .certifications_metadata
@@ -4165,6 +4159,7 @@ pub mod testing {
                 .expect("Did not find metadata at given height")
                 .hash_tree
                 .clone()
+                .map(|(hash_tree, _)| hash_tree)
         }
 
         fn certifications_metadata_state_hash(&self, height: Height) -> CryptoHash {
