@@ -12,9 +12,14 @@ export BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-# Drop into the container if we're not already inside it. This ensures
-# we run in a predictable environment (Ubuntu with known deps).
-if ! ([ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ])); then
+# If running in the wrong container, abort.
+# if not running in a container, drop into the correct container.
+if ([ -e /.dockerenv ] || [ -e /run/.containerenv ]); then
+    if [ -z "${DFINITY_CONTAINER:-}" ]; then
+        echo "ERROR: Detected container environment, but not running in the DFINITY container. Please exit your container and rerun the script."
+        exit 1
+    fi
+else
     echo dropping into container
     exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
 fi
