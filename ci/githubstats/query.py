@@ -9,6 +9,7 @@ import contextlib
 import os
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import codeowners
@@ -188,11 +189,17 @@ def last(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
-    # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target
-    df["buildbuddy_url"] = (
-        df["buildbuddy_url"].apply(get_redirect_location).apply(lambda url: f"{url}?target={args.test_target}")
-    )
-    df["buildbuddy"] = df["buildbuddy_url"].apply(lambda url: terminal_hyperlink("log", url))
+    # Turn the buildbuddy URLs into terminal hyperlinks to the logs of the test target.
+    # Since the buildbuddy_url column points to the BuildBuddy redirect service
+    # we first need to resolve the redirect to the cluster-specific BuildBuddy URL.
+    # Since this I/O takes time we parallelize it speeding it up by a factor of 6.
+    def direct_url_to_buildbuddy(url):
+        redirect = get_redirect_location(url)
+        url = f"{redirect}?target={args.test_target}"
+        return terminal_hyperlink("log", url)
+
+    with ThreadPoolExecutor() as executor:
+        df["buildbuddy"] = list(executor.map(direct_url_to_buildbuddy, df["buildbuddy_url"]))
 
     # Turn the commit SHAs into terminal hyperlinks to the GitHub commit page
     df["commit"] = df["commit"].apply(
