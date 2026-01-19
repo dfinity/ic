@@ -135,35 +135,32 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
         // `Response`, moving its callback into the call context manager.
         if let Some(ExecutionTask::AbortedExecution { input, .. }) =
             task_queue.mut_paused_or_aborted_task()
-        {
-            if let CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+            && let CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
                 response,
                 callback,
             }) = input
-            {
-                match &mut status {
-                    CanisterStatus::Running {
-                        call_context_manager,
-                    }
-                    | CanisterStatus::Stopping {
-                        call_context_manager,
-                        ..
-                    } => {
-                        call_context_manager.insert_callback(
-                            response.originator_reply_callback,
-                            callback.as_ref().clone(),
-                        );
-                    }
-                    CanisterStatus::Stopped => {
-                        return Err(ProxyDecodeError::ValueOutOfRange {
-                            typ: "CanisterStatus",
-                            err: "Cannot insert callback into Stopped canister".to_string(),
-                        });
-                    }
+        {
+            match &mut status {
+                CanisterStatus::Running {
+                    call_context_manager,
                 }
-                *input =
-                    CanisterMessageOrTask::Message(CanisterMessage::Response(response.clone()));
+                | CanisterStatus::Stopping {
+                    call_context_manager,
+                    ..
+                } => {
+                    call_context_manager.insert_callback(
+                        response.originator_reply_callback,
+                        callback.as_ref().clone(),
+                    );
+                }
+                CanisterStatus::Stopped => {
+                    return Err(ProxyDecodeError::ValueOutOfRange {
+                        typ: "CanisterStatus",
+                        err: "Cannot insert callback into Stopped canister".to_string(),
+                    });
+                }
             }
+            *input = CanisterMessageOrTask::Message(CanisterMessage::Response(response.clone()));
         }
 
         Ok(Self {
