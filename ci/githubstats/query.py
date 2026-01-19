@@ -249,7 +249,9 @@ def main():
         default="postgresql://githubstats_read@githubstats.idx.dfinity.network/github",
         help="PostgreSQL connection string",
     )
-    common_parser.add_argument("--timeout", type=int, default=60, help="PostgreSQL connect and query timeout in seconds")
+    common_parser.add_argument(
+        "--timeout", type=int, default=60, help="PostgreSQL connect and query timeout in seconds"
+    )
 
     filter_parser = argparse.ArgumentParser(add_help=False)
     period_group = filter_parser.add_mutually_exclusive_group()
