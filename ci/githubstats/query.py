@@ -26,11 +26,12 @@ REPO = "ic"
 
 
 @contextlib.contextmanager
-def githubstats_db_cursor(conninfo: str):
+def githubstats_db_cursor(conninfo: str, timeout: int):
     """Context manager that yields a cursor connected to the github PostgreSQL database."""
-    conn = psycopg.connect(conninfo)
+    conn = psycopg.connect(conninfo, connect_timeout=timeout)
     try:
         with conn.cursor() as cursor:
+            cursor.execute(f"SET statement_timeout = {timeout * 1000}")
             yield cursor
     finally:
         conn.close()
@@ -137,7 +138,7 @@ def top(args):
         args.conninfo,
     )
 
-    with githubstats_db_cursor(args.conninfo) as cursor:
+    with githubstats_db_cursor(args.conninfo, args.timeout) as cursor:
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
@@ -177,7 +178,7 @@ def last(args):
     if args.flaky:
         overall_statuses.append(2)
         statuses.append("flaky")
-    if args.timeout:
+    if args.timedout:
         overall_statuses.append(3)
         statuses.append("timed out")
     if args.failed:
@@ -205,7 +206,7 @@ def last(args):
         args.conninfo,
     )
 
-    with githubstats_db_cursor(args.conninfo) as cursor:
+    with githubstats_db_cursor(args.conninfo, args.timeout) as cursor:
         cursor.execute(query)
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
@@ -248,6 +249,7 @@ def main():
         default="postgresql://githubstats_read@githubstats.idx.dfinity.network/github",
         help="PostgreSQL connection string",
     )
+    common_parser.add_argument("--timeout", type=int, default=60, help="PostgreSQL connect and query timeout in seconds")
 
     filter_parser = argparse.ArgumentParser(add_help=False)
     period_group = filter_parser.add_mutually_exclusive_group()
@@ -313,7 +315,7 @@ def main():
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
     last_runs_parser.add_argument("--failed", action="store_true", help="Include failed runs")
-    last_runs_parser.add_argument("--timeout", action="store_true", help="Include timed-out runs")
+    last_runs_parser.add_argument("--timedout", action="store_true", help="Include timed-out runs")
 
     last_runs_parser.add_argument("test_target", type=str, help="Bazel label of the test target to get runs of")
     last_runs_parser.set_defaults(func=last)
