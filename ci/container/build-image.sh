@@ -49,12 +49,14 @@ pushd "$REPO_ROOT"
 BUILD_ARGS=("${DOCKER_BUILD_ARGS:---rm=true}")
 
 if findmnt /hoststorage >/dev/null; then
+    DOCKER_CMD="sudo podman"
     ARGS=(--root /hoststorage/podman-root)
 else
+    DOCKER_CMD="docker"
     ARGS=()
 fi
 
-DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
+DOCKER_BUILDKIT=1 $DOCKER_CMD "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     --target "$BUILD_TARGET" \
     -t "$IMAGE_NAME":"$DOCKER_IMG_TAG" \
     -t ghcr.io/dfinity/"$IMAGE_NAME":"$DOCKER_IMG_TAG" \
