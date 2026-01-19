@@ -10,7 +10,8 @@ usage() {
     echo " "
     echo "Options:"
     echo "-h, --help        show brief help"
-    echo "--target <name>   set Docker build target (default: ci)"
+    echo "--ci              build the CI image"
+    echo "--dev             build the devenv image"
 }
 
 while test $# -gt 0; do
@@ -19,9 +20,13 @@ while test $# -gt 0; do
             usage >&2
             exit 0
             ;;
-        --target)
-            shift
-            BUILD_TARGET="$1"
+        --ci)
+            BUILD_TARGET="ci"
+            IMAGE_NAME="ic-build"
+            ;;
+        --dev)
+            BUILD_TARGET="dev"
+            IMAGE_NAME="ic-dev"
             ;;
         *)
             echo "unknown argument: $1" >&2
@@ -32,8 +37,10 @@ while test $# -gt 0; do
     shift
 done
 
-if [ "$BUILD_TARGET" == "dev" ]; then
-    IMAGE_NAME="ic-dev"
+if [ -z "$BUILD_TARGET" ]; then
+    echo "Error: You must specify either --ci or --dev"
+    usage >&2
+    exit 1
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
