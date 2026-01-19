@@ -9480,10 +9480,9 @@ fn commit_and_certify_reuses_certification() {
 
         // `list_state_hashes_to_certify` does not include `no_opt_height` because certification was reused
         assert!(
-            sm.list_state_hashes_to_certify()
+            !sm.list_state_hashes_to_certify()
                 .into_iter()
-                .find(|(height, _)| *height == no_opt_height)
-                .is_none()
+                .any(|(height, _)| height == no_opt_height)
         );
     });
 }
