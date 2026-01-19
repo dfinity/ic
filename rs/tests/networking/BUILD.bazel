@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_DATA", "COUNTER_CANISTER_DATA", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_DATA", "COUNTER_CANISTER_RUNTIME_DEPS", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -342,13 +342,13 @@ system_test_nns(
 
 system_test_nns(
     name = "network_reliability_test",
-    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
         "system_test_large",
     ],
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/types/base_types",
         "@crate_index//:rand",
@@ -358,7 +358,7 @@ system_test_nns(
 
 system_test_nns(
     name = "p2p_performance_test",
-    data = COUNTER_CANISTER_DATA + [
+    data = [
         "//rs/tests:jaeger_uvm_config_image",
     ],
     enable_metrics = True,
@@ -367,6 +367,7 @@ system_test_nns(
         "manual",
     ],
     test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "@crate_index//:ic-agent",
     ],
@@ -381,7 +382,6 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     enable_metrics = True,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
@@ -390,6 +390,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -431,7 +432,6 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
-    data = COUNTER_CANISTER_DATA,
     enable_head_nns_variant = False,
     enable_metrics = True,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
@@ -440,6 +440,7 @@ system_test_nns(
         "colocate",
     ],
     test_timeout = "eternal",
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
     ],
@@ -447,13 +448,12 @@ system_test_nns(
 
 system_test(
     name = "cloner_canister_workload",
-    data = COUNTER_CANISTER_DATA,
     enable_metrics = True,
     tags = [
         "manual",
     ],
     test_timeout = "eternal",
-    runtime_deps = {
+    runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "CLONER_CANISTER_WASM_PATH": "//rs/tests/networking/canisters:cloner_canister",
     },
     deps = [

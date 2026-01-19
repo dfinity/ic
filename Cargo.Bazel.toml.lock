@@ -1418,9 +1418,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoin-dogecoin"
-version = "0.32.5-doge.1"
+version = "0.32.7-doge.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1142f01cb554e9d8be5d79f782f2a371735436ebd9445c54333c27eaf97081bc"
+checksum = "abf573e7be7ffca0b5c7632aafc2eb6759db362e2a0fe2375f18c664ba1346c8"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
