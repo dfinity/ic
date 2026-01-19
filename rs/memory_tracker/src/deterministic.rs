@@ -45,7 +45,7 @@
 //! across different replicas.
 
 use std::cell::RefCell;
-use std::ops::{BitXor, Range};
+use std::ops::Range;
 use std::sync::atomic::Ordering;
 
 use bit_vec::BitVec;
@@ -62,12 +62,14 @@ use crate::{
     range_size_in_bytes,
 };
 
-#[cfg(feature = "sigsegv_handler_checksum")]
-use crate::checksum;
-
 use crate::conversions::{
     FromNumBytes, FromNumOsPages, FromNumWasmPages, FromPageIndex, FromWasmPageIndex, WasmPageIndex,
 };
+
+#[cfg(feature = "sigsegv_handler_checksum")]
+use crate::checksum;
+#[cfg(feature = "sigsegv_handler_checksum")]
+use std::ops::BitXor;
 
 /// Metrics may vary due to non-deterministic signal delivery.
 #[derive(Default)]
@@ -92,10 +94,12 @@ struct NonDeterministicMetrics {
 
 /// A digest of Wasm page indexes, which can be used to check for
 /// deterministic memory access across different replicas.
+#[cfg(feature = "sigsegv_handler_checksum")]
 pub struct WasmPageIndexDigest {
     pub digest: u64,
 }
 
+#[cfg(feature = "sigsegv_handler_checksum")]
 impl WasmPageIndexDigest {
     /// Creates a new `WasmPageIndexDigest` for tracking memory accesses.
     pub fn new(seed: u64) -> Self {
@@ -103,7 +107,6 @@ impl WasmPageIndexDigest {
     }
 
     /// Returns an accumulated digest.
-    #[cfg(feature = "sigsegv_handler_checksum")]
     pub fn get(&self) -> u64 {
         self.digest
     }
@@ -135,6 +138,7 @@ pub struct DeterministicState {
     accessed_wasm_pages_count: NumWasmPages,
     /// A digest of accessed Wasm pages, which can be used to check for
     /// deterministic memory access across different replicas.
+    #[cfg(feature = "sigsegv_handler_checksum")]
     accessed_wasm_pages_digest: WasmPageIndexDigest,
 
     /// Bitmap of dirty Wasm pages (used only when tracking dirty pages).
@@ -150,6 +154,7 @@ pub struct DeterministicState {
     dirty_wasm_pages_count: NumWasmPages,
     /// A digest of dirty Wasm pages, which can be used to check for
     /// deterministic memory writes across different replicas.
+    #[cfg(feature = "sigsegv_handler_checksum")]
     dirty_wasm_pages_digest: WasmPageIndexDigest,
 
     /// Non-deterministic metrics.
@@ -198,10 +203,12 @@ impl DeterministicState {
             accessed_wasm_pages_bitmap: BitVec::from_elem(max_wasm_pages.get(), false),
             accessed_wasm_pages_list: Vec::with_capacity(max_accessed_wasm_pages.get()),
             accessed_wasm_pages_count: NumWasmPages::new(0),
+            #[cfg(feature = "sigsegv_handler_checksum")]
             accessed_wasm_pages_digest: WasmPageIndexDigest::new(0),
             dirty_wasm_pages_bitmap: BitVec::from_elem(max_wasm_pages.get(), false),
             dirty_wasm_pages_list: Vec::with_capacity(max_dirty_wasm_pages.get()),
             dirty_wasm_pages_count: NumWasmPages::new(0),
+            #[cfg(feature = "sigsegv_handler_checksum")]
             dirty_wasm_pages_digest: WasmPageIndexDigest::new(0),
             non_deterministic_metrics: NonDeterministicMetrics::default(),
         }
@@ -212,6 +219,7 @@ impl DeterministicState {
         self.accessed_wasm_pages_count = self.accessed_wasm_pages_count.increment();
         self.accessed_wasm_pages_bitmap
             .set(wasm_page_idx.get() as usize, true);
+        #[cfg(feature = "sigsegv_handler_checksum")]
         self.accessed_wasm_pages_digest.hash(wasm_page_idx);
 
         // Avoid growing the list beyond the limits set in capacity.
@@ -232,6 +240,7 @@ impl DeterministicState {
         self.dirty_wasm_pages_count = self.dirty_wasm_pages_count.increment();
         self.dirty_wasm_pages_bitmap
             .set(wasm_page_idx.get() as usize, true);
+        #[cfg(feature = "sigsegv_handler_checksum")]
         self.dirty_wasm_pages_digest.hash(wasm_page_idx);
 
         // Avoid growing the list beyond the limits set in capacity.
@@ -434,7 +443,7 @@ impl DeterministicMemoryTracker {
     /// Returns a deterministic number of accessed OS pages.
     pub fn num_accessed_os_pages(&self) -> NumOsPages {
         // SAFETY: The caller must ensure that the tracker has a deterministic state.
-        let state = &mut *self.state.borrow_mut();
+        let state = &*self.state.borrow();
         NumOsPages::from_num_wasm_pages(state.accessed_wasm_pages_count)
     }
 }
@@ -526,7 +535,9 @@ impl MemoryTracker for DeterministicMemoryTracker {
     }
 
     fn take_accessed_pages(&self) -> Vec<PageIndex> {
-        self.accessed_pages.take()
+        let mut pages = self.accessed_pages.take();
+        pages.sort_unstable();
+        pages
     }
 
     fn take_dirty_pages(&self) -> Vec<PageIndex> {
