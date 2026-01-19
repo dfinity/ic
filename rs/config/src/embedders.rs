@@ -138,8 +138,7 @@ impl FeatureFlags {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
-            // TODO: "XXX" Disable on merge.
-            deterministic_memory_tracker: FlagStatus::Enabled,
+            deterministic_memory_tracker: FlagStatus::Disabled,
         }
     }
 }
