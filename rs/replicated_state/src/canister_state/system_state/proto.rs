@@ -1,5 +1,4 @@
 use super::*;
-use crate::page_map::int_map::MutableIntMap;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
@@ -181,22 +180,14 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-// TODO(DSM-95): Drop the `callbacks` parameter in the next replica release.
+// TODO(DSM-95): Drop the `ccm` parameter in the next replica release.
 // It is only needed for backward compatible decoding of the legacy
 // `ExecutionTask::Response` variant, which has no callback.
-impl
-    TryFrom<(
-        pb::ExecutionTask,
-        &mut MutableIntMap<CallbackId, Arc<Callback>>,
-    )> for ExecutionTask
-{
+impl TryFrom<(pb::ExecutionTask, &mut CallContextManager)> for ExecutionTask {
     type Error = ProxyDecodeError;
 
     fn try_from(
-        (value, callbacks): (
-            pb::ExecutionTask,
-            &mut MutableIntMap<CallbackId, Arc<Callback>>,
-        ),
+        (value, ccm): (pb::ExecutionTask, &mut CallContextManager),
     ) -> Result<Self, Self::Error> {
         let task = value
             .task
@@ -215,8 +206,8 @@ impl
                     ),
                     PbInput::Response(v) => {
                         let response = Response::try_from(v)?;
-                        let callback = callbacks
-                            .remove(&response.originator_reply_callback)
+                        let callback = ccm
+                            .unregister_callback(response.originator_reply_callback)
                             .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
                         CanisterMessageOrTask::Message(CanisterMessage::Response {
                             response: Arc::new(response),

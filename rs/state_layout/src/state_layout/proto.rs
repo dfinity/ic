@@ -6,7 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_replicated_state::page_map::int_map::MutableIntMap;
+use ic_replicated_state::CallContextManager;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -136,8 +136,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             | CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => call_context_manager.callbacks_mut(),
-            CanisterStatus::Stopped => &mut MutableIntMap::new(),
+            } => call_context_manager,
+            CanisterStatus::Stopped => &mut CallContextManager::default(),
         };
         let task_queue = TaskQueue::try_from((tasks, callbacks))?;
 
