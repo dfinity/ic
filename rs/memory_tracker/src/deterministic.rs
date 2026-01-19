@@ -7,6 +7,18 @@
 //! (`SIGSEGV` or `SIGBUS`), but in the future, it may be delivered
 //! through `userfaultfd`.
 //!
+//! ## Determinism
+//!
+//! The set of pages that get mapped and marked as dirty is independent of the
+//! order in which signals are received. This is because each 64KiB region gets
+//! mapped (or marked dirty) if and only if some read (or write) signal occurs
+//! in that region.
+//!
+//! This is in contrast to the `prefetching` tracker which makes prefetching
+//! decisions based on it's state when a signal is received and therefore will
+//! prefetch different pages if the same signals are received in different
+//! orders.
+//!
 //! ## Assumptions
 //!
 //! 1. The majority of memory accesses are reads.
