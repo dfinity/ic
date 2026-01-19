@@ -98,13 +98,36 @@ def top(args):
     """
     period = "month" if args.month else "week" if args.week else ""
 
+    operator, value = (
+        (">", args.gt)
+        if args.gt is not None
+        else (">=", args.ge)
+        if args.ge is not None
+        else ("<", args.lt)
+        if args.lt is not None
+        else ("<=", args.le)
+        if args.le is not None
+        else ("=", args.eq)
+        if args.eq is not None
+        else (None, None)
+    )
+
+    order_by = sql.Identifier(args.order_by)
+
     query = sql.SQL((THIS_SCRIPT_DIR / "top.sql").read_text()).format(
         hide=sql.Literal(args.hide if args.hide else ""),
         period=sql.SQL(period),
         only_prs=sql.Literal(args.prs),
         branch=sql.Literal(args.branch if args.branch else ""),
-        order_by=sql.Identifier(args.order_by),
+        order_by=order_by,
         N=sql.Literal(args.N),
+        condition=sql.Literal(True)
+        if operator is None
+        else sql.SQL("{order_by} {operator} {value}").format(
+            order_by=order_by,
+            operator=sql.SQL(operator),
+            value=sql.Literal(value),
+        ),
     )
 
     log_psql_query(
@@ -228,7 +251,7 @@ def main():
 
     filter_parser = argparse.ArgumentParser(add_help=False)
     period_group = filter_parser.add_mutually_exclusive_group()
-    period_group.add_argument("--week", action="store_true", help="Limit to last week")
+    period_group.add_argument("--week", action="store_true", default=True, help="Limit to last week")
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
@@ -241,10 +264,12 @@ def main():
     top_parser = subparsers.add_parser(
         "top",
         parents=[common_parser, filter_parser],
-        help="Get the top N non-successful / flaky / failed / timed-out tests in the last period",
+        help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    top_parser.add_argument("N", type=int, nargs="?", default=100, help="Number of tests to show")
+    top_parser.add_argument(
+        "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
+    )
 
     top_parser.add_argument(
         "order_by",
@@ -252,18 +277,24 @@ def main():
         choices=[
             "total",
             "non_success",
-            "non_success_rate",
+            "non_success%",
             "flaky",
-            "flaky_rate",
+            "flaky%",
             "timeout",
-            "timeout_rate",
+            "timeout%",
             "fail",
-            "fail_rate",
-            "p90_duration",
+            "fail%",
+            "duration_p90",
         ],
-        default="flaky_rate",
-        help="Column to order by",
+        help="COLUMN to order by and have the CONDITION (see next option) apply to",
     )
+
+    condition_group = top_parser.add_mutually_exclusive_group()
+    condition_group.add_argument("--gt", metavar="F", type=float, help="Only show tests where COLUMN > F")
+    condition_group.add_argument("--ge", metavar="F", type=float, help="Only show tests where COLUMN >= F")
+    condition_group.add_argument("--lt", metavar="F", type=float, help="Only show tests where COLUMN < F")
+    condition_group.add_argument("--le", metavar="F", type=float, help="Only show tests where COLUMN <= F")
+    condition_group.add_argument("--eq", metavar="F", type=float, help="Only show tests where COLUMN = F")
 
     top_parser.add_argument("--owner", type=str, help="Filter tests by owner (a regex for the GitHub username or team)")
 
