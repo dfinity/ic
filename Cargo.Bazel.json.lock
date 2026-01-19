@@ -1,5 +1,5 @@
 {
-  "checksum": "f13e1458face2df2ff47416ff4fbf5541a26beaaf7466d8b6b5d9561e4346eea",
+  "checksum": "e15ecd721e29b9162c7af00330b317c2a01498a28115ae87dfe736134fc71d69",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8132,14 +8132,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin-dogecoin 0.32.5-doge.1": {
+    "bitcoin-dogecoin 0.32.7-doge.0": {
       "name": "bitcoin-dogecoin",
-      "version": "0.32.5-doge.1",
+      "version": "0.32.7-doge.0",
       "package_url": "https://github.com/dfinity/rust-dogecoin",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/bitcoin-dogecoin/0.32.5-doge.1/download",
-          "sha256": "1142f01cb554e9d8be5d79f782f2a371735436ebd9445c54333c27eaf97081bc"
+          "url": "https://static.crates.io/crates/bitcoin-dogecoin/0.32.7-doge.0/download",
+          "sha256": "abf573e7be7ffca0b5c7632aafc2eb6759db362e2a0fe2375f18c664ba1346c8"
         }
       },
       "targets": [
@@ -8196,7 +8196,7 @@
               "target": "bech32"
             },
             {
-              "id": "bitcoin-dogecoin 0.32.5-doge.1",
+              "id": "bitcoin-dogecoin 0.32.7-doge.0",
               "target": "build_script_build"
             },
             {
@@ -8270,7 +8270,7 @@
             ]
           }
         },
-        "version": "0.32.5-doge.1"
+        "version": "0.32.7-doge.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -21288,7 +21288,7 @@
               "alias": "bitcoin_0_28"
             },
             {
-              "id": "bitcoin-dogecoin 0.32.5-doge.1",
+              "id": "bitcoin-dogecoin 0.32.7-doge.0",
               "target": "bitcoin",
               "alias": "bitcoin_dogecoin"
             },
@@ -98387,7 +98387,7 @@
     "bip32 0.5.1",
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
-    "bitcoin-dogecoin 0.32.5-doge.1",
+    "bitcoin-dogecoin 0.32.7-doge.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",

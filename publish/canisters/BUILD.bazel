@@ -52,9 +52,6 @@ CANISTERS = {
     # Used in snsdemo repo for NNS dapp test environment
     "bitcoin-mock-canister.wasm.gz": "//rs/bitcoin/mock:bitcoin_canister_mock",
 
-    # Boundary Nodes
-    "certificate-orchestrator.wasm.gz": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
-
     # Node Rewards
     "node-rewards-canister.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister",
     "node-rewards-canister-test.wasm.gz": "//rs/node_rewards/canister:node-rewards-canister-test",

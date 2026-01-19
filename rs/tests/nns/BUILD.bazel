@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "IC_GATEWAY_DATA", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -9,11 +9,10 @@ exports_files([
 
 system_test_nns(
     name = "nns_dapp_test",
-    data = IC_GATEWAY_DATA,
     tags = [
         "long_test",  # the P90 duration was over 6 minutes for the week starting on 2025-08-25.
     ],
-    runtime_deps = {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",

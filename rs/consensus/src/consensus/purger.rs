@@ -336,7 +336,8 @@ impl Purger {
     /// the given height can be removed.
     ///
     /// Note from the [`StateManager::remove_states_below`] docs:
-    ///  * The initial state (height = 0) cannot be removed.
+    ///  * The initial state (height = 0) is not removed.
+    ///  * The latest state is not removed.
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
