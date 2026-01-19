@@ -224,7 +224,9 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
 
         // Record response metrics
         let blocks_size: usize = response.blocks.iter().map(|b| b.len()).sum();
-        self.metrics.response_blocks_size.observe(blocks_size as f64);
+        self.metrics
+            .response_blocks_size
+            .observe(blocks_size as f64);
         self.metrics
             .response_build_duration
             .observe(start_time.elapsed().as_secs_f64());

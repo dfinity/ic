@@ -152,7 +152,9 @@ impl BlockchainStateMetrics {
                 "block_received_size_bytes",
                 "Size of blocks received from Bitcoin network in bytes.",
                 // 1KB, 10KB, 100KB, 500KB, 1MB, 2MB, 4MB
-                vec![1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0, 4194304.0],
+                vec![
+                    1024.0, 10240.0, 102400.0, 512000.0, 1048576.0, 2097152.0, 4194304.0,
+                ],
             ),
         }
     }
