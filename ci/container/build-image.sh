@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 
-set -eEuo pipefail
-
-BUILD_TARGET="ci"
-IMAGE_NAME="ic-build"
+set -eEo pipefail
 
 usage() {
     echo "Build ic-build docker image."
@@ -34,6 +31,7 @@ while test $# -gt 0; do
             exit 1
             ;;
     esac
+    shift
 done
 
 if [ -z "$BUILD_TARGET" ]; then
