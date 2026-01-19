@@ -161,7 +161,7 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    print(tabulate(df, headers="keys", tablefmt="github"))
+    print(tabulate(df, headers="keys", tablefmt=args.tablefmt))
 
 
 def last(args):
@@ -234,7 +234,7 @@ def last(args):
 
     df = df.drop(columns=["buildbuddy_url"])
     columns = list(df.columns)
-    print(tabulate(df[columns], headers="keys", tablefmt="github"))
+    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt))
 
 
 def main():
@@ -245,12 +245,20 @@ def main():
     common_parser.add_argument("--verbose", action="store_true", help="Log queries")
     common_parser.add_argument(
         "--conninfo",
+        metavar="STR",
         type=str,
         default="postgresql://githubstats_read@githubstats.idx.dfinity.network/github",
         help="PostgreSQL connection string",
     )
     common_parser.add_argument(
-        "--timeout", type=int, default=60, help="PostgreSQL connect and query timeout in seconds"
+        "--timeout", metavar="T", type=int, default=60, help="PostgreSQL connect and query timeout in seconds"
+    )
+    common_parser.add_argument(
+        "--tablefmt",
+        metavar="FMT",
+        type=str,
+        default="mixed_outline",
+        help="Table format. See: https://pypi.org/project/tabulate/",
     )
 
     filter_parser = argparse.ArgumentParser(add_help=False)
@@ -259,7 +267,7 @@ def main():
     period_group.add_argument("--month", action="store_true", help="Limit to last month")
 
     filter_parser.add_argument("--prs", action="store_true", help="Only show test runs on Pull Requests")
-    filter_parser.add_argument("--branch", type=str, help="Filter by branch SQL LIKE pattern")
+    filter_parser.add_argument("--branch", metavar="B", type=str, help="Filter by branch SQL LIKE pattern")
 
     subparsers = parser.add_subparsers(required=True)
 
@@ -300,9 +308,11 @@ def main():
     condition_group.add_argument("--le", metavar="F", type=float, help="Only show tests where COLUMN <= F")
     condition_group.add_argument("--eq", metavar="F", type=float, help="Only show tests where COLUMN = F")
 
-    top_parser.add_argument("--owner", type=str, help="Filter tests by owner (a regex for the GitHub username or team)")
+    top_parser.add_argument(
+        "--owner", metavar="TEAM", type=str, help="Filter tests by owner (a regex for the GitHub username or team)"
+    )
 
-    top_parser.add_argument("--hide", type=str, help="Hide tests matching this SQL LIKE pattern")
+    top_parser.add_argument("--hide", metavar="TEST", type=str, help="Hide tests matching this SQL LIKE pattern")
 
     top_parser.set_defaults(func=top)
 
