@@ -323,12 +323,6 @@ impl LedgerData for Ledger {
         self.blocks_notified.remove(height);
     }
 
-    fn fee_collector_mut(
-        &mut self,
-    ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
-        None
-    }
-
     fn increment_archiving_failure_metric(&mut self) {
         ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
     }
