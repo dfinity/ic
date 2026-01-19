@@ -40,28 +40,6 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "certificate_orchestrator_test",
-    runtime_deps = {
-        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator",
-    },
-    deps = [
-        # Keep sorted.
-        "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-        "//rs/registry/subnet_type",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ic-agent",
-        "@crate_index//:k256",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
-)
-
-system_test_nns(
     name = "salt_sharing_canister_test",
     proc_macro_deps = [],
     runtime_deps = {
