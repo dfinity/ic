@@ -722,6 +722,6 @@ service : (MinterArg) -> {
     // This call is restricted to the orchestrator ID.
     add_ckerc20_token : (AddCkErc20Token) -> ();
 
-    // Returns information related to minter transactions.
+    // Decode ledger memos produced by the minter when minting (deposits) or burning (withdrawals).
     decode_ledger_memo : (DecodeLedgerMemoArgs) -> (DecodeLedgerMemoResult) query;
 }
