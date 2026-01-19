@@ -20,7 +20,7 @@ Coverage::
 
 end::catalog[] */
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
@@ -74,11 +74,11 @@ fn verify_crypto_vault_is_configured_to_start_after_ic_replica(
         "Verifying that {} is listed in the After property of {}", dependency, service
     );
 
-    let cmd = format!("systemctl show ic-replica.service -p After");
+    let cmd = "systemctl show ic-replica.service -p After";
     debug!(logger, "Executing via SSH: '{}'", cmd);
 
     let output = node
-        .block_on_bash_script(&cmd)
+        .block_on_bash_script(cmd)
         .expect("run systemctl show command");
     debug!(logger, "Output: '{}'", output);
 
@@ -88,12 +88,10 @@ fn verify_crypto_vault_is_configured_to_start_after_ic_replica(
         None => panic!("Unexpected output format: {}", output),
     };
 
-    let after_services: Vec<&str> = after_value.trim().split_whitespace().collect();
+    let after_services: Vec<&str> = after_value.split_whitespace().collect();
     debug!(logger, "After services: {:?}", after_services);
 
-    let found = after_services.iter().any(|&s| s == dependency);
-
-    if !found {
+    if !after_services.contains(&dependency) {
         panic!(
             "{} is not listed in the After property of {}. After services found: {:?}",
             dependency, service, after_services
