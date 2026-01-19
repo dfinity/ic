@@ -76,10 +76,12 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     }
 }
 
-impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
+impl TryFrom<(pb_canister_state_bits::CanisterStateBits, CanisterId)> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb_canister_state_bits::CanisterStateBits, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -152,7 +154,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             reserved_balance,
             reserved_balance_limit: value.reserved_balance_limit.map(|v| v.into()),
             status: try_from_option_field(
-                value.canister_status,
+                value.canister_status.map(|cs| (cs, own_canister_id)),
                 "CanisterStateBits::canister_status",
             )?,
             scheduled_as_first: value.scheduled_as_first,

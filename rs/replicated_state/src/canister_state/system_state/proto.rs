@@ -75,15 +75,17 @@ impl From<&CanisterStatus> for pb::canister_state_bits::CanisterStatus {
     }
 }
 
-impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
+impl TryFrom<(pb::canister_state_bits::CanisterStatus, CanisterId)> for CanisterStatus {
     type Error = ProxyDecodeError;
-    fn try_from(value: pb::canister_state_bits::CanisterStatus) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb::canister_state_bits::CanisterStatus, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let canister_status = match value {
             pb::canister_state_bits::CanisterStatus::Running(pb::CanisterStatusRunning {
                 call_context_manager,
             }) => Self::Running {
                 call_context_manager: try_from_option_field(
-                    call_context_manager,
+                    call_context_manager.map(|ccm| (ccm, own_canister_id)),
                     "CanisterStatus::Running::call_context_manager",
                 )?,
             },
@@ -100,7 +102,7 @@ impl TryFrom<pb::canister_state_bits::CanisterStatus> for CanisterStatus {
                 }
                 Self::Stopping {
                     call_context_manager: try_from_option_field(
-                        call_context_manager,
+                        call_context_manager.map(|ccm| (ccm, own_canister_id)),
                         "CanisterStatus::Stopping::call_context_manager",
                     )?,
                     stop_contexts: contexts,
