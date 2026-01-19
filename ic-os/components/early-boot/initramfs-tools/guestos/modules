@@ -4,3 +4,6 @@ msr
 nvme
 nvme_core
 nvme_auth
+hv_storvsc
+hv_vmbus
+scsi_transport_fc
