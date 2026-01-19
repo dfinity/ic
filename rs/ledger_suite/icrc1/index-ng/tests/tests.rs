@@ -14,7 +14,9 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
     InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_ledger::{
+    BTYPE_107_LEDGER_SET, ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::icrc3::account_to_icrc3_value;
 use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
@@ -1445,7 +1447,7 @@ fn test_fee_collector_107() {
     assert_eq!(4, icrc1_balance_of(env, index_id, feecol_107));
 
     // Set 107 fee collector to burn
-    block_id = add_fee_collector_107_block(block_id, None, Some("107ledger_set".to_string()));
+    block_id = add_fee_collector_107_block(block_id, None, Some(BTYPE_107_LEDGER_SET.to_string()));
 
     // No fees collected
     add_mint_block(block_id, None, None);
