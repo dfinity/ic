@@ -679,3 +679,40 @@ fn test_schema_version_next() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_get_blocks_by_index_range_returns_ascending_order() {
+    let temp_dir = tempdir().expect("create temp dir should succeed");
+    let db_path = temp_dir.path().join("test_blocks_order.sqlite");
+    let mut connection = Connection::open(&db_path).expect("open db should succeed");
+    schema::create_tables(&connection).expect("create tables should succeed");
+
+    let principal = vec![1, 2, 3, 4];
+    let account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+
+    let mut block0 = create_test_rosetta_block(0, 1000000000, &principal, 100);
+    block0.block.transaction.operation = IcrcOperation::Mint {
+        to: account,
+        amount: Nat::from(100u64),
+        fee: None,
+    };
+
+    let mut block1 = create_test_rosetta_block(1, 1000000001, &principal, 100);
+    block1.block.transaction.operation = IcrcOperation::Mint {
+        to: account,
+        amount: Nat::from(100u64),
+        fee: None,
+    };
+
+    store_blocks(&mut connection, vec![block0, block1]).expect("store blocks should succeed");
+
+    let retrieved = get_blocks_by_index_range(&connection, 0, 1)
+        .expect("get blocks by index range should succeed");
+
+    assert_eq!(retrieved.len(), 2);
+    assert_eq!(retrieved[0].index, 0);
+    assert_eq!(retrieved[1].index, 1);
+}

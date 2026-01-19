@@ -722,7 +722,8 @@ pub fn get_blocks_by_index_range(
     start_index: u64,
     end_index: u64,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
-    let command = "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2";
+    let command =
+        "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2 ORDER BY idx ASC";
     let mut stmt = connection.prepare_cached(command)?;
     read_blocks(&mut stmt, params![start_index, end_index])
 }
