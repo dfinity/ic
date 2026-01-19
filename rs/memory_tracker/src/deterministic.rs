@@ -103,6 +103,7 @@ impl WasmPageIndexDigest {
     }
 
     /// Returns an accumulated digest.
+    #[cfg(feature = "sigsegv_handler_checksum")]
     pub fn get(&self) -> u64 {
         self.digest
     }
@@ -156,6 +157,7 @@ pub struct DeterministicState {
 }
 
 /// Prints the digest when dropped (for debugging purposes).
+#[cfg(feature = "sigsegv_handler_checksum")]
 impl Drop for DeterministicState {
     fn drop(&mut self) {
         println!(
@@ -207,7 +209,6 @@ impl DeterministicState {
 
     /// Marks specified Wasm page as accessed.
     fn mark_wasm_page_accessed(&mut self, wasm_page_idx: WasmPageIndex) {
-        println!("mark_wasm_page_accessed: {:?}", wasm_page_idx);
         self.accessed_wasm_pages_count = self.accessed_wasm_pages_count.increment();
         self.accessed_wasm_pages_bitmap
             .set(wasm_page_idx.get() as usize, true);
@@ -217,10 +218,6 @@ impl DeterministicState {
         if self.accessed_wasm_pages_list.len() < self.accessed_wasm_pages_list.capacity() {
             self.accessed_wasm_pages_list.push(wasm_page_idx);
         }
-        println!(
-            "accessed_wasm_pages_bitmap: {:?}",
-            self.accessed_wasm_pages_bitmap
-        );
     }
 
     /// Returns true if specified Wasm page is marked as accessed.
