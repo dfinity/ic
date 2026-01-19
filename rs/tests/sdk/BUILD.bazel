@@ -33,9 +33,6 @@ rust_library(
 
 system_test_nns(
     name = "dfx_smoke_test",
-    tags = [
-        "long_test",  # since it takes longer than 5 minutes.
-    ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "DFX_PATH": "//:dfx",
     },
@@ -45,7 +42,6 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nns/nns_dapp",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
