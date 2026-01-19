@@ -46,7 +46,7 @@ use ic_state_manager::{
     testing::StateManagerTesting,
 };
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities_consensus::fake::FakeVerifier;
+use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
@@ -63,6 +63,9 @@ use ic_types::batch::{
     BatchSummary, CanisterCyclesCostSchedule, CanisterQueryStats, QueryStats, QueryStatsPayload,
     RawQueryStats, TotalQueryStats,
 };
+use ic_types::consensus::certification::{Certification, CertificationContent};
+use ic_types::crypto::Signed;
+use ic_types::signature::ThresholdSignature;
 use ic_types::state_manager::StateManagerError;
 use ic_types::{
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
@@ -8950,6 +8953,17 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
     .unwrap_or_default()
 }
 
+fn fake_certification_for_height(height: Height) -> Certification {
+    let hash = CryptoHashOfPartialState::from(CryptoHash(vec![42; 32]));
+    Certification {
+        height,
+        signed: Signed {
+            content: CertificationContent::new(hash),
+            signature: ThresholdSignature::fake(),
+        },
+    }
+}
+
 #[test]
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
@@ -8997,6 +9011,7 @@ fn commit_and_certify_optimization_semantics() {
         let only_initial_state = || {
             assert_eq!(sm.state_snapshot_heights(), vec![INITIAL_STATE_HEIGHT]);
             assert!(sm.certifications_metadata_heights().is_empty());
+            assert!(sm.certifications().is_empty());
         };
         only_initial_state();
 
@@ -9035,6 +9050,7 @@ fn commit_and_certify_optimization_semantics() {
             sm.certifications_metadata_certification(no_opt_height)
                 .is_none()
         );
+        assert!(sm.certifications().is_empty());
     });
 }
 
@@ -9056,6 +9072,35 @@ fn latest_subnet_certified_height() {
         // `remove_states_below` never updates `latest_subnet_certified_height`
         sm.remove_states_below(Height::new(200));
         assert_eq!(sm.latest_subnet_certified_height(), 100);
+    });
+}
+
+#[test]
+fn tip_height() {
+    state_manager_test(|metrics, sm| {
+        // update `latest_subnet_certified_height` to enable optimization
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // initial value
+        assert_eq!(sm.tip_height(), 0);
+
+        // optimization triggers
+        let state = sm.take_tip().1;
+        let opt_height = Height::new(1);
+        sm.commit_and_certify(state, opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+        assert_eq!(sm.tip_height(), opt_height.get());
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 1);
+        assert_eq!(sm.tip_height(), no_opt_height.get());
     });
 }
 
@@ -9090,6 +9135,24 @@ fn commit_and_certify_optimization_tip_set_panic() {
 }
 
 #[test]
+fn deliver_state_certification_for_future_heights() {
+    state_manager_test(|_metrics, sm| {
+        // consensus delivers certification for a future height
+        let opt_height = Height::new(1);
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification.clone());
+
+        // the certification is stored in `states.certifications`
+        assert_eq!(sm.certifications_metadata_heights(), vec![]);
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+        assert_eq!(sm.certifications().get(&opt_height), Some(&certification));
+    });
+}
+
+#[test]
 fn take_tip_does_not_hash_without_optimization() {
     state_manager_test(|metrics, sm| {
         // optimization has not triggered yet
@@ -9116,6 +9179,46 @@ fn take_tip_does_not_hash_without_optimization() {
         let (height, _state) = sm.take_tip();
         assert_eq!(tip_hash_count(metrics), 1);
         assert_eq!(height, no_opt_height);
+    });
+}
+
+#[test]
+fn take_tip_does_not_hash_with_optimization() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let opt_height = Height::new(1);
+        sm.deliver_state_certification(fake_certification_for_height(opt_height));
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+
+        // update `latest_subnet_certified_height` to enable optimization
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // optimization has not triggered yet
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // the initial state is always hashed in `take_tip`
+        assert_eq!(tip_hash_count(metrics), 0);
+        let (initial_height, initial_state) = sm.take_tip();
+        assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
+        assert_eq!(tip_hash_count(metrics), 1);
+        // optimization triggers
+        sm.commit_and_certify(
+            initial_state,
+            opt_height,
+            CertificationScope::Metadata,
+            None,
+        );
+        assert_eq!(no_state_clone_count(metrics), 1);
+
+        // the state at height 1 is not hashed in `take_tip` since certification was delivered
+        assert_eq!(tip_hash_count(metrics), 1);
+        let (height, _state) = sm.take_tip();
+        assert_eq!(tip_hash_count(metrics), 1);
+        assert_eq!(height, opt_height);
     });
 }
 
@@ -9150,6 +9253,64 @@ fn take_tip_hashes_with_optimization() {
         let (height, _state) = sm.take_tip();
         assert_eq!(tip_hash_count(metrics), 2);
         assert_eq!(height, opt_height);
+    });
+}
+
+#[test]
+fn remove_inmemory_states_below_prunes_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let cert_height = Height::new(10);
+        sm.deliver_state_certification(fake_certification_for_height(cert_height));
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![cert_height]
+        );
+
+        // only certifications strictly below `latest_state_height` are pruned =>
+        // optimization does not trigger in this test to make `latest_state_height` move
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, cert_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // certification at height 10 is not pruned yet since `latest_state_height` is also 10
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![cert_height]
+        );
+
+        // we commit a strictly larger height 20 without optimization
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // certification at height 10 is pruned now that `latest_state_height` advanced to 20
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![]
+        );
+    });
+}
+
+#[test]
+fn remove_inmemory_states_below_does_not_prune_certification() {
+    state_manager_test(|_metrics, sm| {
+        // consensus delivers certification for the next height
+        let opt_height = Height::new(1);
+        sm.deliver_state_certification(fake_certification_for_height(opt_height));
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
+
+        // certification at height 1 is not pruned since `latest_state_height` is 0
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(
+            sm.certifications().keys().cloned().collect::<Vec<_>>(),
+            vec![opt_height]
+        );
     });
 }
 
@@ -9273,5 +9434,76 @@ fn flush_with_optimization() {
         // delta has been flushed
         sm.flush_tip_channel();
         assert_eq!(flush_unflushed_delta_count(metrics), 1);
+    });
+}
+
+#[test]
+fn list_state_heights_to_certify() {
+    state_manager_test(|_metrics, sm| {
+        // commit a state at height 10
+        // (optimization does not trigger, but it does not matter here)
+        let state = sm.take_tip().1;
+        let no_opt_height = Height::new(10);
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+
+        // `latest_subnet_certified_height` is less than `tip_height`
+        // and thus `list_state_heights_to_certify` does not return any height
+        assert!(sm.list_state_heights_to_certify().is_empty());
+
+        // advance `latest_subnet_certified_height` to 13
+        sm.remove_inmemory_states_below(Height::new(13), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 13);
+
+        // now `list_state_heights_to_certify` returns all heights starting at `tip_height`
+        // and up until `latest_subnet_certified_height`
+        assert_eq!(
+            sm.list_state_heights_to_certify(),
+            (10..13).map(Height::new).collect::<Vec<_>>()
+        );
+
+        // advance `latest_subnet_certified_height` further to 42
+        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        assert_eq!(sm.latest_subnet_certified_height(), 42);
+
+        // now `list_state_heights_to_certify` returns 20 heights starting at `tip_height`
+        let mut state_heights_to_certify: Vec<_> = (10..30).map(Height::new).collect();
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+
+        // deliver a certification for a future height after the tip height
+        let certification_height = Height::new(12);
+        let certification = fake_certification_for_height(certification_height);
+        sm.deliver_state_certification(certification.clone());
+
+        // now `list_state_heights_to_certify` omits the height with a certification delivered
+        state_heights_to_certify.retain(|h| *h != certification_height);
+        assert_eq!(sm.list_state_heights_to_certify(), state_heights_to_certify);
+    });
+}
+
+#[test]
+fn commit_and_certify_reuses_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for the next height
+        let no_opt_height = Height::new(10);
+        let certification = fake_certification_for_height(no_opt_height);
+        sm.deliver_state_certification(certification.clone());
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
+
+        // `commit_and_certify` reused certification from `states.certifications`
+        assert!(
+            sm.certifications_metadata_certification(no_opt_height)
+                .is_some()
+        );
+
+        // `list_state_hashes_to_certify` does not include `no_opt_height` because certification was reused
+        assert!(
+            !sm.list_state_hashes_to_certify()
+                .into_iter()
+                .any(|(height, _)| height == no_opt_height)
+        );
     });
 }

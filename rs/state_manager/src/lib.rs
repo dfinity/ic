@@ -83,7 +83,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime};
 use std::{
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     sync::Mutex,
 };
 use tempfile::tempfile;
@@ -765,6 +765,7 @@ impl StateSyncMetrics {
 type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
+type Certifications = BTreeMap<Height, Certification>;
 
 /// This struct bundles the root hash, manifest and meta-manifest.
 #[derive(Clone, Debug)]
@@ -886,6 +887,8 @@ impl StateSyncRefs {
 struct SharedState {
     /// Certifications metadata kept for all states
     certifications_metadata: CertificationsMetadata,
+    /// Certifications delivered optimistically to optimize state hashing.
+    certifications: Certifications,
     /// Metadata for each checkpoint
     states_metadata: StatesMetadata,
     /// A list of states present in the memory.  This list is guaranteed to not be
@@ -936,6 +939,7 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     latest_subnet_certified_height: AtomicU64,
+    tip_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1499,6 +1503,7 @@ impl StateManagerImpl {
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let latest_subnet_certified_height = AtomicU64::new(0);
+        let tip_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1555,6 +1560,7 @@ impl StateManagerImpl {
 
         let states = Arc::new(parking_lot::RwLock::new(SharedState {
             certifications_metadata,
+            certifications: BTreeMap::new(),
             states_metadata,
             snapshots,
             last_advertised: Self::INITIAL_STATE_HEIGHT,
@@ -1614,6 +1620,7 @@ impl StateManagerImpl {
             latest_state_height,
             latest_certified_height,
             latest_subnet_certified_height,
+            tip_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -2313,6 +2320,10 @@ impl StateManagerImpl {
             .latest_certified_height
             .set(latest_certified_height.get() as i64);
 
+        let mut certifications = states.certifications.split_off(&last_height_to_keep);
+        std::mem::swap(&mut certifications, &mut states.certifications);
+        self.deallocator_thread.send(Box::new(certifications));
+
         let mut metadata_to_keep = states.states_metadata.split_off(&last_height_to_keep);
 
         for h in checkpoint_heights_to_keep.iter() {
@@ -2707,6 +2718,8 @@ impl StateManager for StateManagerImpl {
                     states.certifications_metadata.get(&tip_height)
                 {
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
+                } else if let Some(tip_certification) = states.certifications.get(&tip_height) {
+                    tip_certification.signed.content.hash.clone()
                 } else {
                     std::mem::drop(states);
 
@@ -2977,6 +2990,23 @@ impl StateManager for StateManagerImpl {
             .collect()
     }
 
+    fn list_state_heights_to_certify(&self) -> Vec<Height> {
+        let states = self.states.read();
+        let heights_with_certification: HashSet<_> =
+            states.certifications.keys().cloned().collect();
+        drop(states);
+
+        let tip_height = self.tip_height.load(Ordering::Relaxed);
+        let latest_subnet_certified_height =
+            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        let state_heights = tip_height..min(tip_height + 20, latest_subnet_certified_height);
+        state_heights
+            .into_iter()
+            .map(Height::new)
+            .filter(|h| !heights_with_certification.contains(h))
+            .collect()
+    }
+
     fn deliver_state_certification(&self, certification: Certification) {
         let _timer = self
             .metrics
@@ -3028,6 +3058,9 @@ impl StateManager for StateManagerImpl {
                     self.deallocator_thread.send(Box::new(tree));
                 }
             }
+        } else {
+            let height = certification.height;
+            states.certifications.insert(height, certification);
         }
     }
 
@@ -3271,6 +3304,7 @@ impl StateManager for StateManagerImpl {
             self.metrics.no_state_clone_count.inc();
 
             states.tip = Some((height, state));
+            self.tip_height.store(height.get(), Ordering::Relaxed);
             return;
         }
 
@@ -3299,7 +3333,7 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
+        let mut certification_metadata =
             Self::compute_certification_metadata(&self.metrics, &self.log, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
@@ -3345,6 +3379,10 @@ impl StateManager for StateManagerImpl {
                     "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
+        }
+
+        if let Some(certification) = states.certifications.get(&height) {
+            certification_metadata.certification = Some(certification.clone());
         }
 
         if !states
@@ -3404,6 +3442,7 @@ impl StateManager for StateManagerImpl {
         // The next call to take_tip() will take care of updating the
         // tip if needed.
         states.tip = next_tip;
+        self.tip_height.store(height.get(), Ordering::Relaxed);
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
@@ -4077,8 +4116,14 @@ pub mod testing {
         /// Testing only: Returns certification at a given height in `states.certifications_metadata`.
         fn certifications_metadata_certification(&self, height: Height) -> Option<Certification>;
 
+        /// Testing only: Returns certifications in `states.certifications`.
+        fn certifications(&self) -> BTreeMap<Height, Certification>;
+
         /// Testing only: Returns `latest_subnet_certified_height`.
         fn latest_subnet_certified_height(&self) -> u64;
+
+        /// Testing only: Returns `tip_height`.
+        fn tip_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4159,8 +4204,17 @@ pub mod testing {
                 .clone()
         }
 
+        fn certifications(&self) -> BTreeMap<Height, Certification> {
+            let states = self.states.read();
+            states.certifications.clone()
+        }
+
         fn latest_subnet_certified_height(&self) -> u64 {
             self.latest_subnet_certified_height.load(Ordering::Relaxed)
+        }
+
+        fn tip_height(&self) -> u64 {
+            self.tip_height.load(Ordering::Relaxed)
         }
     }
 }
