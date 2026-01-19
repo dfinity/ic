@@ -298,7 +298,7 @@ def main():
             "fail%",
             "duration_p90",
         ],
-        help="COLUMN to order by and have the CONDITION (see next option) apply to",
+        help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
