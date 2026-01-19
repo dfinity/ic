@@ -3242,6 +3242,12 @@ impl StateManager for StateManagerImpl {
             }
         };
 
+        // If the node is catching up (`height.get() < latest_subnet_certified_height`)
+        // and this is not a checkpoint height (`matches!(scope, CertificationScope::Metadata)`),
+        // then we do not clone, do not hash, and do not store the state and certification metadata.
+        // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
+        // so that we always have a reasonably "recent" state snapshot and
+        // its certification metadata available.
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
