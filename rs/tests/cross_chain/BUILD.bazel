@@ -147,6 +147,7 @@ system_test_nns(
         env = {
             "ADAPTER_TO_TEST": adapter,
         },
+        enable_metrics = True,
         tags = [
             "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
         ],
