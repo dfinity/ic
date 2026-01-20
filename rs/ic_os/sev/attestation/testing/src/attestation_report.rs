@@ -1,4 +1,3 @@
-use crate::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
 use der::EncodePem;
 use der::pem::LineEnding;
 use p384::ecdsa::Signature;
@@ -204,7 +203,8 @@ fn convert_signature(signature: &Signature) -> AttestationReportSignature {
 
     AttestationReportSignature::new(r, s)
 }
-
+// TODO: Remove the commented code (not yet removed so git preserves file moves)
+/*
 #[derive(Clone)]
 pub struct MockSevGuestFirmwareBuilder {
     custom_data_override: Option<[u8; 64]>,
@@ -369,6 +369,7 @@ impl SevGuestFirmware for MockSevGuestFirmwareBuilder {
         self.build().generates_report_with_wrong_signature()
     }
 }
+*/
 
 #[cfg(test)]
 mod tests {

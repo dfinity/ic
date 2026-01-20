@@ -1,10 +1,12 @@
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, anyhow};
 
-pub mod custom_data;
-pub mod firmware;
+pub mod attestation_package;
 pub mod key_deriver;
-pub mod testing;
+
+// Re-export firmware types from the firmware crate (optimally we would just declare it as a module
+// of this crate but then there would be a cyclic dependency with the sev_guest_testing crate).
+pub use sev_guest_firmware as firmware;
 
 /// Checks if SEV is active in the Guest Virtual Machine
 #[cfg(target_os = "linux")]
