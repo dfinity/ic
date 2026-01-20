@@ -70,6 +70,7 @@ fn generate_valid_attestation_package() -> SevAttestationPackage {
         &CUSTOM_DATA,
     )
     .expect("Failed to generate attestation package")
+    .into()
 }
 
 #[test]

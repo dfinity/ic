@@ -279,6 +279,16 @@ fn test(env: TestEnv) {
                 "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
                 "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
+            TestCase::new(
+                // TODO(MR-539): Switch to bi-directional once we have mainnet binaries.
+                // TestType::Bidirectional {
+                //     published_binary: "state_layout-test".to_string(),
+                //     mainnet_version: v.clone(),
+                // },
+                TestType::SelfTestOnly,
+                "_main/rs/state_layout/state_layout_test_binary/state_layout_test_binary",
+                "state_layout::tests::mainnet_compatibility_tests::task_queue_compatibility_test",
+            ),
         ]
     });
 

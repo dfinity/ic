@@ -861,6 +861,23 @@ impl SystemState {
             .register_callback(callback))
     }
 
+    /// Inserts a callback under the given ID. Returns an error if the canister is
+    /// `Stopped`.
+    //
+    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
+    // variant and no longer need forward compatible decoding.
+    #[doc(hidden)]
+    pub fn insert_callback(
+        &mut self,
+        callback_id: CallbackId,
+        callback: Callback,
+    ) -> Result<(), StateError> {
+        call_context_manager_mut(&mut self.status)
+            .ok_or(StateError::CanisterStopped(self.canister_id))?
+            .insert_callback(callback_id, callback);
+        Ok(())
+    }
+
     /// Unregisters the callback with the given ID (when a response was received for
     /// it) and returns the callback. Returns an error if the canister is `Stopped`.
     pub fn unregister_callback(
