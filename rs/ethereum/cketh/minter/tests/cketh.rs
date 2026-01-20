@@ -1288,17 +1288,11 @@ fn decode_ledger_memo_smoke() {
     let cketh = CkEthSetup::default();
 
     // mint memo
-    let memo = MintMemo::ReimburseTransaction {
-        withdrawal_id: 444u64,
-        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-    };
-    let mut buf = vec![];
-    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let buf = hex::decode("8202811a000e2a39").expect("failed to decode hex");
     let result = cketh.decode_ledger_memo(MemoType::Mint, buf);
     let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
-        EndpointsMint::ReimburseTransaction {
-            withdrawal_id: 444u64,
-            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
+        EndpointsMint::ReimburseWithdrawal {
+            withdrawal_id: 928313u64,
         },
     ))));
     assert_eq!(
@@ -1308,15 +1302,15 @@ fn decode_ledger_memo_smoke() {
     );
 
     // burn memo
-    let memo = BurnMemo::Convert {
-        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
-    };
-    let mut buf = vec![];
-    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
+    let buf =
+        hex::decode("82018366636b555344541a0174b2e25423c68fabd29a2e4ad98544d6c9d1992685397781")
+            .expect("failed to decode hex");
     let result = cketh.decode_ledger_memo(MemoType::Burn, buf);
     let expected: DecodeLedgerMemoResult =
-        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Convert {
-            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
+        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Erc20GasFee {
+            ckerc20_token_symbol: "ckUSDT".to_string(),
+            ckerc20_withdrawal_amount: Nat::from(24425186u64),
+            to_address: "0x23c68FAbD29A2E4AD98544d6c9D1992685397781".to_string(),
         }))));
     assert_eq!(
         result, expected,
