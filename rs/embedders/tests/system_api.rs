@@ -157,6 +157,7 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
+        reject_code: 0,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -186,7 +187,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::MsgArgDataCopy => vec!["I", "U", "RQ", "NRQ", "CQ", "Ry", "CRy", "F"],
         SystemApiCallId::MsgCallerSize => vec!["*"],
         SystemApiCallId::MsgCallerCopy => vec!["*"],
-        SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt"],
+        SystemApiCallId::MsgRejectCode => vec!["Ry", "Rt", "CRy", "CRt", "C"],
         SystemApiCallId::MsgRejectMsgSize => vec!["Rt", "CRt"],
         SystemApiCallId::MsgRejectMsgCopy => vec!["Rt", "CRt"],
         SystemApiCallId::MsgReplyDataAppend => vec!["U", "RQ", "NRQ", "CQ", "Ry", "Rt", "CRy", "CRt"],

@@ -2,9 +2,9 @@ load("//ic-os/components:setupos.bzl", "component_files")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-# Components required by the reload_hostos script to reload HostOS
+# Components required by the reload_icos script to reload HostOS
 all_component_files = component_files | {
-    "//ic-os/testing:reload_hostos.sh": "/opt/ic/bin/reload_hostos.sh",
+    "//ic-os/testing:reload_icos.sh": "/opt/ic/bin/reload_icos.sh",
     "//ic-os/components:upgrade/grub.sh": "/opt/ic/bin/grub.sh",
     "//rs/ic_os/config:config_dev": "/opt/ic/bin/config",
     "//ic-os/components:upgrade/manageboot/manageboot.sh": "/opt/ic/bin/manageboot.sh",
@@ -25,21 +25,21 @@ trap 'rm -rf $$components' EXIT
 ]) + "tar -cf $@ -C '$$components' .\n"
 
 genrule(
-    name = "reload_hostos_tar",
+    name = "reload_icos_tar",
     srcs = all_component_files.keys(),
-    outs = ["reload_hostos.tar"],
+    outs = ["reload_icos.tar"],
     cmd = script,
 )
 
 # Self-extracting bash script containing all dependencies to reload a HostOS (and the GuestOS in it)
 # Usage:
-# ./reload_hostos_cmd --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
+# ./reload_icos_cmd --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
 genrule(
-    name = "reload_hostos",
-    srcs = [":reload_hostos_tar"],
-    outs = ["reload_hostos_cmd"],
+    name = "reload_icos",
+    srcs = [":reload_icos_tar"],
+    outs = ["reload_icos_cmd"],
     cmd = """
-tar_in="$(execpath :reload_hostos_tar)"
+tar_in="$(execpath :reload_icos_tar)"
 
 # Build the self-extracting script stub
 cat > $@ <<'SFX_STUB'
@@ -55,7 +55,7 @@ tail -n +"$$payload_offset" "$$0" | tar -C "$$tmpdir" -xf -
 
 # Execute the injector script from the extracted payload, forwarding CLI args
 cd "$$tmpdir"
-sudo ./reload_hostos.sh "$$@"
+sudo ./reload_icos.sh "$$@"
 
 exit
 __TAR_PAYLOAD_BELOW__

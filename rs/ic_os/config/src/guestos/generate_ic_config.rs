@@ -388,7 +388,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
                 deployment_environment: config_types::DeploymentEnvironment::Mainnet,
-                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

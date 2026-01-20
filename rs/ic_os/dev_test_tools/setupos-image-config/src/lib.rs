@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Error, bail};
 
 use config::setupos::config_ini::ConfigIniSettings;
-use config::setupos::deployment_json::CompatDeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
 
 pub fn create_setupos_config(
     config_dir: &Path,
@@ -18,7 +18,7 @@ pub fn create_setupos_config(
     node_operator_private_key: Option<&Path>,
     nns_public_key: Option<&Path>,
     admin_keys: Option<&Path>,
-    deployment_settings: CompatDeploymentSettings,
+    deployment_settings: DeploymentSettings,
 ) -> Result<(), Error> {
     // Check that config and data dirs are valid
     if !config_dir.is_dir() {
@@ -55,9 +55,6 @@ pub fn create_setupos_config(
     if let Some(path) = nns_public_key {
         let nns_public_key_override = std::fs::read_to_string(path)?;
         let mut nns_key = fs::File::create(data_dir.join("nns_public_key_override.pem"))?;
-        nns_key.write_all(nns_public_key_override.as_bytes())?;
-        // NODE-1653: Remove once rolled out to all nodes. Exists to pass "latest_release" nested tests.
-        let mut nns_key = fs::File::create(data_dir.join("nns_public_key.pem"))?;
         nns_key.write_all(nns_public_key_override.as_bytes())?;
     }
 

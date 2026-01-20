@@ -20,7 +20,8 @@ use hyper_socks2::SocksConnector;
 use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    CanisterHttpAdapterMetrics, CanisterHttpError, CanisterHttpErrorKind, HttpHeader, HttpMethod,
+    HttpsOutcallRequest, HttpsOutcallResponse, HttpsOutcallResult, https_outcall_result,
     https_outcalls_service_server::HttpsOutcallsService,
 };
 use ic_logger::{ReplicaLogger, debug, info};
@@ -242,195 +243,235 @@ impl HttpsOutcallsService for CanisterHttp {
     async fn https_outcall(
         &self,
         request: Request<HttpsOutcallRequest>,
-    ) -> Result<Response<HttpsOutcallResponse>, Status> {
+    ) -> Result<Response<HttpsOutcallResult>, Status> {
         self.metrics.requests.inc();
 
-        let req = request.into_inner();
+        // Mutable state to track metrics across the lifecycle
+        let mut total_downloaded_bytes: u64 = 0;
 
-        let uri = req.url.parse::<Uri>().map_err(|err| {
-            debug!(self.logger, "Failed to parse URL: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_URL_PARSE])
-                .inc();
-            Status::new(
-                tonic::Code::InvalidArgument,
-                format!("Failed to parse URL: {err}"),
-            )
-        })?;
+        let execution_result: Result<HttpsOutcallResponse, CanisterHttpError> = async {
+            let req = request.into_inner();
 
-        #[cfg(not(feature = "http"))]
-        if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
-            use crate::metrics::LABEL_HTTP_SCHEME;
-            debug!(
-                self.logger,
-                "Got request with no or http scheme specified. {}", uri
-            );
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_HTTP_SCHEME])
-                .inc();
-            return Err(Status::new(
-                tonic::Code::InvalidArgument,
-                "Url need to specify https scheme",
-            ));
-        }
-
-        let method = HttpMethod::try_from(req.method)
-            .map_err(|_| {
-                Status::new(
-                    tonic::Code::InvalidArgument,
-                    "Failed to get HTTP method".to_string(),
-                )
-            })
-            .and_then(|method| match method {
-                HttpMethod::Get => Ok(Method::GET),
-                HttpMethod::Post => Ok(Method::POST),
-                HttpMethod::Head => Ok(Method::HEAD),
-                _ => {
-                    self.metrics
-                        .request_errors
-                        .with_label_values(&[LABEL_HTTP_METHOD])
-                        .inc();
-                    Err(Status::new(
-                        tonic::Code::InvalidArgument,
-                        format!("Unsupported HTTP method {method:?}"),
-                    ))
+            let uri = req.url.parse::<Uri>().map_err(|err| {
+                debug!(self.logger, "Failed to parse URL: {}", err);
+                self.metrics
+                    .request_errors
+                    .with_label_values(&[LABEL_URL_PARSE])
+                    .inc();
+                CanisterHttpError {
+                    kind: CanisterHttpErrorKind::InvalidInput as i32,
+                    message: format!("Failed to parse URL: {err}"),
                 }
             })?;
 
-        // Build Http Request.
-        let mut headers = validate_headers(req.headers).inspect_err(|_| {
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_REQUEST_HEADERS])
-                .inc();
-        })?;
-
-        // Add user-agent header if not present.
-        add_fallback_user_agent_header(&mut headers);
-
-        let mut request_size = req.body.len();
-        request_size += headers
-            .iter()
-            .map(|(name, value)| name.as_str().len() + value.len())
-            .sum::<usize>();
-
-        // Http request does not implement clone. So we have to manually construct a clone.
-        let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-        *http_req.headers_mut() = headers;
-        *http_req.method_mut() = method;
-        *http_req.uri_mut() = uri.clone();
-        let http_req_clone = http_req.clone();
-
-        let http_resp = self
-            .client
-            .request(http_req)
-            .or_else(|direct_err| async move {
-                // If we fail, we try with the socks proxy. For destinations that are ipv4 only this should
-                // fail fast because our interface does not have an ipv4 assigned.
-                self.metrics.requests_socks.inc();
-                info!(
+            #[cfg(not(feature = "http"))]
+            if uri.scheme() != Some(&http::uri::Scheme::HTTPS) {
+                use crate::metrics::LABEL_HTTP_SCHEME;
+                debug!(
                     self.logger,
-                    "Direct connection failed, trying via socks proxies with addsrs: {:?}",
-                    req.socks_proxy_addrs
+                    "Got request with no or http scheme specified. {}", uri
                 );
-                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
-                    .await
-                    .map_err(|socks_err| {
-                        self.metrics
-                            .request_errors
-                            .with_label_values(&[LABEL_CONNECT])
-                            .inc();
-                        Status::new(
-                            tonic::Code::Unavailable,
-                            format!(
-                                "Connecting to {:.50} failed: direct connect {direct_err:?} 
-                                and connect through socks {socks_err:?}",
-                                uri.host().unwrap_or(""),
-                            ),
-                        )
-                    })
-            })
-            .await?;
-        self.metrics
-            .network_traffic
-            .with_label_values(&[LABEL_UPLOAD])
-            .inc_by(request_size as u64);
-
-        let status = http_resp.status().as_u16() as u32;
-
-        // Parse received headers.
-        let mut headers_size_bytes = 0;
-        let headers = http_resp
-            .headers()
-            .iter()
-            .map(|(k, v)| {
-                let name = k.to_string();
-                // Use the header value in bytes for the size.
-                // It is possible that bytes.len() > str.len().
-                headers_size_bytes += name.len() + v.len();
-                let value = v.to_str()?.to_string();
-                Ok(HttpHeader { name, value })
-            })
-            .collect::<Result<Vec<_>, ToStrError>>()
-            .map_err(|err| {
-                debug!(self.logger, "Failed to parse headers: {}", err);
                 self.metrics
                     .request_errors
-                    .with_label_values(&[LABEL_RESPONSE_HEADERS])
+                    .with_label_values(&[LABEL_HTTP_SCHEME])
                     .inc();
-                Status::new(
-                    tonic::Code::Unavailable,
-                    format!("Failed to parse headers: {err}"),
-                )
+                return Err(CanisterHttpError {
+                    kind: CanisterHttpErrorKind::InvalidInput as i32,
+                    message: "Url need to specify https scheme".to_string(),
+                });
+            }
+
+            let method = HttpMethod::try_from(req.method)
+                .map_err(|_| CanisterHttpError {
+                    kind: CanisterHttpErrorKind::InvalidInput as i32,
+                    message: "Failed to get HTTP method".to_string(),
+                })
+                .and_then(|method| match method {
+                    HttpMethod::Get => Ok(Method::GET),
+                    HttpMethod::Post => Ok(Method::POST),
+                    HttpMethod::Head => Ok(Method::HEAD),
+                    _ => {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_HTTP_METHOD])
+                            .inc();
+                        Err(CanisterHttpError {
+                            kind: CanisterHttpErrorKind::InvalidInput as i32,
+                            message: format!("Unsupported HTTP method {method:?}"),
+                        })
+                    }
+                })?;
+
+            // Build Http Request.
+            let mut headers = validate_headers(req.headers).map_err(|e| {
+                self.metrics
+                    .request_errors
+                    .with_label_values(&[LABEL_REQUEST_HEADERS])
+                    .inc();
+                CanisterHttpError {
+                    kind: CanisterHttpErrorKind::InvalidInput as i32,
+                    message: format!("Invalid headers: {e}"),
+                }
             })?;
 
-        // We don't need a timeout here because there is a global timeout on the entire request.
-        let body_bytes = http_body_util::Limited::new(
-            http_resp.into_body(),
-            req.max_response_size_bytes
+            // Add user-agent header if not present.
+            add_fallback_user_agent_header(&mut headers);
+
+            let mut request_size = req.body.len();
+            request_size += headers
+                .iter()
+                .map(|(name, value)| name.as_str().len() + value.len())
+                .sum::<usize>();
+
+            // Http request does not implement clone. So we have to manually construct a clone.
+            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+            *http_req.headers_mut() = headers;
+            *http_req.method_mut() = method;
+            *http_req.uri_mut() = uri.clone();
+            let http_req_clone = http_req.clone();
+
+            let http_resp = self
+                .client
+                .request(http_req)
+                .or_else(|direct_err| async move {
+                    // If we fail, we try with the socks proxy. For destinations that are ipv4 only this should
+                    // fail fast because our interface does not have an ipv4 assigned.
+                    self.metrics.requests_socks.inc();
+                    info!(
+                        self.logger,
+                        "Direct connection failed, trying via socks proxies with addsrs: {:?}",
+                        req.socks_proxy_addrs
+                    );
+                    self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                        .await
+                        .map_err(|socks_err| {
+                            self.metrics
+                                .request_errors
+                                .with_label_values(&[LABEL_CONNECT])
+                                .inc();
+                            CanisterHttpError {
+                                kind: CanisterHttpErrorKind::Connection as i32,
+                                message: format!(
+                                    "Connecting to {:.50} failed: direct connect {direct_err:?} 
+                                    and connect through socks {socks_err:?}",
+                                    uri.host().unwrap_or(""),
+                                ),
+                            }
+                        })
+                })
+                .await?;
+
+            self.metrics
+                .network_traffic
+                .with_label_values(&[LABEL_UPLOAD])
+                .inc_by(request_size as u64);
+
+            let status = http_resp.status().as_u16() as u32;
+
+            let mut headers_size_bytes = 0;
+            for (k, v) in http_resp.headers() {
+                headers_size_bytes += k.as_str().len() + v.len();
+            }
+
+            total_downloaded_bytes += headers_size_bytes as u64;
+
+            let headers = http_resp
+                .headers()
+                .iter()
+                .map(|(k, v)| {
+                    let name = k.to_string();
+                    let value = v.to_str()?.to_string();
+                    Ok(HttpHeader { name, value })
+                })
+                .collect::<Result<Vec<_>, ToStrError>>()
+                .map_err(|err| {
+                    debug!(self.logger, "Failed to parse headers: {}", err);
+                    self.metrics
+                        .request_errors
+                        .with_label_values(&[LABEL_RESPONSE_HEADERS])
+                        .inc();
+                    CanisterHttpError {
+                        kind: CanisterHttpErrorKind::Internal as i32,
+                        message: format!("Failed to parse headers: {err}"),
+                    }
+                })?;
+
+            let remaining_limit = req
+                .max_response_size_bytes
                 .checked_sub(headers_size_bytes as u64)
                 .ok_or_else(|| {
                     self.metrics
                         .request_errors
                         .with_label_values(&[LABEL_HEADER_RECEIVE_SIZE])
                         .inc();
-                    Status::new(
-                        tonic::Code::OutOfRange,
-                        format!(
+                    CanisterHttpError {
+                        kind: CanisterHttpErrorKind::LimitExceeded as i32,
+                        message: format!(
                             "Header size exceeds specified response size limit {}",
                             req.max_response_size_bytes
                         ),
-                    )
-                })? as usize,
-        )
-        .collect()
-        .await
-        .map(|col| col.to_bytes())
-        .map_err(|err| {
-            debug!(self.logger, "Failed to fetch body: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
-                .inc();
-            Status::new(
-                tonic::Code::OutOfRange,
-                format!(
-                    "Http body exceeds size limit of {} bytes.",
-                    req.max_response_size_bytes
-                ),
-            )
-        })?;
+                    }
+                })?;
 
-        self.metrics
-            .network_traffic
-            .with_label_values(&[LABEL_DOWNLOAD])
-            .inc_by(body_bytes.len() as u64 + headers_size_bytes as u64);
-        Ok(Response::new(HttpsOutcallResponse {
-            status,
-            headers,
-            content: body_bytes.to_vec(),
+            // We don't need a timeout here because there is a global timeout on the entire request.
+            let body_bytes =
+                http_body_util::Limited::new(http_resp.into_body(), remaining_limit as usize)
+                    .collect()
+                    .await
+                    .map(|col| col.to_bytes())
+                    .map_err(|err| {
+                        debug!(self.logger, "Failed to fetch body: {}", err);
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_BODY_RECEIVE_SIZE])
+                            .inc();
+
+                        if err
+                            .downcast_ref::<http_body_util::LengthLimitError>()
+                            .is_some()
+                        {
+                            // If limit exceeded, assume we consumed the full allowance
+                            total_downloaded_bytes += remaining_limit;
+                            CanisterHttpError {
+                                kind: CanisterHttpErrorKind::LimitExceeded as i32,
+                                message: format!(
+                                    "Http body exceeds size limit of {} bytes.",
+                                    req.max_response_size_bytes
+                                ),
+                            }
+                        } else {
+                            // Something else went wrong
+                            CanisterHttpError {
+                                kind: CanisterHttpErrorKind::Connection as i32,
+                                message: format!("Failed to fetch body: {}", err),
+                            }
+                        }
+                    })?;
+
+            total_downloaded_bytes += body_bytes.len() as u64;
+
+            self.metrics
+                .network_traffic
+                .with_label_values(&[LABEL_DOWNLOAD])
+                .inc_by(total_downloaded_bytes);
+
+            Ok(HttpsOutcallResponse {
+                status,
+                headers,
+                content: body_bytes.to_vec(),
+            })
+        }
+        .await;
+
+        let http_result = match execution_result {
+            Ok(response) => https_outcall_result::Result::Response(response),
+            Err(error) => https_outcall_result::Result::Error(error),
+        };
+        Ok(Response::new(HttpsOutcallResult {
+            metrics: Some(CanisterHttpAdapterMetrics {
+                downloaded_bytes: total_downloaded_bytes,
+            }),
+            result: Some(http_result),
         }))
     }
 }

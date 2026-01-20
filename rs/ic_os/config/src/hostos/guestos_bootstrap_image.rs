@@ -1,7 +1,6 @@
 use crate::serialize_and_write_config;
 use anyhow::{Context, Result, bail};
 use config_types::GuestOSConfig;
-use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -67,12 +66,9 @@ impl BootstrapOptions {
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        // mkfs.vfat is usually in /usr/sbin which is not always in the PATH
-        let path_with_usr_sbin = format!("/usr/sbin:{}", env::var("PATH").unwrap_or_default());
-        if !Command::new("mkfs.vfat")
+        if !Command::new("/usr/sbin/mkfs.vfat")
             .arg("-n")
             .arg("CONFIG")
-            .env("PATH", path_with_usr_sbin)
             .arg(out_file)
             .status()
             .context("Failed to execute mkfs.vfat command")?
@@ -144,12 +140,6 @@ impl BootstrapOptions {
                     bootstrap_dir.path().join("nns_public_key_override.pem"),
                 )
                 .context("Failed to copy NNS public key override")?;
-                // NODE-1653: remove once rolled out to all nodes. Exists to pass downgrade tests
-                fs::copy(
-                    nns_public_key_override,
-                    bootstrap_dir.path().join("nns_public_key.pem"),
-                )
-                .context("Failed to copy NNS public key")?;
             }
 
             if let Some(accounts_ssh_authorized_keys) = &self.accounts_ssh_authorized_keys {
@@ -258,7 +248,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
                 enable_trusted_execution_environment: false,

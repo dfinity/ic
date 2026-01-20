@@ -21,9 +21,6 @@ else
     exit 1
 fi
 
-# Used to read credentials for S3 upload
-echo "HOME ${HOME}"
-
 # Used as farm metadata
 test -n "${CI_JOB_NAME:-}" && echo "STABLE_FARM_JOB_NAME ${CI_JOB_NAME}"
 if [[ -n "${USER:-}" ]]; then

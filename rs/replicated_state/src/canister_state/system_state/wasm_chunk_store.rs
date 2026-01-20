@@ -87,6 +87,10 @@ impl WasmChunkStore {
         }
     }
 
+    pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
+        Self { data, metadata }
+    }
+
     pub fn page_map(&self) -> &PageMap {
         &self.data
     }
@@ -198,10 +202,6 @@ impl WasmChunkStore {
                 length: validated_chunk.chunk.len() as u64,
             },
         );
-    }
-
-    pub fn from_checkpoint(data: PageMap, metadata: WasmChunkStoreMetadata) -> Self {
-        Self { data, metadata }
     }
 
     fn page_index(chunk_index: u64) -> PageIndex {

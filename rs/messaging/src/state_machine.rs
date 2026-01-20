@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{Cycles, ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes, SubnetId};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -75,6 +75,37 @@ impl StateMachineImpl {
             .with_label_values(&[phase])
             .observe(since.elapsed().as_secs_f64());
     }
+
+    /// Runs a special round during which the state is split (and no messages are
+    /// inducted, executed or routed).
+    ///
+    /// Retains the canisters mapped to `new_subnet_id` in the routing table.
+    /// Validates that all other canisters are mapped to and will be retained by
+    /// `other_subnet_id`.
+    ///
+    /// Shapshots and ingress messages are split accordingly. Streams, refunds and
+    /// subnet queues are preserved on *subnet A* only (i.e., the one retaining the
+    /// original `own_subnet_id`).
+    fn online_split(
+        &self,
+        mut state: ReplicatedState,
+        new_subnet_id: SubnetId,
+        other_subnet_id: SubnetId,
+    ) -> ReplicatedState {
+        // Abort all paused executions and wipe `SystemMetadata` caches.
+        self.scheduler
+            .checkpoint_round_with_no_execution(&mut state);
+
+        let old_subnet_id = state.metadata.own_subnet_id;
+        state
+            .online_split(new_subnet_id, other_subnet_id)
+            .unwrap_or_else(|err| {
+                fatal!(
+                    self.log,
+                    "Failed to split {new_subnet_id} from {old_subnet_id}: {err}"
+                )
+            })
+    }
 }
 
 impl StateMachine for StateMachineImpl {
@@ -89,25 +120,6 @@ impl StateMachine for StateMachineImpl {
         api_boundary_nodes: ApiBoundaryNodes,
     ) -> ReplicatedState {
         let since = Instant::now();
-
-        let (batch_messages, mut consensus_responses, chain_key_data) = match batch.content {
-            BatchContent::Data {
-                batch_messages,
-                consensus_responses,
-                chain_key_data,
-            } => (batch_messages, consensus_responses, chain_key_data),
-            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
-        };
-
-        // Get query stats from blocks and add them to the state, so that they can be aggregated later.
-        if let Some(query_stats) = &batch_messages.query_stats {
-            deliver_query_stats(
-                query_stats,
-                &mut state,
-                &self.log,
-                &self.metrics.query_stats_metrics,
-            );
-        }
 
         if batch.time > state.metadata.batch_time {
             state.metadata.batch_time = batch.time;
@@ -128,6 +140,40 @@ impl StateMachine for StateMachineImpl {
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
+        }
+
+        let (batch_messages, mut consensus_responses, chain_key_data, requires_full_state_hash) =
+            match batch.content {
+                // Regular batch, proceed with round execution.
+                BatchContent::Data {
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                } => (
+                    batch_messages,
+                    consensus_responses,
+                    chain_key_data,
+                    requires_full_state_hash,
+                ),
+
+                // Consensus is telling us to split, do so and return the new state.
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => {
+                    return self.online_split(state, new_subnet_id, other_subnet_id);
+                }
+            };
+
+        // Get query stats from blocks and add them to the state, so that they can be aggregated later.
+        if let Some(query_stats) = &batch_messages.query_stats {
+            deliver_query_stats(
+                query_stats,
+                &mut state,
+                &self.log,
+                &self.metrics.query_stats_metrics,
+            );
         }
 
         // Time out expired messages.
@@ -165,7 +211,6 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
-
         let mut state_with_messages = self.demux.process_payload(state, batch_messages);
         // Batch creation time is essentially wall time (on some replica), so the median
         // duration should be meaningful.
@@ -182,14 +227,14 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
-        let since = Instant::now();
-        let execution_round_type = if batch.requires_full_state_hash {
+        let execution_round_type = if requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound
         };
 
         // Process messages from the induction pool through the Scheduler.
+        let since = Instant::now();
         let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
             current_interval_length: ExecutionRound::from(b.current_interval_length.get()),
@@ -204,7 +249,6 @@ impl StateMachine for StateMachineImpl {
             execution_round_type,
             registry_settings,
         );
-
         if !state_after_execution.consensus_queue.is_empty() {
             fatal!(
                 self.log,
@@ -212,19 +256,18 @@ impl StateMachine for StateMachineImpl {
                 batch.batch_number
             )
         }
-
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
+        // Postprocess the state: route messages into streams.
         let since = Instant::now();
         #[cfg(debug_assertions)]
         let balance_before_routing = state_after_execution.balance_with_messages();
-        // Postprocess the state: route messages into streams.
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
         self.observe_phase_duration(PHASE_MESSAGE_ROUTING, &since);
 
-        let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
+        let since = Instant::now();
         state_after_stream_builder.enforce_best_effort_message_limit(
             self.best_effort_message_memory_capacity,
             &self.metrics,

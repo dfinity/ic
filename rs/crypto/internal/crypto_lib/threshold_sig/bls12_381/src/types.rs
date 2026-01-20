@@ -4,7 +4,7 @@
 // the warnings (the code is defined in another module).
 #![allow(clippy::unit_arg)]
 
-use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
+use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_secrets_containers::SecretArray;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -22,26 +22,26 @@ pub mod arbitrary;
 mod conversions;
 mod generic_traits;
 
-pub(super) type Signature = G1Projective;
+pub(super) type Signature = G1Affine;
 
 pub(super) type IndividualSignature = Signature;
 
 /// A serialized individual BLS signature.
 #[derive(Copy, Clone)]
-pub struct IndividualSignatureBytes(pub [u8; G1Projective::BYTES]);
+pub struct IndividualSignatureBytes(pub [u8; G1Affine::BYTES]);
 ic_crypto_internal_types::derive_serde!(IndividualSignatureBytes, IndividualSignatureBytes::SIZE);
 impl IndividualSignatureBytes {
-    pub const SIZE: usize = G1Projective::BYTES;
+    pub const SIZE: usize = G1Affine::BYTES;
 }
 
 pub(super) type CombinedSignature = Signature;
 
 /// A serialized combined (threshold-signed) BLS signature.
 #[derive(Copy, Clone)]
-pub struct CombinedSignatureBytes(pub [u8; G1Projective::BYTES]);
+pub struct CombinedSignatureBytes(pub [u8; G1Affine::BYTES]);
 ic_crypto_internal_types::derive_serde!(CombinedSignatureBytes, CombinedSignatureBytes::SIZE);
 impl CombinedSignatureBytes {
-    pub const SIZE: usize = G1Projective::BYTES;
+    pub const SIZE: usize = G1Affine::BYTES;
 }
 
 pub(super) type SecretKey = Scalar;
@@ -66,7 +66,7 @@ impl SecretKeyBytes {
 /// Doing this (instead of a type) allows for From conversions in
 /// this crate.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct PublicKey(pub G2Projective);
+pub struct PublicKey(pub G2Affine);
 
 /// Interpolation failed because of duplicate x-coordinates.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]

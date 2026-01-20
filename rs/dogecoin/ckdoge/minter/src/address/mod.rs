@@ -2,6 +2,8 @@
 mod tests;
 
 use crate::lifecycle::init::Network;
+use candid::Deserialize;
+use serde::Serialize;
 use std::fmt;
 
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L167
@@ -16,7 +18,7 @@ const DOGE_TESTNET_P2SH_PREFIX: u8 = 196;
 const DOGE_REGTEST_P2PKH_PREFIX: u8 = 111;
 const DOGE_REGTEST_P2SH_PREFIX: u8 = 196;
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize, candid::CandidType)]
 pub enum DogecoinAddress {
     P2pkh([u8; 20]),
     P2sh([u8; 20]),

@@ -15,6 +15,7 @@ rust_library(
     },
     compile_data = [
         ":assets/vector.toml",
+        ":assets/create-universal-vm-config-image.sh",
     ],
     crate_name = "ic_system_test_driver",
     proc_macro_deps = [

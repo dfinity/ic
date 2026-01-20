@@ -18,7 +18,6 @@ ic-config = { path = "../../config" }
 config_types = { path = "../config_types" }
 network = { path = "../network" }                                     # Only required by bin
 deterministic_ips = { path = "../deterministic_ips" }
-linux_kernel_command_line = { path = "../linux_kernel_command_line" }
 tempfile = { workspace = true }
 rust-ini = { workspace = true }
 fs_extra = { workspace = true }

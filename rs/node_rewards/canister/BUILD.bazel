@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
-load("//bazel:defs.bzl", "rust_ic_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -157,7 +157,7 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_ic_test_suite_with_extra_srcs(
+rust_ic_test_suite(
     name = "node_rewards_canister_integration_test",
     srcs = glob(
         ["tests/*.rs"],
@@ -168,7 +168,6 @@ rust_ic_test_suite_with_extra_srcs(
     ),
     data = DEV_DATA,
     env = DEV_ENV,
-    extra_srcs = glob(["tests/common/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":nrc"],
 )

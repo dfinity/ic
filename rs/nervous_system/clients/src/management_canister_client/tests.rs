@@ -84,6 +84,13 @@ async fn test_limit_outstanding_calls() {
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
+
+            async fn take_canister_snapshot(
+                &self,
+                _args: TakeCanisterSnapshotArgs,
+            ) -> Result<CanisterSnapshotResponse, (i32, String)> {
+                unimplemented!();
+            }
         }
 
         impl Drop for MockManagementCanisterClient {

@@ -1,0 +1,21 @@
+[package]
+name = "ic_consensus_system_test_node_registration_test_common"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-governance-api = { path = "../../../nns/governance/api" }
+ic-protobuf = { path = "../../../protobuf" }
+ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
+ic-system-test-driver = { path = "../../driver" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-types = { path = "../../../types/types" }
+ic_consensus_system_test_utils = { path = "../utils" }
+registry-canister = { path = "../../../registry/canister" }
+slog = { workspace = true }

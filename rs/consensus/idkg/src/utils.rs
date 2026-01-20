@@ -36,7 +36,7 @@ use ic_types::{
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
         },
-        vetkd::{VetKdArgs, VetKdDerivationContext},
+        vetkd::{VetKdArgs, VetKdDerivationContextRef},
     },
     messages::CallbackId,
     registry::RegistryClientError,
@@ -290,14 +290,16 @@ pub(super) fn build_signature_inputs<'a>(
                 callback_id,
                 height: args.height,
             };
+            debug_assert_eq!(context.derivation_path.len(), 1);
+            const EMPTY_VEC_REF: &Vec<u8> = &vec![];
             let inputs = ThresholdSigInputs::VetKd(VetKdArgs {
-                context: VetKdDerivationContext {
-                    caller: context.request.sender.into(),
-                    context: context.derivation_path.iter().flatten().cloned().collect(),
+                context: VetKdDerivationContextRef {
+                    caller: context.request.sender.get_ref(),
+                    context: context.derivation_path.first().unwrap_or(EMPTY_VEC_REF),
                 },
-                ni_dkg_id: args.ni_dkg_id.clone(),
-                input: args.input.to_vec(),
-                transport_public_key: args.transport_public_key.clone(),
+                ni_dkg_id: &args.ni_dkg_id,
+                input: &args.input,
+                transport_public_key: &args.transport_public_key,
             });
             Ok((request_id, inputs))
         }

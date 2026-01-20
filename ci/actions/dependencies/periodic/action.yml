@@ -27,7 +27,7 @@ runs:
         node --version
         npm --version
       env:
-        CARGO_AUDIT_VERSION: "0.21.0"
+        CARGO_AUDIT_VERSION: "0.22.0"
         CARGO_WASMPACK_VERSION: "0.12.1"
         NODE_VERSION_20: "20.19.5"
         NODE_VERSION_22: "22.12.0"

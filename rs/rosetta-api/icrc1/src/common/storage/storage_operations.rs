@@ -14,6 +14,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
 use tracing::{info, trace};
 
+pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
+
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
 pub fn get_counter_value(
@@ -168,6 +170,23 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
         result.push(entry);
     }
     Ok(result)
+}
+
+pub fn get_rosetta_metadata(connection: &Connection, key: &str) -> anyhow::Result<Option<Vec<u8>>> {
+    let mut stmt_metadata = connection.prepare_cached(&format!(
+        "SELECT value FROM rosetta_metadata WHERE key = '{key}'"
+    ))?;
+    let rows = stmt_metadata.query_map(params![], |row| row.get(0))?;
+    let mut result = vec![];
+    for row in rows {
+        let entry: Vec<u8> = row?;
+        result.push(entry);
+    }
+    match result.len() {
+        0 => Ok(None),
+        1 => Ok(Some(result.swap_remove(0))),
+        _ => bail!(format!("Multiple metadata entries found for key: {key}")),
+    }
 }
 
 pub fn update_account_balances(

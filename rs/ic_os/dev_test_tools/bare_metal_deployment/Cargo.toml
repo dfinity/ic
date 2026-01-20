@@ -1,6 +1,6 @@
 [package]
 name = "bare_metal_deployment"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "deploy"
@@ -12,4 +12,5 @@ clap = { workspace = true }
 http = { workspace = true }
 rand = { workspace = true }
 rexpect = { workspace = true }
+thiserror = { workspace = true }
 ssh2 = { workspace = true }

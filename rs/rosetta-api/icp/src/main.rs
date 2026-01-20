@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::{
-    parse_threshold_sig_key, parse_threshold_sig_key_from_der,
+    parse_threshold_sig_key_from_der, parse_threshold_sig_key_from_pem_file,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
@@ -99,7 +99,7 @@ impl ParsedNetworkConfig {
 
         let root_key = match config.root_key {
             Some(root_key_path) => Some(
-                parse_threshold_sig_key(root_key_path.as_path())
+                parse_threshold_sig_key_from_pem_file(root_key_path.as_path())
                     .map_err(|e| format!("Unable to parse root key from file: {e}"))?,
             ),
             None => {

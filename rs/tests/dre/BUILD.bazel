@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -15,7 +15,6 @@ system_test(
     ],
     runtime_deps =
         ["//bazel:version.txt"] +
-        UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +
         COUNTER_CANISTER_RUNTIME_DEPS +
         XNET_TEST_CANISTER_RUNTIME_DEPS,

@@ -9,17 +9,12 @@ import os
 import shutil
 import signal
 import tempfile
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
 import invoke
-from loguru import logger as log
-
-from toolchains.sysimage.utils import (
-    purge_podman,
-    remove_image,
-)
 
 
 @dataclass(frozen=True)
@@ -33,12 +28,12 @@ class BaseImageOverride:
         assert self.image_file.exists()
 
 
-def load_base_image_tar_file(container_cmd: str, tar_file: Path):
+def load_base_image_tar_file(tar_file: Path):
     """
     Load the filesystem in the tar file into the podman repo.
     It will be available to subsequent commands using the associated tag
     """
-    cmd = f"{container_cmd} image load --quiet --input {tar_file}"
+    cmd = f"podman image load --quiet --input {tar_file}"
     invoke.run(cmd)
 
 
@@ -54,12 +49,10 @@ def arrange_component_files(context_dir, component_files):
 
 
 def build_container(
-    container_cmd: str,
     build_args: List[str],
     context_dir: str,
     dockerfile: str,
     image_tag: str,
-    no_cache: bool,
     base_image_override: Optional[BaseImageOverride],
 ) -> str:
     """Run container build command with given args. Return the given tag."""
@@ -68,17 +61,14 @@ def build_container(
     build_arg_strings = [f'--build-arg "{v}"' for v in build_args]
     build_arg_strings_joined = " ".join(build_arg_strings)
 
-    cmd = f"{container_cmd} "
+    cmd = "podman "
     cmd += "build "
     cmd += f"-t {image_tag} "
     cmd += f"{build_arg_strings_joined} "
-
-    # Rebuild layers instead of using cached ones.
-    if no_cache:
-        cmd += "--no-cache "
+    cmd += "--no-cache "
 
     if base_image_override:
-        load_base_image_tar_file(container_cmd, base_image_override.image_file)
+        load_base_image_tar_file(base_image_override.image_file)
         # Override the first FROM statement - grabs it from local cache
         cmd += f"--from {base_image_override.image_tag} "
 
@@ -89,14 +79,14 @@ def build_container(
         cmd += f"-f {dockerfile} "
 
     # Context must go last
-    cmd += f"{context_dir} "
+    cmd += f"{context_dir}"
     print(cmd)
 
     invoke.run(cmd)  # Throws on failure
     return image_tag
 
 
-def export_container_filesystem(container_cmd: str, image_tag: str, destination_tar_filename: str):
+def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     """
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
@@ -107,15 +97,14 @@ def export_container_filesystem(container_cmd: str, image_tag: str, destination_
     tar_dir = tempdir + "/tar"
 
     container_name = image_tag + "_container"
-    invoke.run(f"{container_cmd} create --name {container_name} {image_tag}")
-    invoke.run(f"{container_cmd} export -o {tar_file} {container_name}")
+    invoke.run(f"podman create --name {container_name} {image_tag}")
+    invoke.run(f"podman export -o {tar_file} {container_name}")
     invoke.run(f"mkdir -p {tar_dir}")
     invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
     invoke.run(
         f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )
     invoke.run("sync")
-    invoke.run(f"{container_cmd} container rm {container_name}")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -133,29 +122,6 @@ def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]
             result.append(f"{name}={value}")
 
     return result
-
-
-def generate_image_tag(base: str) -> str:
-    # Image tags need to be unique and follow a specific format
-    # See the (unwieldy) format spec:
-    # https://github.com/opencontainers/distribution-spec/blob/main/spec.md#pulling-manifests
-    # Replace disallowed chars with dashes
-    return base.translate(str.maketrans({"/": "-", ".": "-", ":": "-"})).lower()
-
-
-def build_and_export(
-    container_cmd: str,
-    build_args: List[str],
-    context_dir: str,
-    dockerfile: str,
-    image_tag: str,
-    no_cache: bool,
-    base_image_override: Optional[BaseImageOverride],
-    destination_tar_filename: str,
-) -> None:
-    build_container(container_cmd, build_args, context_dir, dockerfile, image_tag, no_cache, base_image_override)
-
-    export_container_filesystem(container_cmd, image_tag, destination_tar_filename)
 
 
 def get_args():
@@ -213,13 +179,6 @@ def get_args():
     )
 
     parser.add_argument(
-        "--no-cache",
-        help="By default the container builds using the image layer cache. Turn this on to prevent using the cache. Cache usage causes instability with parallel builds. It can be mitigated by addressing at a layer above this.",
-        default=False,
-        action="store_true",
-    )
-
-    parser.add_argument(
         "--base-image-tar-file",
         help="Override the base image used by 'podman build'. The 'FROM' line in the target Dockerfile will be ignored",
         default=None,
@@ -244,11 +203,22 @@ def main():
     destination_tar_filename = args.output
     build_args = list(args.build_args or [])
 
-    # Use the unique destination filename as the image tag.
-    image_tag = generate_image_tag(destination_tar_filename)
+    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
+    # podman (no longer in latest version). bazel strips this out - add it back
+    # manually, for now.
+    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
+
+    image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files
     component_files = args.component_files
-    no_cache = args.no_cache
+
+    def cleanup():
+        invoke.run(f"podman rm -f {image_tag}_container")
+        invoke.run(f"podman rm -f {image_tag}")
+
+    atexit.register(lambda: cleanup())
+    signal.signal(signal.SIGTERM, lambda: cleanup())
+    signal.signal(signal.SIGINT, lambda: cleanup())
 
     context_dir = tempfile.mkdtemp()
 
@@ -276,33 +246,9 @@ def main():
     if args.base_image_tar_file:
         base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
-    if "TMPFS_TMPDIR" in os.environ:
-        tmpdir = os.environ.get("TMPFS_TMPDIR")
-    else:
-        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
-        tmpdir = os.environ.get("TMPDIR")
+    build_container(build_args, context_dir, args.dockerfile, image_tag, base_image_override)
 
-    root = tempfile.mkdtemp(dir=tmpdir)
-    run_root = tempfile.mkdtemp(dir=tmpdir)
-    container_cmd = f"sudo podman --root {root} --runroot {run_root}"
-
-    atexit.register(lambda: purge_podman(container_cmd))
-    signal.signal(signal.SIGTERM, lambda: purge_podman(container_cmd))
-    signal.signal(signal.SIGINT, lambda: purge_podman(container_cmd))
-
-    build_and_export(
-        container_cmd,
-        build_args,
-        context_dir,
-        args.dockerfile,
-        image_tag,
-        no_cache,
-        base_image_override,
-        destination_tar_filename,
-    )
-    remove_image(container_cmd, image_tag)  # No harm removing if in the tmp dir
-
-    # tempfile cleanup is handled by proc_wrapper.sh
+    export_container_filesystem(image_tag, destination_tar_filename)
 
 
 if __name__ == "__main__":

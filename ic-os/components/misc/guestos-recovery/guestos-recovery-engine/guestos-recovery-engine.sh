@@ -7,8 +7,13 @@ source /opt/ic/bin/config.sh
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
+notify_console() {
+    local message="$1"
+    /opt/ic/bin/vsock_guest --notify "$message" --count 1 >/dev/null 2>&1 || true
+}
+
 function read_config_variables() {
-    expected_recovery_hash=$(get_config_value '.recovery_config.recovery_hash')
+    expected_recovery_hash_prefix=$(get_config_value '.recovery_config.recovery_hash')
 }
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -22,26 +27,29 @@ pushd /tmp/subnet_recovery >/dev/null
 perform_recovery() {
     verify_file_hash() {
         local file="$1"
-        local expected_hash="$2"
+        local expected_hash_prefix="$2"
 
         echo "Verifying hash for $file..."
         actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
 
-        if [ "$actual_hash" = "$expected_hash" ]; then
-            echo "✓ Hash verification successful for $file"
+        if [[ "$actual_hash" == "${expected_hash_prefix}"* ]]; then
+            echo "✓ Hash verification successful for $file (matches prefix)"
+            echo "  Expected prefix: $expected_hash_prefix"
+            echo "  Actual hash:     $actual_hash"
             return 0
         else
             echo "✗ Hash verification failed for $file"
-            echo "  Expected hash: $expected_hash"
-            echo "  Actual hash:   $actual_hash"
+            echo "  Expected prefix: $expected_hash_prefix"
+            echo "  Actual hash:     $actual_hash"
+            notify_console "Manual recovery error: hash mismatch for $file (expected prefix ${expected_hash_prefix}, got ${actual_hash})"
             return 1
         fi
     }
 
     download_recovery_artifact() {
         local base_url="$1"
-        local expected_recovery_hash="$2"
-        local recovery_url="${base_url}/recovery/${expected_recovery_hash}/recovery.tar.zst"
+        local expected_recovery_hash_prefix="$2"
+        local recovery_url="${base_url}/recovery/${expected_recovery_hash_prefix}/recovery.tar.zst"
 
         echo "Attempting to download recovery artifact from $recovery_url"
 
@@ -57,12 +65,13 @@ perform_recovery() {
 
     read_config_variables
 
-    if [ -z "$expected_recovery_hash" ]; then
-        echo "ERROR: recovery-hash boot parameter is required"
+    if [ -z "$expected_recovery_hash_prefix" ]; then
+        echo "ERROR: recovery-hash prefix is required"
+        notify_console "Manual recovery error: recovery-hash prefix is required"
         return 1
     fi
 
-    echo "Using expected recovery hash: $expected_recovery_hash"
+    echo "Using expected recovery hash prefix: $expected_recovery_hash_prefix"
 
     echo "Downloading recovery artifact..."
     base_urls=(
@@ -72,7 +81,7 @@ perform_recovery() {
 
     download_successful=false
     for base_url in "${base_urls[@]}"; do
-        if download_recovery_artifact "$base_url" "$expected_recovery_hash"; then
+        if download_recovery_artifact "$base_url" "$expected_recovery_hash_prefix"; then
             download_successful=true
             break
         fi
@@ -80,11 +89,12 @@ perform_recovery() {
 
     if [ "$download_successful" = false ]; then
         echo "ERROR: Failed to download recovery artifact from all available URLs"
+        notify_console "Manual recovery error: Failed to download recovery artifact from all available URLs"
         return 1
     fi
 
     echo "Verifying recovery artifact..."
-    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash"; then
+    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash_prefix"; then
         echo "ERROR: Recovery artifact hash verification failed"
         return 1
     fi
@@ -127,6 +137,7 @@ while [ $attempt -le $MAX_ATTEMPTS ]; do
         exit 0
     else
         echo "✗ Recovery failed on attempt $attempt"
+        notify_console "Manual recovery error: attempt $attempt/$MAX_ATTEMPTS failed"
 
         if [ $attempt -lt $MAX_ATTEMPTS ]; then
             echo "Waiting ${RETRY_DELAY} seconds before retry..."

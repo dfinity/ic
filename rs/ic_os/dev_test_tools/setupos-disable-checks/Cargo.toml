@@ -6,8 +6,7 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-indoc = "1.0.9"
-linux_kernel_command_line = { path = "../../../ic_os/linux_kernel_command_line" }
+indoc = { workspace = true }
 partition_tools = { path = "../../build_tools/partition_tools" }
 regex = { workspace = true }
 tempfile = { workspace = true }

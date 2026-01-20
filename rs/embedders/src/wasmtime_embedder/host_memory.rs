@@ -15,11 +15,8 @@ use libc::c_void;
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
 use libc::{mmap, munmap};
 use wasmtime::{LinearMemory, MemoryType};
-use wasmtime_environ::WASM32_MAX_SIZE;
 
-use crate::MIN_GUARD_REGION_SIZE;
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use crate::{MAX_WASM_MEMORY_IN_BYTES, MIN_GUARD_REGION_SIZE, WASM_PAGE_SIZE};
 
 pub fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -73,7 +70,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         let max_pages = if ty.is_64() {
             MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
         } else {
-            WASM32_MAX_SIZE / (WASM_PAGE_SIZE as u64)
+            MAX_WASM_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
         };
         let min = ty.minimum().min(max_pages) as usize;
         let max = ty

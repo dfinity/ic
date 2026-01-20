@@ -309,7 +309,7 @@ impl StorageClient {
         storage_operations::reset_blocks_counter(&open_connection)
     }
 
-    fn create_tables(&self) -> Result<(), rusqlite::Error> {
+    fn create_tables(&self) -> anyhow::Result<()> {
         let open_connection = self.storage_connection.lock().unwrap();
         super::schema::create_tables(&open_connection)
     }

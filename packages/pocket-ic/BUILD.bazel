@@ -9,7 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "10.0.0",
+    version = "11.0.0",
     deps = [
         # Keep sorted.
         "@crate_index//:backoff",

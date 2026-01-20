@@ -2,7 +2,8 @@ use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    EventType, MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus, memo_encode,
+    MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    event::CkDogeMinterEventType, memo_encode,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
@@ -117,7 +118,7 @@ where
 pub struct DepositFlowEnd<S> {
     setup: S,
     account: Account,
-    balance_before: u64,
+    balance_before: u128,
     deposit_utxos: BTreeSet<Utxo>,
     result: Result<Vec<UtxoStatus>, UpdateBalanceError>,
 }
@@ -150,8 +151,8 @@ where
 
         let total_minted_amount = minted_status
             .iter()
-            .map(|(_utxo, (_block_index, minted_amount))| minted_amount)
-            .sum::<u64>();
+            .map(|(_utxo, (_block_index, minted_amount))| *minted_amount as u128)
+            .sum::<u128>();
 
         let known_utxos: BTreeSet<_> = self
             .setup
@@ -170,11 +171,11 @@ where
             .iter()
             .flat_map(|(utxo, (mint_index, _minted_amount))| {
                 vec![
-                    EventType::CheckedUtxoV2 {
+                    CkDogeMinterEventType::CheckedUtxo {
                         utxo: utxo.clone(),
                         account: self.account,
                     },
-                    EventType::ReceivedUtxos {
+                    CkDogeMinterEventType::ReceivedUtxos {
                         mint_txid: Some(*mint_index),
                         to_account: self.account,
                         utxos: vec![utxo.clone()],

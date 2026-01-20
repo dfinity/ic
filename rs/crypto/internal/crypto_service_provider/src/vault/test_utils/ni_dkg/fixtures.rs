@@ -111,21 +111,53 @@ impl MockNode {
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
         resharing_public_coefficients: Option<CspPublicCoefficients>,
     ) -> Result<CspNiDkgDealing, ni_dkg_errors::CspDkgCreateReshareDealingError> {
-        let maybe_reshared_secret_id =
-            resharing_public_coefficients
-                .as_ref()
-                .map(|public_coefficients| {
-                    KeyId::try_from(public_coefficients)
-                        .expect("computing key id from public coefficients should not fail")
-                });
-        self.csp_vault.create_dealing(
-            algorithm_id,
-            dealer_index,
-            threshold,
-            epoch,
-            receiver_keys,
-            maybe_reshared_secret_id,
-        )
+        match resharing_public_coefficients {
+            Some(public_coefficients) => {
+                let resharing_secret_id = KeyId::try_from(&public_coefficients)
+                    .expect("computing key id from public coefficients should not fail");
+                self.csp_vault.create_resharing_dealing(
+                    algorithm_id,
+                    dealer_index,
+                    threshold,
+                    epoch,
+                    receiver_keys,
+                    resharing_secret_id,
+                )
+            }
+            None => self
+                .csp_vault
+                .create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
+                .map_err(|e| match e {
+                    ni_dkg_errors::CspDkgCreateDealingError::UnsupportedAlgorithmId(alg) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(alg)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::InvalidThresholdError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::InvalidThresholdError(err)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::MisnumberedReceiverError {
+                        receiver_index,
+                        number_of_receivers,
+                    } => ni_dkg_errors::CspDkgCreateReshareDealingError::MisnumberedReceiverError {
+                        receiver_index,
+                        number_of_receivers,
+                    },
+                    ni_dkg_errors::CspDkgCreateDealingError::MalformedFsPublicKeyError {
+                        receiver_index,
+                        error,
+                    } => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
+                            receiver_index,
+                            error,
+                        }
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::SizeError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::SizeError(err)
+                    }
+                    ni_dkg_errors::CspDkgCreateDealingError::TransientInternalError(err) => {
+                        ni_dkg_errors::CspDkgCreateReshareDealingError::TransientInternalError(err)
+                    }
+                }),
+        }
     }
 }
 

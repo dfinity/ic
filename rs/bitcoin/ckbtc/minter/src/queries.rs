@@ -3,6 +3,7 @@ use crate::dashboard::build_dashboard;
 use crate::fees::FeeEstimator;
 use crate::metrics::encode_metrics;
 use crate::state::read_state;
+use crate::state::utxos::UtxoSet;
 use crate::updates::update_balance::UpdateBalanceArgs;
 use crate::{BuildTxError, build_unsigned_transaction_from_inputs, utxos_selection};
 use candid::CandidType;
@@ -10,7 +11,6 @@ use ic_btc_interface::Utxo;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 
 #[derive(CandidType, Deserialize)]
 pub struct RetrieveBtcStatusRequest {
@@ -39,11 +39,12 @@ pub fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
 }
 
 pub fn estimate_withdrawal_fee<F: FeeEstimator>(
-    available_utxos: &mut BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     minter_address: BitcoinAddress,
     recipient_address: BitcoinAddress,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
     // We simulate the algorithm that selects UTXOs for the
@@ -53,7 +54,8 @@ pub fn estimate_withdrawal_fee<F: FeeEstimator>(
     build_unsigned_transaction_from_inputs(
         &selected_utxos,
         vec![(recipient_address, withdrawal_amount)],
-        minter_address,
+        &minter_address,
+        max_num_inputs_in_transaction,
         median_fee_millisatoshi_per_vbyte,
         fee_estimator,
     )

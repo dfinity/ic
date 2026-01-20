@@ -76,6 +76,7 @@ rust_test(
         "//rs/ledger_suite/icrc1/tokens_u256",
         "//rs/ledger_suite/icrc1/tokens_u64",
         "//rs/types/base_types",
+        "@crate_index//:hex",
     ] + DEV_DEPENDENCIES,
 )
 

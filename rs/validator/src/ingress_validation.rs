@@ -434,6 +434,8 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     let min_allowed_expiry = current_time;
     // We need to account for time drift and be more forgiving at rejecting ingress
     // messages due to their expiry being too far in the future.
+    // If this logic changes, then the migration canister in `//rs/migration_canister`
+    // must be updated, too.
     let max_expiry_diff = MAX_INGRESS_TTL
         .checked_add(PERMITTED_DRIFT_AT_VALIDATOR)
         .ok_or_else(|| {

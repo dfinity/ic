@@ -32,21 +32,19 @@ use crate::{
         self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem, Followees,
-            FulfillSubnetRentalRequest, GetNeuronsFundAuditInfoRequest,
-            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
-            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
-            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
-            NeuronsFundAuditInfo, NeuronsFundData,
+            ArchivedMonthlyNodeProviderRewards, Ballot, BlessAlternativeGuestOsVersion,
+            CreateServiceNervousSystem, Followees, FulfillSubnetRentalRequest,
+            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
+            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
+            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
             RewardNodeProvider, RewardNodeProviders, SettleNeuronsFundParticipationRequest,
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
-            WaitForQuietState,
-            add_or_remove_node_provider::Change,
-            archived_monthly_node_provider_rewards,
+            WaitForQuietState, archived_monthly_node_provider_rewards,
             create_service_nervous_system::LedgerParameters,
             get_neurons_fund_audit_info_response,
             governance::{
@@ -168,7 +166,6 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
@@ -511,6 +508,9 @@ impl Action {
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
             Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
+            Action::BlessAlternativeGuestOsVersion(_) => {
+                "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
+            }
         }
     }
 }
@@ -4128,80 +4128,10 @@ impl Governance {
                 let result = self.approve_genesis_kyc(&proposal.principals);
                 self.set_proposal_execution_status(pid, result);
             }
-            ValidProposalAction::AddOrRemoveNodeProvider(ref proposal) => {
-                if let Some(change) = &proposal.change {
-                    match change {
-                        Change::ToAdd(node_provider) => {
-                            if node_provider.id.is_none() {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "Node providers must have a principal id.",
-                                    )),
-                                );
-                                return;
-                            }
-
-                            // Check if the node provider already exists
-                            if self
-                                .heap_data
-                                .node_providers
-                                .iter()
-                                .any(|np| np.id == node_provider.id)
-                            {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "A node provider with the same principal already exists.",
-                                    )),
-                                );
-                                return;
-                            }
-                            self.heap_data.node_providers.push(node_provider.clone());
-                            self.set_proposal_execution_status(pid, Ok(()));
-                        }
-                        Change::ToRemove(node_provider) => {
-                            if node_provider.id.is_none() {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::PreconditionFailed,
-                                        "Node providers must have a principal id.",
-                                    )),
-                                );
-                                return;
-                            }
-
-                            if let Some(pos) = self
-                                .heap_data
-                                .node_providers
-                                .iter()
-                                .position(|np| np.id == node_provider.id)
-                            {
-                                self.heap_data.node_providers.remove(pos);
-                                self.set_proposal_execution_status(pid, Ok(()));
-                            } else {
-                                self.set_proposal_execution_status(
-                                    pid,
-                                    Err(GovernanceError::new_with_message(
-                                        ErrorType::NotFound,
-                                        "Can't find a NodeProvider with the same principal id.",
-                                    )),
-                                );
-                            }
-                        }
-                    }
-                } else {
-                    self.set_proposal_execution_status(
-                        pid,
-                        Err(GovernanceError::new_with_message(
-                            ErrorType::PreconditionFailed,
-                            "The proposal didn't contain a change.",
-                        )),
-                    );
-                }
+            ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                let result =
+                    add_or_remove_node_provider.execute(&mut self.heap_data.node_providers);
+                self.set_proposal_execution_status(pid, result);
             }
             ValidProposalAction::RewardNodeProvider(ref reward) => {
                 self.reward_node_provider(pid, reward).await;
@@ -4237,6 +4167,12 @@ impl Governance {
                 self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
                     .await
             }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => self.perform_bless_alternative_guest_os_version(
+                pid,
+                bless_alternative_guest_os_version,
+            ),
         }
     }
 
@@ -4305,6 +4241,15 @@ impl Governance {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    fn perform_bless_alternative_guest_os_version(
+        &mut self,
+        proposal_id: u64,
+        bless_alternative_guest_os_version: BlessAlternativeGuestOsVersion,
+    ) {
+        let result = bless_alternative_guest_os_version.execute();
         self.set_proposal_execution_status(proposal_id, result);
     }
 
@@ -4805,7 +4750,7 @@ impl Governance {
             }
 
             ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
-                self.validate_add_or_remove_node_provider(add_or_remove_node_provider)
+                add_or_remove_node_provider.validate(&self.heap_data.node_providers)
             }
             ValidProposalAction::ApproveGenesisKyc(_)
             | ValidProposalAction::RewardNodeProvider(_)
@@ -4824,6 +4769,9 @@ impl Governance {
             ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron) => {
                 deregister_known_neuron.validate(&self.neuron_store)
             }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => bless_alternative_guest_os_version.validate(),
         }
     }
 
@@ -4914,79 +4862,6 @@ impl Governance {
         }
 
         Ok(())
-    }
-
-    fn validate_add_or_remove_node_provider(
-        &self,
-        add_or_remove_node_provider: &AddOrRemoveNodeProvider,
-    ) -> Result<(), GovernanceError> {
-        match &add_or_remove_node_provider.change {
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "AddOrRemoveNodeProvider proposal must have a change field",
-            )),
-            Some(Change::ToAdd(node_provider)) => {
-                let Some(np_id) = node_provider.id else {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    ));
-                };
-                // Validate that np does not exist
-                if self
-                    .heap_data
-                    .node_providers
-                    .iter()
-                    .any(|np| np.id.as_ref() == Some(&np_id))
-                {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {np_id}"
-                        ),
-                    ));
-                }
-
-                if let Some(ref account_identifier) = node_provider.reward_account {
-                    validate_account_identifier(account_identifier).map_err(|e| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("The account_identifier field is invalid: {e}"),
-                        )
-                    })?;
-                }
-
-                // Validate that np does not exist
-                // validate the account_identifier
-                Ok(())
-            }
-            Some(Change::ToRemove(node_provider)) => {
-                let Some(np_id) = node_provider.id else {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        "AddOrRemoveNodeProvider proposal must have a node provider id",
-                    ));
-                };
-
-                // Validate that np exists
-                if !self
-                    .heap_data
-                    .node_providers
-                    .iter()
-                    .any(|np| np.id.as_ref() == Some(&np_id))
-                {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
-                              but targeted {np_id}"
-                        ),
-                    ));
-                }
-
-                Ok(())
-            }
-        }
     }
 
     fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
@@ -5125,13 +5000,14 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled() {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
+                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+                // implemented.
+                action.to_self_describing(self.env.clone()).await.ok()
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the

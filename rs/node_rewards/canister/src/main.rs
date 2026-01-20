@@ -10,7 +10,7 @@ use ic_node_rewards_canister::storage::{
 };
 use ic_node_rewards_canister::telemetry::PROMETHEUS_METRICS;
 use ic_node_rewards_canister::timer_tasks::{
-    GetNodeProvidersRewardsInstructionsExporter, HourlySyncTask,
+    GetNodeProvidersRewardsInstructionsExporter, HourlySyncTask, RecurringAsyncTaskNonSend,
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -59,7 +59,7 @@ fn post_upgrade() {
 }
 
 pub fn schedule_timers() {
-    HourlySyncTask::new(&CANISTER).schedule(&METRICS_REGISTRY);
+    HourlySyncTask::new(&CANISTER).schedule();
     GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
 }
 

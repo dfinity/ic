@@ -115,7 +115,7 @@ impl BareMetalIpmiSession {
         bail!("Could not get to login prompt")
     }
 
-    pub fn host_address(&self) -> Ipv6Addr {
+    pub fn hostos_address(&self) -> Ipv6Addr {
         self.host_address
     }
 
@@ -162,6 +162,13 @@ pub struct LoginInfo {
     host: String,
     username: String,
     password: String,
+    hostos_address: Ipv6Addr,
+}
+
+impl LoginInfo {
+    pub fn hostos_address(&self) -> Ipv6Addr {
+        self.hostos_address
+    }
 }
 
 pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
@@ -179,10 +186,32 @@ pub fn parse_login_info_from_csv(data: &str) -> Result<LoginInfo> {
         .next()
         .context("Could not read password from file")?
         .to_string();
+    let guest_ip = parts
+        .next()
+        .context("Could not read host ipv6 from file (expected as the attribute after password)")?
+        .parse()
+        .context("Failed to parse host IP address")?;
+    let host_ip = guestos_ipv6_to_hostos_ipv6(guest_ip);
 
     Ok(LoginInfo {
         host,
         username,
         password,
+        hostos_address: host_ip,
     })
+}
+
+fn guestos_ipv6_to_hostos_ipv6(guestos_ipv6: Ipv6Addr) -> Ipv6Addr {
+    // TODO: would be nice not to hardcode this but instead calculate it with deterministic_ips tool
+    let segments = guestos_ipv6.segments();
+    Ipv6Addr::new(
+        segments[0],
+        segments[1],
+        segments[2],
+        segments[3],
+        0x6800,
+        segments[5],
+        segments[6],
+        segments[7],
+    )
 }

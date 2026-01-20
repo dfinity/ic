@@ -128,3 +128,8 @@ pub enum EstimateWithdrawalFeeError {
     /// non-standard.
     AmountTooHigh,
 }
+#[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
+pub struct MinterInfo {
+    pub min_confirmations: u32,
+    pub retrieve_doge_min_amount: u64,
+}

@@ -432,7 +432,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -538,6 +538,10 @@ pub mod proposal {
         /// Create a rented subnet.
         #[prost(message, tag = "28")]
         FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
+        /// Allow node operators to manually intervene in case of disaster to run
+        /// (NNS-approved) new software.
+        #[prost(message, tag = "31")]
+        BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2785,6 +2789,25 @@ pub struct FulfillSubnetRentalRequest {
     pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(string, tag = "2")]
     pub replica_version_id: ::prost::alloc::string::String,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct BlessAlternativeGuestOsVersion {
+    #[prost(bytes = "vec", repeated, tag = "1")]
+    pub chip_ids: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+    #[prost(string, tag = "2")]
+    pub rootfs_hash: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub base_guest_launch_measurements: ::core::option::Option<
+        ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
+    >,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
