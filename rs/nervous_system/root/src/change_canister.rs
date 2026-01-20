@@ -1,5 +1,17 @@
+//! Basically, this wraps the `install_code` method of the Management canister.
+//!
+//! (Therefore, a better name for this would have been `install_code`.)
+//!
+//! There are a couple of additional things that this does though:
+//!
+//! 1. Lock the canister.
+//! 2. Stop the canister before installing (this can be skipped).
+//!
+//! Of course, after calling the Management canister's `install_code` method,
+//! this start the canister back up again, and unlocks it.
+
 #![allow(deprecated)]
-use crate::LOG_PREFIX;
+use crate::{LOG_PREFIX, private::exclusively_stop_and_start_canister};
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
 #[cfg(target_arch = "wasm32")]
@@ -10,10 +22,8 @@ use ic_management_canister_types_private::{
     InstallCodeArgs,
 };
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
-use std::{cell::RefCell, collections::BTreeMap};
 
 /// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
 /// reinstall some target canister.
@@ -216,70 +226,41 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
-// Thread-local storage for per-canister locks
-// Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
-thread_local! {
-    static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
-        const {RefCell::new(BTreeMap::new()) };
-}
-
-pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
-where
-    Rt: Runtime,
-{
+pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), String> {
     let canister_id = request.canister_id;
     let stop_before_installing = request.stop_before_installing;
-
-    // Try to acquire lock for this canister - fail immediately if locked
-    let _guard = match acquire_for(&CANISTER_CHANGE_LOCKS, canister_id, request.clone()) {
-        Ok(guard) => guard,
-        Err(conflicting_request) => {
-            return Err(format!(
-                "Canister {canister_id} is currently locked by another change operation. Conflicting request: {conflicting_request:?}"
-            ));
-        }
-    };
-
-    if stop_before_installing {
-        let stop_result = stop_canister::<Rt>(canister_id).await;
-        if stop_result.is_err() {
-            println!("{LOG_PREFIX}change_canister: Failed to stop canister, trying to restart...");
-            return match start_canister::<Rt>(canister_id).await {
-                Ok(_) => Err(format!(
-                    "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."
-                )),
-                Err(_) => {
-                    println!("{LOG_PREFIX}change_canister: Failed to restart canister.");
-                    Err(format!(
-                        "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."
-                    ))
-                }
-            };
-        }
-    }
 
     let request_str = format!("{request:?}");
 
     // Ship code to the canister.
     //
-    // Note that there's no guarantee that the canister to install/reinstall/upgrade
-    // is actually stopped here, even if stop_before_installing is true. This is
-    // because there could be a concurrent request to restart it. This could be
-    // guaranteed with a "stopped precondition" in the management canister, or
-    // with some locking here.
-    let res = install_code(request).await;
-    // For once, we don't want to unwrap the result here. The reason is that, if the
-    // installation failed (e.g., the wasm was rejected because it's invalid),
-    // then we want to restart the canister. So we just keep the res to be
-    // unwrapped later.
+    let result = exclusively_stop_and_start_canister::<_, _, _>(
+        canister_id,
+        &request_str,
+        stop_before_installing,
+        || async {
+            // Note that there's no guarantee that the canister to install/reinstall/upgrade
+            // is actually stopped here, even if stop_before_installing is true. This is
+            // because there could be a concurrent request to restart it. This could be
+            // guaranteed with a "stopped precondition" in the management canister, or
+            // with some locking here.
+            install_code(request).await
+            // For once, we don't want to unwrap the result here. The reason is that, if the
+            // installation failed (e.g., the wasm was rejected because it's invalid),
+            // then we want to restart the canister. So we just keep the res to be
+            // unwrapped later.
+        },
+    )
+    .await;
 
-    // Restart the canister, if needed
-    if stop_before_installing {
-        start_canister::<Rt>(canister_id).await.unwrap();
-    }
+    let result = match result {
+        Ok(ok) => ok,
+        Err(err) => {
+            return Err(format!("{err}"));
+        }
+    };
 
-    // Check the result of the install_code
-    res.map_err(|(rejection_code, message)| {
+    result.map_err(|(rejection_code, message)| {
         format!(
             "Attempt to call install_code with request {request_str} failed with code \
              {rejection_code:?}: {message}"
@@ -480,10 +461,11 @@ mod tests {
         };
 
         // Manually insert a lock for this canister to simulate a concurrent operation
-        CANISTER_CHANGE_LOCKS.with(|locks| {
+        // Manually insert a lock for this canister to simulate a concurrent operation
+        crate::private::CANISTER_LOCK_ACQUISITIONS.with(|locks| {
             locks
                 .borrow_mut()
-                .insert(canister_id, conflicting_request.clone());
+                .insert(canister_id, format!("{conflicting_request:?}"));
         });
 
         // Now try to call change_canister on the same canister - this should fail

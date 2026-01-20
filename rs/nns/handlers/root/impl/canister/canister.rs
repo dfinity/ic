@@ -147,7 +147,7 @@ fn change_nns_canister(request: ChangeCanisterRequest) {
     // Because change_canister is async, and because we can't directly use
     // `await`, we need to use the `spawn` trick.
     let future = async move {
-        let change_canister_result = change_canister::<CdkRuntime>(request).await;
+        let change_canister_result = change_canister(request).await;
         match change_canister_result {
             Ok(()) => {
                 println!("{LOG_PREFIX}change_canister: Canister change completed successfully.");
