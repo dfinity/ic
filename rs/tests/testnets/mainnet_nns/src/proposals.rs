@@ -6,7 +6,10 @@ use ic_nns_common::types::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
 use ic_nns_test_utils::{
-    governance::{submit_external_update_proposal_allowing_error, wait_for_final_state},
+    governance::{
+        submit_external_update_proposal, submit_external_update_proposal_allowing_error,
+        wait_for_final_state,
+    },
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::{
@@ -22,10 +25,12 @@ use ic_system_test_driver::{
     nns::{get_canister, get_governance_canister, submit_update_elected_replica_versions_proposal},
     util::runtime_from_url,
 };
-use ic_types::{CanisterId, NodeId, ReplicaVersion};
+use ic_types::{CanisterId, NodeId, ReplicaVersion, SubnetId};
 use once_cell::sync::OnceCell;
 use registry_canister::mutations::{
-    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload, do_update_subnet::UpdateSubnetPayload,
+    do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
+    do_change_subnet_membership::ChangeSubnetMembershipPayload,
+    do_update_subnet::UpdateSubnetPayload,
 };
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info};
@@ -248,5 +253,39 @@ impl ProposalWithMainnetState {
             logger,
             "API Boundary Nodes addition proposal {:?} has been executed", proposal_id,
         );
+    }
+
+    /// Code duplicate of rs/tests/driver/src/nns.rs:change_subnet_membership
+    pub async fn change_subnet_membership(
+        url: Url,
+        subnet_id: SubnetId,
+        node_ids_add: &[NodeId],
+        node_ids_remove: &[NodeId],
+    ) -> Result<(), String> {
+        let self_ = Self::new();
+
+        let nns = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
+        let governance_canister = get_governance_canister(&nns);
+        let proposal_payload = ChangeSubnetMembershipPayload {
+            subnet_id: subnet_id.get(),
+            node_ids_add: node_ids_add.to_vec(),
+            node_ids_remove: node_ids_remove.to_vec(),
+        };
+        let neuron_id = self_.neuron_id;
+        let proposal_sender = self_.proposal_sender.clone();
+
+        let proposal_id = submit_external_update_proposal(
+            &governance_canister,
+            proposal_sender,
+            neuron_id,
+            NnsFunction::ChangeSubnetMembership,
+            proposal_payload,
+            String::from("Change subnet membership for testing"),
+            "Motivation: testing".to_string(),
+        )
+        .await;
+
+        wait_for_final_state(&governance_canister, proposal_id).await;
+        Ok(())
     }
 }
