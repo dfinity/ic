@@ -15,7 +15,7 @@ export ROOT_DIR="$(git rev-parse --show-toplevel)"
 # If running in the wrong container, abort.
 # if not running in a container, drop into the correct container.
 if ([ -e /.dockerenv ] || [ -e /run/.containerenv ]); then
-    if [ -z "${DFINITY_CONTAINER:-}" ]; then
+    if [ -f /etc/ic-build-container ]; then
         echo "ERROR: Detected container environment, but not running in the DFINITY container. Please exit your container and rerun the script."
         exit 1
     fi
