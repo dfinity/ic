@@ -176,6 +176,23 @@ mod deposit {
             .minter_update_balance()
             .expect_mint();
     }
+
+    #[test]
+    fn should_not_mint_when_below_dust_limit() {
+        let setup = Setup::default().with_doge_balance();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_send_transaction(vec![1])
+            .dogecoin_mine_blocks(MIN_CONFIRMATIONS)
+            .minter_update_balance()
+            .expect_no_mint_value_too_small();
+    }
 }
 
 mod withdrawal {
