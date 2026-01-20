@@ -15145,6 +15145,7 @@ name = "ic-tests-cross-chain"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "bitcoin-dogecoin",
  "candid",
  "canister-test",
  "dfn_candid",
