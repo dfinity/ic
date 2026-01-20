@@ -33,6 +33,7 @@ jobs:
         shell: bash
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
+          env | sort
           sudo -u ubuntu bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
             python3 - -c ${{ inputs.github_sha }}
