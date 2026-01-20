@@ -251,9 +251,7 @@ MAINNET_NNS_CANISTER_ENV = {
         srcs = ["build.rs"],
         aliases = ALIASES,
         build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
-        data = EXTERNAL_CANISTER_DATA + nns_canister_data + [
-            "templates/dashboard.html",
-        ],
+        data = EXTERNAL_CANISTER_DATA + nns_canister_data + ["templates/dashboard.html"],
         deps = BUILD_DEPENDENCIES,
     )
     for (name_suffix, nns_canister_data, nns_canister_env) in [

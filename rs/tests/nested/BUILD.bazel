@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
-load("//rs/tests:common.bzl", "IC_GATEWAY_DATA", "MAINNET_ENV")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV")
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -46,12 +46,12 @@ genrule(
 
 system_test_nns(
     name = "registration",
-    data = IC_GATEWAY_DATA,
     env = MAINNET_ENV,
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
     setupos = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":nested",
@@ -78,7 +78,6 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "guestos_upgrade_smoke_test",
-    data = IC_GATEWAY_DATA,
     env = MAINNET_ENV,
     flaky = True,
     guestos_update = "test",
@@ -86,15 +85,12 @@ system_test_nns(
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     setupos = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully guestos upgrade to current commit
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current",
-    data = IC_GATEWAY_DATA + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
     flaky = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
@@ -102,6 +98,9 @@ system_test_nns(
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     setupos = "mainnet_latest",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )
 
 rust_binary(
@@ -121,7 +120,6 @@ rust_binary(
 # Tests if current commit is "upgradeable" and can be used as an upgrade image
 system_test_nns(
     name = "hostos_upgrade_smoke_test",
-    data = IC_GATEWAY_DATA,
     env = MAINNET_ENV,
     flaky = True,
     tags = ["long_test"],
@@ -129,15 +127,12 @@ system_test_nns(
     test_timeout = "eternal",
     hostos_update = "test",
     setupos = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
 # Tests if "latest_release" in mainnet-icos-revisions.json can successfully hostos upgrade to current commit
 system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
-    data = IC_GATEWAY_DATA + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     tags = ["long_test"],
@@ -145,4 +140,7 @@ system_test_nns(
     test_timeout = "eternal",
     hostos_update = True,
     setupos = "mainnet_latest",
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )

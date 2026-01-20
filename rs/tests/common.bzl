@@ -122,15 +122,13 @@ SNS_CANISTER_RUNTIME_DEPS = canister_runtime_deps_impl(
     qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
 )
 
-IC_GATEWAY_DATA = [
-    "//rs/tests:ic_gateway_uvm_config_image",
-]
+IC_GATEWAY_RUNTIME_DEPS = {
+    "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH": "//rs/tests:ic_gateway_uvm_config_image",
+}
 
-COUNTER_CANISTER_DATA = ["//rs/tests:counter.wat"]
-
-CANISTER_HTTP_DATA = [
-    "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
+COUNTER_CANISTER_RUNTIME_DEPS = {
+    "COUNTER_CANISTER_WAT_PATH": "//rs/tests:counter.wat",
+}
 
 XNET_TEST_CANISTER_DATA = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 

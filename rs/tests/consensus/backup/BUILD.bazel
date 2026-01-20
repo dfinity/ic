@@ -59,7 +59,7 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     runtime_deps = BACKUP_RUNTIME_DEPS | {
-        "ENV_DEPS__IC_VERSION_FILE": "//bazel:version.txt",
+        "IC_VERSION_FILE": "//bazel:version.txt",
     },
 )
 
@@ -73,6 +73,6 @@ system_test_nns(
     test_driver_target = ":backup_manager_test_bin",
     test_timeout = "eternal",  # this test often times out with the default 15 minute timeout so we allow more time
     runtime_deps = BACKUP_RUNTIME_DEPS | {
-        "ENV_DEPS__IC_VERSION_FILE": "//bazel:version.txt",
+        "IC_VERSION_FILE": "//bazel:version.txt",
     },
 )
