@@ -3,7 +3,7 @@ use crate::cbor::tests::check_roundtrip;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::{
     BurnMemo as EndpointsBurn, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult,
-    DecodedMemo, MemoType, MintMemo as EndpointsMint,
+    DecodedMemo, MemoType,
 };
 use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
@@ -57,6 +57,40 @@ proptest! {
                 prop_assert_eq!(withdrawal_id, reimbursement_request.ledger_burn_index.get());
             }
         }
+    }
+
+    #[test]
+    fn should_decode_mint_memo(mint_memo in arb_mint_memo()) {
+        let mut buf = vec![];
+        minicbor::encode(&mint_memo, &mut buf).expect("encoding should succeed");
+        let args = DecodeLedgerMemoArgs {
+            memo_type: MemoType::Mint,
+            encoded_memo: buf,
+        };
+        let result = decode_ledger_memo(args);
+        let memo = match result.expect("decoding memo failed").unwrap() {
+            DecodedMemo::Mint(mint_memo) => mint_memo.unwrap(),
+            DecodedMemo::Burn(_) => panic!("found burn memo instead of mint memo"),
+        };
+        let decoded_memo = MintMemo::try_from(memo).expect("failed to convert back to original memo");
+        assert_eq!(mint_memo, decoded_memo);
+    }
+
+    #[test]
+    fn should_decode_burn_memo(burn_memo in arb_burn_memo()) {
+        let mut buf = vec![];
+        minicbor::encode(&burn_memo, &mut buf).expect("encoding should succeed");
+        let args = DecodeLedgerMemoArgs {
+            memo_type: MemoType::Burn,
+            encoded_memo: buf,
+        };
+        let result = decode_ledger_memo(args);
+        let memo = match result.expect("decoding memo failed").unwrap() {
+            DecodedMemo::Mint(_) => panic!("found mint memo instead of burn memo"),
+            DecodedMemo::Burn(burn_memo) => burn_memo.unwrap(),
+        };
+        let decoded_memo = BurnMemo::try_from(memo).expect("failed to convert back to original memo");
+        assert_eq!(burn_memo, decoded_memo);
     }
 }
 
@@ -134,90 +168,6 @@ fn encode_burn_memo_is_stable() {
 }
 
 #[test]
-fn should_decode_ledger_mint_convert_memo() {
-    for index in [
-        "0x23",
-        "0xffffffffffffffff",                 // u64 max
-        "0xffffffffffffffffffffffffffffffff", // u128 max
-    ] {
-        let log_index = CheckedAmountOf::from_str_hex(index).expect("should decode number");
-        let memo = MintMemo::Convert {
-            from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
-            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-            log_index,
-        };
-        let mut buf = vec![];
-        minicbor::encode(memo, &mut buf).expect("encoding should succeed");
-        let args = DecodeLedgerMemoArgs {
-            memo_type: MemoType::Mint,
-            encoded_memo: buf,
-        };
-        let result = decode_ledger_memo(args);
-        let expected: DecodeLedgerMemoResult =
-            Ok(Some(DecodedMemo::Mint(Some(EndpointsMint::Convert {
-                from_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-                tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-                log_index: Nat::from(log_index),
-            }))));
-        assert_eq!(
-            result, expected,
-            "Decoded Memo mismatch: {:?} vs {:?}",
-            result, expected
-        );
-    }
-}
-
-#[test]
-fn should_decode_ledger_mint_reimburse_tx_memo() {
-    let memo = MintMemo::ReimburseTransaction {
-        withdrawal_id: 123u64,
-        tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.parse().unwrap(),
-    };
-    let mut buf = vec![];
-    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
-    let args = DecodeLedgerMemoArgs {
-        memo_type: MemoType::Mint,
-        encoded_memo: buf,
-    };
-    let result = decode_ledger_memo(args);
-    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
-        EndpointsMint::ReimburseTransaction {
-            withdrawal_id: 123u64,
-            tx_hash: DEFAULT_DEPOSIT_TRANSACTION_HASH.to_string(),
-        },
-    ))));
-    assert_eq!(
-        result, expected,
-        "Decoded Memo mismatch: {:?} vs {:?}",
-        result, expected
-    );
-}
-
-#[test]
-fn should_decode_ledger_mint_reimburse_withdrawal_memo() {
-    let memo = MintMemo::ReimburseWithdrawal {
-        withdrawal_id: 123u64,
-    };
-    let mut buf = vec![];
-    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
-    let args = DecodeLedgerMemoArgs {
-        memo_type: MemoType::Mint,
-        encoded_memo: buf,
-    };
-    let result = decode_ledger_memo(args);
-    let expected: DecodeLedgerMemoResult = Ok(Some(DecodedMemo::Mint(Some(
-        EndpointsMint::ReimburseWithdrawal {
-            withdrawal_id: 123u64,
-        },
-    ))));
-    assert_eq!(
-        result, expected,
-        "Decoded Memo mismatch: {:?} vs {:?}",
-        result, expected
-    );
-}
-
-#[test]
 fn should_return_error_for_invalid_mint_memo() {
     // empty array
     let args = DecodeLedgerMemoArgs {
@@ -240,29 +190,6 @@ fn should_return_error_for_invalid_mint_memo() {
         result,
         Err(Some(DecodeLedgerMemoError::InvalidMemo(msg)))
         if msg.contains("Error decoding MintMemo")
-    );
-}
-
-#[test]
-fn should_decode_ledger_burn_convert_memo() {
-    let memo = BurnMemo::Convert {
-        to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.parse().unwrap(),
-    };
-    let mut buf = vec![];
-    minicbor::encode(memo, &mut buf).expect("encoding should succeed");
-    let args = DecodeLedgerMemoArgs {
-        memo_type: MemoType::Burn,
-        encoded_memo: buf,
-    };
-    let result = decode_ledger_memo(args);
-    let expected: DecodeLedgerMemoResult =
-        Ok(Some(DecodedMemo::Burn(Some(EndpointsBurn::Convert {
-            to_address: DEFAULT_WITHDRAWAL_DESTINATION_ADDRESS.to_string(),
-        }))));
-    assert_eq!(
-        result, expected,
-        "Decoded Memo mismatch: {:?} vs {:?}",
-        result, expected
     );
 }
 

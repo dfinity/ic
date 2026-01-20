@@ -1,12 +1,15 @@
 use crate::CKETH_LEDGER_MEMO_SIZE;
+use crate::erc20::CkTokenSymbol;
+use crate::eth_rpc::Hash;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
 use crate::memo;
-use crate::numeric::LedgerBurnIndex;
+use crate::numeric::{Erc20Value, LedgerBurnIndex, LogIndex};
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use evm_rpc_types::BlockTag;
+use ic_ethereum_types::Address;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
@@ -561,6 +564,34 @@ impl From<memo::MintMemo> for MintMemo {
     }
 }
 
+impl TryFrom<MintMemo> for memo::MintMemo {
+    type Error = String;
+
+    fn try_from(value: MintMemo) -> Result<Self, Self::Error> {
+        match value {
+            MintMemo::Convert {
+                from_address,
+                tx_hash,
+                log_index,
+            } => Ok(memo::MintMemo::Convert {
+                from_address: Address::from_str(&from_address)?,
+                tx_hash: Hash::from_str(&tx_hash)?,
+                log_index: LogIndex::try_from(log_index)?,
+            }),
+            MintMemo::ReimburseTransaction {
+                withdrawal_id,
+                tx_hash,
+            } => Ok(memo::MintMemo::ReimburseTransaction {
+                withdrawal_id,
+                tx_hash: Hash::from_str(&tx_hash)?,
+            }),
+            MintMemo::ReimburseWithdrawal { withdrawal_id } => {
+                Ok(memo::MintMemo::ReimburseWithdrawal { withdrawal_id })
+            }
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
 pub enum BurnMemo {
     Convert {
@@ -599,6 +630,34 @@ impl From<memo::BurnMemo> for BurnMemo {
                 ckerc20_withdrawal_id,
                 to_address: to_address.to_string(),
             },
+        }
+    }
+}
+
+impl TryFrom<BurnMemo> for memo::BurnMemo {
+    type Error = String;
+
+    fn try_from(value: BurnMemo) -> Result<Self, Self::Error> {
+        match value {
+            BurnMemo::Convert { to_address } => Ok(memo::BurnMemo::Convert {
+                to_address: Address::from_str(&to_address)?,
+            }),
+            BurnMemo::Erc20GasFee {
+                ckerc20_token_symbol,
+                ckerc20_withdrawal_amount,
+                to_address,
+            } => Ok(memo::BurnMemo::Erc20GasFee {
+                ckerc20_token_symbol: CkTokenSymbol::from_str(&ckerc20_token_symbol)?,
+                ckerc20_withdrawal_amount: Erc20Value::try_from(ckerc20_withdrawal_amount)?,
+                to_address: Address::from_str(&to_address)?,
+            }),
+            BurnMemo::Erc20Convert {
+                ckerc20_withdrawal_id,
+                to_address,
+            } => Ok(memo::BurnMemo::Erc20Convert {
+                ckerc20_withdrawal_id,
+                to_address: Address::from_str(&to_address)?,
+            }),
         }
     }
 }
