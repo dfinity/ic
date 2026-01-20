@@ -6,6 +6,7 @@ load("//publish:defs.bzl", "artifact_bundle", "release_nostrip_binary", "release
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 ALL_BINARIES = {
+    # Keep sorted
     "canister_sandbox": "//rs/canister_sandbox",
     "compiler_sandbox": "//rs/canister_sandbox:compiler_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
@@ -34,6 +35,7 @@ ALL_BINARIES = {
     "pocket-ic": "//rs/pocket_ic_server:pocket-ic-server",
     "types-test": "//rs/types/types:types_test",
     "replicated-state-test": "//rs/replicated_state:replicated_state_test_binary",
+    "state-layout-test": "//rs/state_layout:state_layout_test_binary",
 }
 
 # test binaries or binaries using test utils
@@ -48,6 +50,7 @@ TESTONLY_BINARIES = [
     "ic-test-state-machine",
     "pocket-ic",
     "replicated-state-test",
+    "state-layout-test",
     "types-test",
 ]
 
