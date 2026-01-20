@@ -48,9 +48,9 @@ system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
+    setupos = True,
     tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
-    setupos = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -81,10 +81,10 @@ system_test_nns(
     env = MAINNET_ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    setupos = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
@@ -94,10 +94,10 @@ system_test_nns(
     flaky = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
+    setupos = "mainnet_latest",
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    setupos = "mainnet_latest",
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
     },
@@ -122,11 +122,11 @@ system_test_nns(
     name = "hostos_upgrade_smoke_test",
     env = MAINNET_ENV,
     flaky = True,
+    hostos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    hostos_update = "test",
-    setupos = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
 )
 
@@ -135,11 +135,11 @@ system_test_nns(
     name = "hostos_upgrade_from_latest_release_to_current",
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
+    hostos_update = True,
+    setupos = "mainnet_latest",
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
-    hostos_update = True,
-    setupos = "mainnet_latest",
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
     },

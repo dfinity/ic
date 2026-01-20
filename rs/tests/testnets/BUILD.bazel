@@ -297,11 +297,11 @@ system_test_nns(
     name = "nns_recovery",
     enable_metrics = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    setupos = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
