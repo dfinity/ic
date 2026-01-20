@@ -385,66 +385,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
-    use candid::utils::{ArgumentDecoder, ArgumentEncoder};
     use dfn_core::api::CanisterId;
-    use std::future::Future;
-
-    // Mock runtime that returns errors for all inter-canister calls
-    // This allows us to test the locking behavior without actually making calls
-    struct MockRuntime;
-
-    #[async_trait]
-    impl Runtime for MockRuntime {
-        async fn call_without_cleanup<In, Out>(
-            _id: CanisterId,
-            _method: &str,
-            _args: In,
-        ) -> Result<Out, (i32, String)>
-        where
-            In: ArgumentEncoder + Send,
-            Out: for<'a> ArgumentDecoder<'a>,
-        {
-            Err((
-                1,
-                "MockRuntime: call_without_cleanup not implemented".to_string(),
-            ))
-        }
-
-        async fn call_with_cleanup<In, Out>(
-            _id: CanisterId,
-            _method: &str,
-            _args: In,
-        ) -> Result<Out, (i32, String)>
-        where
-            In: ArgumentEncoder + Send,
-            Out: for<'a> ArgumentDecoder<'a>,
-        {
-            Err((
-                1,
-                "MockRuntime: call_with_cleanup not implemented".to_string(),
-            ))
-        }
-
-        async fn call_bytes_with_cleanup(
-            _id: CanisterId,
-            _method: &str,
-            _args: &[u8],
-        ) -> Result<Vec<u8>, (i32, String)> {
-            Err((
-                1,
-                "MockRuntime: call_bytes_with_cleanup not implemented".to_string(),
-            ))
-        }
-
-        fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
-            // Do nothing - we don't need to actually spawn
-        }
-
-        fn canister_version() -> u64 {
-            1
-        }
-    }
 
     #[tokio::test]
     async fn test_change_canister_fails_when_lock_exists() {
@@ -478,12 +419,17 @@ mod tests {
             arg: vec![16, 17, 18],
         };
 
-        let result = change_canister::<MockRuntime>(new_request).await;
+        let result = change_canister(new_request).await;
 
         // Should return an error indicating the canister is locked
         assert!(result.is_err());
         let error_msg = result.unwrap_err();
-        assert!(error_msg.contains("currently locked by another change operation"));
-        assert!(error_msg.contains(&format!("{canister_id}")));
+        for key_word in ["another operation", "in progress"] {
+            assert!(
+                error_msg.to_lowercase().contains(key_word),
+                "{key_word:?} not in {error_msg:?}"
+            );
+        }
+        assert!(error_msg.contains(&format!("{canister_id}")), "{error_msg}");
     }
 }
