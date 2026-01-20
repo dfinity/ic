@@ -51,6 +51,7 @@ else
     DEVENV=false
 fi
 PODMAN_CMD="sudo podman"
+REBUILD_IMAGE=false
 
 IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
@@ -85,9 +86,9 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
 
-if [ "${REBUILD_IMAGE:-false}" = true ]; then
+if [ $REBUILD_IMAGE = true ]; then
     "$REPO_ROOT"/ci/container/build-image.sh
-elif $PODMAN_CMD "${ARGS[@]}" "${PODMAN_ARGS[@]}" image exists "$IMAGE"; then
+elif ! $PODMAN_CMD "${ARGS[@]}" "${PODMAN_ARGS[@]}" image exists "$IMAGE"; then
     $PODMAN_CMD "${ARGS[@]}" pull "$IMAGE"
 else
     "$REPO_ROOT"/ci/container/build-image.sh
@@ -237,7 +238,7 @@ fi
 
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
 
 # option to pass in another shell if desired
 if [ $# -eq 0 ]; then
@@ -247,4 +248,4 @@ else
 fi
 
 set -x
-exec $PODMAN_CMD "${ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec $PODMAN_CMD "${ARGS[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
