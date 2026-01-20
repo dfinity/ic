@@ -237,7 +237,7 @@ fn set_up(
             .await_ingress(msg_id, /*max_ticks=*/ 100)
             .unwrap();
 
-        // Send an intranet message
+        // Send a subnet-local message
         if let Some(previous_canister_id) = previous_canister_id {
             state_machine
                 .execute_ingress(
