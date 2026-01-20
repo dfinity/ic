@@ -340,6 +340,12 @@ impl DashboardBuilder for CkDogeDashboardBuilder {
     }
 }
 
+impl CkDogeDashboardBuilder {
+    pub fn new(network: Network) -> Self {
+        Self { network }
+    }
+}
+
 pub fn ckdoge_dashboard(network: Network) -> Dashboard<CkDogeDashboardBuilder> {
-    Dashboard::new(CkDogeDashboardBuilder { network })
+    Dashboard::new(CkDogeDashboardBuilder::new(network))
 }

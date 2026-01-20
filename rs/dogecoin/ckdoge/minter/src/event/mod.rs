@@ -604,7 +604,7 @@ pub fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, S
     }
 }
 
-fn dogecoin_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {
+pub fn dogecoin_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {
     match address {
         DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
         DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),

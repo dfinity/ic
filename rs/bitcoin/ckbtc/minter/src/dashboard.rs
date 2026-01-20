@@ -344,10 +344,6 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
 
     pub fn build_metadata(&self, s: &CkBtcMinterState) -> String {
         let native_token = self.builder.native_token();
-        let main_account = Account {
-            owner: ic_cdk::api::canister_self(),
-            subaccount: None,
-        };
         format!(
             "<table>
                 <tbody>
@@ -392,7 +388,13 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
             s.btc_network,
             s.ecdsa_public_key
                 .clone()
-                .map(|key| { self.builder.display_account_address(&key, &main_account) })
+                .map(|key| {
+                    let main_account = Account {
+                        owner: ic_cdk::api::canister_self(),
+                        subaccount: None,
+                    };
+                    self.builder.display_account_address(&key, &main_account)
+                })
                 .unwrap_or_default(),
             s.min_confirmations,
             s.ledger_id,
