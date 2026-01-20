@@ -127,13 +127,13 @@ fn read_load_samples(path: &Path) -> anyhow::Result<BTreeMap<CanisterId, LoadSam
 
 #[derive(Debug, Default)]
 pub struct LoadEstimates {
-    pub instructions_used: Estimates,
+    pub instructions_executed: Estimates,
     pub ingress_messages_executed: Estimates,
     /// Note: it could happen that canisters which communicate with each other end up on different
-    /// subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
+    /// subnets, meaning that Local-Subnet messages could become Remote-Subnet messages post-split.
     pub remote_subnet_messages_executed_lower_bound: Estimates,
     /// Note: it could happen that canisters which communicate with each other end up on different
-    /// subnets, meaning that LocaL-Subnet messages could become Remote-Subnet messages post-split.
+    /// subnets, meaning that Local-Subnet messages could become Remote-Subnet messages post-split.
     pub local_subnet_messages_executed_upper_bound: Estimates,
     pub http_outcalls_executed: Estimates,
     pub heartbeats_and_global_timers_executed: Estimates,
@@ -147,7 +147,7 @@ fn estimate_loads(
 
     for (canister_id, load_sample) in load_samples {
         if canister_ranges_to_move.contains(canister_id) {
-            load_estimates.instructions_used.destination += load_sample.instructions_executed;
+            load_estimates.instructions_executed.destination += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.destination +=
                 load_sample.ingress_messages_executed;
             load_estimates
@@ -161,7 +161,7 @@ fn estimate_loads(
                 .heartbeats_and_global_timers_executed
                 .destination += load_sample.heartbeats_and_global_timers_executed;
         } else {
-            load_estimates.instructions_used.source += load_sample.instructions_executed;
+            load_estimates.instructions_executed.source += load_sample.instructions_executed;
             load_estimates.ingress_messages_executed.source +=
                 load_sample.ingress_messages_executed;
             load_estimates

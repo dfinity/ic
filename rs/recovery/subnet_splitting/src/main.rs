@@ -224,7 +224,7 @@ fn do_estimate(args: EstimateArgs, _logger: Logger) -> anyhow::Result<()> {
 
     println!(
         "Estimated instructions used on both subnet: {}",
-        load_estimates.instructions_used
+        load_estimates.instructions_executed
     );
 
     println!(

@@ -14,7 +14,7 @@ use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
 /// 2. TODO(CON-1569): a tool which takes the output of the `state-tool` and proposes a good split,
-/// 3. `subnet-splitting-tool`, which takes the outputs from the above to tools, and returns
+/// 3. `subnet-splitting-tool`, which takes the outputs from the above two tools, and returns
 ///    estimated loads/sizes after splitting a subnet.
 fn load_metrics_e2e_test() {
     let dir = ic_test_utilities_tmpdir::tmpdir("testdir");
@@ -76,7 +76,7 @@ fn load_metrics_e2e_test() {
     let (
         StateSizeEstimates { states_sizes_bytes },
         LoadEstimates {
-            instructions_used,
+            instructions_executed: instructions_used,
             ingress_messages_executed,
             remote_subnet_messages_executed_lower_bound: xnet_messages_executed_lower_bound,
             local_subnet_messages_executed_upper_bound: intranet_messages_executed_upper_bound,
@@ -103,8 +103,8 @@ fn load_metrics_e2e_test() {
     assert_eq!(
         instructions_used,
         Estimates {
-            source: 79563911,
-            destination: 80768836,
+            source: 79487011,
+            destination: 80691936,
         }
     );
     assert_eq!(
@@ -189,7 +189,7 @@ fn set_up(
                 "send_request",
                 Encode!(&RemoteHttpRequest {
                     request: UnvalidatedCanisterHttpRequestArgs {
-                        url: String::from("http://this.url.should_hopefully_be_invalid.ch"),
+                        url: String::from("http://this.url.should_be.invalid"),
                         max_response_bytes: None,
                         headers: vec![],
                         body: None,
