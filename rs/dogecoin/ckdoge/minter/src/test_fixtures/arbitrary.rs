@@ -116,7 +116,7 @@ pub mod ckbtc {
         ]
     }
 
-    fn amount() -> impl Strategy<Value = Satoshi> {
+    pub fn amount() -> impl Strategy<Value = Satoshi> {
         1..10_000_000_000u64
     }
 
@@ -410,7 +410,7 @@ pub mod ckbtc {
         ]
     }
 
-    fn retrieve_btc_request(
+    pub(crate) fn retrieve_btc_request(
         amount: impl Strategy<Value = Satoshi>,
     ) -> impl Strategy<Value = RetrieveBtcRequest> {
         prop_struct!(RetrieveBtcRequest {

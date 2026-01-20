@@ -12,14 +12,9 @@ export BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-# If running in the wrong container, abort.
-# if not running in a container, drop into the correct container.
-if ([ -e /.dockerenv ] || [ -e /run/.containerenv ]); then
-    if [ ! -f /etc/ic-build-container ]; then
-        echo "ERROR: Detected container environment, but not running in the DFINITY container. Please exit your container and rerun the script."
-        exit 1
-    fi
-else
+# This script needs to be run inside the ic-build container
+# If it isn't, we drop into the correct container.
+if [ ! -f /home/ubuntu/.ic-build-container ]; then
     echo dropping into container
     exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
 fi
