@@ -5,5 +5,10 @@ nvme
 nvme_core
 nvme_auth
 hv_storvsc
+hv_netvsc
 hv_vmbus
+hv_balloon
+hv_utils
+pci_hyperv
+pci_hyperv_intf
 scsi_transport_fc
