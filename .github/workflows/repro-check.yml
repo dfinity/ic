@@ -25,7 +25,7 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      mage: ghcr.io/dfinity/ic-build@sha256:4a80139e1172d1eb886db6511ac4ce8bc151c8904ce06606595f15f18e163faf
+      image: ghcr.io/dfinity/ic-build@sha256:4a80139e1172d1eb886db6511ac4ce8bc151c8904ce06606595f15f18e163faf
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
