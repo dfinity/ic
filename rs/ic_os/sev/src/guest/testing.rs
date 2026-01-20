@@ -236,6 +236,10 @@ impl MockSevGuestFirmwareBuilder {
         Self::default()
     }
 
+    /// Make the firmware return a custom data that does not match the one passed to `get_report`.
+    /// Can be used for testing invalid attestation packages.
+    /// Automatically marks the firmware as generating invalid custom data, unless overriden by
+    /// `with_generates_report_with_wrong_custom_data`.
     pub fn with_custom_data_override(mut self, custom_data: Option<[u8; 64]>) -> Self {
         self.custom_data_override = custom_data;
         self
@@ -256,16 +260,26 @@ impl MockSevGuestFirmwareBuilder {
         self
     }
 
+    /// Make the firmware return attestation reports signed by this signer.
+    /// Automatically marks the firmware as generating valid signatures, unless overriden by
+    /// `with_generates_report_with_wrong_signature`.
     pub fn with_signer(mut self, signer: Option<FakeAttestationReportSigner>) -> Self {
         self.signer = signer;
         self
     }
 
+    /// By default, the mock firmware reports that it generates wrong custom data when
+    /// `with_custom_data_override` is used, which is useful for testing invalid attestation
+    /// packages.
+    /// This can be overridden by setting this flag to `false`.
     pub fn with_generates_report_with_wrong_custom_data(mut self, value: bool) -> Self {
         self.generates_report_with_wrong_custom_data = Some(value);
         self
     }
 
+    /// By default, the mock firmware reports that it generates valid signatures when
+    /// `with_signer` is used.
+    /// This can be overridden by setting this flag to `false`.
     pub fn with_generates_report_with_wrong_signature(mut self, value: bool) -> Self {
         self.generates_report_with_wrong_signature = Some(value);
         self
