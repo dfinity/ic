@@ -14,7 +14,7 @@ export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
 # This script needs to be run inside the ic-build container
 # If it isn't, we drop into the correct container.
-if [ ! -f /etc/ic-build-container ]; then
+if [ ! -f /home/ubuntu/.ic-build-container ]; then
     echo dropping into container
     exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
 fi
