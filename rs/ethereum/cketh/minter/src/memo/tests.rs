@@ -3,13 +3,13 @@ use crate::cbor::tests::check_roundtrip;
 use crate::checked_amount::CheckedAmountOf;
 use crate::endpoints::{
     BurnMemo as EndpointsBurn, DecodeLedgerMemoArgs, DecodeLedgerMemoError, DecodeLedgerMemoResult,
-    DecodedMemo, MemoType,
+    DecodedMemo, MemoType, MintMemo as EndpointsMint,
 };
 use crate::erc20::CkTokenSymbol;
 use crate::eth_logs::{ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc::Hash;
 use crate::memo::{Address, BurnMemo, MintMemo, decode_ledger_memo};
-use crate::numeric::{BlockNumber, CkTokenAmount, LedgerBurnIndex, LogIndex, Wei};
+use crate::numeric::{BlockNumber, CkTokenAmount, Erc20Value, LedgerBurnIndex, LogIndex, Wei};
 use crate::state::transactions::ReimbursementRequest;
 use arbitrary::{arb_burn_memo, arb_mint_memo, arb_reimbursement_request};
 use assert_matches::assert_matches;
@@ -21,6 +21,56 @@ use ic_cketh_test_utils::{
 use icrc_ledger_types::icrc1::transfer::Memo;
 use proptest::prelude::*;
 use std::str::FromStr;
+
+fn endpoints_mint_to_mint_memo(memo: EndpointsMint) -> Result<MintMemo, String> {
+    let memo = match memo {
+        EndpointsMint::Convert {
+            from_address,
+            tx_hash,
+            log_index,
+        } => MintMemo::Convert {
+            from_address: Address::from_str(&from_address)?,
+            tx_hash: Hash::from_str(&tx_hash)?,
+            log_index: LogIndex::try_from(log_index)?,
+        },
+        EndpointsMint::ReimburseTransaction {
+            withdrawal_id,
+            tx_hash,
+        } => MintMemo::ReimburseTransaction {
+            withdrawal_id,
+            tx_hash: Hash::from_str(&tx_hash)?,
+        },
+        EndpointsMint::ReimburseWithdrawal { withdrawal_id } => {
+            MintMemo::ReimburseWithdrawal { withdrawal_id }
+        }
+    };
+    Ok(memo)
+}
+
+fn endpoints_burn_to_burn_memo(memo: EndpointsBurn) -> Result<BurnMemo, String> {
+    let memo = match memo {
+        EndpointsBurn::Convert { to_address } => BurnMemo::Convert {
+            to_address: Address::from_str(&to_address)?,
+        },
+        EndpointsBurn::Erc20GasFee {
+            ckerc20_token_symbol,
+            ckerc20_withdrawal_amount,
+            to_address,
+        } => BurnMemo::Erc20GasFee {
+            ckerc20_token_symbol: CkTokenSymbol::from_str(&ckerc20_token_symbol)?,
+            ckerc20_withdrawal_amount: Erc20Value::try_from(ckerc20_withdrawal_amount)?,
+            to_address: Address::from_str(&to_address)?,
+        },
+        EndpointsBurn::Erc20Convert {
+            ckerc20_withdrawal_id,
+            to_address,
+        } => BurnMemo::Erc20Convert {
+            ckerc20_withdrawal_id,
+            to_address: Address::from_str(&to_address)?,
+        },
+    };
+    Ok(memo)
+}
 
 proptest! {
     #[test]
@@ -72,7 +122,7 @@ proptest! {
             DecodedMemo::Mint(mint_memo) => mint_memo.unwrap(),
             DecodedMemo::Burn(_) => panic!("found burn memo instead of mint memo"),
         };
-        let decoded_memo = MintMemo::try_from(memo).expect("failed to convert back to original memo");
+        let decoded_memo = endpoints_mint_to_mint_memo(memo).expect("failed to convert back to original memo");
         assert_eq!(mint_memo, decoded_memo);
     }
 
@@ -89,7 +139,7 @@ proptest! {
             DecodedMemo::Mint(_) => panic!("found mint memo instead of burn memo"),
             DecodedMemo::Burn(burn_memo) => burn_memo.unwrap(),
         };
-        let decoded_memo = BurnMemo::try_from(memo).expect("failed to convert back to original memo");
+        let decoded_memo = endpoints_burn_to_burn_memo(memo).expect("failed to convert back to original memo");
         assert_eq!(burn_memo, decoded_memo);
     }
 }
