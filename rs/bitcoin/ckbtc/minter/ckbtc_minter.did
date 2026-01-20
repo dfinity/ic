@@ -1,8 +1,8 @@
 // Represents an account on the ckBTC ledger.
 type Account = record { owner : principal; subaccount : opt blob };
 
-type environment_variable = record { 
-    name: text; 
+type environment_variable = record {
+    name: text;
     value: text;
 };
 
@@ -204,6 +204,9 @@ type InitArgs = record {
     // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
 
+    // The minimal amount of BTC that can be converted to ckBTC.
+    deposit_btc_min_amount : opt nat64;
+
     // The minimal amount of ckBTC that can be converted to BTC.
     retrieve_btc_min_amount : nat64;
 
@@ -242,6 +245,9 @@ type InitArgs = record {
 
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
+    // The minimal amount of BTC that can be converted to ckBTC.
+    deposit_btc_min_amount : opt nat64;
+
     // The minimal amount of ckBTC that the minter converts to BTC.
     retrieve_btc_min_amount : opt nat64;
 

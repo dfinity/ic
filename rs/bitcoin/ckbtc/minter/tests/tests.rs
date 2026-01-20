@@ -64,6 +64,7 @@ fn default_init_args() -> CkbtcMinterInitArgs {
         btc_network: Network::Regtest,
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 2000,
+        deposit_btc_min_amount: None,
         ledger_id: CanisterId::from(0),
         max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
         min_confirmations: Some(MIN_CONFIRMATIONS),
