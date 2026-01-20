@@ -37,3 +37,9 @@ uuid
 # packages not directly used, but required by other packages and need to be manually version pinned for python 3.12
 typing_extensions>=4.6.0
 urllib3>=2.6.3
+
+# For ci/githubstats/query.py
+pandas
+psycopg
+tabulate
+codeowners

@@ -2781,7 +2781,7 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
 
 fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterId> {
     let message = match message {
-        CanisterMessage::Response(_) => return None,
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => return None,
         CanisterMessage::Request(request) => CanisterCall::Request(request),
         CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };

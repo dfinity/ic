@@ -130,10 +130,6 @@ COUNTER_CANISTER_RUNTIME_DEPS = {
     "COUNTER_CANISTER_WAT_PATH": "//rs/tests:counter.wat",
 }
 
-CANISTER_HTTP_DATA = [
-    "//rs/tests/networking/canister_http:http_uvm_config_image",
-]
-
 XNET_TEST_CANISTER_DATA = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
 
 STATESYNC_TEST_CANISTER_DATA = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
