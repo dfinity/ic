@@ -25,49 +25,10 @@ jobs:
     runs-on:
       labels: dind-large
     container:
-      image: ubuntu:24.04
+      mage: ghcr.io/dfinity/ic-build@sha256:4a80139e1172d1eb886db6511ac4ce8bc151c8904ce06606595f15f18e163faf
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
-      - name: Setup podman
-        shell: bash
-        run: |
-          apt-get update
-          apt-get -y upgrade
-          apt-get -y install curl sudo git podman
-
-          # Create a passwordless sudo rule for the current user (usually root in containers, but safe to include)
-          # Required because the repro check uses it.
-          echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/nopasswd
-          chmod 0440 /etc/sudoers.d/nopasswd
-
-      - name: Create ext4 workspace for rootless podman for the cache
-        run: |
-          fallocate -l 110G /tmp/workspace.img
-          mkfs.ext4 /tmp/workspace.img
-          mkdir -p /home/ubuntu/
-
-          mount -o loop /tmp/workspace.img /home/ubuntu/
-          chown -R ubuntu:ubuntu /home/ubuntu/
-
-      - name: Create ext4 workspace for rootless podman for ict_testnets dir in tmp
-        run: |
-          fallocate -l 2G /tmp/tnets.img
-          mkfs.ext4 /tmp/tnets.img
-          mkdir -p /tmp/ict_testnets
-
-          mount -o loop /tmp/tnets.img /tmp/ict_testnets
-          chown -R ubuntu:ubuntu /tmp/ict_testnets
-
-      - name: Create ext4 workspace for rootless podman for misc small files in tmp
-        run: |
-          fallocate -l 1G /tmp/misc.img
-          mkfs.ext4 /tmp/misc.img
-          mkdir -p /tmp/misc
-
-          mount -o loop /tmp/misc.img /tmp/misc
-          chown -R ubuntu:ubuntu /tmp/misc
-
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         run: |
