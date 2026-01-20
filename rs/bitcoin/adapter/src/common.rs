@@ -172,7 +172,6 @@ impl BlockchainNetwork for bitcoin::Network {
                     <= crate::get_successors_handler::BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
             }
             Testnet | Signet | Regtest | Testnet4 => true,
-            other => unreachable!("Unsupported Bitcoin network: {:?}", other),
         }
     }
     fn max_blocks_bytes(&self) -> usize {
