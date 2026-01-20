@@ -36,7 +36,7 @@ pushd "$REPO_ROOT"
 BUILD_ARGS=("${DOCKER_BUILD_ARGS:---rm=true}")
 
 # Detect if we're running in a Devenv environment
-if [ -d /var/lib/cloud/instance ] && [ findmnt /hoststorage >/dev/null ]; then
+if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
     echo "Detected Devenv environment, using hoststorage for podman root."
     DOCKER_CMD="sudo podman"
     ARGS=(--root /hoststorage/podman-root)
