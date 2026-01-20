@@ -89,6 +89,7 @@ fn setup(
                         max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(|_| {}),
                 )
                 .unwrap(),
             );
@@ -107,6 +108,7 @@ fn setup(
                         max_accessed_pages: NumOsPages::new(memory_pages as u64),
                         max_dirty_pages: NumOsPages::new(memory_pages as u64),
                     },
+                    Arc::new(|_| {}),
                 )
                 .unwrap(),
             );

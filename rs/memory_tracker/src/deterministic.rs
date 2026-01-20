@@ -58,7 +58,7 @@
 
 use std::cell::RefCell;
 use std::ops::Range;
-use std::sync::atomic::Ordering;
+use std::sync::{Arc, atomic::Ordering};
 
 use bit_vec::BitVec;
 use ic_logger::{ReplicaLogger, debug};
@@ -344,6 +344,8 @@ pub(crate) struct DeterministicMemoryTracker {
     checksum: RefCell<checksum::SigsegChecksum>,
     pub metrics: MemoryTrackerMetrics,
     state: RefCell<DeterministicState>,
+    #[allow(dead_code)]
+    decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync>,
 }
 
 impl DeterministicMemoryTracker {
@@ -469,6 +471,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
+        decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync>,
     ) -> nix::Result<Self>
     where
         Self: Sized,
@@ -477,7 +480,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
         let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
         debug!(
             log,
-            "PrefetchingMemoryTracker::new: start={:?}, size={}, num_pages={}",
+            "DeterministicMemoryTracker::new: start={:?}, size={}, num_pages={}",
             start,
             size,
             num_pages
@@ -501,6 +504,7 @@ impl MemoryTracker for DeterministicMemoryTracker {
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
             metrics: MemoryTrackerMetrics::default(),
             state: RefCell::new(state),
+            decrement_instruction_counter,
         };
 
         let mut instructions = tracker.page_map.get_base_memory_instructions();
