@@ -1,4 +1,7 @@
-use crate::{LOG_PREFIX, change_canister::{stop_canister, start_canister}};
+use crate::{
+    LOG_PREFIX,
+    change_canister::{start_canister, stop_canister},
+};
 use dfn_core::api::CanisterId;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::CdkRuntime;
@@ -19,7 +22,7 @@ thread_local! {
     >> = const { RefCell::new(BTreeMap::new()) };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq,)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Reject {
     pub code: i32,
     pub message: String,
@@ -29,10 +32,7 @@ impl From<(i32, String)> for Reject {
     fn from(src: (i32, String)) -> Self {
         let (code, message) = src;
 
-        Self {
-            code,
-            message,
-        }
+        Self { code, message }
     }
 }
 
@@ -55,37 +55,42 @@ pub(crate) enum ExclusivelyStopAndStartCanisterError {
 }
 
 pub(crate) use ExclusivelyStopAndStartCanisterError::{
-    LockAcquisitionFailed, StopBeforeMainOperationFailed, StartAfterMainOperationFailed,
+    LockAcquisitionFailed, StartAfterMainOperationFailed, StopBeforeMainOperationFailed,
 };
 
 impl Display for ExclusivelyStopAndStartCanisterError {
     fn fmt(&self, formatter: &mut Formatter) -> fmt::Result {
         let result = match self {
-            LockAcquisitionFailed { ongoing_operation_description } => {
+            LockAcquisitionFailed {
+                ongoing_operation_description,
+            } => {
                 format!(
                     "Another operation is currently in progress \
                      (on the same canister): {ongoing_operation_description}.",
                 )
             }
 
-            StopBeforeMainOperationFailed { stop_reject, restart_result } => {
-                let main_reason = format!(
-                    "Failed to stop the canister beforehand: {stop_reject:?}"
-                );
+            StopBeforeMainOperationFailed {
+                stop_reject,
+                restart_result,
+            } => {
+                let main_reason =
+                    format!("Failed to stop the canister beforehand: {stop_reject:?}");
 
                 let restart_status = match restart_result {
                     Ok(()) => "fortunately, re-starting the canister succeeded".to_string(),
                     Err(restart_err) => {
-                        format!(
-                            "unfortunately, re-starting the canister failed: {restart_err:?}",
-                        )
+                        format!("unfortunately, re-starting the canister failed: {restart_err:?}",)
                     }
                 };
 
                 format!("{main_reason}; {restart_status}.")
             }
 
-            StartAfterMainOperationFailed { start_reject, main_operation_result } => {
+            StartAfterMainOperationFailed {
+                start_reject,
+                main_operation_result,
+            } => {
                 let start_failure = format!(
                     "Unable to start the canister again after the main operation: \
                      {start_reject:?}",
@@ -131,7 +136,9 @@ where
         canister_id,
         operation_description.to_string(),
     )
-    .map_err(|ongoing_operation_description| LockAcquisitionFailed { ongoing_operation_description })?;
+    .map_err(|ongoing_operation_description| LockAcquisitionFailed {
+        ongoing_operation_description,
+    })?;
 
     if stop_before {
         stop_before_main_operation(canister_id, operation_description).await?;
@@ -216,12 +223,10 @@ async fn restart_after_main_operation<R>(
     main_operation_result: R,
 ) -> Result<R, ExclusivelyStopAndStartCanisterError>
 where
-    R: Debug
+    R: Debug,
 {
     match start_canister::<CdkRuntime>(canister_id).await {
-        Ok(()) => {
-            Ok(main_operation_result)
-        }
+        Ok(()) => Ok(main_operation_result),
 
         Err(err) => {
             // This would be pretty terrible, especially if Governance is the

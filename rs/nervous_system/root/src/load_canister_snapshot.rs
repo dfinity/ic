@@ -1,4 +1,4 @@
-use crate::private::{exclusively_stop_and_start_canister};
+use crate::private::exclusively_stop_and_start_canister;
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types_private::LoadCanisterSnapshotArgs;
@@ -79,22 +79,18 @@ pub async fn load_canister_snapshot(
         Ok(ok) => ok,
         Err(err) => {
             let description = format!("{err}");
-            return LoadCanisterSnapshotResponse::Err(
-                LoadCanisterSnapshotError {
-                    code: None,
-                    description,
-                }
-            );
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description,
+            });
         }
     };
 
     match result {
         Ok(()) => LoadCanisterSnapshotResponse::Ok(LoadCanisterSnapshotOk {}),
-        Err((code, description)) => {
-            LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
-                code: Some(code),
-                description,
-            })
-        }
+        Err((code, description)) => LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+            code: Some(code),
+            description,
+        }),
     }
 }

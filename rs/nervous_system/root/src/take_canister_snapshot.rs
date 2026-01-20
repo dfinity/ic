@@ -1,9 +1,7 @@
 use crate::private::exclusively_stop_and_start_canister;
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
-use ic_management_canister_types_private::{
-    CanisterSnapshotResponse, TakeCanisterSnapshotArgs,
-};
+use ic_management_canister_types_private::{CanisterSnapshotResponse, TakeCanisterSnapshotArgs};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
 use serde::Deserialize;
 

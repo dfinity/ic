@@ -24,8 +24,7 @@ use ic_nns_common::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
-    UpdateCanisterSettingsResponse,
+    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
