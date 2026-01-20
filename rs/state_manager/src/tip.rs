@@ -1680,6 +1680,7 @@ mod test {
                 snapshots: Default::default(),
                 last_advertised: Height::new(0),
                 fetch_state: None,
+                tip_height: height,
                 tip: None,
             }));
 

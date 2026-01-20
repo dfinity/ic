@@ -10,6 +10,7 @@ use crate::state::{
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use crate::storage::EventIterator;
+use crate::tx::FeeRate;
 use candid::Principal;
 pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
@@ -108,10 +109,11 @@ mod event {
             /// The IC time at which the minter submitted the transaction.
             #[serde(rename = "submitted_at")]
             submitted_at: u64,
-            /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+            /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
+            /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
             #[serde(rename = "fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
-            fee_per_vbyte: Option<u64>,
+            effective_fee_per_vbyte: Option<u64>,
             /// The total fee for this transaction
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -138,9 +140,10 @@ mod event {
             /// The IC time at which the minter submitted the transaction.
             #[serde(rename = "submitted_at")]
             submitted_at: u64,
-            /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+            /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
+            /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
             #[serde(rename = "fee")]
-            fee_per_vbyte: u64,
+            effective_fee_per_vbyte: u64,
             /// The total fee for this transaction
             #[serde(rename = "withdrawal_fee")]
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -400,7 +403,7 @@ impl EventLogger for CkBtcEventLogger {
                     request_block_indices,
                     txid,
                     utxos,
-                    fee_per_vbyte,
+                    effective_fee_per_vbyte,
                     change_output,
                     submitted_at,
                     withdrawal_fee,
@@ -439,7 +442,8 @@ impl EventLogger for CkBtcEventLogger {
                         requests,
                         txid,
                         used_utxos: utxos,
-                        fee_per_vbyte,
+                        effective_fee_per_vbyte: effective_fee_per_vbyte
+                            .map(FeeRate::from_millis_per_byte),
                         change_output,
                         submitted_at,
                         withdrawal_fee,
@@ -451,7 +455,7 @@ impl EventLogger for CkBtcEventLogger {
                     new_txid,
                     change_output,
                     submitted_at,
-                    fee_per_vbyte,
+                    effective_fee_per_vbyte,
                     withdrawal_fee,
                     reason,
                     new_utxos,
@@ -505,7 +509,9 @@ impl EventLogger for CkBtcEventLogger {
                             used_utxos: new_utxos.unwrap_or(old_utxos),
                             change_output: Some(change_output),
                             submitted_at,
-                            fee_per_vbyte: Some(fee_per_vbyte),
+                            effective_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(
+                                effective_fee_per_vbyte,
+                            )),
                             withdrawal_fee,
                             signed_tx: None,
                         },

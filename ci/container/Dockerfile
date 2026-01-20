@@ -8,7 +8,7 @@ ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+ENV DFINITY_CONTAINER=true
 
 # Todo: split out essential packages from application-level packages
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
