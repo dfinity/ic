@@ -1419,7 +1419,7 @@ impl CkBtcMinterState {
     fn ensure_reason_consistent_with_state(&self, utxo: &Utxo, reason: SuspendedReason) {
         match reason {
             SuspendedReason::ValueTooSmall => {
-                assert!(utxo.value <= self.check_fee);
+                assert!(utxo.value < self.deposit_btc_min_amount || utxo.value <= self.check_fee);
             }
             SuspendedReason::Quarantined => {}
         }
@@ -1587,6 +1587,16 @@ impl CkBtcMinterState {
             self.ecdsa_key_name,
             other.ecdsa_key_name,
             "ecdsa_key_name does not match"
+        );
+        ensure_eq!(
+            self.retrieve_btc_min_amount,
+            other.retrieve_btc_min_amount,
+            "retrieve_btc_min_amount does not match"
+        );
+        ensure_eq!(
+            self.deposit_btc_min_amount,
+            other.deposit_btc_min_amount,
+            "deposit_btc_min_amount does not match"
         );
         ensure_eq!(
             self.min_confirmations,

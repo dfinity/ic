@@ -34,7 +34,9 @@ pub fn init_args() -> InitArgs {
         max_time_in_queue_nanos: 600_000_000_000,
         min_confirmations: Some(6),
         mode: crate::state::Mode::GeneralAvailability,
-        btc_checker_principal: Some(CanisterId::from(0)),
+        btc_checker_principal: Some(CanisterId::unchecked_from_principal(
+            BTC_CHECKER_CANISTER_ID.into(),
+        )),
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
