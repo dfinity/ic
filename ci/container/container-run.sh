@@ -31,7 +31,7 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
     -r | --rebuild          Rebuild the container image
     -h | --help             Print help
 
-If no COMMAND is given, the default shell (${USHELL:-/usr/bin/bash}) will be started inside the container.
+If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
 To run a different shell or command, pass it as arguments, e.g.:
 
     $0 /usr/bin/zsh
@@ -51,7 +51,6 @@ else
     DEVENV=false
 fi
 PODMAN_CMD="sudo podman"
-USHELL=/usr/bin/bash
 
 IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
@@ -242,7 +241,7 @@ other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --ne
 
 # option to pass in another shell if desired
 if [ $# -eq 0 ]; then
-    cmd=("$USHELL")
+    cmd=("${USHELL:-/usr/bin/bash}")
 else
     cmd=("$@")
 fi
