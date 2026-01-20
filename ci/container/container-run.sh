@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+## Currently this script only supports podman as container runtime
+## Eventually we may want to add docker support as well
+
 eprintln() {
     echo "$@" >&2
 }
@@ -25,17 +28,30 @@ usage() {
 Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
+    -r | --rebuild          Rebuild the container image
     -h | --help             Print help
+
+If no COMMAND is given, the default shell (${USHELL:-/usr/bin/bash}) will be started inside the container.
+To run a different shell or command, pass it as arguments, e.g.:
+
+    $0 /usr/bin/zsh
+    $0 bash -l
 
 Script uses dfinity/ic-build image by default.
 EOF
 }
 
-if findmnt /hoststorage >/dev/null; then
-    PODMAN_ARGS=(--root /hoststorage/podman-root)
+# Detect if we're running in a Devenv environment
+if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
+    echo "Detected Devenv environment, using hoststorage for podman root."
+    ARGS=(--root /hoststorage/podman-root)
+    DEVENV=true
 else
-    PODMAN_ARGS=()
+    ARGS=()
+    DEVENV=false
 fi
+PODMAN_CMD="sudo podman"
+USHELL=/usr/bin/bash
 
 IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
@@ -43,6 +59,10 @@ while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
         -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
+        -r | --rebuild)
+            REBUILD_IMAGE=true
+            shift
+            ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
@@ -65,24 +85,18 @@ done
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
-    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
-        # fallback to building the image
-        docker() {
-            # Preserve "${PODMAN_ARGS[@]}" in the exported function by passing
-            # them through a single variable, and unpacking them here.
-            PODMAN_ARGS=(${PODMAN_ARGS})
-            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
-        }
-        export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
-        unset -f docker
-    fi
+
+if [ "${REBUILD_IMAGE:-false}" = true ]; then
+    "$REPO_ROOT"/ci/container/build-image.sh
+elif $PODMAN_CMD "${ARGS[@]}" "${PODMAN_ARGS[@]}" image exists "$IMAGE"; then
+    $PODMAN_CMD "${ARGS[@]}" pull "$IMAGE"
+else
+    "$REPO_ROOT"/ci/container/build-image.sh
 fi
 
-if findmnt /hoststorage >/dev/null; then
+if [ "$DEVENV" = true ]; then
     eprintln "Purging non-relevant container images"
-    sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
+    $PODMAN_CMD "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
 WORKDIR="/ic"
@@ -102,7 +116,7 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-if podman version | grep -qE 'Version:\s+4.'; then
+if [ "$DEVENV" = true ]; then
     PODMAN_RUN_ARGS+=(
         --hostuser="$USER"
     )
@@ -182,11 +196,6 @@ if [ "$(id -u)" = "1000" ]; then
             --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
         )
     fi
-
-    USHELL=$(getent passwd "$USER" | cut -d : -f 7)
-    if [[ "$USHELL" != *"/bash" ]] && [[ "$USHELL" != *"/zsh" ]] && [[ "$USHELL" != *"/fish" ]]; then
-        USHELL=/usr/bin/bash
-    fi
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
@@ -226,13 +235,17 @@ if tty >/dev/null 2>&1; then
 else
     tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
+other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+
+# option to pass in another shell if desired
 if [ $# -eq 0 ]; then
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
+    cmd=("$USHELL")
 else
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
+    cmd=("$@")
 fi
+
+set -x
+exec $PODMAN_CMD "${ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
