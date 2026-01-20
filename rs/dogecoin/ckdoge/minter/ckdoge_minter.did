@@ -16,6 +16,9 @@ type InitArgs = record {
     // The name of the ECDSA key to use.
     // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
+    
+    // The minimal amount of DOGE that can be converted to ckDOGE.
+    deposit_doge_min_amount : opt nat64;
 
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : nat64;
@@ -43,6 +46,9 @@ type InitArgs = record {
 
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
+    // The minimal amount of DOGE that can be converted to ckDOGE.
+    deposit_doge_min_amount : opt nat64;
+    
     // The minimal amount of ckDOGE that can be converted to DOGE.
     retrieve_doge_min_amount : opt nat64;
 

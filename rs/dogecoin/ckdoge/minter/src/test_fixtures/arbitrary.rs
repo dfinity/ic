@@ -155,6 +155,7 @@ pub mod ckbtc {
             btc_network(),
             canister_id(),
             ".*",
+            option::of(0..u64::MAX),
             0..u64::MAX,
             0..u64::MAX,
             mode(),
@@ -165,6 +166,7 @@ pub mod ckbtc {
                     btc_network,
                     ledger_id,
                     ecdsa_key_name,
+                    deposit_btc_min_amount,
                     retrieve_btc_min_amount,
                     max_time_in_queue_nanos,
                     mode,
@@ -173,6 +175,7 @@ pub mod ckbtc {
                     btc_network,
                     ledger_id,
                     ecdsa_key_name,
+                    deposit_btc_min_amount,
                     retrieve_btc_min_amount,
                     max_time_in_queue_nanos,
                     mode,
@@ -191,6 +194,7 @@ pub mod ckbtc {
     #[allow(deprecated)]
     fn upgrade_args() -> impl Strategy<Value = CkbtcMinterUpgradeArgs> {
         prop_struct!(CkbtcMinterUpgradeArgs {
+            deposit_btc_min_amount: option::of(any::<u64>()),
             retrieve_btc_min_amount: option::of(any::<u64>()),
             min_confirmations: option::of(any::<u32>()),
             max_time_in_queue_nanos: option::of(any::<u64>()),
