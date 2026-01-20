@@ -1,5 +1,5 @@
 {
-  "checksum": "d425e394ab11db72cc2a3db55681331cab2fcd2025756d5b383345dc09980d95",
+  "checksum": "f94b4e1ee27524427fe3a0731636d696bcc8262a225061d7ea6084fb5430adb3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22198,7 +22198,7 @@
               "target": "rolling_file"
             },
             {
-              "id": "rsa 0.9.6",
+              "id": "rsa 0.9.10",
               "target": "rsa"
             },
             {
@@ -51519,14 +51519,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "num-bigint-dig 0.8.4": {
+    "num-bigint-dig 0.8.6": {
       "name": "num-bigint-dig",
-      "version": "0.8.4",
+      "version": "0.8.6",
       "package_url": "https://github.com/dignifiedquire/num-bigint",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/num-bigint-dig/0.8.4/download",
-          "sha256": "dc84195820f291c7697304f3cbdadd1cb7199c0efc917ff5eafd71225c136151"
+          "url": "https://static.crates.io/crates/num-bigint-dig/0.8.6/download",
+          "sha256": "e661dda6640fad38e827a6d4a310ff4763082116fe217f279885c97f511bb0b7"
         }
       },
       "targets": [
@@ -51573,10 +51573,6 @@
         "deps": {
           "common": [
             {
-              "id": "byteorder 1.5.0",
-              "target": "byteorder"
-            },
-            {
               "id": "lazy_static 1.5.0",
               "target": "lazy_static"
             },
@@ -51585,7 +51581,7 @@
               "target": "libm"
             },
             {
-              "id": "num-bigint-dig 0.8.4",
+              "id": "num-bigint-dig 0.8.6",
               "target": "build_script_build"
             },
             {
@@ -51616,7 +51612,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.4"
+        "version": "0.8.6"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -67860,14 +67856,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "rsa 0.9.6": {
+    "rsa 0.9.10": {
       "name": "rsa",
-      "version": "0.9.6",
+      "version": "0.9.10",
       "package_url": "https://github.com/RustCrypto/RSA",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/rsa/0.9.6/download",
-          "sha256": "5d0e5124fcb30e76a7e79bfee683a2746db83784b86289f6251b54b7950a0dfc"
+          "url": "https://static.crates.io/crates/rsa/0.9.10/download",
+          "sha256": "b8573f03f5883dcaebdfcf4725caa1ecb9c15b2ef50c43a07b816e06799bb12d"
         }
       },
       "targets": [
@@ -67911,7 +67907,7 @@
               "target": "digest"
             },
             {
-              "id": "num-bigint-dig 0.8.4",
+              "id": "num-bigint-dig 0.8.6",
               "target": "num_bigint_dig",
               "alias": "num_bigint"
             },
@@ -67959,7 +67955,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.6"
+        "version": "0.9.10"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73900,7 +73896,7 @@
               "target": "p384"
             },
             {
-              "id": "rsa 0.9.6",
+              "id": "rsa 0.9.10",
               "target": "rsa"
             },
             {
@@ -98655,7 +98651,7 @@
     "rlp 0.5.2",
     "rocksdb 0.22.0",
     "rolling-file 0.2.0",
-    "rsa 0.9.6",
+    "rsa 0.9.10",
     "rstest 0.19.0",
     "rusb 0.9.3",
     "rusqlite 0.37.0",

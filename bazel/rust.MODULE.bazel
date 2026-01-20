@@ -1312,7 +1312,7 @@ crate.spec(
         "getrandom",
     ],
     package = "rsa",
-    version = "^0.9.6",
+    version = "^0.9.10",
 )
 crate.spec(
     package = "rstest",
