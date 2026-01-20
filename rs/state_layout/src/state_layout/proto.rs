@@ -156,7 +156,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 CanisterStatus::Stopped => {
                     return Err(ProxyDecodeError::ValueOutOfRange {
                         typ: "CanisterStatus",
-                        err: "Cannot insert callback into Stopped canister".to_string(),
+                        err: "Aborted execution in Stopped canister".to_string(),
                     });
                 }
             }

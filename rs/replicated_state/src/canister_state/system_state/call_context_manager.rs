@@ -669,6 +669,9 @@ impl CallContextManager {
 
     /// Inserts a callback under the given ID. Returns an error if the canister is
     /// `Stopped`.
+    //
+    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
+    // variant and no longer need forward compatible decoding.
     #[doc(hidden)]
     pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
