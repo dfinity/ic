@@ -432,8 +432,8 @@ message CanisterStateBits {
   uint64 executed = 18;
   uint64 instructions_executed = 57;
   uint64 ingress_messages_executed = 58;
-  uint64 xnet_messages_executed = 59;
-  uint64 intranet_messages_executed = 60;
+  uint64 remote_subnet_messages_executed = 59;
+  uint64 local_subnet_messages_executed = 60;
   uint64 http_outcalls_executed = 61;
   uint64 heartbeats_and_global_timers_executed = 62;
   reserved 19;

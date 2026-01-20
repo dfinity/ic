@@ -74,8 +74,8 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             environment_variables: item.environment_variables.into_iter().collect(),
             instructions_executed: item.instructions_executed.get(),
             ingress_messages_executed: item.ingress_messages_executed,
-            xnet_messages_executed: item.xnet_messages_executed,
-            intranet_messages_executed: item.intranet_messages_executed,
+            remote_subnet_messages_executed: item.remote_subnet_messages_executed,
+            local_subnet_messages_executed: item.local_subnet_messages_executed,
             http_outcalls_executed: item.http_outcalls_executed,
             heartbeats_and_global_timers_executed: item.heartbeats_and_global_timers_executed,
         }
@@ -214,8 +214,8 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             environment_variables: value.environment_variables.into_iter().collect(),
             instructions_executed: NumInstructions::from(value.instructions_executed),
             ingress_messages_executed: value.ingress_messages_executed,
-            xnet_messages_executed: value.xnet_messages_executed,
-            intranet_messages_executed: value.intranet_messages_executed,
+            remote_subnet_messages_executed: value.remote_subnet_messages_executed,
+            local_subnet_messages_executed: value.local_subnet_messages_executed,
             http_outcalls_executed: value.http_outcalls_executed,
             heartbeats_and_global_timers_executed: value.heartbeats_and_global_timers_executed,
         })

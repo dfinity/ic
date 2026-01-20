@@ -639,9 +639,9 @@ pub struct CanisterStateBits {
     #[prost(uint64, tag = "58")]
     pub ingress_messages_executed: u64,
     #[prost(uint64, tag = "59")]
-    pub xnet_messages_executed: u64,
+    pub remote_subnet_messages_executed: u64,
     #[prost(uint64, tag = "60")]
-    pub intranet_messages_executed: u64,
+    pub local_subnet_messages_executed: u64,
     #[prost(uint64, tag = "61")]
     pub http_outcalls_executed: u64,
     #[prost(uint64, tag = "62")]

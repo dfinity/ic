@@ -63,8 +63,8 @@ fn default_canister_state_bits() -> CanisterStateBits {
         environment_variables: BTreeMap::new(),
         instructions_executed: NumInstructions::new(0),
         ingress_messages_executed: 0,
-        xnet_messages_executed: 0,
-        intranet_messages_executed: 0,
+        remote_subnet_messages_executed: 0,
+        local_subnet_messages_executed: 0,
         http_outcalls_executed: 0,
         heartbeats_and_global_timers_executed: 0,
     }
