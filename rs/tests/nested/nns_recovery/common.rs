@@ -159,11 +159,6 @@ async fn replace_nns_with_nested_vms(env: &TestEnv, use_mainnet_state: bool) {
     // Readiness wait: ensure the NNS subnet is driven by the new nodes
     let state_sync_timeout = if use_mainnet_state {
         // Large subnet with large state takes longer to sync
-        // TODO: change me after seeing actual timings in CI
-        // Run 1: https://dash.zh1-idx1.dfinity.network/invocation/323afd0b-5f51-4548-a3d4-510d12b29d0a#@95396
-        //  - 2108s ~= 36 minutes
-        // Run 2: https://dash.zh1-idx1.dfinity.network/invocation/196812f6-0513-4aad-9ee7-65971e83d3d1#@60778
-        //  - 2145s ~= 36 minutes
         secs(60 * 60)
     } else {
         secs(15 * 60)
