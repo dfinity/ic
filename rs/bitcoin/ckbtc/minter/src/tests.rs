@@ -1099,7 +1099,7 @@ fn test_build_account_to_utxos_table_pagination() {
     state.add_utxos::<CheckInvariantsImpl>(account1, utxos[..10].to_vec());
     state.add_utxos::<CheckInvariantsImpl>(account2, utxos[10..].to_vec());
 
-    let dashboard = crate::dashboard::ckbtc_dashboard();
+    let dashboard = crate::dashboard::ckbtc_dashboard(state.btc_network);
     // Check if all pages combined together would give the full utxos set.
     let pages = [
         dashboard.build_account_to_utxos_table(&state, 0, 7),

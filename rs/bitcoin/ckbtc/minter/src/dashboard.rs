@@ -20,14 +20,9 @@ const DEFAULT_PAGE_SIZE: u64 = 100;
 /// taking care of their differences, e.g. in address display and block
 /// explorer URL.
 pub trait DashboardBuilder {
-    fn display_account_address(
-        &self,
-        key: &ECDSAPublicKey,
-        aaccount: &Account,
-        network: Network,
-    ) -> String;
-    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String;
-    fn transaction_url(&self, txid: &Txid, network: Network) -> String;
+    fn display_account_address(&self, key: &ECDSAPublicKey, aaccount: &Account) -> String;
+    fn display_address(&self, address: &BitcoinAddress) -> String;
+    fn transaction_url(&self, txid: &Txid) -> String;
     fn token(&self) -> &str;
     fn native_token(&self) -> &str;
 }
@@ -36,24 +31,21 @@ pub struct Dashboard<Builder> {
     builder: Builder,
 }
 
-pub struct CkBtcDashboardBuilder;
+pub struct CkBtcDashboardBuilder {
+    network: Network,
+}
 
 impl DashboardBuilder for CkBtcDashboardBuilder {
-    fn display_account_address(
-        &self,
-        key: &ECDSAPublicKey,
-        account: &Account,
-        network: Network,
-    ) -> String {
-        account_to_bitcoin_address(key, account).display(network)
+    fn display_account_address(&self, key: &ECDSAPublicKey, account: &Account) -> String {
+        account_to_bitcoin_address(key, account).display(self.network)
     }
 
-    fn display_address(&self, address: &BitcoinAddress, network: Network) -> String {
-        address.display(network)
+    fn display_address(&self, address: &BitcoinAddress) -> String {
+        address.display(self.network)
     }
 
-    fn transaction_url(&self, txid: &Txid, network: Network) -> String {
-        let net_prefix = if network == Network::Mainnet {
+    fn transaction_url(&self, txid: &Txid) -> String {
+        let net_prefix = if self.network == Network::Mainnet {
             ""
         } else {
             "testnet4/"
@@ -62,16 +54,22 @@ impl DashboardBuilder for CkBtcDashboardBuilder {
     }
 
     fn token(&self) -> &str {
-        "ckBTC"
+        match self.network {
+            Network::Mainnet => "ckBTC",
+            _ => "ckTESTBTC",
+        }
     }
 
     fn native_token(&self) -> &str {
-        "BTC"
+        match self.network {
+            Network::Mainnet => "BTC",
+            _ => "TESTBTC",
+        }
     }
 }
 
-pub fn ckbtc_dashboard() -> Dashboard<CkBtcDashboardBuilder> {
-    Dashboard::new(CkBtcDashboardBuilder)
+pub fn ckbtc_dashboard(network: Network) -> Dashboard<CkBtcDashboardBuilder> {
+    Dashboard::new(CkBtcDashboardBuilder { network })
 }
 
 impl<Builder: DashboardBuilder> Dashboard<Builder> {
@@ -320,7 +318,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                         writeln!(
                             buf,
                             "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                            self.txid_link(s, &utxo.outpoint.txid),
+                            self.txid_link(&utxo.outpoint.txid),
                             utxo.outpoint.vout,
                             utxo.height,
                             DisplayAmount(utxo.value),
@@ -394,10 +392,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
             s.btc_network,
             s.ecdsa_public_key
                 .clone()
-                .map(|key| {
-                    self.builder
-                        .display_account_address(&key, &main_account, s.btc_network)
-                })
+                .map(|key| { self.builder.display_account_address(&key, &main_account) })
                 .unwrap_or_default(),
             s.min_confirmations,
             s.ledger_id,
@@ -418,7 +413,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     buf,
                     "<tr><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
                     req.block_index,
-                    self.builder.display_address(&req.address, s.btc_network),
+                    self.builder.display_address(&req.address),
                     req.amount
                 )
                 .unwrap();
@@ -435,12 +430,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                         write!(buf, "<td>Signing...</td>").unwrap();
                     }
                     state::InFlightStatus::Sending { txid } => {
-                        write!(
-                            buf,
-                            "<td>Sending TX {}</td>",
-                            self.txid_link_on(txid, s.btc_network)
-                        )
-                        .unwrap();
+                        write!(buf, "<td>Sending TX {}</td>", self.txid_link(txid)).unwrap();
                     }
                 }
                 writeln!(buf, "</tr>").unwrap();
@@ -459,7 +449,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                             buf,
                             "<td rowspan='{}'>{}</td>",
                             rowspan,
-                            self.txid_link(s, &tx.txid)
+                            self.txid_link(&tx.txid)
                         )
                         .unwrap();
 
@@ -475,7 +465,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                             </table>",
                                 req.block_index(),
                                 DisplayAmount(req.amount()),
-                                self.builder.display_address(req.address(), s.btc_network),
+                                self.builder.display_address(req.address()),
                                 req.received_at(),
                             )
                             .unwrap();
@@ -485,7 +475,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     writeln!(
                         buf,
                         "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                        self.txid_link(s, &utxo.outpoint.txid),
+                        self.txid_link(&utxo.outpoint.txid),
                         utxo.outpoint.vout,
                         utxo.height,
                         DisplayAmount(utxo.value),
@@ -506,8 +496,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                         <td><code>{}</code></td>
                         <td>{}</td>",
                     req.request.block_index(),
-                    self.builder
-                        .display_address(req.request.address(), s.btc_network),
+                    self.builder.display_address(req.request.address()),
                     DisplayAmount(req.request.amount()),
                 )
                 .unwrap();
@@ -515,12 +504,9 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     state::FinalizedStatus::AmountTooLow => {
                         write!(buf, "<td>Amount is too low to cover fees</td>").unwrap()
                     }
-                    state::FinalizedStatus::Confirmed { txid } => write!(
-                        buf,
-                        "<td>Confirmed {}</td>",
-                        self.txid_link_on(txid, s.btc_network)
-                    )
-                    .unwrap(),
+                    state::FinalizedStatus::Confirmed { txid } => {
+                        write!(buf, "<td>Confirmed {}</td>", self.txid_link(txid)).unwrap()
+                    }
                 }
                 writeln!(buf, "</tr>").unwrap();
             }
@@ -538,7 +524,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     <td>{}</td>
                     <td>{}</td>
                 </tr>",
-                    self.txid_link(s, &utxo.outpoint.txid),
+                    self.txid_link(&utxo.outpoint.txid),
                     utxo.outpoint.vout,
                     utxo.height,
                     DisplayAmount(utxo.value)
@@ -559,7 +545,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     <td>{}</td>
                     <td>{}</td>
                 </tr>",
-                    self.txid_link(s, &utxo.outpoint.txid),
+                    self.txid_link(&utxo.outpoint.txid),
                     utxo.outpoint.vout,
                     utxo.height,
                     DisplayAmount(utxo.value)
@@ -580,7 +566,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     <td>{}</td>
                     <td>{}</td>
                 </tr>",
-                    self.txid_link(s, &utxo.outpoint.txid),
+                    self.txid_link(&utxo.outpoint.txid),
                     utxo.outpoint.vout,
                     utxo.height,
                     DisplayAmount(utxo.value)
@@ -598,7 +584,7 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
                     writeln!(
                         buf,
                         "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
-                        self.txid_link_on(&tx.txid, s.btc_network),
+                        self.txid_link(&tx.txid),
                         change.vout,
                         DisplayAmount(change.value)
                     )
@@ -631,12 +617,8 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
         })
     }
 
-    fn txid_link(&self, s: &CkBtcMinterState, txid: &Txid) -> String {
-        self.txid_link_on(txid, s.btc_network)
-    }
-
-    fn txid_link_on(&self, txid: &Txid, btc_network: Network) -> String {
-        let url = self.builder.transaction_url(txid, btc_network);
+    fn txid_link(&self, txid: &Txid) -> String {
+        let url = self.builder.transaction_url(txid);
         format!("<a target='_blank' href='{url}'><code>{txid}</code></a>",)
     }
 }
@@ -644,25 +626,23 @@ impl<Builder: DashboardBuilder> Dashboard<Builder> {
 #[test]
 fn test_txid_link() {
     assert_eq!(
-        ckbtc_dashboard().txid_link_on(
+        ckbtc_dashboard(Network::Mainnet).txid_link(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
             ]
             .into(),
-            Network::Mainnet
         ),
         "<a target='_blank' href='https://mempool.space/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );
 
     assert_eq!(
-        ckbtc_dashboard().txid_link_on(
+        ckbtc_dashboard(Network::Testnet).txid_link(
             &[
                 242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
                 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
             ]
             .into(),
-            Network::Testnet
         ),
         "<a target='_blank' href='https://mempool.space/testnet4/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
     );

@@ -234,8 +234,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
-
-    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard())
+    let network = ic_ckbtc_minter::state::read_state(|s| s.btc_network)
+        .try_into()
+        .unwrap_or_else(|err| ic_cdk::trap(err));
+    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard(network))
 }
 
 fn main() {}
