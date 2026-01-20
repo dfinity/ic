@@ -237,7 +237,7 @@ where
                     utxos,
                     change_output,
                     submitted_at: _,
-                    effective_fee_per_vbyte,
+                    effective_fee_per_byte: effective_fee_per_vbyte,
                     withdrawal_fee,
                     signed_tx: _,
                 } => (
@@ -494,11 +494,11 @@ where
         });
         let old_effective_fee_per_vbyte = match sent_old_tx_event {
             CkDogeMinterEventType::SentDogeTransaction {
-                effective_fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 ..
             } => effective_fee_per_vbyte.expect("BUG: missing effective fee per vbyte"),
             CkDogeMinterEventType::ReplacedDogeTransaction {
-                effective_fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 ..
             } => effective_fee_per_vbyte,
             _ => unreachable!(),
@@ -513,7 +513,7 @@ where
             );
         let new_effective_fee_per_vbyte = match replaced_tx_event {
             CkDogeMinterEventType::ReplacedDogeTransaction {
-                effective_fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 ..
             } => effective_fee_per_vbyte,
             _ => unreachable!(),
