@@ -6,7 +6,7 @@ use crate::{
     },
     test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
 };
-use candid::{Decode, Encode, Nat};
+use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
@@ -186,7 +186,7 @@ service : {
     assert_eq!(
         self_describing_value,
         SelfDescribingValue::Map(hashmap! {
-            "Add".to_string() => SelfDescribingValue::Text("application".to_string()),
+            "Add".to_string() => SelfDescribingValue::from("application"),
         })
     );
 }
@@ -227,9 +227,9 @@ async fn test_to_self_describing_uninstall_code() {
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
         SelfDescribingValue::Map(hashmap! {
-            "canister_id".to_string() => SelfDescribingValue::Text(target_canister.to_string()),
+            "canister_id".to_string() => SelfDescribingValue::from(target_canister.to_string()),
             "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
-                SelfDescribingValue::Nat(Nat::from(42_u64)),
+                SelfDescribingValue::from(42_u64),
             ]),
         })
     );
@@ -264,9 +264,9 @@ async fn test_to_self_describing_bitcoin_set_config() {
     assert_eq!(
         SelfDescribingValue::from(result.value.unwrap()),
         SelfDescribingValue::Map(hashmap! {
-            "canister_id".to_string() => SelfDescribingValue::Text(BITCOIN_MAINNET_CANISTER_ID.to_string()),
-            "method_name".to_string() => SelfDescribingValue::Text("set_config".to_string()),
-            "payload".to_string() => SelfDescribingValue::Blob(bitcoin_payload),
+            "canister_id".to_string() => SelfDescribingValue::from(BITCOIN_MAINNET_CANISTER_ID.to_string()),
+            "method_name".to_string() => SelfDescribingValue::from("set_config"),
+            "payload".to_string() => SelfDescribingValue::from(bitcoin_payload),
         })
     );
 }
