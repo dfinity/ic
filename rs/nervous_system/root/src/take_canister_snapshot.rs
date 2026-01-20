@@ -1,3 +1,4 @@
+use crate::private::exclusively_stop_and_start_canister;
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types_private::{
@@ -39,6 +40,8 @@ pub async fn take_canister_snapshot<Rt>(
 where
     Rt: Runtime,
 {
+    let operation_description = format!("{:?}", take_canister_snapshot_request);
+
     let TakeCanisterSnapshotRequest {
         canister_id,
         replace_snapshot,
@@ -61,17 +64,48 @@ where
         }
     };
 
-    let take_canister_snapshot_args = TakeCanisterSnapshotArgs {
-        canister_id,
-        replace_snapshot,
-        uninstall_code: None,
-        sender_canister_version: management_canister_client.canister_version(),
+    let canister_id = match CanisterId::try_from(canister_id) {
+        Ok(id) => id,
+        Err(e) => {
+            return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid canister ID: {:?}", e),
+            });
+        }
     };
 
-    match management_canister_client
-        .take_canister_snapshot(take_canister_snapshot_args)
-        .await
-    {
+    let result = exclusively_stop_and_start_canister::<_, _, _>(
+        canister_id,
+        &operation_description,
+        true, // stop_before
+        || async {
+            let canister_id = PrincipalId::from(canister_id);
+
+            let take_canister_snapshot_args = TakeCanisterSnapshotArgs {
+                canister_id,
+                replace_snapshot,
+                uninstall_code: None,
+                sender_canister_version: management_canister_client.canister_version(),
+            };
+
+            management_canister_client
+                .take_canister_snapshot(take_canister_snapshot_args)
+                .await
+        },
+    )
+    .await;
+
+    let result = match result {
+        Ok(ok) => ok,
+        Err(err) => {
+            return TakeCanisterSnapshotResponse::Err(TakeCanisterSnapshotError {
+                code: None,
+                description: format!("{err}"),
+            });
+        }
+    };
+
+    match result {
         Ok(result) => {
             let result =
                 convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(result);
