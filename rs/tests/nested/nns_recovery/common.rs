@@ -1,5 +1,3 @@
-use std::{net::IpAddr, path::Path};
-
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
@@ -47,6 +45,7 @@ use manual_guestos_recovery::recovery_utils::build_recovery_upgrader_run_command
 use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
 use slog::{Logger, info};
+use std::{net::IpAddr, path::Path};
 use tokio::task::JoinSet;
 
 pub const NNS_RECOVERY_VM_RESOURCES: VmResources = VmResources {
