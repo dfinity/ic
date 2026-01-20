@@ -230,13 +230,13 @@ fn test_decode_candid_args_to_self_describing_value_blob() {
         schema,
         "set_data_vec_nat8",
         &encoded,
-        SelfDescribingValue::from(vec![1_u8, 2_u8, 3_u8, 4_u8]),
+        SelfDescribingValue::from(vec![1_u8, 2, 3, 4]),
     );
     assert_candid_converts_to(
         schema,
         "set_data_blob",
         &encoded,
-        SelfDescribingValue::from(vec![1_u8, 2_u8, 3_u8, 4_u8]),
+        SelfDescribingValue::from(vec![1_u8, 2, 3, 4]),
     );
 }
 

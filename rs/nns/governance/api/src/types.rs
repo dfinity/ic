@@ -4630,6 +4630,12 @@ impl From<Vec<u8>> for SelfDescribingValue {
     }
 }
 
+impl From<PrincipalId> for SelfDescribingValue {
+    fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct SelfDescribingProposalAction {
     pub type_name: Option<String>,

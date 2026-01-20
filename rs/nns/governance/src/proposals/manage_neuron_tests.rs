@@ -144,7 +144,7 @@ fn test_command_configure_add_hot_key_to_self_describing() {
         }),
         SelfDescribingValue::Map(hashmap! {
             "AddHotKey".to_string() => SelfDescribingValue::Map(hashmap! {
-                "new_hot_key".to_string() => SelfDescribingValue::from(principal.to_string()),
+                "new_hot_key".to_string() => SelfDescribingValue::from(principal),
             }),
         }),
     );
@@ -274,7 +274,7 @@ fn test_command_configure_remove_hot_key_to_self_describing() {
         }),
         SelfDescribingValue::Map(hashmap! {
             "RemoveHotKey".to_string() => SelfDescribingValue::Map(hashmap! {
-                "hot_key_to_remove".to_string() => SelfDescribingValue::from(principal.to_string()),
+                "hot_key_to_remove".to_string() => SelfDescribingValue::from(principal),
             }),
         }),
     );
@@ -365,7 +365,7 @@ fn test_command_spawn_to_self_describing() {
         }),
         SelfDescribingValue::Map(hashmap! {
             "Spawn".to_string() => SelfDescribingValue::Map(hashmap! {
-                "new_controller".to_string() => SelfDescribingValue::from(principal.to_string()),
+                "new_controller".to_string() => SelfDescribingValue::from(principal),
                 "nonce".to_string() => SelfDescribingValue::from(999_u64),
                 "percentage_to_spawn".to_string() => SelfDescribingValue::from(50_u64),
             }),
@@ -386,7 +386,7 @@ fn test_command_disburse_to_neuron_to_self_describing() {
         }),
         SelfDescribingValue::Map(hashmap! {
             "DisburseToNeuron".to_string() => SelfDescribingValue::Map(hashmap! {
-                "new_controller".to_string() => SelfDescribingValue::from(principal.to_string()),
+                "new_controller".to_string() => SelfDescribingValue::from(principal),
                 "amount_e8s".to_string() => SelfDescribingValue::from(200_000_000_u64),
                 "dissolve_delay_seconds".to_string() => SelfDescribingValue::from(31_536_000_u64),
                 "kyc_verified".to_string() => SelfDescribingValue::from(1_u64),
@@ -427,7 +427,7 @@ fn test_command_claim_or_refresh_memo_and_controller_to_self_describing() {
             "ClaimOrRefresh".to_string() => SelfDescribingValue::Map(hashmap! {
                 "By".to_string() => SelfDescribingValue::from("MemoAndController"),
                 "memo".to_string() => SelfDescribingValue::from(98_765_u64),
-                "controller".to_string() => SelfDescribingValue::from(principal.to_string()),
+                "controller".to_string() => SelfDescribingValue::from(principal),
             }),
         }),
     );
