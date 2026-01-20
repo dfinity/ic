@@ -76,10 +76,10 @@ fn load_metrics_e2e_test() {
     let (
         StateSizeEstimates { states_sizes_bytes },
         LoadEstimates {
-            instructions_executed: instructions_used,
+            instructions_executed,
             ingress_messages_executed,
-            remote_subnet_messages_executed_lower_bound: xnet_messages_executed_lower_bound,
-            local_subnet_messages_executed_upper_bound: intranet_messages_executed_upper_bound,
+            remote_subnet_messages_executed_lower_bound,
+            local_subnet_messages_executed_upper_bound,
             http_outcalls_executed,
             heartbeats_and_global_timers_executed,
         },
@@ -101,7 +101,7 @@ fn load_metrics_e2e_test() {
         }
     );
     assert_eq!(
-        instructions_used,
+        instructions_executed,
         Estimates {
             source: 79487011,
             destination: 80691936,
@@ -115,14 +115,14 @@ fn load_metrics_e2e_test() {
         }
     );
     assert_eq!(
-        xnet_messages_executed_lower_bound,
+        remote_subnet_messages_executed_lower_bound,
         Estimates {
             source: 49,
             destination: 51,
         }
     );
     assert_eq!(
-        intranet_messages_executed_upper_bound,
+        local_subnet_messages_executed_upper_bound,
         Estimates {
             source: 146,
             destination: 152,
