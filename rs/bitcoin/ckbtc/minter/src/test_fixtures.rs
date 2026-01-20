@@ -3,6 +3,7 @@ use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
     lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
@@ -146,7 +147,7 @@ pub fn build_bitcoin_unsigned_transaction(
     available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
-    fee_per_vbyte: u64,
+    fee_per_vbyte: FeeRate,
 ) -> Result<
     (
         tx::UnsignedTransaction,
@@ -177,7 +178,7 @@ pub mod mock {
     use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
     use crate::state::eventlog::CkBtcEventLogger;
-    use crate::tx::{SignedRawTransaction, UnsignedTransaction};
+    use crate::tx::{FeeRate, SignedRawTransaction, UnsignedTransaction};
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
@@ -213,7 +214,7 @@ pub mod mock {
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             fn event_logger(&self) -> CkBtcEventLogger;
-            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<FeeRate>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
@@ -228,6 +229,7 @@ pub mod mock {
 pub mod arbitrary {
     use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
+    use crate::tx::FeeRate;
     use crate::{
         WithdrawalFee,
         address::BitcoinAddress,
@@ -545,6 +547,10 @@ pub mod arbitrary {
             })
     }
 
+    pub fn fee_rate(rates: impl Strategy<Value = u64>) -> impl Strategy<Value = FeeRate> {
+        rates.prop_map(FeeRate::from_millis_per_byte)
+    }
+
     pub fn account() -> impl Strategy<Value = Account> {
         prop_struct!(Account {
             owner: principal(),
@@ -649,7 +655,7 @@ pub mod arbitrary {
                     utxos: pvec(utxo(amount()), 0..10_000),
                     change_output: option::of(change_output()),
                     submitted_at: any::<u64>(),
-                    fee_per_vbyte: option::of(any::<u64>()),
+                    effective_fee_per_vbyte: option::of(any::<u64>()),
                     withdrawal_fee: option::of(withdrawal_fee()),
                     signed_tx: option::of(pvec(any::<u8>(), 1..10_000)),
                 }),
@@ -658,7 +664,7 @@ pub mod arbitrary {
                     new_txid: txid(),
                     change_output: change_output(),
                     submitted_at: any::<u64>(),
-                    fee_per_vbyte: any::<u64>(),
+                    effective_fee_per_vbyte: any::<u64>(),
                     withdrawal_fee: option::of(withdrawal_fee()),
                     reason: option::of(replaced_reason()),
                     new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),
