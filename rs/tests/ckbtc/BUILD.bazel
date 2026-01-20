@@ -218,6 +218,7 @@ system_test_nns(
 [
     system_test(
         name = "adapter_basics_test",
+        enable_metrics = True,
         env = MESSAGE_CANISTER_ENV | {
             "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",

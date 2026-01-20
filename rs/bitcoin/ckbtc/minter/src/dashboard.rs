@@ -32,11 +32,11 @@ pub trait DashboardBuilder {
     fn native_token(&self) -> &str;
 }
 
-pub struct Dashboard {
-    builder: Box<dyn DashboardBuilder>,
+pub struct Dashboard<Builder> {
+    builder: Builder,
 }
 
-struct CkBtcDashboardBuilder;
+pub struct CkBtcDashboardBuilder;
 
 impl DashboardBuilder for CkBtcDashboardBuilder {
     fn display_account_address(
@@ -70,15 +70,13 @@ impl DashboardBuilder for CkBtcDashboardBuilder {
     }
 }
 
-pub fn ckbtc_dashboard() -> Dashboard {
+pub fn ckbtc_dashboard() -> Dashboard<CkBtcDashboardBuilder> {
     Dashboard::new(CkBtcDashboardBuilder)
 }
 
-impl Dashboard {
-    pub fn new<Builder: DashboardBuilder + 'static>(builder: Builder) -> Self {
-        Self {
-            builder: Box::new(builder),
-        }
+impl<Builder: DashboardBuilder> Dashboard<Builder> {
+    pub fn new(builder: Builder) -> Self {
+        Self { builder }
     }
 
     pub fn build(&self, account_to_utxos_start: u64) -> Vec<u8> {

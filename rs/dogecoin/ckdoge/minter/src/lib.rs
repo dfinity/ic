@@ -314,7 +314,7 @@ mod dogecoin_canister {
     }
 }
 
-struct CkDogeDashboardBuilder;
+pub struct CkDogeDashboardBuilder;
 
 impl DashboardBuilder for CkDogeDashboardBuilder {
     fn display_account_address(
@@ -349,6 +349,6 @@ impl DashboardBuilder for CkDogeDashboardBuilder {
     }
 }
 
-pub fn ckdoge_dashboard() -> Dashboard {
+pub fn ckdoge_dashboard() -> Dashboard<CkDogeDashboardBuilder> {
     Dashboard::new(CkDogeDashboardBuilder)
 }
