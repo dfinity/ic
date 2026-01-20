@@ -343,7 +343,7 @@ mod withdrawal_reimbursement {
             used_utxos: vec![],
             submitted_at: 0,
             change_output: None,
-            fee_per_vbyte: None,
+            effective_fee_per_vbyte: None,
             withdrawal_fee: None,
             signed_tx: None,
         };

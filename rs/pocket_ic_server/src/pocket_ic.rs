@@ -166,8 +166,12 @@ use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(askama::Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    height: Height,
+    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+}
 
 const MAINNET_NNS_SUBNET_ID: &str =
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
