@@ -5,16 +5,16 @@ WITH "top" AS (
     COUNT(*) AS "total",
 
            SUM(CASE WHEN overall_status <> 1 THEN 1 ELSE 0 END)                         AS "non_success",
-    ROUND((SUM(CASE WHEN overall_status <> 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2) AS "non_success%",
+    ROUND((SUM(CASE WHEN overall_status <> 1 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1) AS "non_success%",
 
            SUM(CASE WHEN overall_status = 2 THEN 1 ELSE 0 END)                          AS "flaky",
-    ROUND((SUM(CASE WHEN overall_status = 2 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2)  AS "flaky%",
+    ROUND((SUM(CASE WHEN overall_status = 2 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1)  AS "flaky%",
 
            SUM(CASE WHEN overall_status = 3 THEN 1 ELSE 0 END)                          AS "timeout",
-    ROUND((SUM(CASE WHEN overall_status = 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2)  AS "timeout%",
+    ROUND((SUM(CASE WHEN overall_status = 3 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1)  AS "timeout%",
 
            SUM(CASE WHEN overall_status = 4 THEN 1 ELSE 0 END)                          AS "fail",
-    ROUND((SUM(CASE WHEN overall_status = 4 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 2)  AS "fail%",
+    ROUND((SUM(CASE WHEN overall_status = 4 THEN 1 ELSE 0 END) * 100.0) / COUNT(*), 1)  AS "fail%",
 
     percentile_disc(0.9) WITHIN GROUP (ORDER BY total_run_duration) * INTERVAL '1 second' AS "duration_p90"
 
