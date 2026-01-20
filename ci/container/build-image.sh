@@ -15,7 +15,7 @@ usage() {
     echo "  arguments to the docker build command (e.g., export DOCKER_BUILD_ARGS=\"--no-cache\")."
 }
 
-CONTAINER_CMD=()  # Default: empty, will auto-detect later
+CONTAINER_CMD=() # Default: empty, will auto-detect later
 
 while test $# -gt 0; do
     case "$1" in
@@ -31,7 +31,7 @@ while test $# -gt 0; do
                 exit 1
             fi
             # Split the argument into an array (supports "sudo podman")
-            read -ra CONTAINER_CMD <<< "$1"
+            read -ra CONTAINER_CMD <<<"$1"
             shift
             ;;
         *)
