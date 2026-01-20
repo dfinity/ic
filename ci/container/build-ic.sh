@@ -12,7 +12,8 @@ export BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
-# If not running in the DFINITY container, drop into the correct container.
+# This script needs to be run inside the build-ic container
+# If it isn't, we drop into the correct container.
 if [ ! -f /etc/ic-build-container ]; then
     echo dropping into container
     exec "$ROOT_DIR"/ci/container/container-run.sh bash "$0" "$@"
