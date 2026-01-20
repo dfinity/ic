@@ -7,6 +7,10 @@ usage() {
     echo " "
     echo "Options:"
     echo "-h, --help   show brief help"
+    echo ""
+    echo "Advanced:"
+    echo "Set the DOCKER_BUILD_ARGS environment variable to pass additional"
+    echo "arguments to the docker build command (e.g., export DOCKER_BUILD_ARGS=\"--no-cache\")."
 }
 
 while test $# -gt 0; do
@@ -29,16 +33,20 @@ DOCKER_IMG_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 
 pushd "$REPO_ROOT"
 
-# we can pass '--no-cache' from env
 BUILD_ARGS=("${DOCKER_BUILD_ARGS:---rm=true}")
 
-if findmnt /hoststorage >/dev/null; then
+if [ -d /var/lib/cloud/instance ] && [ findmnt /hoststorage >/dev/null ]; then
+    echo "Detected Devenv environment, using hoststorage for podman root."
+    DOCKER_CMD="sudo podman"
     ARGS=(--root /hoststorage/podman-root)
 else
+    DOCKER_CMD="docker"
     ARGS=()
 fi
 
-DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
+echo "Building ic-build:$DOCKER_IMG_TAG"
+
+DOCKER_BUILDKIT=1 $DOCKER_CMD "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
     -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     -t ghcr.io/dfinity/ic-build:latest \
