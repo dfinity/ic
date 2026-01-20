@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "MESSAGE_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs/tests:__subpackages__"])
 

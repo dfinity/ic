@@ -1,5 +1,5 @@
 load("//rs/tests:common.bzl", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
-load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns", "uvm_config_image")
+load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
