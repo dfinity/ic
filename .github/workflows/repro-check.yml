@@ -31,12 +31,15 @@ jobs:
       env:
         DFINITY_CONTAINER: true
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.github_sha }}
+
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
-          env | sort
           sudo -u ubuntu bash -c '
-            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }}
+            ci/scripts/repro-check | python3 - -c ${{ inputs.github_sha }}
           '
