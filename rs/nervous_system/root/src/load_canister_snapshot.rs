@@ -3,7 +3,6 @@ use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types_private::LoadCanisterSnapshotArgs;
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
-use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
@@ -27,13 +26,10 @@ pub struct LoadCanisterSnapshotError {
     pub description: String,
 }
 
-pub async fn load_canister_snapshot<Rt>(
+pub async fn load_canister_snapshot(
     load_canister_snapshot_request: LoadCanisterSnapshotRequest,
     management_canister_client: &mut impl ManagementCanisterClient,
-) -> LoadCanisterSnapshotResponse
-where
-    Rt: Runtime,
-{
+) -> LoadCanisterSnapshotResponse {
     let operation_description = format!("{:?}", load_canister_snapshot_request);
 
     let LoadCanisterSnapshotRequest {

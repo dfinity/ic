@@ -5,7 +5,6 @@ use ic_management_canister_types_private::{
     CanisterSnapshotResponse, TakeCanisterSnapshotArgs,
 };
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClient;
-use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize)]
@@ -33,13 +32,10 @@ pub struct TakeCanisterSnapshotError {
     pub description: String,
 }
 
-pub async fn take_canister_snapshot<Rt>(
+pub async fn take_canister_snapshot(
     take_canister_snapshot_request: TakeCanisterSnapshotRequest,
     management_canister_client: &mut impl ManagementCanisterClient,
-) -> TakeCanisterSnapshotResponse
-where
-    Rt: Runtime,
-{
+) -> TakeCanisterSnapshotResponse {
     let operation_description = format!("{:?}", take_canister_snapshot_request);
 
     let TakeCanisterSnapshotRequest {

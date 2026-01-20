@@ -24,8 +24,7 @@ use ic_nns_common::{
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse, TakeCanisterSnapshotRequest,
-    TakeCanisterSnapshotResponse, UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
     UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
@@ -252,26 +251,4 @@ pub async fn update_canister_settings(
             })
         }
     }
-}
-
-pub async fn take_canister_snapshot(
-    take_canister_snapshot_request: TakeCanisterSnapshotRequest,
-    management_canister_client: &mut impl ManagementCanisterClient,
-) -> TakeCanisterSnapshotResponse {
-    ic_nervous_system_root::take_canister_snapshot::take_canister_snapshot::<CdkRuntime>(
-        take_canister_snapshot_request,
-        management_canister_client,
-    )
-    .await
-}
-
-pub async fn load_canister_snapshot(
-    load_canister_snapshot_request: LoadCanisterSnapshotRequest,
-    management_canister_client: &mut impl ManagementCanisterClient,
-) -> LoadCanisterSnapshotResponse {
-    ic_nervous_system_root::load_canister_snapshot::load_canister_snapshot::<CdkRuntime>(
-        load_canister_snapshot_request,
-        management_canister_client,
-    )
-    .await
 }
