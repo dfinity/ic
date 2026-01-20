@@ -9,8 +9,8 @@ usage() {
     echo "-h, --help   show brief help"
     echo ""
     echo "Advanced:"
-    echo "Set the DOCKER_BUILD_ARGS environment variable to pass additional"
-    echo "arguments to the docker build command (e.g., export DOCKER_BUILD_ARGS=\"--no-cache\")."
+    echo "  Set the DOCKER_BUILD_ARGS environment variable to pass additional"
+    echo "  arguments to the docker build command (e.g., export DOCKER_BUILD_ARGS=\"--no-cache\")."
 }
 
 while test $# -gt 0; do
