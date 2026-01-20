@@ -2,7 +2,9 @@ use anyhow::{Context, Result, bail, ensure};
 use bare_metal_deployment::deploy::{
     DeploymentConfig, DeploymentError, ImageSource, deploy_to_bare_metal, establish_ssh_connection,
 };
-use bare_metal_deployment::{BareMetalIpmiSession, LoginInfo, parse_login_info_from_csv};
+use bare_metal_deployment::{
+    BareMetalIpmiSession, LoginInfo, SshAuthMethod, parse_login_info_from_ini,
+};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -14,7 +16,7 @@ use std::{env, fs};
     about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, checks SSH connection and injects key via IPMI if needed."
 )]
 struct Args {
-    /// Path to CSV file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.csv.
+    /// Path to INI file with baremetal login info e.g. zh2-dll01.ini.
     /// Ask the node team for access to this file.
     #[arg(long)]
     login_info: PathBuf,
@@ -33,6 +35,11 @@ struct Args {
     /// Fails if images are not found at expected paths.
     #[arg(long)]
     nobuild: bool,
+
+    /// Path to SSH public key file. Required when using SSH agent forwarding
+    /// (when private key files are not available locally).
+    #[arg(long)]
+    public_key: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -50,9 +57,8 @@ impl Display for OsType {
     }
 }
 
-/// Attempts to find a default SSH key in the user's .ssh directory.
-/// Returns (public_key, private_key_path)
-fn get_default_ssh_keys() -> Result<(String, PathBuf)> {
+/// Attempts to find SSH keys and determine the authentication method.
+fn get_ssh_keys(public_key_path: Option<&Path>) -> Result<(String, SshAuthMethod)> {
     let home_dir = std::env::var("HOME").context("HOME environment variable not set")?;
     let home_path = Path::new(&home_dir);
 
@@ -62,18 +68,42 @@ fn get_default_ssh_keys() -> Result<(String, PathBuf)> {
         home_path.join(".ssh/id_ecdsa"),
     ];
 
+    // Try to find private key files
     for private_key_path in &key_paths {
         if private_key_path.exists() {
-            let public_key_path = private_key_path.with_extension("pub");
-            let public_key = fs::read_to_string(&public_key_path).with_context(|| {
-                format!("Failed to read SSH public key from {:?}", public_key_path)
+            let derived_public_key_path = private_key_path.with_extension("pub");
+            let public_key = fs::read_to_string(&derived_public_key_path).with_context(|| {
+                format!(
+                    "Failed to read SSH public key from {:?}",
+                    derived_public_key_path
+                )
             })?;
-            return Ok((public_key, private_key_path.clone()));
+            return Ok((public_key, SshAuthMethod::KeyFile(private_key_path.clone())));
         }
     }
 
+    // No private key files found, check if SSH agent is available
+    if std::env::var("SSH_AUTH_SOCK").is_ok() {
+        let provided_public_key_path = public_key_path.ok_or_else(|| {
+            anyhow::anyhow!(
+                "SSH agent detected but --public-key is required.\n\
+                 The public key is needed for IPMI key injection if SSH fails."
+            )
+        })?;
+        let public_key = fs::read_to_string(provided_public_key_path).with_context(|| {
+            format!(
+                "Failed to read SSH public key from {:?}",
+                provided_public_key_path
+            )
+        })?;
+        println!("Using SSH agent for authentication");
+        return Ok((public_key, SshAuthMethod::Agent));
+    }
+
     bail!(
-        "No SSH private key found. Tried: {}",
+        "No SSH private key found and SSH agent not available.\n\
+         Tried: {}\n\
+         If using SSH agent forwarding, set SSH_AUTH_SOCK and use --public-key.",
         key_paths
             .iter()
             .map(|p| p.display().to_string())
@@ -150,13 +180,16 @@ fn main() -> Result<()> {
     };
 
     println!("Loading SSH keys...");
-    let (ssh_public_key, ssh_private_key_path) = get_default_ssh_keys()?;
-    println!("Using SSH key: {:?}.pub", ssh_private_key_path);
+    let (ssh_public_key, ssh_auth_method) = get_ssh_keys(args.public_key.as_deref())?;
+    match &ssh_auth_method {
+        SshAuthMethod::Agent => println!("Using SSH agent for authentication"),
+        SshAuthMethod::KeyFile(path) => println!("Using SSH key file: {:?}", path),
+    }
 
     println!("Reading login info from {:?}", args.login_info);
-    let login_csv = fs::read_to_string(&args.login_info)
+    let login_ini = fs::read_to_string(&args.login_info)
         .with_context(|| format!("Failed to read login info from {:?}", args.login_info))?;
-    let login_info = parse_login_info_from_csv(&login_csv)?;
+    let login_info = parse_login_info_from_ini(&login_ini)?;
 
     let host_ip = login_info.hostos_address();
 
@@ -168,7 +201,7 @@ fn main() -> Result<()> {
     let final_host_ip = if has_images {
         println!("Deploying to bare metal host at {host_ip}");
         let ip = execute_with_ssh_recovery(
-            |ip| deploy_to_bare_metal(&config, ip.into(), &ssh_private_key_path),
+            |ip| deploy_to_bare_metal(&config, ip.into(), &ssh_auth_method),
             &login_info,
             &ssh_public_key,
         )?;
@@ -177,7 +210,7 @@ fn main() -> Result<()> {
     } else {
         println!("No images specified. Checking SSH connection to {host_ip}...");
         let ip = execute_with_ssh_recovery(
-            |ip| establish_ssh_connection(ip.into(), &ssh_private_key_path).map(|_| ()),
+            |ip| establish_ssh_connection(ip.into(), &ssh_auth_method).map(|_| ()),
             &login_info,
             &ssh_public_key,
         )?;

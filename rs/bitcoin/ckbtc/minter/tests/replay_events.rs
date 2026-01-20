@@ -31,8 +31,8 @@ pub mod mock {
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
     use ic_ckbtc_minter::{
         CanisterRuntime, ECDSAPublicKey, GetCurrentFeePercentilesRequest, GetUtxosRequest,
-        GetUtxosResponse, Network, state::eventlog::CkBtcEventLogger, tx::SignedRawTransaction,
-        tx::UnsignedTransaction,
+        GetUtxosResponse, Network, state::eventlog::CkBtcEventLogger, tx::FeeRate,
+        tx::SignedRawTransaction, tx::UnsignedTransaction,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -59,7 +59,7 @@ pub mod mock {
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn event_logger(&self) -> CkBtcEventLogger;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
-            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<FeeRate>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;

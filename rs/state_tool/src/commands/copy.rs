@@ -28,13 +28,13 @@ pub fn do_copy(source: PathBuf, destination: PathBuf, heights: Heights) -> Resul
 
     let heights = match heights {
         Heights::All => src_layout
-            .checkpoint_heights()
+            .verified_checkpoint_heights()
             .unwrap()
             .into_iter()
             .map(|h| (h, None))
             .collect(),
         Heights::Latest => src_layout
-            .checkpoint_heights()
+            .verified_checkpoint_heights()
             .unwrap()
             .last()
             .map(|h| vec![(*h, None)])
@@ -153,7 +153,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(dst_layout.verified_checkpoint_heights().unwrap().is_empty());
         assert!(
             load_metadata_proto(&dst_layout.states_metadata())
                 .unwrap()
@@ -169,7 +169,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(1)]
         );
         assert_eq!(
@@ -199,7 +199,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(1), Height::new(3)]
         );
     }
@@ -222,7 +222,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(dst_layout.verified_checkpoint_heights().unwrap().is_empty());
         assert!(
             load_metadata_proto(&dst_layout.states_metadata())
                 .unwrap()
@@ -241,7 +241,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(1), Height::new(3)]
         );
         assert_eq!(
@@ -281,7 +281,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
+        assert!(dst_layout.verified_checkpoint_heights().unwrap().is_empty());
         assert!(
             load_metadata_proto(&dst_layout.states_metadata())
                 .unwrap()
@@ -297,7 +297,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(4)]
         );
         assert_eq!(
