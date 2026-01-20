@@ -946,7 +946,6 @@ pub struct StateManagerImpl {
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     latest_subnet_certified_height: AtomicU64,
-    tip_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1510,7 +1509,6 @@ impl StateManagerImpl {
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
         let latest_subnet_certified_height = AtomicU64::new(0);
-        let tip_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1628,7 +1626,6 @@ impl StateManagerImpl {
             latest_state_height,
             latest_certified_height,
             latest_subnet_certified_height,
-            tip_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -3003,11 +3000,11 @@ impl StateManager for StateManagerImpl {
 
     fn list_state_heights_to_certify(&self) -> Vec<Height> {
         let states = self.states.read();
+        let tip_height = states.tip_height.get();
         let heights_with_certification: HashSet<_> =
             states.certifications.keys().cloned().collect();
         drop(states);
 
-        let tip_height = self.tip_height.load(Ordering::Relaxed);
         let latest_subnet_certified_height =
             self.latest_subnet_certified_height.load(Ordering::Relaxed);
         let state_heights = tip_height
@@ -3377,11 +3374,7 @@ impl StateManager for StateManagerImpl {
 
         assert_tip_is_none(&states);
 
-        // It's possible that we already computed this state before.  We
-        // validate that hashes agree to spot bugs causing non-determinism as
-        // early as possible.
-        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            let prev_hash = &prev_metadata.certified_state_hash;
+        let assert_prev_hash_matches = |prev_hash| {
             let hash = &certification_metadata.certified_state_hash;
             if prev_hash != hash {
                 if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
@@ -3394,9 +3387,22 @@ impl StateManager for StateManagerImpl {
                     "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
+        };
+
+        // It's possible that we already computed this state before.  We
+        // validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
+        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
+            let prev_hash = &prev_metadata.certified_state_hash;
+            assert_prev_hash_matches(prev_hash);
         }
 
+        // We reuse certification delivered by consensus if possible.
+        // We also validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
         if let Some(certification) = states.certifications.get(&height) {
+            let prev_hash = &certification.signed.content.hash.clone().get();
+            assert_prev_hash_matches(prev_hash);
             certification_metadata.certification = Some(certification.clone());
         }
 
@@ -4136,9 +4142,6 @@ pub mod testing {
 
         /// Testing only: Returns `latest_subnet_certified_height`.
         fn latest_subnet_certified_height(&self) -> u64;
-
-        /// Testing only: Returns `tip_height`.
-        fn tip_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4226,10 +4229,6 @@ pub mod testing {
 
         fn latest_subnet_certified_height(&self) -> u64 {
             self.latest_subnet_certified_height.load(Ordering::Relaxed)
-        }
-
-        fn tip_height(&self) -> u64 {
-            self.tip_height.load(Ordering::Relaxed)
         }
     }
 }
