@@ -895,8 +895,9 @@ struct SharedState {
     last_advertised: Height,
     /// The state we are are trying to fetch.
     fetch_state: Option<(Height, CryptoHashOfState, Height)>,
-    /// State representing the on disk mutable state
-    tip: Option<(Height, ReplicatedState)>,
+    /// State representing the on disk mutable state and its height
+    tip_height: Height,
+    tip: Option<ReplicatedState>,
 }
 
 impl SharedState {
@@ -1559,7 +1560,8 @@ impl StateManagerImpl {
             snapshots,
             last_advertised: Self::INITIAL_STATE_HEIGHT,
             fetch_state: None,
-            tip: Some(tip_height_and_state),
+            tip_height: tip_height_and_state.0,
+            tip: Some(tip_height_and_state.1),
         }));
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
@@ -2682,7 +2684,8 @@ impl StateManager for StateManagerImpl {
             .start_timer();
 
         let mut states = self.states.write();
-        let (tip_height, mut tip) = states.tip.take().expect("failed to get TIP");
+        let tip_height = states.tip_height;
+        let mut tip = states.tip.take().expect("failed to get TIP");
 
         let (target_snapshot, target_hash) = match states.snapshots.back() {
             Some(snapshot) if snapshot.height > tip_height => {
@@ -2788,11 +2791,13 @@ impl StateManager for StateManagerImpl {
         assert!(states.tip.is_none());
 
         if height < tip_height {
-            states.tip = Some((tip_height, state));
+            states.tip_height = tip_height;
+            states.tip = Some(state);
             return Err(StateManagerError::StateRemoved(height));
         }
         if tip_height < height {
-            states.tip = Some((tip_height, state));
+            states.tip_height = tip_height;
+            states.tip = Some(state);
             return Err(StateManagerError::StateNotCommittedYet(height));
         }
 
@@ -3238,12 +3243,12 @@ impl StateManager for StateManagerImpl {
             // The following assert validates that we don't have two clients
             // modifying TIP at the same time and that each commit_and_certify()
             // is preceded by a call to take_tip().
-            if let Some((tip_height, _)) = &states.tip {
+            if states.tip.is_some() {
                 fatal!(
                     self.log,
                     "Attempt to commit state not borrowed from this StateManager, height = {}, tip_height = {}",
                     height,
-                    tip_height,
+                    states.tip_height,
                 );
             }
         };
@@ -3270,7 +3275,8 @@ impl StateManager for StateManagerImpl {
 
             self.metrics.no_state_clone_count.inc();
 
-            states.tip = Some((height, state));
+            states.tip_height = height;
+            states.tip = Some(state);
             return;
         }
 
@@ -3319,7 +3325,7 @@ impl StateManager for StateManagerImpl {
                 .checkpoint_op_duration
                 .with_label_values(&["copy_state"])
                 .start_timer();
-            Some((height, state.deref().clone()))
+            (height, state.deref().clone())
         };
 
         let mut states = self.states.write();
@@ -3403,7 +3409,8 @@ impl StateManager for StateManagerImpl {
 
         // The next call to take_tip() will take care of updating the
         // tip if needed.
-        states.tip = next_tip;
+        states.tip_height = next_tip.0;
+        states.tip = Some(next_tip.1);
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);

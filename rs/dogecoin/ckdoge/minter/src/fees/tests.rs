@@ -3,6 +3,7 @@ use crate::lifecycle::init::Network;
 use crate::test_fixtures::{arbitrary, dogecoin_fee_estimator};
 use ic_ckbtc_minter::fees::FeeEstimator;
 use ic_ckbtc_minter::state::utxos::UtxoSet;
+use ic_ckbtc_minter::tx::FeeRate;
 use proptest::prop_assert;
 use test_strategy::proptest;
 
@@ -14,18 +15,19 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
     let increment = 25 * DOGE;
     let estimator = DogecoinFeeEstimator::new(Network::Mainnet, initial_min_amount);
 
-    for fee_rate_in_millikoinus_per_byte in
-        [0, 1, 100, 1_000, 10_000, 100_000, 1_000_000].map(|f| f * 1_000)
+    for fee_rate_in_millikoinus_per_byte in [0, 1, 100, 1_000, 10_000, 100_000, 1_000_000]
+        .map(|f| FeeRate::from_millis_per_byte(f * 1_000))
     {
         assert_eq!(
             estimator.fee_based_minimum_withdrawal_amount(fee_rate_in_millikoinus_per_byte),
             initial_min_amount,
-            "BUG: unexpected fee for fee rate {fee_rate_in_millikoinus_per_byte}"
+            "BUG: unexpected fee for fee rate {fee_rate_in_millikoinus_per_byte:?}"
         );
     }
 
     assert_eq!(
-        estimator.fee_based_minimum_withdrawal_amount(10_000_000 * 1_000),
+        estimator
+            .fee_based_minimum_withdrawal_amount(FeeRate::from_millis_per_byte(10_000_000 * 1_000)),
         initial_min_amount + increment,
     );
 }
@@ -34,7 +36,7 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
 fn test_fee_range(
     #[strategy(arbitrary::utxo_set(5_000u64..1_000_000_000, 20..40))] mut utxos: UtxoSet,
     #[strategy(0_u64..15_000)] amount: u64,
-    #[strategy(2000..10000u64)] fee_rate_in_millikoinus_per_byte: u64,
+    #[strategy(arbitrary::fee_rate(2000..10000u64))] fee_rate_in_millikoinus_per_byte: FeeRate,
 ) {
     const SMALLEST_TX_SIZE_BYTES: u64 = 225; // one input, two outputs
     const MIN_MINTER_FEE: u64 = DogecoinFeeEstimator::DUST_LIMIT;
@@ -53,7 +55,7 @@ fn test_fee_range(
     )
     .unwrap();
     let lower_bound =
-        MIN_MINTER_FEE + SMALLEST_TX_SIZE_BYTES * fee_rate_in_millikoinus_per_byte / 1000;
+        MIN_MINTER_FEE + fee_rate_in_millikoinus_per_byte.fee_ceil(SMALLEST_TX_SIZE_BYTES);
     let estimate_fee_amount = estimate.minter_fee + estimate.dogecoin_fee;
 
     prop_assert!(
