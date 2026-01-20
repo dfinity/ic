@@ -8,6 +8,7 @@ ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
+# marker for scripts to check if they are running in this container
 RUN echo "ic-build" > /etc/ic-build-container
 
 # Todo: split out essential packages from application-level packages
