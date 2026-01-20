@@ -1,3 +1,4 @@
+use crate::private::{exclusively_stop_and_start_canister};
 use candid::CandidType;
 use ic_base_types::{CanisterId, PrincipalId, SnapshotId};
 use ic_management_canister_types_private::LoadCanisterSnapshotArgs;
@@ -33,6 +34,8 @@ pub async fn load_canister_snapshot<Rt>(
 where
     Rt: Runtime,
 {
+    let operation_description = format!("{:?}", load_canister_snapshot_request);
+
     let LoadCanisterSnapshotRequest {
         canister_id,
         snapshot_id,
@@ -58,20 +61,44 @@ where
         }
     };
 
-    let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(
+    let result = exclusively_stop_and_start_canister::<_, _, _>(
         canister_id,
-        snapshot_id,
-        management_canister_client.canister_version(),
-    );
+        &operation_description,
+        true, // stop_before
+        || async {
+            let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(
+                canister_id,
+                snapshot_id,
+                management_canister_client.canister_version(),
+            );
 
-    match management_canister_client
-        .load_canister_snapshot(load_canister_snapshot_args)
-        .await
-    {
+            management_canister_client
+                .load_canister_snapshot(load_canister_snapshot_args)
+                .await
+        },
+    )
+    .await;
+
+    let result = match result {
+        Ok(ok) => ok,
+        Err(err) => {
+            let description = format!("{err}");
+            return LoadCanisterSnapshotResponse::Err(
+                LoadCanisterSnapshotError {
+                    code: None,
+                    description,
+                }
+            );
+        }
+    };
+
+    match result {
         Ok(()) => LoadCanisterSnapshotResponse::Ok(LoadCanisterSnapshotOk {}),
-        Err((code, description)) => LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
-            code: Some(code),
-            description,
-        }),
+        Err((code, description)) => {
+            LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: Some(code),
+                description,
+            })
+        }
     }
 }
