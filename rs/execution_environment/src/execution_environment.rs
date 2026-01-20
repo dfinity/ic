@@ -1011,7 +1011,7 @@ impl ExecutionEnvironment {
                                 },
                                 Ok(_) => ExecuteSubnetMessageResult::Finished {
                                     response: Err(UserError::new(
-                                        ErrorCode::UnknownManagementMessage,
+                                        ErrorCode::CanisterRejectedMessage,
                                         "FlexibleHttpRequest is not yet implemented".to_string(),
                                     )),
                                     refund: msg.take_cycles(),
