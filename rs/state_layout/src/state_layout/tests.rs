@@ -1259,3 +1259,108 @@ fn test_decode_task_queue_forward_compatibility() {
         canister_state_bits.status
     );
 }
+
+/// These tests are used to check the compatibility with the mainnet version.
+/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+/// but instead invoked from the compiled test binary by a separate compatibility test.
+mod mainnet_compatibility_tests {
+    use prost::Message;
+
+    #[cfg(test)]
+    mod task_queue_compatibility_test {
+        use ic_types::CanisterId;
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "canister.pbuf";
+
+        fn make_task_queue_and_status() -> CanisterStateBits {
+            let make_callback = |respondent: CanisterId| {
+                Arc::new(Callback {
+                    call_context_id: CallContextId::new(1),
+                    originator: canister_test_id(0),
+                    respondent,
+                    cycles_sent: Cycles::new(100),
+                    prepayment_for_response_execution: Cycles::zero(),
+                    prepayment_for_response_transmission: Cycles::zero(),
+                    on_reply: WasmClosure::new(1, 2),
+                    on_reject: WasmClosure::new(3, 4),
+                    on_cleanup: None,
+                    deadline: NO_DEADLINE,
+                })
+            };
+
+            let callback_id1 = CallbackId::new(1);
+            let callback1 = make_callback(canister_test_id(1));
+            let response1 = Arc::new(
+                ResponseBuilder::new()
+                    .respondent(canister_test_id(1))
+                    .originator_reply_callback(callback_id1)
+                    .build(),
+            );
+
+            let callback_id2 = CallbackId::new(3);
+            let callback2 = make_callback(canister_test_id(3));
+
+            // A canister state with a `NewResponse` aborted execution (corresponding to
+            // `callback1`); and a second callback (`callback2`).
+            let mut task_queue = TaskQueue::default();
+            task_queue.enqueue(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(response1)),
+                prepaid_execution_cycles: Cycles::new(10),
+            });
+
+            let mut call_context_manager = CallContextManager::default();
+            call_context_manager.insert_callback(callback_id1, callback1.as_ref().clone());
+            call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
+
+            CanisterStateBits {
+                task_queue: task_queue.clone(),
+                status: CanisterStatus::Running {
+                    call_context_manager,
+                },
+                ..default_canister_state_bits()
+            }
+        }
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let canister_state_bits = make_task_queue_and_status();
+
+            let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
+                canister_state_bits.into();
+            let serialized = proto_state_bits.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let proto_state_bits =
+                pb_canister_state_bits::CanisterStateBits::decode(&serialized as &[u8])
+                    .expect("Failed to deserialize the protobuf");
+            let canister_state_bits = CanisterStateBits::try_from(proto_state_bits)
+                .expect("Failed to convert the protobuf to CanisterStateBits");
+
+            let CanisterStateBits {
+                task_queue, status, ..
+            } = canister_state_bits;
+            let CanisterStateBits {
+                task_queue: expected_task_queue,
+                status: expected_status,
+                ..
+            } = make_task_queue_and_status();
+
+            assert_eq!(expected_task_queue, task_queue);
+            assert_eq!(expected_status, status);
+        }
+    }
+}
