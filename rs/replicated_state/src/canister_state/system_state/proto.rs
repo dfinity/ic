@@ -128,12 +128,20 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
-                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
+                    CanisterTask as PbCanisterTask, aborted_execution::AbortedResponse,
+                    aborted_execution::Input as PbInput,
                 };
                 let input = match input {
                     CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
                         PbInput::Response(v.as_ref().into())
                     }
+                    CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+                        response,
+                        callback,
+                    }) => PbInput::AbortedResponse(AbortedResponse {
+                        response: Some(response.as_ref().into()),
+                        callback: Some(callback.as_ref().into()),
+                    }),
                     CanisterMessageOrTask::Message(CanisterMessage::Request(v)) => {
                         PbInput::Request(v.as_ref().into())
                     }
@@ -177,10 +185,12 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
     }
 }
 
-impl TryFrom<pb::ExecutionTask> for ExecutionTask {
+impl TryFrom<(pb::ExecutionTask, CanisterId)> for ExecutionTask {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb::ExecutionTask) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb::ExecutionTask, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let task = value
             .task
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
@@ -199,6 +209,20 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     PbInput::Response(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Response(Arc::new(v.try_into()?)),
                     ),
+                    PbInput::AbortedResponse(v) => {
+                        let response = v
+                            .response
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::response"))?
+                            .try_into()?;
+                        let callback_proto = v
+                            .callback
+                            .ok_or(ProxyDecodeError::MissingField("AbortedResponse::callback"))?;
+                        let callback = (callback_proto, own_canister_id).try_into()?;
+                        CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+                            response: Arc::new(response),
+                            callback: Arc::new(callback),
+                        })
+                    }
                     PbInput::Ingress(v) => CanisterMessageOrTask::Message(
                         CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                     ),

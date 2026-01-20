@@ -98,9 +98,7 @@ pub fn setup(env: TestEnv) {
         // Set up Universal VM with HTTP Bin testing service
         s.spawn(|| {
             UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-                .with_config_img(get_dependency_path(
-                    "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-                ))
+                .with_config_img(get_dependency_path_from_env("HTTP_UVM_CONFIG_IMAGE_PATH"))
                 .enable_ipv4()
                 .start(&env)
                 .expect("failed to set up universal VM");
@@ -112,9 +110,7 @@ pub fn setup(env: TestEnv) {
 
 pub fn stress_setup(env: TestEnv) {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/networking/canister_http/http_uvm_config_image.zst",
-        ))
+        .with_config_img(get_dependency_path_from_env("HTTP_UVM_CONFIG_IMAGE_PATH"))
         .start(&env)
         .expect("failed to set up universal VM");
 
