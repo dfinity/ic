@@ -128,7 +128,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let mut status: CanisterStatus =
             try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
-        let callbacks = match &mut status {
+        let call_context_manager = match &mut status {
             CanisterStatus::Running {
                 call_context_manager,
                 ..
@@ -139,7 +139,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             } => call_context_manager,
             CanisterStatus::Stopped => &mut CallContextManager::default(),
         };
-        let task_queue = TaskQueue::try_from((tasks, callbacks))?;
+        let task_queue = TaskQueue::try_from((tasks, call_context_manager))?;
 
         Ok(Self {
             controllers,

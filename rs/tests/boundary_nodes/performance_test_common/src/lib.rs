@@ -30,7 +30,6 @@ use rand::thread_rng;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Parameters related to workload creation.
@@ -81,7 +80,10 @@ pub fn update_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
 
     let api_bn_agent = env
         .topology_snapshot()
@@ -145,7 +147,10 @@ pub fn query_calls_test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap()
-        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+        .create_and_install_canister_with_arg(
+            &std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap(),
+            None,
+        );
 
     let api_bn_agent = env
         .topology_snapshot()

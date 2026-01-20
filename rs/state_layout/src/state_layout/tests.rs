@@ -4,6 +4,7 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::canister_state::system_state::testing::CallContextManagerTesting;
 use ic_replicated_state::{CallContextManager, ExecutionTask};
 use ic_replicated_state::{
     NumWasmPages, canister_state::system_state::CanisterHistory,
@@ -14,8 +15,7 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::{ids::canister_test_id, ids::user_test_id};
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    NO_DEADLINE,
+    CallContextId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, NO_DEADLINE,
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
@@ -1205,7 +1205,7 @@ fn test_encode_task_queue_with_paused_task_fails() {
 /// the one matching the `Response`); expect to decode a `CanisterStateBits`
 /// with a new `Response` task (bundling its callback) plus the other callback.
 #[test]
-fn test_decode_task_queue_forward_compatibility() {
+fn test_decode_task_queue_backward_compatibility() {
     let make_callback = |respondent: CanisterId| {
         Arc::new(Callback {
             call_context_id: CallContextId::new(1),
@@ -1220,10 +1220,11 @@ fn test_decode_task_queue_forward_compatibility() {
             deadline: NO_DEADLINE,
         })
     };
+    let mut call_context_manager = CallContextManager::default();
 
     // Response and its matching callback.
-    let callback_id1 = CallbackId::new(1);
     let callback1 = make_callback(canister_test_id(1));
+    let callback_id1 = call_context_manager.with_callback(callback1.as_ref().clone());
     let response1 = Arc::new(
         ResponseBuilder::new()
             .respondent(canister_test_id(1))
@@ -1231,14 +1232,11 @@ fn test_decode_task_queue_forward_compatibility() {
             .build(),
     );
 
-    // Another callback.
-    let callback_id2 = CallbackId::new(2);
+    // A second callback.
     let callback2 = make_callback(canister_test_id(2));
+    let _callback_id2 = call_context_manager.with_callback(callback2.as_ref().clone());
 
     // Encode the call context manager with the two callbacks.
-    let mut call_context_manager = CallContextManager::default();
-    call_context_manager.insert_callback(callback_id1, callback1.as_ref().clone());
-    call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
     let canister_state_bits = CanisterStateBits {
         status: CanisterStatus::Running {
             call_context_manager,
@@ -1271,7 +1269,7 @@ fn test_decode_task_queue_forward_compatibility() {
     expected_task_queue.enqueue(ExecutionTask::AbortedExecution {
         input: CanisterMessageOrTask::Message(CanisterMessage::Response {
             response: response1,
-            callback: callback1,
+            callback: callback1.clone(),
         }),
         prepaid_execution_cycles: Cycles::new(10),
     });
@@ -1279,11 +1277,120 @@ fn test_decode_task_queue_forward_compatibility() {
 
     // ... and a call context manager with only the other callback.
     let mut expected_call_context_manager = CallContextManager::default();
-    expected_call_context_manager.insert_callback(callback_id2, callback2.as_ref().clone());
+    expected_call_context_manager.with_callback(callback1.as_ref().clone());
+    expected_call_context_manager.unregister_callback(callback_id1);
+    expected_call_context_manager.with_callback(callback2.as_ref().clone());
     assert_eq!(
         CanisterStatus::Running {
             call_context_manager: expected_call_context_manager
         },
         canister_state_bits.status
     );
+}
+
+/// These tests are used to check the compatibility with the mainnet version.
+/// They are not meant to be run as part of the regular test suite (hence the ignore attributes),
+/// but instead invoked from the compiled test binary by a separate compatibility test.
+mod mainnet_compatibility_tests {
+    use prost::Message;
+
+    #[cfg(test)]
+    mod task_queue_compatibility_test {
+        use ic_types::CanisterId;
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "canister.pbuf";
+
+        fn make_task_queue_and_status() -> CanisterStateBits {
+            let make_callback = |respondent: CanisterId| {
+                Arc::new(Callback {
+                    call_context_id: CallContextId::new(1),
+                    originator: canister_test_id(0),
+                    respondent,
+                    cycles_sent: Cycles::new(100),
+                    prepayment_for_response_execution: Cycles::zero(),
+                    prepayment_for_response_transmission: Cycles::zero(),
+                    on_reply: WasmClosure::new(1, 2),
+                    on_reject: WasmClosure::new(3, 4),
+                    on_cleanup: None,
+                    deadline: NO_DEADLINE,
+                })
+            };
+            let mut call_context_manager = CallContextManager::default();
+
+            let callback1 = make_callback(canister_test_id(1));
+            let callback_id1 = call_context_manager.with_callback(callback1.as_ref().clone());
+            let response1 = Arc::new(
+                ResponseBuilder::new()
+                    .respondent(canister_test_id(1))
+                    .originator_reply_callback(callback_id1)
+                    .build(),
+            );
+
+            let callback2 = make_callback(canister_test_id(3));
+            let _callback_id2 = call_context_manager.with_callback(callback2.as_ref().clone());
+
+            // A task queue with a `Response` aborted execution bundling `response1` and
+            // `callback1`.
+            let mut task_queue = TaskQueue::default();
+            task_queue.enqueue(ExecutionTask::AbortedExecution {
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response {
+                    response: response1,
+                    callback: callback1,
+                }),
+                prepaid_execution_cycles: Cycles::new(10),
+            });
+
+            // And a `CallContextManager` with the second callback only.
+            call_context_manager.unregister_callback(callback_id1);
+            CanisterStateBits {
+                task_queue: task_queue.clone(),
+                status: CanisterStatus::Running {
+                    call_context_manager,
+                },
+                ..default_canister_state_bits()
+            }
+        }
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let canister_state_bits = make_task_queue_and_status();
+
+            let proto_state_bits: pb_canister_state_bits::CanisterStateBits =
+                canister_state_bits.into();
+            let serialized = proto_state_bits.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let proto_state_bits =
+                pb_canister_state_bits::CanisterStateBits::decode(&serialized as &[u8])
+                    .expect("Failed to deserialize the protobuf");
+            let canister_state_bits = CanisterStateBits::try_from(proto_state_bits)
+                .expect("Failed to convert the protobuf to CanisterStateBits");
+
+            let CanisterStateBits {
+                task_queue, status, ..
+            } = canister_state_bits;
+            let CanisterStateBits {
+                task_queue: expected_task_queue,
+                status: expected_status,
+                ..
+            } = make_task_queue_and_status();
+
+            assert_eq!(expected_task_queue, task_queue);
+            assert_eq!(expected_status, status);
+        }
+    }
 }

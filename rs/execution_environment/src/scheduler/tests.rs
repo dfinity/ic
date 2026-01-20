@@ -5429,7 +5429,6 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
 
 #[test]
 fn dts_resume_install_code_after_abort() {
-    // TODO: Ensure that `check_canister_invariants()` works correctly with DTS installs.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
@@ -5480,7 +5479,6 @@ fn dts_resume_install_code_after_abort() {
 
 #[test]
 fn dts_resume_long_execution_after_abort() {
-    // TODO: Ensure that `check_canister_invariants()` works correctly with DTS.
     let mut test = SchedulerTestBuilder::new()
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,

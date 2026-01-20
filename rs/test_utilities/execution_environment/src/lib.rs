@@ -1299,7 +1299,7 @@ impl ExecutionTest {
         result
     }
 
-    pub fn execute_responsez(
+    pub fn execute_response(
         &mut self,
         canister_id: CanisterId,
         response: Response,

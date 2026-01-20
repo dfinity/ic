@@ -358,15 +358,6 @@ impl Display for CanisterMessage {
     }
 }
 
-// impl From<RequestOrResponse> for CanisterMessage {
-//     fn from(msg: RequestOrResponse) -> Self {
-//         match msg {
-//             RequestOrResponse::Request(request) => CanisterMessage::Request(request),
-//             RequestOrResponse::Response(response) => CanisterMessage::Response(response),
-//         }
-//     }
-// }
-
 /// A wrapper around ingress messages and canister requests/responses as
 /// management canister inputs.
 ///

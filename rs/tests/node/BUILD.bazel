@@ -30,6 +30,7 @@ system_test_nns(
 # Unit tests that require root privileges to run.
 system_test(
     name = "root_tests",
+    data = [":root_tests_config_image"],
     env = {
         "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
     },
@@ -39,7 +40,6 @@ system_test(
     tags = [
         "long_test",  # The P90 duration of this test was over 6 minutes for the week starting on 2025-08-21.
     ],
-    runtime_deps = [":root_tests_config_image"],
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
         "@crate_index//:anyhow",

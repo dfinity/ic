@@ -469,13 +469,6 @@ impl CallContextManager {
         self.callbacks.get(&callback_id).map(AsRef::as_ref)
     }
 
-    /// Temporary workaround to allow backward compatible decoding of
-    /// `ExecutionTasks` without a callback.
-    #[doc(hidden)]
-    pub fn callbacks_mut(&mut self) -> &mut MutableIntMap<CallbackId, Arc<Callback>> {
-        &mut self.callbacks
-    }
-
     /// Accepts a canister result and produces an action that should be taken
     /// by the caller; and the call context, if completed.
     pub(super) fn on_canister_result(
@@ -624,6 +617,9 @@ impl CallContextManager {
 
     /// Inserts a callback under the given ID. Returns an error if the canister is
     /// `Stopped`.
+    //
+    // TODO(DSM-95) Drop this when we drop the legacy `CanisterMessage::Response`
+    // variant and no longer need forward compatible decoding.
     #[doc(hidden)]
     pub fn insert_callback(&mut self, callback_id: CallbackId, callback: Callback) {
         self.stats.on_register_callback(&callback);
@@ -931,8 +927,7 @@ impl AsInt for (CoarseTime, CallbackId) {
 }
 
 pub mod testing {
-    use super::{CallContext, CallContextManager};
-    use ic_types::messages::CallContextId;
+    use super::*;
 
     /// Exposes `CallContextManager` internals for use in other modules' or crates'
     /// tests.
@@ -940,6 +935,12 @@ pub mod testing {
         /// Testing only: Registers the given call context (which may already be
         /// responded or deleted).
         fn with_call_context(&mut self, call_context: CallContext) -> CallContextId;
+
+        /// Testing only: Publicly exposes `register_callback()`.
+        fn with_callback(&mut self, callback: Callback) -> CallbackId;
+
+        /// Testing only: Publicly exposes `unregister_callback()`.
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>>;
     }
 
     impl CallContextManagerTesting for CallContextManager {
@@ -955,6 +956,14 @@ pub mod testing {
             debug_assert!(self.stats_ok());
 
             id
+        }
+
+        fn with_callback(&mut self, callback: Callback) -> CallbackId {
+            self.register_callback(callback)
+        }
+
+        fn unregister_callback(&mut self, callback_id: CallbackId) -> Option<Arc<Callback>> {
+            self.unregister_callback(callback_id)
         }
     }
 }

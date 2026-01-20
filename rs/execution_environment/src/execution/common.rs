@@ -338,6 +338,8 @@ pub(crate) fn validate_message(
 }
 
 /// Unregisters the callback corresponding to the given response.
+//
+// TODO(DSM-95): Consider making this only apply to non-replicated call origins.
 pub fn unregister_callback(
     canister: &mut CanisterState,
     response: &Response,
