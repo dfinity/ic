@@ -1499,7 +1499,15 @@ type SelfDescribingValue = variant {
 
 type GetPendingProposalsRequest = record {
   return_self_describing_action : opt bool;
-}
+};
+
+type ListSelfDescribingActionsRequest = record {
+  after_proposal : opt nat64;
+};
+
+type ListSelfDescribingActionsResponse = record {
+  actions : vec record { nat64; text };
+};
 
 service : (Governance) -> {
   claim_gtc_neurons : (principal, vec NeuronId) -> (Result);
@@ -1538,6 +1546,9 @@ service : (Governance) -> {
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
   list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
+  list_self_describing_actions : (ListSelfDescribingActionsRequest) -> (
+      ListSelfDescribingActionsResponse,
+    ) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (

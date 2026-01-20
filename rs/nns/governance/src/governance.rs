@@ -107,7 +107,8 @@ use ic_nns_constants::{
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
     GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
-    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    ListSelfDescribingActionsRequest, ListSelfDescribingActionsResponse, ManageNeuronResponse,
     NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
@@ -3559,6 +3560,58 @@ impl Governance {
         ListProposalInfoResponse {
             proposal_info: proposals,
         }
+    }
+
+    /// Lists self-describing actions for proposals, returning them as JSON strings.
+    ///
+    /// This method returns a map of proposal_id -> JSON-serialized self-describing action.
+    /// It uses pagination: if `after_proposal` is set, only proposals with id > after_proposal
+    /// are returned.
+    ///
+    /// A fixed limit of 100 proposals is returned per call.
+    ///
+    /// The JSON format is intuitive:
+    /// - Blob -> hex-encoded string with "0x" prefix
+    /// - Text -> string
+    /// - Nat/Int -> string representation (to preserve precision)
+    /// - Null -> null
+    /// - Array -> JSON array
+    /// - Map -> JSON object
+    pub fn list_self_describing_actions(
+        &self,
+        req: ListSelfDescribingActionsRequest,
+    ) -> ListSelfDescribingActionsResponse {
+        use crate::pb::proposal_conversions::{
+            pb_to_api_self_describing_action, self_describing_action_to_json,
+        };
+
+        const LIMIT: usize = 100;
+
+        let after_proposal = req.after_proposal.unwrap_or(0);
+
+        let actions: std::collections::HashMap<u64, String> = self
+            .heap_data
+            .proposals
+            .iter()
+            .filter(|&(&proposal_id, _)| proposal_id > after_proposal)
+            .take(LIMIT)
+            .filter_map(|(&proposal_id, proposal_data)| {
+                let pb_action = proposal_data
+                    .proposal
+                    .as_ref()?
+                    .self_describing_action
+                    .as_ref()?;
+
+                // Convert pb type to API type, then to intuitive JSON
+                let api_action = pb_to_api_self_describing_action(pb_action);
+                let json_value = self_describing_action_to_json(&api_action);
+                let json = serde_json::to_string_pretty(&json_value).ok()?;
+
+                Some((proposal_id, json))
+            })
+            .collect();
+
+        ListSelfDescribingActionsResponse { actions }
     }
 
     // This is slow, because it scans all proposals.

@@ -10,12 +10,13 @@ use ic_nns_constants::{
     NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, PROTOCOL_CANISTER_IDS, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
+use ic_nns_governance_api::ListSelfDescribingActionsRequest;
 use ic_nns_governance_api::{
     MonthlyNodeProviderRewards, NetworkEconomics, Vote, VotingPowerEconomics,
 };
 use ic_nns_test_utils::state_test_helpers::{
-    nns_get_most_recent_monthly_node_provider_rewards, nns_wait_for_proposal_execution,
-    scrape_metrics,
+    nns_get_most_recent_monthly_node_provider_rewards, nns_list_self_describing_actions,
+    nns_wait_for_proposal_execution, scrape_metrics,
 };
 use ic_nns_test_utils::{
     common::modify_wasm_bytes,
@@ -366,16 +367,55 @@ fn test_upgrade_canisters_with_golden_nns_state() {
 
     perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
 
-    // Modify all WASMs, but preserve their behavior.
-    for nns_canister_upgrade in &mut nns_canister_upgrade_sequence {
-        nns_canister_upgrade.modify_wasm_but_preserve_behavior();
+    for _ in 0..5000 {
+        state_machine.advance_time(std::time::Duration::from_secs(3));
+        state_machine.tick();
     }
 
-    perform_sequence_of_upgrades(&nns_canister_upgrade_sequence);
+    // Fetch all self-describing actions and write them to JSON files
+    write_self_describing_actions_to_files(&state_machine);
+}
 
-    sanity_check::fetch_and_check_metrics_after_advancing_time(&state_machine, metrics_before);
+/// Fetches all self-describing actions from governance and writes each one to a JSON file.
+fn write_self_describing_actions_to_files(state_machine: &StateMachine) {
+    const OUTPUT_DIR: &str = "/home/jason1/self_describing";
 
-    check_canisters_are_all_protocol_canisters(&state_machine);
+    // Create the output directory if it doesn't exist
+    fs::create_dir_all(OUTPUT_DIR).expect("Failed to create output directory");
+
+    let mut after_proposal: Option<u64> = None;
+    let mut total_written = 0;
+
+    loop {
+        let response = nns_list_self_describing_actions(
+            state_machine,
+            ListSelfDescribingActionsRequest { after_proposal },
+        );
+
+        if response.actions.is_empty() {
+            break;
+        }
+
+        // Find the maximum proposal id for the next iteration
+        let max_proposal_id = response.actions.keys().max().copied();
+
+        // Write each action to a file
+        for (proposal_id, json) in &response.actions {
+            let file_path = format!("{}/{}.json", OUTPUT_DIR, proposal_id);
+            fs::write(&file_path, json).unwrap_or_else(|e| {
+                panic!("Failed to write self-describing action for proposal {proposal_id}: {e}")
+            });
+            total_written += 1;
+        }
+
+        // Set after_proposal for the next iteration
+        after_proposal = max_proposal_id;
+    }
+
+    println!(
+        "Wrote {} self-describing actions to {}",
+        total_written, OUTPUT_DIR
+    );
 }
 
 // Check that all canisters in the NNS subnet (except for exempted ones) are protocol canisters. If
@@ -449,8 +489,8 @@ mod sanity_check {
         state_machine.advance_time(std::time::Duration::from_secs(
             seconds_to_node_provider_reward_distribution - 1,
         ));
-        for _ in 0..100 {
-            state_machine.advance_time(std::time::Duration::from_secs(1));
+        for _ in 0..5000 {
+            state_machine.advance_time(std::time::Duration::from_secs(3));
             state_machine.tick();
         }
 

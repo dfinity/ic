@@ -31,6 +31,7 @@ use ic_nns_governance_api::{
     ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
     ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
     ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    ListSelfDescribingActionsRequest, ListSelfDescribingActionsResponse,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
     MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
     NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
@@ -366,6 +367,14 @@ fn get_pending_proposals(req: Option<GetPendingProposalsRequest>) -> Vec<Proposa
 fn list_proposals(req: ListProposalInfoRequest) -> ListProposalInfoResponse {
     debug_log("list_proposals");
     with_governance(|governance| governance.list_proposals(&caller(), req))
+}
+
+#[query]
+fn list_self_describing_actions(
+    req: ListSelfDescribingActionsRequest,
+) -> ListSelfDescribingActionsResponse {
+    debug_log("list_self_describing_actions");
+    with_governance(|governance| governance.list_self_describing_actions(req))
 }
 
 #[query]

@@ -4654,3 +4654,16 @@ pub struct SelfDescribingProposalAction {
 pub struct GetPendingProposalsRequest {
     pub return_self_describing_action: Option<bool>,
 }
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ListSelfDescribingActionsRequest {
+    /// If set, only return proposals with id > after_proposal. If not set, starts from the
+    /// beginning.
+    pub after_proposal: Option<u64>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct ListSelfDescribingActionsResponse {
+    /// A map of proposal id to JSON-serialized self-describing action.
+    pub actions: HashMap<u64, String>,
+}

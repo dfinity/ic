@@ -43,9 +43,10 @@ use ic_nns_governance_api::{
     GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
     ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
     ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, Vote,
+    ListProposalInfoResponse, ListSelfDescribingActionsRequest, ListSelfDescribingActionsResponse,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -1512,6 +1513,26 @@ pub fn nns_list_proposals(
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+pub fn nns_list_self_describing_actions(
+    state_machine: &StateMachine,
+    request: ListSelfDescribingActionsRequest,
+) -> ListSelfDescribingActionsResponse {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "list_self_describing_actions",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_self_describing_actions failed: {s:#?}"),
+    };
+
+    Decode!(&result, ListSelfDescribingActionsResponse).unwrap()
 }
 
 /// Return the monthly Node Provider rewards

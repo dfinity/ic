@@ -443,6 +443,91 @@ impl From<pb::SelfDescribingValue> for api::SelfDescribingValue {
     }
 }
 
+/// Converts a pb SelfDescribingProposalAction to the API type.
+pub fn pb_to_api_self_describing_action(
+    item: &pb::SelfDescribingProposalAction,
+) -> api::SelfDescribingProposalAction {
+    convert_self_describing_action(item, false)
+}
+
+/// Converts a SelfDescribingProposalAction to an intuitive JSON representation.
+///
+/// The output format is:
+/// {
+///   "type_name": "...",
+///   "type_description": "...",
+///   "value": <recursively converted SelfDescribingValue>
+/// }
+///
+/// Where SelfDescribingValue is converted as:
+/// - Blob -> hex-encoded string prefixed with "0x"
+/// - Text -> string
+/// - Nat/Int -> string representation (to preserve precision for large numbers)
+/// - Null -> null
+/// - Array -> JSON array
+/// - Map -> JSON object
+pub fn self_describing_action_to_json(
+    action: &api::SelfDescribingProposalAction,
+) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+
+    if let Some(type_name) = &action.type_name {
+        map.insert(
+            "type_name".to_string(),
+            serde_json::Value::String(type_name.clone()),
+        );
+    }
+
+    if let Some(type_description) = &action.type_description {
+        map.insert(
+            "type_description".to_string(),
+            serde_json::Value::String(type_description.clone()),
+        );
+    }
+
+    if let Some(value) = &action.value {
+        map.insert("value".to_string(), self_describing_value_to_json(value));
+    }
+
+    serde_json::Value::Object(map)
+}
+
+/// Converts bytes to a hex string.
+fn bytes_to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Converts a SelfDescribingValue to an intuitive JSON representation.
+fn self_describing_value_to_json(value: &api::SelfDescribingValue) -> serde_json::Value {
+    match value {
+        api::SelfDescribingValue::Blob(bytes) => {
+            // Convert to hex string
+            serde_json::Value::String(bytes_to_hex(bytes))
+        }
+        api::SelfDescribingValue::Text(s) => serde_json::Value::String(s.clone()),
+        api::SelfDescribingValue::Bool(b) => serde_json::Value::Bool(*b),
+        api::SelfDescribingValue::Nat(n) => {
+            // Convert to string to preserve precision for large numbers
+            serde_json::Value::String(n.0.to_string())
+        }
+        api::SelfDescribingValue::Int(i) => {
+            // Convert to string to preserve precision for large numbers
+            serde_json::Value::String(i.0.to_string())
+        }
+        api::SelfDescribingValue::Null => serde_json::Value::Null,
+        api::SelfDescribingValue::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(self_describing_value_to_json).collect())
+        }
+        api::SelfDescribingValue::Map(map) => {
+            let json_map: serde_json::Map<String, serde_json::Value> = map
+                .iter()
+                .map(|(k, v)| (k.clone(), self_describing_value_to_json(v)))
+                .collect();
+            serde_json::Value::Object(json_map)
+        }
+    }
+}
+
 pub(crate) fn convert_proposal(
     item: &pb::Proposal,
     display_options: ProposalDisplayOptions,
