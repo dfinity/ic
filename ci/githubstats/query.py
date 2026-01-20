@@ -90,6 +90,17 @@ def period(args) -> str:
     return "month" if args.month else "week" if args.week else "day" if args.day else "week"
 
 
+def normalize_duration(td: pd.Timedelta):
+    c = td.components
+    return (
+        f"{c.days} days {c.hours:02d}:{c.minutes:02d}:{c.seconds:02d}"
+        if c.days > 0
+        else f"{c.hours:d}:{c.minutes:02d}:{c.seconds:02d}"
+        if c.hours > 0
+        else f"{c.minutes:d}:{c.seconds:02d}"
+    )
+
+
 def top(args):
     """
     Get the top N non-successful / flaky / failed / timed-out tests
@@ -135,6 +146,8 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
+
     # Find the CODEOWNERS for each test target:
     owners = codeowners.CodeOwners(Path(os.environ["CODEOWNERS_PATH"]).read_text())
     df["owners"] = df["label"].apply(lambda label: owners.of(label.rsplit(":")[0].replace("//", "") + "/"))
@@ -153,7 +166,23 @@ def top(args):
     # Turn the Bazel labels into terminal hyperlinks to a SourceGraph search for the test target:
     df["label"] = df["label"].apply(lambda label: terminal_hyperlink(label, sourcegraph_url(label)))
 
-    print(tabulate(df, headers="keys", tablefmt=args.tablefmt))
+    colalignments = [
+        "decimal",  # idx
+        "left",  # label
+        "decimal",  # total
+        "decimal",  # non_success
+        "decimal",  # non_success%
+        "decimal",  # flaky
+        "decimal",  # flaky%
+        "decimal",  # timeout
+        "decimal",  # timeout%
+        "decimal",  # fail
+        "decimal",  #  fail%
+        "right",  # duration_p90
+        "left",  # owners
+    ]
+
+    print(tabulate(df, headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
 def last(args):
@@ -217,8 +246,22 @@ def last(args):
     )
 
     df = df.drop(columns=["buildbuddy_url"])
+
+    df["duration"] = df["duration"].apply(normalize_duration)
+
+    colalignments = [
+        "decimal",  # idx
+        "right",  # last started at (UTC)
+        "right",  # duration
+        "left",  # status
+        "left",  # branch
+        "left",  # PR
+        "left",  # commit
+        "left",  # buildbuddy
+    ]
+
     columns = list(df.columns)
-    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt))
+    print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
 def main():
