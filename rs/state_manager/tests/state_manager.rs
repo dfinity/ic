@@ -8954,11 +8954,14 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 }
 
 fn fake_certification_for_height(height: Height) -> Certification {
-    let hash = CryptoHashOfPartialState::from(CryptoHash(vec![42; 32]));
+    fake_certification_for_height_with_hash(height, CryptoHash(vec![42; 32]))
+}
+
+fn fake_certification_for_height_with_hash(height: Height, hash: CryptoHash) -> Certification {
     Certification {
         height,
         signed: Signed {
-            content: CertificationContent::new(hash),
+            content: CertificationContent::new(CryptoHashOfPartialState::from(hash)),
             signature: ThresholdSignature::fake(),
         },
     }
@@ -9092,7 +9095,7 @@ fn commit_and_certify_tip_set_panic() {
 #[should_panic(
     expected = "Attempt to commit state not borrowed from this StateManager, height = 1, tip_height = 0"
 )]
-fn commit_and_certify_optimization_tip_set_panic() {
+fn commit_and_certify_tip_set_panic_with_optimization() {
     state_manager_test(|_metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
         sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
@@ -9158,7 +9161,8 @@ fn take_tip_does_not_hash_with_optimization() {
     state_manager_test(|metrics, sm| {
         // consensus delivers certification for the next height
         let opt_height = Height::new(1);
-        sm.deliver_state_certification(fake_certification_for_height(opt_height));
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification);
         assert_eq!(
             sm.certifications().keys().cloned().collect::<Vec<_>>(),
             vec![opt_height]
@@ -9176,6 +9180,7 @@ fn take_tip_does_not_hash_with_optimization() {
         let (initial_height, initial_state) = sm.take_tip();
         assert_eq!(initial_height, INITIAL_STATE_HEIGHT);
         assert_eq!(tip_hash_count(metrics), 1);
+
         // optimization triggers
         sm.commit_and_certify(
             initial_state,
@@ -9232,7 +9237,13 @@ fn remove_inmemory_states_below_prunes_certification() {
     state_manager_test(|metrics, sm| {
         // consensus delivers certification for the next height
         let cert_height = Height::new(10);
-        sm.deliver_state_certification(fake_certification_for_height(cert_height));
+        // the state hash was derived from the panic message in `commit_and_certify`
+        let state_hash = CryptoHash(
+            hex::decode("9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(cert_height, state_hash);
+        sm.deliver_state_certification(certification);
         assert_eq!(
             sm.certifications().keys().cloned().collect::<Vec<_>>(),
             vec![cert_height]
@@ -9270,7 +9281,8 @@ fn remove_inmemory_states_below_does_not_prune_certification() {
     state_manager_test(|_metrics, sm| {
         // consensus delivers certification for the next height
         let opt_height = Height::new(1);
-        sm.deliver_state_certification(fake_certification_for_height(opt_height));
+        let certification = fake_certification_for_height(opt_height);
+        sm.deliver_state_certification(certification);
         assert_eq!(
             sm.certifications().keys().cloned().collect::<Vec<_>>(),
             vec![opt_height]
@@ -9443,7 +9455,7 @@ fn list_state_heights_to_certify() {
         // deliver a certification for a future height after the tip height
         let certification_height = Height::new(12);
         let certification = fake_certification_for_height(certification_height);
-        sm.deliver_state_certification(certification.clone());
+        sm.deliver_state_certification(certification);
 
         // now `list_state_heights_to_certify` omits the height with a certification delivered
         state_heights_to_certify.retain(|h| *h != certification_height);
@@ -9456,8 +9468,13 @@ fn commit_and_certify_reuses_certification() {
     state_manager_test(|metrics, sm| {
         // consensus delivers certification for the next height
         let no_opt_height = Height::new(10);
-        let certification = fake_certification_for_height(no_opt_height);
-        sm.deliver_state_certification(certification.clone());
+        // the state hash was derived from the panic message in `commit_and_certify`
+        let state_hash = CryptoHash(
+            hex::decode("9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90")
+                .unwrap(),
+        );
+        let certification = fake_certification_for_height_with_hash(no_opt_height, state_hash);
+        sm.deliver_state_certification(certification);
 
         // optimization does not trigger
         let state = sm.take_tip().1;
@@ -9476,5 +9493,23 @@ fn commit_and_certify_reuses_certification() {
                 .into_iter()
                 .any(|(height, _)| height == no_opt_height)
         );
+    });
+}
+
+#[test]
+#[should_panic(
+    expected = "Committed state @10 with hash CryptoHash(0x9ffd667c5d015bb61a684707cc44568097acd0b2879e88b26e3927fff3be2e90) which is different from previously computed or delivered hash CryptoHash(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)"
+)]
+fn commit_and_certify_panic_on_delivered_fake_certification() {
+    state_manager_test(|metrics, sm| {
+        // consensus delivers certification for a future height
+        let no_opt_height = Height::new(10);
+        let certification = fake_certification_for_height(no_opt_height);
+        sm.deliver_state_certification(certification);
+
+        // optimization does not trigger
+        let state = sm.take_tip().1;
+        sm.commit_and_certify(state, no_opt_height, CertificationScope::Metadata, None);
+        assert_eq!(no_state_clone_count(metrics), 0);
     });
 }

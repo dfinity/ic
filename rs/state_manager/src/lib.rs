@@ -3374,11 +3374,7 @@ impl StateManager for StateManagerImpl {
 
         assert_tip_is_none(&states);
 
-        // It's possible that we already computed this state before.  We
-        // validate that hashes agree to spot bugs causing non-determinism as
-        // early as possible.
-        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            let prev_hash = &prev_metadata.certified_state_hash;
+        let assert_prev_hash_matches = |prev_hash| {
             let hash = &certification_metadata.certified_state_hash;
             if prev_hash != hash {
                 if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
@@ -3391,9 +3387,22 @@ impl StateManager for StateManagerImpl {
                     "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
                 );
             }
+        };
+
+        // It's possible that we already computed this state before.  We
+        // validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
+        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
+            let prev_hash = &prev_metadata.certified_state_hash;
+            assert_prev_hash_matches(prev_hash);
         }
 
+        // We reuse certification delivered by consensus if possible.
+        // We also validate that hashes agree to spot bugs causing non-determinism as
+        // early as possible.
         if let Some(certification) = states.certifications.get(&height) {
+            let prev_hash = &certification.signed.content.hash.clone().get();
+            assert_prev_hash_matches(prev_hash);
             certification_metadata.certification = Some(certification.clone());
         }
 
