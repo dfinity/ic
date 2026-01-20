@@ -457,7 +457,9 @@ impl CertifierImpl {
                 for certification in
                     certification_pool.unvalidated_certifications_at_height(*height)
                 {
-                    if let Some(val) = self.validate_certification(hash, certification) {
+                    if let Some(hash) = hash
+                        && let Some(val) = self.validate_certification(hash, certification)
+                    {
                         match val {
                             ChangeAction::MoveToValidated(_) => {
                                 cert_change_set.push(val);
@@ -501,7 +503,7 @@ impl CertifierImpl {
 
     fn validate_certification(
         &self,
-        hash: &Option<CryptoHashOfPartialState>,
+        hash: &CryptoHashOfPartialState,
         certification: &Certification,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::Certification(certification.clone());
@@ -511,9 +513,7 @@ impl CertifierImpl {
 
         // check if the certification contains the same state hash as our local one. If
         // not, we consider the certification invalid.
-        if let Some(hash) = hash
-            && hash != &certification.signed.content.hash
-        {
+        if hash != &certification.signed.content.hash {
             return Some(ChangeAction::HandleInvalid(
                 msg,
                 format!(
@@ -1265,7 +1265,7 @@ mod tests {
                 let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
 
                 assert_eq!(
-                    certifier.validate_certification(&Some(hash.clone()), &cert),
+                    certifier.validate_certification(&hash, &cert),
                     Some(ChangeAction::HandleInvalid(
                         CertificationMessage::Certification(cert.clone()),
                         format!(
