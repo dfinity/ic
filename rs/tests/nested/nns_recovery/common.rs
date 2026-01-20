@@ -10,7 +10,7 @@ use ic_consensus_system_test_subnet_recovery::utils::{
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version_with_retries,
-    rw_message::{cert_state_makes_progress_with_retries, store_message},
+    rw_message::store_message,
     set_sandbox_env_vars,
     ssh_access::{
         AuthMean, disable_ssh_access_to_node, get_updatesubnetpayload_with_keys,
@@ -19,6 +19,7 @@ use ic_consensus_system_test_utils::{
     subnet::assert_subnet_is_healthy,
     upgrade::bless_replica_version,
 };
+use ic_nervous_system_root::change_canister::AddCanisterRequest;
 use ic_recovery::{
     RecoveryArgs,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs, StepType},
@@ -35,7 +36,7 @@ use ic_system_test_driver::{
     },
     nns::change_subnet_membership,
     retry_with_msg_async,
-    util::block_on,
+    util::{MESSAGE_CANISTER_WASM, MessageCanister, assert_create_agent, block_on},
 };
 use ic_testnet_mainnet_nns::{
     MAINNET_NODE_VM_RESOURCES, proposals::ProposalWithMainnetState,
@@ -286,37 +287,52 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
-    let app_can_id_and_msg = if !cfg.use_mainnet_state {
-        let init_msg = "subnet recovery works!";
-        let app_can_id = store_message(
-            &nns_node.get_public_url(),
-            nns_node.effective_canister_id(),
-            init_msg,
-            &logger,
-        );
-        let msg = "subnet recovery works again!";
-        assert_subnet_is_healthy(
-            &nns_subnet.nodes().collect::<Vec<_>>(),
-            &current_version,
-            app_can_id,
-            init_msg,
-            msg,
-            &logger,
-        );
+    let init_msg = "subnet recovery works!";
+    let app_can_id = if cfg.use_mainnet_state {
+        block_on(async {
+            let nns_url = nns_node.get_public_url();
+            let agent = assert_create_agent(&nns_url.as_str()).await;
+            let canister_principal = ProposalWithMainnetState::add_nns_canister(
+                nns_url.clone(),
+                AddCanisterRequest {
+                    name: "message_canister".to_string(),
+                    wasm_module: MESSAGE_CANISTER_WASM.to_vec(),
+                    arg: vec![],
+                    memory_allocation: None,
+                    compute_allocation: None,
+                    initial_cycles: 1 << 45,
+                },
+            )
+            .await
+            .into();
 
-        Some((app_can_id, msg))
+            let mcan = MessageCanister::from_canister_id(&agent, canister_principal);
+
+            info!(
+                logger,
+                "Storing a message in canister with id {} at {}", canister_principal, nns_url
+            );
+            mcan.store_msg(init_msg.to_string()).await;
+
+            canister_principal
+        })
     } else {
-        // TODO: maybe there's a proposal to install a canister
-        cert_state_makes_progress_with_retries(
+        store_message(
             &nns_node.get_public_url(),
             nns_node.effective_canister_id(),
+            init_msg,
             &logger,
-            secs(600),
-            secs(10),
-        );
-
-        None
+        )
     };
+    let msg = "subnet recovery works again!";
+    assert_subnet_is_healthy(
+        &nns_subnet.nodes().collect::<Vec<_>>(),
+        &current_version,
+        app_can_id,
+        init_msg,
+        msg,
+        &logger,
+    );
 
     // identifies the version of the replica after the recovery
     let upgrade_version = get_guestos_update_img_version();
@@ -377,15 +393,13 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     );
 
     break_nodes(faulty_nodes, &logger);
-    if let Some((app_can_id, msg)) = app_can_id_and_msg {
-        assert_subnet_is_broken(
-            &healthy_node.get_public_url(),
-            app_can_id,
-            msg,
-            true,
-            &logger,
-        );
-    }
+    assert_subnet_is_broken(
+        &healthy_node.get_public_url(),
+        app_can_id,
+        msg,
+        true,
+        &logger,
+    );
 
     // Download pool from the node with the highest certification share height
     let (download_pool_node, highest_cert_share) =
@@ -560,26 +574,15 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
-    if let Some((app_can_id, msg)) = app_can_id_and_msg {
-        let new_msg = "subnet recovery still works!";
-        assert_subnet_is_healthy(
-            &nns_subnet.nodes().collect::<Vec<_>>(),
-            &upgrade_version,
-            app_can_id,
-            msg,
-            new_msg,
-            &logger,
-        );
-    } else {
-        // TODO: maybe there's a proposal to install a canister
-        cert_state_makes_progress_with_retries(
-            &nns_node.get_public_url(),
-            nns_node.effective_canister_id(),
-            &logger,
-            secs(600),
-            secs(10),
-        );
-    }
+    let new_msg = "subnet recovery still works!";
+    assert_subnet_is_healthy(
+        &nns_subnet.nodes().collect::<Vec<_>>(),
+        &upgrade_version,
+        app_can_id,
+        msg,
+        new_msg,
+        &logger,
+    );
 }
 
 async fn simulate_node_provider_action(

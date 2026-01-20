@@ -24,6 +24,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/ic_os/os_tools/manual_guestos_recovery",
+        "//rs/nervous_system/root",
         "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",

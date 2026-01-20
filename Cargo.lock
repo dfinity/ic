@@ -15074,11 +15074,13 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-limits",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
@@ -16012,6 +16014,7 @@ name = "ic_nested_nns_recovery_common"
 version = "0.9.0"
 dependencies = [
  "anyhow",
+ "ic-nervous-system-root",
  "ic-recovery",
  "ic-system-test-driver",
  "ic-testnet-mainnet-nns",
