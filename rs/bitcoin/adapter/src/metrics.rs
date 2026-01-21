@@ -60,8 +60,8 @@ impl GetSuccessorMetrics {
             response_build_duration: metrics_registry.histogram(
                 "response_build_duration_seconds",
                 "Time spent building the GetSuccessors response.",
-                // 100us, 1ms, 10ms, 100ms, 1s, 10s
-                vec![0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
+                // 1ms, 10ms, 100ms, 1s, 10s
+                vec![0.001, 0.01, 0.1, 1.0, 10.0],
             ),
             response_blocks_size: metrics_registry.histogram(
                 "response_blocks_size_bytes",
@@ -145,8 +145,8 @@ impl BlockchainStateMetrics {
             block_processing_duration: metrics_registry.histogram(
                 "block_processing_duration_seconds",
                 "Time spent processing (deserializing and validating) received blocks.",
-                // 100us, 1ms, 10ms, 100ms, 1s, 10s
-                vec![0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
+                // 1ms, 10ms, 100ms, 1s, 10s
+                vec![0.001, 0.01, 0.1, 1.0, 10.0],
             ),
             block_received_size: metrics_registry.histogram(
                 "block_received_size_bytes",
