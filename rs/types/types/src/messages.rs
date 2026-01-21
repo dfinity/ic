@@ -17,9 +17,10 @@ pub use self::http::{
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
     SignedDelegation,
 };
+use crate::methods::Callback;
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
+use crate::{Cycles, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_option};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
@@ -220,10 +221,10 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                         call_id,
                     },
                 ) => StopCanisterContext::Ingress {
-                    sender: user_id_try_from_protobuf(try_from_option_field(
+                    sender: user_id_try_from_option(
                         sender,
                         "StopCanisterContext::Ingress::sender",
-                    )?)?,
+                    )?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
                     call_id: call_id.map(StopCanisterCallId::from),
                 },
@@ -308,9 +309,16 @@ impl SignedRequestBytes {
 }
 
 /// A wrapper around ingress messages and canister requests/responses.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessage {
+    // TODO(DSM-95): Switch to `NewResponse` (in the next replica release) and drop.
     Response(Arc<Response>),
+    /// Forward compatibility: a response as an input for Execution, consisting of
+    /// the response itself plus its associated callback.
+    NewResponse {
+        response: Arc<Response>,
+        callback: Arc<Callback>,
+    },
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
 }
@@ -321,7 +329,7 @@ impl CanisterMessage {
         match &self {
             CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
             CanisterMessage::Request(request) => request.extract_effective_canister_id(),
-            CanisterMessage::Response(_) => None,
+            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => None,
         }
     }
 }
@@ -335,7 +343,9 @@ impl Display for CanisterMessage {
             CanisterMessage::Request(request) => {
                 write!(f, "Request, method name {},", request.method_name)
             }
-            CanisterMessage::Response(_) => write!(f, "Response"),
+            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => {
+                write!(f, "Response")
+            }
         }
     }
 }
@@ -428,7 +438,7 @@ impl TryFrom<CanisterMessage> for CanisterCall {
         match msg {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
-            CanisterMessage::Response(_) => Err(()),
+            CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => Err(()),
         }
     }
 }
@@ -491,7 +501,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
 }
 
 /// A wrapper around canister messages and tasks.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CanisterMessageOrTask {
     Message(CanisterMessage),
     Task(CanisterTask),

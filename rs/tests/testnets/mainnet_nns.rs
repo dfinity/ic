@@ -36,35 +36,14 @@
 // Happy testing!
 
 use anyhow::Result;
-use ic_system_test_driver::driver::{
-    group::SystemTestGroup,
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
-    test_env::TestEnv,
-};
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_testnet_mainnet_nns::setup as setup_mainnet_nns;
 use std::time::Duration;
-
-fn setup(env: TestEnv) {
-    // Requires more resources to scrape mainnet topology
-    PrometheusVm::default()
-        .with_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(32)),
-            memory_kibibytes: Some(AmountOfMemoryKiB::new(125000000)), // ~128 GiB
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-        })
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
-    setup_mainnet_nns(env.clone());
-
-    env.sync_with_prometheus();
-}
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
-        .with_setup(setup)
+        .with_setup(setup_mainnet_nns)
         .execute_from_args()?;
     Ok(())
 }

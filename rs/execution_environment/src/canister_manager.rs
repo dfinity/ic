@@ -2898,13 +2898,14 @@ impl CanisterManager {
         // Memory has already been reserved by `create_snapshot_from_metadata`,
         // but the instructions used to copy the data still need to be accounted for.
         // Cycles should be charged in any case, because memory is being written.
-        let (bytes_written, instructions) = self.get_bytes_and_instructions(args);
+        let (bytes_written, cycles_cost, instructions) =
+            self.get_bytes_and_cycles_and_instructions(args);
         if let Err(e) = self
             .cycles_account_manager
             .consume_cycles_for_instructions(
                 &sender,
                 canister,
-                NumInstructions::new(bytes_written),
+                NumInstructions::new(cycles_cost.low64()),
                 subnet_size,
                 cost_schedule,
                 // It does not matter if this is a Wasm64 or Wasm32 module.
@@ -2975,7 +2976,8 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return (Ok(()), NumInstructions::new(0));
+                        round_limits.instructions -= as_round_instructions(instructions);
+                        return (Ok(()), instructions);
                     }
                     ChunkValidationResult::ValidationError(err) => {
                         // In this case, we spent instructions calculating the chunk hash, so we charge them.
@@ -3064,26 +3066,31 @@ impl CanisterManager {
         );
     }
 
-    /// Returns the cycles and instructions that should be charged for this data upload operation.
-    fn get_bytes_and_instructions(
+    /// Returns the bytes, cycles and instructions that should be charged for this data upload operation.
+    fn get_bytes_and_cycles_and_instructions(
         &self,
         args: &UploadCanisterSnapshotDataArgs,
-    ) -> (u64, NumInstructions) {
+    ) -> (u64, Cycles, NumInstructions) {
         match args.kind {
             CanisterSnapshotDataOffset::WasmModule { .. } => (
                 args.chunk.len() as u64,
+                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
+                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::StableMemory { .. } => (
                 args.chunk.len() as u64,
+                Cycles::from(args.chunk.len() as u64),
                 NumInstructions::new(args.chunk.len() as u64),
             ),
             CanisterSnapshotDataOffset::WasmChunk => (
                 wasm_chunk_store::chunk_size().get(),
+                // `upload_chunk` already has this high cycle cost, so we keep it consistent.
+                Cycles::from(self.config.upload_wasm_chunk_instructions.get()),
                 self.config.upload_wasm_chunk_instructions,
             ),
         }
