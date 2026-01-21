@@ -26,7 +26,13 @@ pub fn spawn_launcher_process(
     >,
 ) -> std::io::Result<(Box<dyn LauncherService>, Child)> {
     let (socket, sock_launcher) = std::os::unix::net::UnixStream::pair()?;
-    let child_handle = spawn_socketed_process(exec_path, argv, &[], sock_launcher.as_raw_fd())?;
+    let child_handle = spawn_socketed_process(
+        "[LAUNCHER]: ",
+        exec_path,
+        argv,
+        &[],
+        sock_launcher.as_raw_fd(),
+    )?;
 
     let socket = Arc::new(socket);
 
