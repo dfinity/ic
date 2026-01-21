@@ -185,7 +185,7 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let ingress_size = ingress.count_bytes();
+                    let ingress_size = ingress.signed_ingress.count_bytes();
 
                     // Break criterion #1: global byte limit
                     if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
