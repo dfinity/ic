@@ -1,4 +1,3 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
@@ -75,8 +74,6 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-BUILD_DEPENDENCIES = []
-
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/canister_client",
@@ -112,18 +109,11 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    aliases = ALIASES,
-    data = ["templates/dashboard.html"],  # build script data (e.g. template files) goes here
-    deps = BUILD_DEPENDENCIES,
-)
-
 rust_library(
     name = "public",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    compile_data = ["templates/dashboard.html"],
     crate_features = select({
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
@@ -135,7 +125,7 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
@@ -143,7 +133,7 @@ rust_test(
     aliases = ALIASES,
     crate = ":public",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(

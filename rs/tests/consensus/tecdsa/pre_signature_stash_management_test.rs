@@ -63,8 +63,10 @@ fn setup(env: TestEnv) {
                     key_configs: key_ids
                         .into_iter()
                         .map(|key_id| KeyConfig {
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(20),
                             key_id,
-                            pre_signatures_to_create_in_advance: 20,
                             max_queue_size: 20,
                         })
                         .collect(),

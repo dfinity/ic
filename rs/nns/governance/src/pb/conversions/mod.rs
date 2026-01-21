@@ -460,6 +460,9 @@ impl From<api::proposal::Action> for pb::proposal::Action {
             api::proposal::Action::TakeCanisterSnapshot(v) => {
                 pb::proposal::Action::TakeCanisterSnapshot(v.into())
             }
+            api::proposal::Action::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
+            }
         }
     }
 }
@@ -514,6 +517,9 @@ impl From<api::ProposalActionRequest> for pb::proposal::Action {
             }
             api::ProposalActionRequest::TakeCanisterSnapshot(v) => {
                 pb::proposal::Action::TakeCanisterSnapshot(v.into())
+            }
+            api::ProposalActionRequest::LoadCanisterSnapshot(v) => {
+                pb::proposal::Action::LoadCanisterSnapshot(v.into())
             }
         }
     }
@@ -2762,6 +2768,23 @@ fn convert_guest_launch_measurement_metadata_from_api_to_pb(
 ) -> PbGuestLaunchMeasurementMetadata {
     PbGuestLaunchMeasurementMetadata {
         kernel_cmdline: item.kernel_cmdline,
+    }
+}
+
+impl From<pb::LoadCanisterSnapshot> for api::LoadCanisterSnapshot {
+    fn from(item: pb::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: Some(item.snapshot_id),
+        }
+    }
+}
+impl From<api::LoadCanisterSnapshot> for pb::LoadCanisterSnapshot {
+    fn from(item: api::LoadCanisterSnapshot) -> Self {
+        Self {
+            canister_id: item.canister_id,
+            snapshot_id: item.snapshot_id.unwrap_or_default(),
+        }
     }
 }
 

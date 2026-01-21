@@ -35,6 +35,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
     get_upstreams_uvm(env)
         .block_on_bash_script(&format!(
             r#"
+                set -euo pipefail
                 # Generate TLS certificates for the upstreams.
                 mkdir -p {CERTS_ROOT}
                 cd {CERTS_ROOT}
@@ -113,6 +114,7 @@ fn get_spoof_commands(server_ipv6: &Ipv6Addr) -> String {
     // original with a bind mount.
     let mut command = String::from(
         r#"
+            set -euo pipefail
             sudo cp /etc/hosts /tmp/hosts
         "#,
     );

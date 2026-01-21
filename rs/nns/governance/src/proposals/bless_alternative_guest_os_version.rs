@@ -1,6 +1,14 @@
 use super::*;
-use crate::are_bless_alternative_guest_os_version_proposals_enabled;
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
+
+use crate::{
+    are_bless_alternative_guest_os_version_proposals_enabled,
+    pb::v1::SelfDescribingValue,
+    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
+};
+
+use ic_protobuf::registry::replica_version::v1::{
+    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
+};
 
 impl BlessAlternativeGuestOsVersion {
     /// Verifies the following:
@@ -145,6 +153,55 @@ fn validate_base_guest_launch_measurements(
     }
 
     defects
+}
+
+impl LocallyDescribableProposalAction for BlessAlternativeGuestOsVersion {
+    const TYPE_NAME: &'static str = "Bless Alternative Guest OS Version";
+    const TYPE_DESCRIPTION: &'static str = "Blesses an alternative Guest OS version that node \
+    operators can manually use to boot nodes in case the normal means of changing software fail.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
+    }
+}
+
+// The following impls are for external crate types from ic_protobuf that cannot use
+// the SelfDescribing derive macro.
+
+impl From<GuestLaunchMeasurements> for SelfDescribingValue {
+    fn from(value: GuestLaunchMeasurements) -> Self {
+        let GuestLaunchMeasurements {
+            guest_launch_measurements,
+        } = value;
+
+        ValueBuilder::new()
+            .add_field("guest_launch_measurements", guest_launch_measurements)
+            .build()
+    }
+}
+
+impl From<GuestLaunchMeasurement> for SelfDescribingValue {
+    fn from(value: GuestLaunchMeasurement) -> Self {
+        let GuestLaunchMeasurement {
+            measurement,
+            metadata,
+        } = value;
+
+        ValueBuilder::new()
+            .add_field("measurement", measurement)
+            .add_field("metadata", metadata)
+            .build()
+    }
+}
+
+impl From<GuestLaunchMeasurementMetadata> for SelfDescribingValue {
+    fn from(value: GuestLaunchMeasurementMetadata) -> Self {
+        let GuestLaunchMeasurementMetadata { kernel_cmdline } = value;
+
+        ValueBuilder::new()
+            .add_field("kernel_cmdline", kernel_cmdline)
+            .build()
+    }
 }
 
 #[cfg(test)]

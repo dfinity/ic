@@ -1,27 +1,59 @@
-use ic_base_types::CanisterId;
+use candid::{Nat, Principal};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_management_canister_types_private::{CanisterSnapshotResponse, ListCanisterSnapshotArgs};
+use ic_nervous_system_common::E8;
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::ProposalStatus;
 use ic_nns_governance_api::{
-    MakeProposalRequest, ProposalActionRequest, TakeCanisterSnapshot,
+    LoadCanisterSnapshot, MakeProposalRequest, ProposalActionRequest, TakeCanisterSnapshot,
     manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
-        nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
-        nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
-        update_with_sender,
+        icrc1_balance, icrc1_transfer, nns_governance_get_proposal_info_as_anonymous,
+        nns_governance_make_proposal, nns_wait_for_proposal_execution, setup_nns_canisters,
+        state_machine_builder_for_nns_tests, update_with_sender,
     },
 };
+use ic_state_machine_tests::StateMachine;
+use icp_ledger::{AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens};
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use std::time::{Duration, SystemTime};
+
+fn default_account_identifier(principal_id: PrincipalId) -> AccountIdentifier {
+    AccountIdentifier::new(principal_id, None)
+}
 
 #[test]
 fn test_canister_snapshot() {
     // Step 1: Prepare the world: Set up the NNS canisters with a super powerful neuron.
     let state_machine = state_machine_builder_for_nns_tests().build();
-    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+
+    let icp_token_sender = PrincipalId::new_user_test_id(298_993_015);
+    let icp_token_receiver = PrincipalId::new_user_test_id(836_602_313);
+    let stable_balance_principal = PrincipalId::new_user_test_id(724_822_448);
+
+    let initial_balance = Tokens::from_e8s(10 * E8);
+
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_test_neurons()
+        .with_ledger_account(
+            default_account_identifier(icp_token_sender),
+            initial_balance,
+        )
+        .with_ledger_account(
+            default_account_identifier(icp_token_receiver),
+            initial_balance,
+        )
+        .with_ledger_account(
+            default_account_identifier(stable_balance_principal),
+            initial_balance,
+        )
+        .build();
+
     setup_nns_canisters(&state_machine, nns_init_payloads);
 
     // Basic facts.
@@ -200,4 +232,107 @@ fn test_canister_snapshot() {
 
     // Generic checks of the second snapshot.
     assert_snapshot_seems_reasonable(second_snapshot);
+
+    // Scenario C: Load the second snapshot, but first, icp_token_sender sends
+    // some ICP tokens to icp_token_recevier. That way, when the snapshot is
+    // loaded, we can observe whether the expected effect takes place (i.e. the
+    // ICP transfer from icp_token_sender to icp_token_receiver is rolled back).
+
+    // Step 1(C): Prepare the world for LoadCanisterSnapshot.
+
+    #[track_caller]
+    fn assert_balance(state_machine: &StateMachine, owner: PrincipalId, expected_balance: Tokens) {
+        let owner = Principal::from(owner);
+
+        let account = Account {
+            owner,
+            subaccount: None,
+        };
+
+        let observed_balance = icrc1_balance(state_machine, LEDGER_CANISTER_ID, account);
+
+        assert_eq!(observed_balance, expected_balance);
+    }
+
+    // Verify initial balances. This just makes sure that we configured this
+    // test correctly; this is not to confirm that the code under test itself is
+    // correct.
+    assert_balance(&state_machine, icp_token_sender, initial_balance);
+    assert_balance(&state_machine, icp_token_receiver, initial_balance);
+    assert_balance(&state_machine, stable_balance_principal, initial_balance);
+
+    // Tranfer ICP (from icp_token_sender to icp_token_receiver).
+    let transfer_amount = Tokens::from_tokens(1).unwrap();
+    icrc1_transfer(
+        &state_machine,
+        LEDGER_CANISTER_ID,
+        icp_token_sender,
+        TransferArg {
+            to: Account {
+                owner: Principal::from(icp_token_receiver),
+                subaccount: None,
+            },
+            amount: Nat::from(transfer_amount.get_e8s()),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+
+            from_subaccount: None,
+            memo: None,
+            created_at_time: None,
+        },
+    )
+    .unwrap();
+
+    // Verify balances AFTER transfer
+    assert_balance(
+        &state_machine,
+        icp_token_sender,
+        initial_balance
+            .checked_sub(&transfer_amount)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap(),
+    );
+    assert_balance(
+        &state_machine,
+        icp_token_receiver,
+        initial_balance.checked_add(&transfer_amount).unwrap(),
+    );
+    assert_balance(&state_machine, stable_balance_principal, initial_balance);
+
+    // Step 2(C): Run the code under test by making, adopting, and executing a
+    // LoadCanisterSnapshot proposal. This should revert the Ledger canister to
+    // `second_snapshot`, which was taken BEFORE the transfer (which took place
+    // in Step 1(C)).
+
+    let load_snapshot = LoadCanisterSnapshot {
+        canister_id: Some(target_canister_id.get()),
+        snapshot_id: Some(second_snapshot.snapshot_id().to_vec()),
+    };
+    let action = ProposalActionRequest::LoadCanisterSnapshot(load_snapshot);
+    let make_proposal_request = MakeProposalRequest {
+        title: Some("Restore Ledger Canister to Snapshot 2".to_string()),
+        summary: r#"This will revert the ICP transfer."#.to_string(),
+        url: "https://forum.dfinity.org/restore-ledger-canister-to-snapshot-2".to_string(),
+        action: Some(action),
+    };
+    let make_proposal_response = nns_governance_make_proposal(
+        &state_machine,
+        neuron.principal_id,
+        neuron.neuron_id,
+        &make_proposal_request,
+    );
+    let load_canister_snapshot_proposal_id = match make_proposal_response.command.as_ref().unwrap()
+    {
+        Command::MakeProposal(response) => response.proposal_id.unwrap(),
+        _ => panic!("{make_proposal_response:#?}"),
+    };
+
+    // Step 3C: Verify LoadCanisterSnapshot execution.
+
+    nns_wait_for_proposal_execution(&state_machine, load_canister_snapshot_proposal_id.id);
+
+    // Balanaces are back to what they were.
+    assert_balance(&state_machine, icp_token_sender, initial_balance);
+    assert_balance(&state_machine, icp_token_receiver, initial_balance);
+    assert_balance(&state_machine, stable_balance_principal, initial_balance);
 }

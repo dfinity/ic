@@ -9,8 +9,22 @@ use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/ic_config_template.rs"));
+#[derive(Template)]
+#[template(path = "ic.json5.template", escape = "none")]
+pub struct IcConfigTemplate {
+    pub ipv6_address: String,
+    pub ipv6_prefix: String,
+    pub ipv4_address: String,
+    pub ipv4_gateway: String,
+    pub nns_urls: String,
+    pub backup_retention_time_secs: String,
+    pub backup_purging_interval_secs: String,
+    pub query_stats_epoch_length: String,
+    pub jaeger_addr: String,
+    pub domain_name: String,
+    pub node_reward_type: String,
+    pub malicious_behavior: String,
+}
 
 /// Generate IC configuration from template and guestos config
 pub fn generate_ic_config(guestos_config: &GuestOSConfig, output_path: &Path) -> Result<()> {

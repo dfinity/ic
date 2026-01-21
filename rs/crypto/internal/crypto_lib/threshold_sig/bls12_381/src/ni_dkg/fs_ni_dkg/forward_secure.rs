@@ -931,7 +931,7 @@ pub(crate) fn extend_tau(
 /// Extends tau using the random oracle, and computes the function f
 ///
 /// See the description of Deal in Section 7.1.
-pub fn ftau_extended(
+fn ftau_extended(
     cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],

@@ -243,6 +243,9 @@ fn convert_action(
         pb::proposal::Action::TakeCanisterSnapshot(v) => {
             api::proposal::Action::TakeCanisterSnapshot(v.clone().into())
         }
+        pb::proposal::Action::LoadCanisterSnapshot(v) => {
+            api::proposal::Action::LoadCanisterSnapshot(v.clone().into())
+        }
 
         // The action types with potentially large fields need to be converted in a way that avoids
         // cloning the action first.
@@ -404,6 +407,7 @@ fn convert_self_describing_value(
             api::SelfDescribingValue::Int(int)
         }
         pb::self_describing_value::Value::Null(_) => api::SelfDescribingValue::Null,
+        pb::self_describing_value::Value::Bool(v) => api::SelfDescribingValue::Bool(*v),
         pb::self_describing_value::Value::Array(v) => api::SelfDescribingValue::Array(
             v.values
                 .iter()

@@ -124,6 +124,10 @@ impl StateSync {
                 .step_duration
                 .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
                 .start_timer();
+            info!(
+                self.log,
+                "Loading and validating checkpoint at {height} to mark as verified as no verified checkpoints exist or last one is too old. Current verified heights: {verified_checkpoint_heights:?}"
+            );
             match crate::checkpoint::load_checkpoint_and_validate_parallel(
                 &ro_layout,
                 self.state_manager.own_subnet_type,
@@ -143,6 +147,10 @@ impl StateSync {
                 .step_duration
                 .with_label_values(&[LABEL_LOAD_CHECKPOINT])
                 .start_timer();
+            info!(
+                self.log,
+                "Loading state sync checkpoint at {height} and skipping validation. The checkpoint will remain unverified."
+            );
             let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
             let state = match crate::checkpoint::load_checkpoint(
                 &ro_layout,

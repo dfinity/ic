@@ -11,9 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-Promoted the check for empty SEV measurements in replica versions from a check
-on proposals, to an invariant of the registry.
-
 ## Deprecated
 
 ## Removed

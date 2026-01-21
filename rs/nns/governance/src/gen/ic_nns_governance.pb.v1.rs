@@ -432,7 +432,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -545,6 +545,9 @@ pub mod proposal {
         /// Take a canister snapshot.
         #[prost(message, tag = "32")]
         TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        #[prost(message, tag = "33")]
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 /// Take a canister snapshot.
@@ -2832,6 +2835,7 @@ pub struct FulfillSubnetRentalRequest {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -2845,6 +2849,23 @@ pub struct BlessAlternativeGuestOsVersion {
     pub base_guest_launch_measurements: ::core::option::Option<
         ::ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements,
     >,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[prost(bytes = "vec", tag = "2")]
+    pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
@@ -4170,7 +4191,10 @@ pub struct FinalizeDisburseMaturity {
     ::prost::Message,
 )]
 pub struct SelfDescribingValue {
-    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    #[prost(
+        oneof = "self_describing_value::Value",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8"
+    )]
     pub value: ::core::option::Option<self_describing_value::Value>,
 }
 /// Nested message and enum types in `SelfDescribingValue`.
@@ -4200,6 +4224,8 @@ pub mod self_describing_value {
         Map(super::SelfDescribingValueMap),
         #[prost(message, tag = "7")]
         Null(super::Empty),
+        #[prost(bool, tag = "8")]
+        Bool(bool),
     }
 }
 #[derive(

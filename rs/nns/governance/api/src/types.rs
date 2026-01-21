@@ -653,6 +653,8 @@ pub mod proposal {
         BlessAlternativeGuestOsVersion(super::BlessAlternativeGuestOsVersion),
         /// Take a canister snapshot.
         TakeCanisterSnapshot(super::TakeCanisterSnapshot),
+        /// Load a canister snapshot.
+        LoadCanisterSnapshot(super::LoadCanisterSnapshot),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -1412,6 +1414,7 @@ pub enum ProposalActionRequest {
     FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
     TakeCanisterSnapshot(TakeCanisterSnapshot),
+    LoadCanisterSnapshot(LoadCanisterSnapshot),
 }
 
 #[derive(
@@ -2721,6 +2724,18 @@ pub struct GuestLaunchMeasurement {
 )]
 pub struct GuestLaunchMeasurementMetadata {
     pub kernel_cmdline: Option<String>,
+}
+
+/// Loads a snapshot of the canister.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct LoadCanisterSnapshot {
+    /// The ID of the canister to load the snapshot into.
+    pub canister_id: Option<PrincipalId>,
+    /// The ID of the snapshot to load.
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub snapshot_id: Option<Vec<u8>>,
 }
 
 /// This represents the whole NNS governance system. It contains all
@@ -4583,6 +4598,13 @@ pub enum SelfDescribingValue {
     Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
+    Bool(bool),
+}
+
+impl From<String> for SelfDescribingValue {
+    fn from(value: String) -> Self {
+        SelfDescribingValue::Text(value)
+    }
 }
 
 impl From<&str> for SelfDescribingValue {
@@ -4600,6 +4622,24 @@ impl From<u64> for SelfDescribingValue {
 impl From<u32> for SelfDescribingValue {
     fn from(value: u32) -> Self {
         SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue::Blob(value)
+    }
+}
+
+impl From<PrincipalId> for SelfDescribingValue {
+    fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue::Bool(value)
     }
 }
 

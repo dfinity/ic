@@ -105,11 +105,9 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
         .into_iter()
         .map(|key_id| KeyConfig {
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                PRE_SIGNATURES_TO_CREATE_IN_ADVANCE
-            } else {
-                0
-            },
+            pre_signatures_to_create_in_advance: key_id
+                .requires_pre_signatures()
+                .then_some(PRE_SIGNATURES_TO_CREATE_IN_ADVANCE),
             key_id,
         })
         .collect();

@@ -1,12 +1,13 @@
 use super::*;
+
 use crate::{
+    proposals::self_describing::LocallyDescribableProposalAction,
     temporarily_disable_bless_alternative_guest_os_version_proposals,
     temporarily_enable_bless_alternative_guest_os_version_proposals,
 };
 use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
-use ic_protobuf::registry::replica_version::v1::{
-    GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
-};
+use ic_nns_governance_api::SelfDescribingValue;
+use maplit::hashmap;
 
 #[test]
 fn test_validate_chip_ids_empty() {
@@ -235,5 +236,55 @@ fn test_bless_alternative_guest_os_version_disabled() {
     assert_contains_all_key_words(
         &result.error_message,
         &["BlessAlternativeGuestOsVersion", "not enabled"],
+    );
+}
+
+#[test]
+fn test_bless_alternative_guest_os_version_to_self_describing() {
+    let bless_alternative_guest_os_version = BlessAlternativeGuestOsVersion {
+        chip_ids: vec![vec![0xAB; 64], vec![0xCD; 64]],
+        rootfs_hash: "deadbeef1234567890abcdef".to_string(),
+        base_guest_launch_measurements: Some(GuestLaunchMeasurements {
+            guest_launch_measurements: vec![
+                GuestLaunchMeasurement {
+                    measurement: vec![0x01; 48],
+                    metadata: Some(GuestLaunchMeasurementMetadata {
+                        kernel_cmdline: Some("console=ttyS0".to_string()),
+                    }),
+                },
+                GuestLaunchMeasurement {
+                    measurement: vec![0x02; 48],
+                    metadata: None,
+                },
+            ],
+        }),
+    };
+
+    let value =
+        SelfDescribingValue::from(bless_alternative_guest_os_version.to_self_describing_value());
+
+    assert_eq!(
+        value,
+        SelfDescribingValue::Map(hashmap! {
+            "chip_ids".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::from(vec![0xAB; 64]),
+                SelfDescribingValue::from(vec![0xCD; 64]),
+            ]),
+            "rootfs_hash".to_string() => SelfDescribingValue::from("deadbeef1234567890abcdef"),
+            "base_guest_launch_measurements".to_string() => SelfDescribingValue::Map(hashmap! {
+                "guest_launch_measurements".to_string() => SelfDescribingValue::Array(vec![
+                    SelfDescribingValue::Map(hashmap! {
+                        "measurement".to_string() => SelfDescribingValue::from(vec![0x01; 48]),
+                        "metadata".to_string() => SelfDescribingValue::Map(hashmap! {
+                            "kernel_cmdline".to_string() => SelfDescribingValue::from("console=ttyS0"),
+                        }),
+                    }),
+                    SelfDescribingValue::Map(hashmap! {
+                        "measurement".to_string() => SelfDescribingValue::from(vec![0x02; 48]),
+                        "metadata".to_string() => SelfDescribingValue::Null,
+                    }),
+                ]),
+            }),
+        })
     );
 }

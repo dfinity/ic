@@ -513,6 +513,7 @@ impl Action {
                 "ACTION_BLESS_ALTERNATIVE_GUEST_OS_VERSION"
             }
             Action::TakeCanisterSnapshot(_) => "ACTION_TAKE_CANISTER_SNAPSHOT",
+            Action::LoadCanisterSnapshot(_) => "ACTION_LOAD_CANISTER_SNAPSHOT",
         }
     }
 }
@@ -4179,6 +4180,10 @@ impl Governance {
                 self.perform_take_canister_snapshot(pid, take_canister_snapshot)
                     .await;
             }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                self.perform_load_canister_snapshot(pid, load_canister_snapshot)
+                    .await;
+            }
         }
     }
 
@@ -4246,6 +4251,17 @@ impl Governance {
     ) {
         let result = fulfill_subnet_rental_request
             .execute(ProposalId { id: proposal_id }, &self.env)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_load_canister_snapshot(
+        &mut self,
+        proposal_id: u64,
+        load_canister_snapshot: pb::v1::LoadCanisterSnapshot,
+    ) {
+        let result = self
+            .perform_call_canister(proposal_id, load_canister_snapshot)
             .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
@@ -4789,6 +4805,9 @@ impl Governance {
             ) => bless_alternative_guest_os_version.validate(),
             ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
                 take_canister_snapshot.validate()
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                load_canister_snapshot.validate()
             }
         }
     }

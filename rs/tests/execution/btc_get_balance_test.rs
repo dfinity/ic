@@ -9,7 +9,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
-    SshSession, get_dependency_path,
+    SshSession, get_dependency_path_from_env,
 };
 use ic_system_test_driver::{
     driver::{
@@ -54,9 +54,7 @@ pub fn config(env: TestEnv) {
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            "rs/tests/execution/btc_uvm_config_image.zst",
-        ))
+        .with_config_img(get_dependency_path_from_env("BTC_UVM_CONFIG_IMAGE_PATH"))
         .start(&env)
         .expect("failed to setup universal VM");
 

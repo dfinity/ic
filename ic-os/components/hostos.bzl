@@ -13,8 +13,6 @@ component_files = {
     Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
     Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
     Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.sh"): "/opt/ic/bin/grub-upgrader.sh",
-    Label("hostos/misc/grub-upgrader/grub-upgrader.service"): "/etc/systemd/system/grub-upgrader.service",
     Label("hostos/misc/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
 
     # early-boot
@@ -103,5 +101,5 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
-    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
+    Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
 }

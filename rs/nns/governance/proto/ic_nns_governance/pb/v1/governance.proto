@@ -709,6 +709,8 @@ message Proposal {
     BlessAlternativeGuestOsVersion bless_alternative_guest_os_version = 31;
     // Take a canister snapshot.
     TakeCanisterSnapshot take_canister_snapshot = 32;
+    // Load a canister snapshot.
+    LoadCanisterSnapshot load_canister_snapshot = 33;
   }
 }
 
@@ -1941,6 +1943,14 @@ message BlessAlternativeGuestOsVersion {
   registry.replica_version.v1.GuestLaunchMeasurements base_guest_launch_measurements = 3;
 }
 
+message LoadCanisterSnapshot {
+  // The ID of the canister to load the snapshot into.
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+
+  // The ID of the snapshot to load.
+  bytes snapshot_id = 2;
+}
+
 // This represents the whole NNS governance system. It contains all
 // information about the NNS governance system that must be kept
 // across upgrades of the NNS governance system.
@@ -2662,6 +2672,7 @@ message SelfDescribingValue {
     SelfDescribingValueArray array = 5;
     SelfDescribingValueMap map = 6;
     Empty null = 7;
+    bool bool = 8;
   }
 }
 

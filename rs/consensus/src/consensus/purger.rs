@@ -316,11 +316,7 @@ impl Purger {
 
     /// Ask state manager to purge all states below the given height
     fn purge_replicated_state_by_finalized_certified_height(&self, pool: &PoolReader<'_>) {
-        let height = pool
-            .get_finalized_tip()
-            .context
-            .certified_height
-            .min(self.state_manager.latest_state_height());
+        let height = pool.get_finalized_tip().context.certified_height;
 
         let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
@@ -340,7 +336,8 @@ impl Purger {
     /// the given height can be removed.
     ///
     /// Note from the [`StateManager::remove_states_below`] docs:
-    ///  * The initial state (height = 0) cannot be removed.
+    ///  * The initial state (height = 0) is not removed.
+    ///  * The latest state is not removed.
     ///  * Some states matching the removal criteria might be kept alive.  For
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.

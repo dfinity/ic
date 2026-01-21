@@ -594,6 +594,9 @@ impl ExecutionEnvironment {
                     }
                 };
             }
+            CanisterMessage::NewResponse { .. } => {
+                unreachable!("NewResponse is only used during state loading")
+            }
 
             CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
             CanisterMessage::Request(msg) => CanisterCall::Request(msg),
@@ -2020,6 +2023,9 @@ impl ExecutionEnvironment {
                     subnet_size,
                     cost_schedule,
                 );
+            }
+            CanisterMessageOrTask::Message(CanisterMessage::NewResponse { .. }) => {
+                unreachable!("NewResponse is only used during state loading")
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 CanisterCall::Request(request)

@@ -7,7 +7,7 @@ use ic_cdk::{
 };
 use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CanisterSnapshotResponse,
-    CreateCanisterArgs, InstallCodeArgs, TakeCanisterSnapshotArgs,
+    CreateCanisterArgs, InstallCodeArgs, LoadCanisterSnapshotArgs, TakeCanisterSnapshotArgs,
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
@@ -24,9 +24,11 @@ use ic_nns_common::{
     types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, TakeCanisterSnapshotError,
-    TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest, TakeCanisterSnapshotResponse,
-    UpdateCanisterSettingsError, UpdateCanisterSettingsRequest, UpdateCanisterSettingsResponse,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse, LoadCanisterSnapshotError,
+    LoadCanisterSnapshotOk, LoadCanisterSnapshotRequest, LoadCanisterSnapshotResponse,
+    TakeCanisterSnapshotError, TakeCanisterSnapshotOk, TakeCanisterSnapshotRequest,
+    TakeCanisterSnapshotResponse, UpdateCanisterSettingsError, UpdateCanisterSettingsRequest,
+    UpdateCanisterSettingsResponse,
 };
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
@@ -319,5 +321,52 @@ fn convert_from_canister_snapshot_response_to_take_canister_snapshot_ok(
         id,
         taken_at_timestamp,
         total_size,
+    }
+}
+
+pub async fn load_canister_snapshot(
+    load_canister_snapshot_request: LoadCanisterSnapshotRequest,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> LoadCanisterSnapshotResponse {
+    let LoadCanisterSnapshotRequest {
+        canister_id,
+        snapshot_id,
+    } = load_canister_snapshot_request;
+
+    let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+        Ok(ok) => ok,
+        Err(err) => {
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid snapshot ID: {err}"),
+            });
+        }
+    };
+
+    let canister_id = match CanisterId::try_from(canister_id) {
+        Ok(ok) => ok,
+        Err(err) => {
+            return LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+                code: None,
+                description: format!("Invalid canister ID: {err}"),
+            });
+        }
+    };
+
+    let load_canister_snapshot_args = LoadCanisterSnapshotArgs::new(
+        canister_id,
+        snapshot_id,
+        management_canister_client.canister_version(),
+    );
+
+    match management_canister_client
+        .load_canister_snapshot(load_canister_snapshot_args)
+        .await
+    {
+        Ok(()) => LoadCanisterSnapshotResponse::Ok(LoadCanisterSnapshotOk {}),
+        Err((code, description)) => LoadCanisterSnapshotResponse::Err(LoadCanisterSnapshotError {
+            code: Some(code),
+            description,
+        }),
     }
 }

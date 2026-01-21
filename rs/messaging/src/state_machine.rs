@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{Cycles, ExecutionRound, NumBytes, SubnetId};
+use ic_types::{ExecutionRound, NumBytes, SubnetId};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -275,20 +275,6 @@ impl StateMachine for StateMachineImpl {
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
-
-        // Take out all refunds from the refund pool and observe them as lost cycles.
-        //
-        // Refunds are currently not routed to streams (this will be implemented in a
-        // follow-up change). Therefore, we "lose" them here, so they don't accumulate
-        // forever.
-        if !state_after_stream_builder.refunds().is_empty() {
-            let mut lost_cycles = Cycles::new(0);
-            state_after_stream_builder.take_refunds(|refund| {
-                lost_cycles += refund.amount();
-                true
-            });
-            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
-        }
 
         state_after_stream_builder
     }

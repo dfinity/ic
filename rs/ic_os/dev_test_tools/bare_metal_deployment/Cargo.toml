@@ -8,8 +8,11 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+deterministic_ips = { path = "../../networking/deterministic_ips" }
 clap = { workspace = true }
 http = { workspace = true }
+macaddr = { workspace = true }
+rust-ini = { workspace = true }
 rand = { workspace = true }
 rexpect = { workspace = true }
 thiserror = { workspace = true }

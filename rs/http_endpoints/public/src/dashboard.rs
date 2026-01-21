@@ -16,8 +16,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{Height, ReplicaVersion};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    subnet_type: ic_registry_subnet_type::SubnetType,
+    http_config: &'a ic_config::http_handler::Config,
+
+    height: Height,
+    replicated_state: &'a ic_replicated_state::replicated_state::ReplicatedState,
+    canisters: &'a Vec<&'a ic_replicated_state::CanisterState>,
+    replica_version: ic_types::ReplicaVersion,
+}
 
 #[derive(Clone)]
 pub(crate) struct DashboardService {
