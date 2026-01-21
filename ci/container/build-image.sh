@@ -66,7 +66,7 @@ while test $# -gt 0; do
 done
 
 if [ $IMAGE_NAME == "ic-build" ]; then
-    BUILD_TARGET="--ci"
+    BUILD_TARGET="--build"
 elif [ $IMAGE_NAME == "ic-dev" ]; then
     BUILD_TARGET="--dev"
 else

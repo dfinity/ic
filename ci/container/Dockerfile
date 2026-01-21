@@ -140,5 +140,5 @@ ARG CI_USER="root"
 USER $CI_USER
 CMD ["/bin/bash"]
 
-FROM base as ci
+FROM base as build
 FROM base as dev
