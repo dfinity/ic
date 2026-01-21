@@ -168,9 +168,11 @@ impl From<&CallContextManager> for pb::CallContextManager {
     }
 }
 
-impl TryFrom<pb::CallContextManager> for CallContextManager {
+impl TryFrom<(pb::CallContextManager, CanisterId)> for CallContextManager {
     type Error = ProxyDecodeError;
-    fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
+    fn try_from(
+        (value, own_canister_id): (pb::CallContextManager, CanisterId),
+    ) -> Result<Self, Self::Error> {
         let mut call_contexts = MutableIntMap::<CallContextId, CallContext>::new();
         let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>>::new();
         for pb::CallContextEntry {
@@ -191,7 +193,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
             callbacks.insert(
                 callback_id.into(),
                 Arc::new(try_from_option_field(
-                    callback,
+                    callback.map(|callback| (callback, own_canister_id)),
                     "CallContextManager::callbacks::V",
                 )?),
             );
