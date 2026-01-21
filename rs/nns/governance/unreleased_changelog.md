@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
 ## Changed
 
 ## Deprecated
