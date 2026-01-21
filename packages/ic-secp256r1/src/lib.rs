@@ -501,6 +501,36 @@ impl PublicKey {
         Ok(Self { key })
     }
 
+    /// Deserialize a public key from (x,y) coordinates
+    ///
+    /// It is allowed for x and y to be shorter than the field length,
+    /// with implicit leading zeros. It is not allowed for x or y to be
+    /// longer than the field width, even if the leading bytes are zero.
+    pub fn deserialize_from_xy(x: &[u8], y: &[u8]) -> Result<Self, KeyDecodingError> {
+        const FIELD_BYTES: usize = 32;
+
+        if x.len() > FIELD_BYTES {
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "ECDSA x coordinate is too large".to_string(),
+            ));
+        }
+        if y.len() > FIELD_BYTES {
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "ECDSA y coordinate is too large".to_string(),
+            ));
+        }
+
+        let x_zeros = FIELD_BYTES - x.len();
+        let y_zeros = FIELD_BYTES - y.len();
+
+        let mut sec1 = [0u8; 1 + FIELD_BYTES * 2];
+        sec1[0] = 0x04;
+        sec1[(1 + x_zeros)..(1 + FIELD_BYTES)].copy_from_slice(x);
+        sec1[(1 + FIELD_BYTES + y_zeros)..(1 + 2 * FIELD_BYTES)].copy_from_slice(y);
+
+        Self::deserialize_sec1(&sec1)
+    }
+
     /// Deserialize a public key stored in DER SubjectPublicKeyInfo format
     pub fn deserialize_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         use p256::pkcs8::DecodePublicKey;

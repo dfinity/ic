@@ -42,50 +42,15 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
 /// # Returns
 /// The DER encoding of the public key
 pub fn der_encoding_from_xy_coordinates(x: &[u8], y: &[u8]) -> CryptoResult<Vec<u8>> {
-    if x.len() > types::FIELD_SIZE {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: Some(x.to_vec()),
-            internal_error: "ECDSA x coordinate is too large".to_string(),
-        });
-    }
-
-    if y.len() > types::FIELD_SIZE {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: Some(y.to_vec()),
-            internal_error: "ECDSA y coordinate is too large".to_string(),
-        });
-    }
-
-    let mut bytes = Vec::with_capacity(1 + 2 * types::FIELD_SIZE);
-    bytes.extend_from_slice(&[0x04]); // uncompressed
-
-    // apply zero padding for x if necessary
-    for _i in x.len()..types::FIELD_SIZE {
-        bytes.push(0x00);
-    }
-    bytes.extend_from_slice(x);
-
-    // apply zero padding for y if necessary
-    for _i in y.len()..types::FIELD_SIZE {
-        bytes.push(0x00);
-    }
-    bytes.extend_from_slice(y);
-    let bytes = types::PublicKeyBytes(bytes);
-    public_key_to_der(&bytes)
-}
-
-fn public_key_to_der(pk: &types::PublicKeyBytes) -> CryptoResult<Vec<u8>> {
-    let pkey = ic_secp256r1::PublicKey::deserialize_sec1(&pk.0).map_err(|e| {
+    let pk = ic_secp256r1::PublicKey::deserialize_from_xy(x, y).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: Some(pk.0.to_vec()),
-            internal_error: format!("{e:?}"),
+            key_bytes: None,
+            internal_error: format!("{:?}", e),
         }
     })?;
 
-    Ok(pkey.serialize_der())
+    Ok(pk.serialize_der())
 }
 
 /// Sign a message using a secp256r1 private key

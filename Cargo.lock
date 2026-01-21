@@ -8163,7 +8163,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
- "ic-crypto-sha2",
  "ic-secp256r1",
  "ic-types",
  "serde",
