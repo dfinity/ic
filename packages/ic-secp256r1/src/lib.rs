@@ -515,7 +515,7 @@ impl PublicKey {
 
         let mut sec1 = [0u8; 1 + FIELD_BYTES * 2];
         sec1[0] = 0x04;
-        sec1[(1)..(1 + FIELD_BYTES)].copy_from_slice(x);
+        sec1[1..(1 + FIELD_BYTES)].copy_from_slice(x);
         sec1[(1 + FIELD_BYTES)..(1 + 2 * FIELD_BYTES)].copy_from_slice(y);
 
         Self::deserialize_sec1(&sec1)
