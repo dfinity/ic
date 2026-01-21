@@ -475,7 +475,7 @@ async fn test_to_self_describing_nns_canister_install() {
         SelfDescribingValue::Map(hashmap! {
             "wasm_module_hash".to_string() => SelfDescribingValue::from(wasm_hash),
             "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
-            "initial_cycles".to_string() => SelfDescribingValue::Nat(Nat::from(1_000_000_000_000_u64)),
+            "initial_cycles".to_string() => SelfDescribingValue::from(1_000_000_000_000_u64),
             "name".to_string() => SelfDescribingValue::from("test-canister"),
             "memory_allocation".to_string() => SelfDescribingValue::Array(vec![]),
             "compute_allocation".to_string() => SelfDescribingValue::Array(vec![]),
