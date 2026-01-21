@@ -29,16 +29,12 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(
 ///   RFC 8410, or the OID in incorrect, or the key length is incorrect.
 pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes> {
     match ic_ed25519::PublicKey::deserialize_rfc8410_der(pk_der) {
-        Ok(pk) => {
-            Ok(types::PublicKeyBytes(pk.serialize_raw()))
-        }
-        Err(e) => {
-            Err(CryptoError::MalformedPublicKey {
-                algorithm: AlgorithmId::Ed25519,
-                key_bytes: Some(pk_der.to_vec()),
-                internal_error: format!("{:?}", e)
-            })
-        }
+        Ok(pk) => Ok(types::PublicKeyBytes(pk.serialize_raw())),
+        Err(e) => Err(CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::Ed25519,
+            key_bytes: Some(pk_der.to_vec()),
+            internal_error: format!("{:?}", e),
+        }),
     }
 }
 

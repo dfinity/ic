@@ -192,8 +192,7 @@ fn should_correctly_verify_nist_fips_test_vectors() {
         let verify_result = pk.verify_signature(&v.msg, &v.sig);
 
         assert_eq!(
-            verify_result,
-            v.is_valid,
+            verify_result, v.is_valid,
             "Unexpected verification result for test vector {v:?}"
         );
     }

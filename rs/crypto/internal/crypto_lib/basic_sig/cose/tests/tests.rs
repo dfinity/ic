@@ -131,11 +131,7 @@ fn should_correctly_verify_webauthn_signatures() {
 
 // Given a DER-encoded signature, a COSE-encoded ECDSA-P256 public key,
 // and a message, computes and returns a signature verification result.
-fn get_der_cose_verification_result(
-    sig_der_hex: &str,
-    pk_cose_hex: &str,
-    msg_hex: &str,
-) -> bool {
+fn get_der_cose_verification_result(sig_der_hex: &str, pk_cose_hex: &str, msg_hex: &str) -> bool {
     let sig_der = hex::decode(sig_der_hex).unwrap();
     let pk_cose = hex::decode(pk_cose_hex).unwrap();
     let (_alg_id, pk) = parse_cose_public_key(&pk_cose).unwrap();

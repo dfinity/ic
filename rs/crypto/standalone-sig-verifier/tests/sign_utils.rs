@@ -103,20 +103,20 @@ fn should_fail_parsing_corrupted_der_encoded_ecdsa_p256_sig() {
     assert!(sig_result.is_err());
 }
 
-    #[test]
-    fn should_correctly_parse_der_encoded_signature() {
-        let sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
-        let _sig = ecdsa_p256_signature_from_der_bytes(&sig_der).unwrap();
-    }
+#[test]
+fn should_correctly_parse_der_encoded_signature() {
+    let sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+    let _sig = ecdsa_p256_signature_from_der_bytes(&sig_der).unwrap();
+}
 
-    #[test]
-    fn should_fail_parsing_a_corrupted_der_encoded_signature() {
-        let mut sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
-        sig_der[0] += 1;
-        let sig_result = ecdsa_p256_signature_from_der_bytes(&sig_der);
-        assert!(sig_result.is_err());
-        assert!(sig_result.unwrap_err().is_malformed_signature());
-    }
+#[test]
+fn should_fail_parsing_a_corrupted_der_encoded_signature() {
+    let mut sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+    sig_der[0] += 1;
+    let sig_result = ecdsa_p256_signature_from_der_bytes(&sig_der);
+    assert!(sig_result.is_err());
+    assert!(sig_result.unwrap_err().is_malformed_signature());
+}
 
 #[test]
 fn should_fail_parsing_corrupted_raw_pk() {
