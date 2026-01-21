@@ -3,6 +3,8 @@ use std::path::PathBuf;
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo::rerun-if-changed=proto/attestation.proto");
     let manifest_path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+
     let mut config = prost_build::Config::new();
     config.type_attribute(
         ".",
@@ -12,5 +14,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &[manifest_path.join("proto/attestation.proto")],
         &[manifest_path],
     )?;
+
+    ic_utils_rustfmt::rustfmt(&out_dir)?;
+
     Ok(())
 }

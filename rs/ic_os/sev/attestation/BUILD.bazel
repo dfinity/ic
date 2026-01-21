@@ -22,6 +22,7 @@ cargo_build_script(
         "@rules_rust//rust/toolchain:current_rustfmt_files",
     ],
     deps = [
+        "//rs/utils/rustfmt",
         "@crate_index//:prost-build",
     ],
 )
