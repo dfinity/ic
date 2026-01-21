@@ -690,7 +690,7 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgMessage {
-    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7")]
+    #[prost(oneof = "i_dkg_message::Msg", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
     pub msg: ::core::option::Option<i_dkg_message::Msg>,
 }
 /// Nested message and enum types in `IDkgMessage`.
@@ -711,6 +711,8 @@ pub mod i_dkg_message {
         SchnorrSigShare(super::SchnorrSigShare),
         #[prost(message, tag = "7")]
         VetkdKeyShare(super::VetKdKeyShare),
+        #[prost(message, tag = "8")]
+        Transcript(super::super::super::registry::subnet::v1::IDkgTranscript),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -816,7 +818,7 @@ pub struct PrefixPairSigShare {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgArtifactId {
-    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7")]
+    #[prost(oneof = "i_dkg_artifact_id::Kind", tags = "1, 2, 3, 4, 5, 6, 7, 8")]
     pub kind: ::core::option::Option<i_dkg_artifact_id::Kind>,
 }
 /// Nested message and enum types in `IDkgArtifactId`.
@@ -837,6 +839,8 @@ pub mod i_dkg_artifact_id {
         SchnorrSigShare(super::PrefixPairSigShare),
         #[prost(message, tag = "7")]
         VetkdKeyShare(super::PrefixPairSigShare),
+        #[prost(message, tag = "8")]
+        Transcript(super::PrefixPairIDkg),
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
