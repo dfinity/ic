@@ -10,6 +10,20 @@ use ic_types::{CanisterId, Cycles};
 use ic_universal_canister::{call_args, wasm};
 use proxy_canister::{RemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
 
+/// Checks whether the first argument is equal to the second argument with a relative error
+/// tolerance up to the third argument.
+macro_rules! assert_near {
+    ($left:expr, $right:expr, $max_relative_error:expr) => {
+        let relative_error = ($left.abs_diff($right) as f64) / ($right as f64);
+        assert!(
+            relative_error <= $max_relative_error,
+            "The relative error {} exceeds {}",
+            relative_error,
+            $max_relative_error
+        );
+    };
+}
+
 #[test]
 /// Tests that three tools needed for subnet splitting are compatible with each other:
 /// 1. `state-tool`, which extracts load metrics and manifest from the replicated state,
@@ -93,20 +107,13 @@ fn load_metrics_e2e_test() {
         .expect("Should succeed given valid inputs")
     );
 
-    assert_eq!(
-        states_sizes_bytes,
-        Estimates {
-            source: 44854703,
-            destination: 46088059,
-        }
-    );
-    assert_eq!(
-        instructions_executed,
-        Estimates {
-            source: 79487011,
-            destination: 80691936,
-        }
-    );
+    // Accept up to 10% error. The precise values are not important here and they're very sensitive
+    // to the changes to the replicated state / execution. It's mostly a sanity check that the
+    // returned values are not too ridiculous and they might have to be updated once in a while.
+    assert_near!(states_sizes_bytes.source, 44877226, 0.1);
+    assert_near!(states_sizes_bytes.destination, 46071116, 0.1);
+    assert_near!(instructions_executed.source, 79487011, 0.1);
+    assert_near!(instructions_executed.destination, 80691936, 0.1);
     assert_eq!(
         ingress_messages_executed,
         Estimates {
