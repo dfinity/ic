@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* Enabled BlessAlternativeGuestOsVersion, which would generally be used to
+  recover a subnet where a) orchestrator is not working for whatever reason, and
+  b) SEV is enabled and/or there is no DFINITY node in the subnet.
+
 ## Changed
 
 ## Deprecated
