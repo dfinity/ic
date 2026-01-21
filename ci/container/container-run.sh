@@ -103,7 +103,7 @@ IMAGE="$IMAGE:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
     "$REPO_ROOT"/ci/container/build-image.sh
-if ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
+elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
         "$REPO_ROOT"/ci/container/build-image.sh
     fi
