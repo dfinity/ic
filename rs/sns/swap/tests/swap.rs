@@ -132,6 +132,7 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         should_auto_finalize: Some(true),
         neurons_fund_participation_constraints: None,
         neurons_fund_participation: None,
+        testflight: Some(false),
 
         // The following fields are deprecated.
         min_icp_e8s: None,

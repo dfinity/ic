@@ -430,6 +430,9 @@ message Init {
 
   // Whether Neurons' Fund participation is requested.
   optional bool neurons_fund_participation = 32;
+
+  // Whether this is a testflight swap.
+  optional bool testflight = 33;
 }
 
 // Constraints for the Neurons' Fund participation in an SNS swap.
