@@ -150,7 +150,6 @@ struct TempInfo {
     sensor_label: String,
     // Temperature in Celsius degrees.
     temp: f64,
-    // Rate of received bytes.
 }
 
 /// Keys are chip and sensor.
@@ -382,40 +381,38 @@ impl App {
 
         let mut slot_index = 0;
 
-        fn f(v: &str, vv: f64) -> Paragraph<'_> {
-            Paragraph::new(format!("{} {:.2}", v, vv)).centered()
+        fn labeled_metric(label: &str, value: f64) -> Paragraph<'_> {
+            Paragraph::new(format!("{} {:.2}", label, value)).centered()
         }
-        fn format_bps(v: f64) -> String {
-            format_size_i(v, DECIMAL)
+        fn format_bps(bytes: f64) -> String {
+            format_size_i(bytes, DECIMAL)
         }
-        fn right_aligned_cell<'a>(v: String) -> Cell<'a> {
-            Cell::from(Text::from(v).alignment(Alignment::Right))
+        fn right_aligned_cell<'a>(text: String) -> Cell<'a> {
+            Cell::from(Text::from(text).alignment(Alignment::Right))
         }
-        fn left_aligned_cell<'a>(v: String) -> Cell<'a> {
-            Cell::from(Text::from(v).alignment(Alignment::Left))
+        fn left_aligned_cell<'a>(text: String) -> Cell<'a> {
+            Cell::from(Text::from(text).alignment(Alignment::Left))
         }
 
-        {
-            let slot = metrics_layout[slot_index];
-            let block = Block::bordered().title("Internet Computer node information");
-            frame.render_widget(
-                &block,
-                slot.inner(Margin {
-                    vertical: 0,
-                    horizontal: 0,
-                }),
-            );
-            let icinfo_layout = Table::default()
-                .widths(vec![Constraint::Min(16), Constraint::Fill(1000)])
-                .rows(icinfo_rows);
-            frame.render_widget(
-                icinfo_layout,
-                block.inner(slot.inner(Margin {
-                    vertical: 0,
-                    horizontal: 0,
-                })),
-            );
-        }
+        let slot = metrics_layout[slot_index];
+        let block = Block::bordered().title("Internet Computer node information");
+        frame.render_widget(
+            &block,
+            slot.inner(Margin {
+                vertical: 0,
+                horizontal: 0,
+            }),
+        );
+        let icinfo_layout = Table::default()
+            .widths(vec![Constraint::Min(16), Constraint::Fill(1000)])
+            .rows(icinfo_rows);
+        frame.render_widget(
+            icinfo_layout,
+            block.inner(slot.inner(Margin {
+                vertical: 0,
+                horizontal: 0,
+            })),
+        );
 
         if let Ok(metrics_data) = &self.hostos_node_exporter_latest_sample
             && let Some(cpu) = &metrics_data.cpu
@@ -432,15 +429,15 @@ impl App {
             );
             let cpu_layout = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints((0..7).map(|_| Constraint::Fill(1)).collect::<Vec<_>>())
+                .constraints(vec![Constraint::Fill(1); 7])
                 .split(cpu_block.inner(slot));
-            frame.render_widget(f("user", cpu.user), cpu_layout[0]);
-            frame.render_widget(f("nice", cpu.nice), cpu_layout[1]);
-            frame.render_widget(f("sys", cpu.system), cpu_layout[2]);
-            frame.render_widget(f("io", cpu.iowait), cpu_layout[3]);
-            frame.render_widget(f("irq", cpu.irq), cpu_layout[4]);
-            frame.render_widget(f("sirq", cpu.softirq), cpu_layout[5]);
-            frame.render_widget(f("stl", cpu.steal), cpu_layout[6]);
+            frame.render_widget(labeled_metric("user", cpu.user), cpu_layout[0]);
+            frame.render_widget(labeled_metric("nice", cpu.nice), cpu_layout[1]);
+            frame.render_widget(labeled_metric("sys", cpu.system), cpu_layout[2]);
+            frame.render_widget(labeled_metric("io", cpu.iowait), cpu_layout[3]);
+            frame.render_widget(labeled_metric("irq", cpu.irq), cpu_layout[4]);
+            frame.render_widget(labeled_metric("sirq", cpu.softirq), cpu_layout[5]);
+            frame.render_widget(labeled_metric("stl", cpu.steal), cpu_layout[6]);
         }
 
         if let Ok(metrics_data) = &self.hostos_node_exporter_latest_sample
@@ -458,12 +455,18 @@ impl App {
             );
             let psi_layout = Layout::default()
                 .direction(Direction::Horizontal)
-                .constraints((0..4).map(|_| Constraint::Fill(1)).collect::<Vec<_>>())
+                .constraints(vec![Constraint::Fill(1); 4])
                 .split(psi_block.inner(slot));
-            frame.render_widget(f("CPU waiting", psi.cpu_waiting), psi_layout[0]);
-            frame.render_widget(f("I/O waiting", psi.io_waiting), psi_layout[1]);
-            frame.render_widget(f("I/O stalled", psi.io_stalled), psi_layout[2]);
-            frame.render_widget(f("RAM stalled", psi.memory_stalled), psi_layout[3]);
+            frame.render_widget(
+                labeled_metric("CPU waiting", psi.cpu_waiting),
+                psi_layout[0],
+            );
+            frame.render_widget(labeled_metric("I/O waiting", psi.io_waiting), psi_layout[1]);
+            frame.render_widget(labeled_metric("I/O stalled", psi.io_stalled), psi_layout[2]);
+            frame.render_widget(
+                labeled_metric("RAM stalled", psi.memory_stalled),
+                psi_layout[3],
+            );
         }
 
         if let Ok(metrics_data) = &self.hostos_node_exporter_latest_sample
@@ -732,7 +735,7 @@ impl App {
     }
 
     fn recalc_hostos_node_exporter_metrics(&mut self) {
-        let theseries = match &self.hostos_node_exporter_series {
+        let series = match &self.hostos_node_exporter_series {
             Ok(s) => s,
             Err(e) => {
                 self.hostos_node_exporter_latest_sample = Err(e.clone());
@@ -752,14 +755,14 @@ impl App {
         }
 
         let hostos_version = latest_samples(
-            theseries,
+            series,
             [("__name__", &ValueQuery::equals("hostos_version"))],
         )
         .first()
         .and_then(|v| v.labels.get("version").map(|v| v.to_string()));
 
         let mut iface_info = latest_samples(
-            theseries,
+            series,
             [
                 ("__name__", &ValueQuery::equals("node_network_info")),
                 ("device", &ValueQuery::does_not_equal("lo")),
@@ -780,7 +783,7 @@ impl App {
         .collect::<BTreeMap<_, _>>();
 
         for s in latest_samples(
-            theseries,
+            series,
             [(
                 "__name__",
                 &ValueQuery::equals("node_network_carrier_changes_total"),
@@ -795,7 +798,7 @@ impl App {
 
         let mut temp_info: HostOSTempInfo = BTreeMap::new();
         for s in latest_samples(
-            theseries,
+            series,
             [("__name__", &ValueQuery::equals("node_hwmon_temp_celsius"))],
         ) {
             let (chip, sensor) = match (s.labels.get("chip"), s.labels.get("sensor")) {
@@ -813,7 +816,7 @@ impl App {
                     ..Default::default()
                 });
         }
-        for s in latest_samples(theseries, [("__name__", &ValueQuery::matches(&TEMP_REGEX))]) {
+        for s in latest_samples(series, [("__name__", &ValueQuery::matches(&TEMP_REGEX))]) {
             match s.metric.as_str() {
                 "node_hwmon_sensor_label" => {
                     let (chip, sensor) = match (s.labels.get("chip"), s.labels.get("sensor")) {
@@ -860,13 +863,13 @@ impl App {
             temp: temp_info,
         };
 
-        if theseries.len() < 2 {
+        if series.len() < 2 {
             // No more data that doesn't require deltas / rates.  Moving on.
             self.hostos_node_exporter_latest_sample = Ok(result);
             return;
         }
 
-        for s in theseries
+        for s in series
             .search([("__name__", &ValueQuery::matches(&NET_REGEX))])
             .delta(0, 1)
             .samples
@@ -893,7 +896,7 @@ impl App {
         }
         result.network = iface_info;
 
-        let cpu_samples: Vec<_> = theseries
+        let cpu_samples: Vec<_> = series
             .search([
                 ("__name__", &ValueQuery::equals("node_cpu_seconds_total")),
                 ("mode", &ValueQuery::does_not_equal("idle")),
@@ -919,7 +922,7 @@ impl App {
             steal: *cpu_buckets.get("steal").unwrap_or(&0.0),
         });
 
-        fn x(series: &IndexedSeries, metric: &str) -> f64 {
+        fn metric_rate(series: &IndexedSeries, metric: &str) -> f64 {
             series
                 .search([("__name__", &ValueQuery::equals(metric))])
                 .rate(0, 1)
@@ -930,13 +933,13 @@ impl App {
         }
 
         result.psi = Some(PSIInfo {
-            cpu_waiting: x(theseries, "node_pressure_cpu_waiting_seconds_total"),
-            io_stalled: x(theseries, "node_pressure_io_stalled_seconds_total"),
-            io_waiting: x(theseries, "node_pressure_io_waiting_seconds_total"),
-            memory_stalled: x(theseries, "node_pressure_memory_stalled_seconds_total"),
+            cpu_waiting: metric_rate(series, "node_pressure_cpu_waiting_seconds_total"),
+            io_stalled: metric_rate(series, "node_pressure_io_stalled_seconds_total"),
+            io_waiting: metric_rate(series, "node_pressure_io_waiting_seconds_total"),
+            memory_stalled: metric_rate(series, "node_pressure_memory_stalled_seconds_total"),
         });
 
-        let disk_samples: Vec<_> = theseries
+        let disk_samples: Vec<_> = series
             .search([("__name__", &ValueQuery::matches(&DISK_REGEX))])
             .rate(0, 1)
             .samples;
@@ -965,7 +968,7 @@ impl App {
     }
 
     fn recalc_guestos_node_exporter_metrics(&mut self) {
-        let theseries = match &self.guestos_node_exporter_series {
+        let series = match &self.guestos_node_exporter_series {
             Ok(s) => s,
             Err(e) => {
                 self.guestos_node_exporter_latest_sample = Err(e.clone());
@@ -973,7 +976,7 @@ impl App {
             }
         };
 
-        let guestos_version = theseries
+        let guestos_version = series
             .search([("__name__", &ValueQuery::equals("guestos_version"))])
             .at(0)
             .samples
@@ -985,7 +988,7 @@ impl App {
     }
 
     fn recalc_guestos_replica_metrics(&mut self) {
-        let theseries = match &self.guestos_replica_series {
+        let series = match &self.guestos_replica_series {
             Ok(s) => s,
             Err(e) => {
                 self.guestos_replica_latest_sample = Err(e.clone());
@@ -993,7 +996,7 @@ impl App {
             }
         };
 
-        let block_height = theseries
+        let block_height = series
             .search([(
                 "__name__",
                 &ValueQuery::equals("artifact_pool_consensus_height_stat"),
