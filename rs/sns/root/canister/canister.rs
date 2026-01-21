@@ -11,6 +11,7 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
     management_canister_client::ManagementCanisterClientImpl,
 };
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common::{
     NANO_SECONDS_PER_SECOND,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
@@ -481,6 +482,10 @@ fn init_timers() {
             ic_cdk_timers::clear_timer(saved_timer_id);
         }
         saved_timer_id.replace(new_timer_id);
+    });
+
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(ONE_DAY_SECONDS), || {
+        ic_cdk::spawn(SnsRootCanister::install_index_canister_if_missing(&STATE))
     });
 }
 
