@@ -80,7 +80,7 @@ fn should_correctly_verify_der_signature() {
         ECDSA_P256_PK_2_COSE_HEX,
         MSG_2_HEX,
     );
-    assert_eq!(result, true);
+    assert!(result);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn should_fail_to_verify_on_wrong_message() {
         ECDSA_P256_PK_2_COSE_HEX,
         &wrong_msg_hex,
     );
-    assert_eq!(result, false);
+    assert!(!result);
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn should_fail_to_verify_corrupted_signature() {
         ECDSA_P256_PK_2_COSE_HEX,
         MSG_2_HEX,
     );
-    assert_eq!(result, false);
+    assert!(!result);
 }
 
 #[test]
@@ -119,14 +119,14 @@ fn should_correctly_verify_webauthn_signatures() {
         test_data::ECDSA_P256_PK_1_COSE_HEX,
         test_data::WEBAUTHN_MSG_1_HEX,
     );
-    assert_eq!(result, true);
+    assert!(result);
 
     let result = get_der_cose_verification_result(
         test_data::ECDSA_P256_SIG_2_DER_HEX,
         test_data::ECDSA_P256_PK_2_COSE_HEX,
         test_data::WEBAUTHN_MSG_2_HEX,
     );
-    assert_eq!(result, true);
+    assert!(result);
 }
 
 // Given a DER-encoded signature, a COSE-encoded ECDSA-P256 public key,
