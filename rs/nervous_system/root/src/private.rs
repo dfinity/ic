@@ -205,16 +205,6 @@ async fn stop_before_main_operation(
         stop_reject,
         restart_result,
     })
-
-    /*
-    let final_err = format!(
-        "Failed to stop canister {canister_id} while preparing to perform a {operation}: \
-         {code} {message}. Tried re-starting the canister after that, and the result of \
-         re-starting was {restart_status}."
-    );
-
-    Err((code, final_err))
-    */
 }
 
 async fn restart_after_main_operation<R>(
