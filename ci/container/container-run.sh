@@ -84,14 +84,17 @@ while test $# -gt $CTR; do
     esac
 done
 
-# Detect if we're running in a Devenv environment
-if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
-    echo "Detected Devenv environment, using hoststorage for podman root."
-    CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
-    DEVENV=true
-else
-    CONTAINER_CMD=(podman)
-    DEVENV=false
+# If no container command specified, detect environment
+if [ -z "${CONTAINER_CMD[*]:-}" ]; then
+    # Detect if we're running in a Devenv environment
+    if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
+        echo "Detected Devenv environment, using hoststorage for podman root."
+        CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
+        DEVENV=true
+    else
+        CONTAINER_CMD=(podman)
+        DEVENV=false
+    fi
 fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
