@@ -4,7 +4,6 @@ use regex::Regex;
 use std::{
     cmp::min,
     collections::{HashMap, HashSet, VecDeque, hash_map::Entry},
-    ops::{BitAnd, BitOr},
 };
 
 pub enum ValueQuery {
@@ -83,7 +82,9 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                     } else {
                         hashsets[1..]
                             .iter()
-                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set))
+                            .fold(hashsets[0].clone(), |acc, set| {
+                                acc.union(set).copied().collect()
+                            })
                     }
                 }
                 ValueQuery::DoesNotMatch(rex) => {
@@ -98,7 +99,9 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                     } else {
                         hashsets[1..]
                             .iter()
-                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set))
+                            .fold(hashsets[0].clone(), |acc, set| {
+                                acc.union(set).copied().collect()
+                            })
                     };
                     let exclude_these: Vec<&HashSet<usize>> = indexes_for_label_name
                         .iter()
@@ -112,7 +115,9 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                     } else {
                         exclude_these[1..]
                             .iter()
-                            .fold(exclude_these[0].clone(), |acc, set| acc.bitor(set))
+                            .fold(exclude_these[0].clone(), |acc, set| {
+                                acc.union(set).copied().collect()
+                            })
                     };
                     hashset
                         .difference(&exclude_these_indexes)
@@ -139,34 +144,6 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
 
     fn does_not_match(label_query: IndexedScrapeLabelQuery<'a>, value: &Regex) -> Self {
         Self::new(label_query, ValueQuery::does_not_match(value))
-    }
-}
-
-impl<'a> BitOr for IndexedScrapeLabelValueQuery<'a> {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        let mine_indexes = self.indexes.clone();
-        let other_indexes = rhs.indexes.clone();
-        Self {
-            value: self.value,
-            label_query: self.label_query,
-            indexes: &mine_indexes | &other_indexes,
-        }
-    }
-}
-
-impl<'a> BitAnd for IndexedScrapeLabelValueQuery<'a> {
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        let mine_indexes = self.indexes.clone();
-        let other_indexes = rhs.indexes.clone();
-        Self {
-            value: self.value,
-            label_query: self.label_query,
-            indexes: &mine_indexes & &other_indexes,
-        }
     }
 }
 
