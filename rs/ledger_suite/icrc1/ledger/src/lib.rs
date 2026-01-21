@@ -932,8 +932,13 @@ impl Ledger {
         records.push(Value::entry(MetadataKey::ICRC1_NAME, self.token_name()).unwrap());
         records.push(Value::entry(MetadataKey::ICRC1_SYMBOL, self.token_symbol()).unwrap());
         records.push(Value::entry(MetadataKey::ICRC1_FEE, Nat::from(self.transfer_fee())).unwrap());
-        records
-            .push(Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, self.max_memo_length() as u64).unwrap());
+        records.push(
+            Value::entry(
+                MetadataKey::ICRC1_MAX_MEMO_LENGTH,
+                self.max_memo_length() as u64,
+            )
+            .unwrap(),
+        );
         records.push(Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap());
         records.push(
             Value::entry(
