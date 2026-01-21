@@ -41,8 +41,6 @@ const TEST_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60); // 4 hours
 /// Time to keep the testnet alive once all canisters are installed
 const TESTNET_LIFETIME_AFTER_SETUP: Duration = Duration::from_secs(60 * 60); // 1 hour
 
-const COUNTER_CANISTER_WAT: &str = "rs/tests/counter.wat";
-
 const SUBNET_SIZE: usize = 13;
 const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(200);
 
@@ -114,7 +112,7 @@ pub fn install_cloner_canisters(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let counter_canister_bytes = load_wasm(COUNTER_CANISTER_WAT);
+    let counter_canister_bytes = load_wasm(std::env::var("COUNTER_CANISTER_WAT_PATH").unwrap());
 
     info!(
         &logger,
