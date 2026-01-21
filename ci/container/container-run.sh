@@ -30,6 +30,8 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -r | --rebuild          Rebuild the container image
     -h | --help             Print help
+    --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
+                                otherwise will choose based on detected environment)
 
 If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
 To run a different shell or command, pass it as arguments, e.g.:
@@ -41,16 +43,6 @@ Script uses dfinity/ic-build image by default.
 EOF
 }
 
-# Detect if we're running in a Devenv environment
-if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
-    echo "Detected Devenv environment, using hoststorage for podman root."
-    ARGS=(--root /hoststorage/podman-root)
-    DEVENV=true
-else
-    ARGS=()
-    DEVENV=false
-fi
-PODMAN_CMD="sudo podman"
 REBUILD_IMAGE=false
 
 IMAGE="ghcr.io/dfinity/ic-build"
@@ -62,6 +54,16 @@ while test $# -gt $CTR; do
         -r | --rebuild)
             REBUILD_IMAGE=true
             shift
+            ;;
+        --container-cmd)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --container-cmd requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            # Split the argument into an array (supports "sudo podman")
+            read -ra CONTAINER_CMD <<<"$1"
             ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
@@ -82,21 +84,31 @@ while test $# -gt $CTR; do
     esac
 done
 
+# Detect if we're running in a Devenv environment
+if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
+    echo "Detected Devenv environment, using hoststorage for podman root."
+    CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
+    DEVENV=true
+else
+    CONTAINER_CMD=(podman)
+    DEVENV=false
+fi
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="$IMAGE:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
     "$REPO_ROOT"/ci/container/build-image.sh
-elif ! $PODMAN_CMD "${ARGS[@]}" "${PODMAN_ARGS[@]}" image exists "$IMAGE"; then
-    $PODMAN_CMD "${ARGS[@]}" pull "$IMAGE"
+elif ! "${CONTAINER_CMD[@]}" image exists "$IMAGE"; then
+    "${CONTAINER_CMD[@]}" "${ARGS[@]}" pull "$IMAGE"
 else
     "$REPO_ROOT"/ci/container/build-image.sh
 fi
 
 if [ "$DEVENV" = true ]; then
     eprintln "Purging non-relevant container images"
-    $PODMAN_CMD "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
+    "${CONTAINER_CMD[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
 WORKDIR="/ic"
@@ -217,13 +229,6 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
 )
 
-PODMAN_RUN_USR_ARGS=()
-if [ -f "$HOME/.container-run.conf" ]; then
-    # conf file with user's custom PODMAN_RUN_USR_ARGS
-    eprintln "Sourcing user's ~/.container-run.conf"
-    source "$HOME/.container-run.conf"
-fi
-
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
 # every byte of standard output to the journal, and that
@@ -248,4 +253,4 @@ else
 fi
 
 set -x
-exec $PODMAN_CMD "${ARGS[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
