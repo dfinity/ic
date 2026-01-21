@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
@@ -78,6 +78,11 @@ LIB_PROC_MACRO_DEPS = [
 alias(
     name = "minter",
     actual = ":ckbtc_minter_lib",
+)
+
+rust_doc_test(
+    name = "ckbtc_minter_doc_tests",
+    crate = ":minter",
 )
 
 [

@@ -1443,6 +1443,16 @@ fn handle_compute_manifest_request(
         );
     }
 
+    // State sync checkpoints should already have their associated manifests.
+    // If this warning is triggered, it indicates an unexpected situation that should be investigated.
+    if checkpoint_layout.is_unverified_state_sync_checkpoint() {
+        warn!(
+            log,
+            "Trying to compute manifest for state sync checkpoint @{}",
+            checkpoint_layout.height()
+        );
+    }
+
     let start = Instant::now();
     let manifest_is_incremental = base_manifest_info.is_some();
     let manifest = crate::manifest::compute_manifest(
@@ -1669,6 +1679,7 @@ mod test {
                 snapshots: Default::default(),
                 last_advertised: Height::new(0),
                 fetch_state: None,
+                tip_height: height,
                 tip: None,
             }));
 
