@@ -1,3 +1,4 @@
+use ic_utils_rustfmt::rustfmt;
 use std::path::PathBuf;
 
 fn generate_prost_files(proto_dir: &std::path::Path, out_dir: &std::path::Path) {
@@ -10,6 +11,9 @@ fn generate_prost_files(proto_dir: &std::path::Path, out_dir: &std::path::Path) 
     config
         .compile_protos(&[proto_dir.join("attestation.proto")], &[proto_dir])
         .expect("Failed to compile protos");
+
+    // Format the generated files to match what build.rs produces
+    rustfmt(out_dir).expect("Failed to run rustfmt");
 }
 
 #[test]

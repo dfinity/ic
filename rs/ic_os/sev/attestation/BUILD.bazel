@@ -63,6 +63,7 @@ generated_files_check(
     data = glob(["src/proto_gen/**"]) + glob(["proto/**"]),
     manifest_dir = "rs/ic_os/sev/attestation",
     deps = [
+        "//rs/utils/rustfmt",
         "@crate_index//:prost-build",
         "@crate_index//:tempfile",
     ],
