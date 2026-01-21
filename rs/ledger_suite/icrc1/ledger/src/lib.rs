@@ -646,7 +646,7 @@ pub fn wasm_token_type() -> String {
 fn map_metadata_or_trap(
     arg_metadata: Vec<(String, Value)>,
     require_valid: bool,
-    sink: impl Sink + Clone
+    sink: impl Sink + Clone,
 ) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         MetadataKey::ICRC1_DECIMALS,
@@ -673,7 +673,8 @@ fn map_metadata_or_trap(
                     // For backwards compat with ledgers that have legacy invalid keys
                     log!(
                         sink,
-                        "Warning: accepting invalid metadata key '{}' for backwards compatibility", key_str
+                        "Warning: accepting invalid metadata key '{}' for backwards compatibility",
+                        key_str
                     );
                     MetadataKey::unchecked_from_string(key_str)
                 }
