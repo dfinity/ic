@@ -80,8 +80,6 @@ done
 # instead of via hard-code paths relative to $RUNFILES.
 cd "$TEST_TMPDIR"
 
-env
-
 exec \
     "$ORIG_RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
     --working-dir "$TEST_TMPDIR" \
