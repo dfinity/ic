@@ -136,7 +136,7 @@ system_test_nns(
     flaky = True,  # flakiness rate of 5% over the month from 2025-02-11 till 2025-03-11.
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     hostos_update = True,
-    setupos = "mainnet_latest",
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
