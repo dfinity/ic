@@ -1,3 +1,8 @@
+use futures::{StreamExt, stream};
+use ic_cdk::futures::spawn;
+use ic_cdk::management_canister::{
+    ProvisionalCreateCanisterWithCyclesArgs, provisional_create_canister_with_cycles,
+};
 use ic_cdk::stable::{
     WASM_PAGE_SIZE_IN_BYTES as PAGE_SIZE, stable_grow, stable_size, stable_write,
 };
@@ -7,6 +12,7 @@ use ic_cdk::stable::{
 use ic_cdk::{query, update};
 use lazy_static::lazy_static;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
+use statesync_test::CanisterCreationStatus;
 use std::sync::Mutex;
 
 /// Size of data vector in canister, 128 MB
@@ -15,6 +21,8 @@ const VECTOR_LENGTH: usize = 128 * 1024 * 1024;
 lazy_static! {
     static ref V_DATA: Mutex<Vec<u8>> = Mutex::new(vec![0; VECTOR_LENGTH]);
     static ref NUM_CHANGED: Mutex<u64> = Mutex::new(0_u64);
+    static ref CANISTER_CREATION_STATUS: Mutex<CanisterCreationStatus> =
+        Mutex::new(CanisterCreationStatus::Idle);
 }
 
 /// Changes every 1023rd byte in `V_DATA` to a random value.
@@ -78,4 +86,93 @@ async fn read_state(index: usize) -> Result<u8, String> {
     }
 }
 
+fn set_canister_creation_status(n: u64) -> bool {
+    let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
+    match *canister_creation_status_guard {
+        CanisterCreationStatus::Idle => {
+            *canister_creation_status_guard = CanisterCreationStatus::InProgress(n);
+            true
+        }
+        CanisterCreationStatus::InProgress(num_canisters) => {
+            if n == num_canisters {
+                false
+            } else {
+                panic!(
+                    "Canister creation of a different number {num_canisters} of canisters is already in progress!"
+                );
+            }
+        }
+        CanisterCreationStatus::Done(num_canisters) => {
+            if n == num_canisters {
+                false
+            } else {
+                panic!(
+                    "Canister creation of a different number {num_canisters} of canisters is already done!"
+                );
+            }
+        }
+    }
+}
+
+#[update]
+async fn create_many_canisters(n: u64) {
+    if !set_canister_creation_status(n) {
+        return;
+    }
+
+    #[allow(clippy::disallowed_methods)]
+    spawn(async move {
+        let mut futs = vec![];
+
+        for _ in 0..n {
+            let fut = async {
+                let create_args = ProvisionalCreateCanisterWithCyclesArgs {
+                    amount: None,
+                    settings: None,
+                    specified_id: None,
+                };
+                provisional_create_canister_with_cycles(&create_args)
+                    .await
+                    .expect("Failed to create canister");
+            };
+            futs.push(fut);
+        }
+
+        stream::iter(futs)
+            .buffer_unordered(500) // limit concurrency to 500 (inter-canister queue capacity)
+            .collect::<Vec<_>>()
+            .await;
+
+        let mut canister_creation_status_guard = CANISTER_CREATION_STATUS.lock().unwrap();
+        *canister_creation_status_guard = CanisterCreationStatus::Done(n);
+    });
+}
+
+#[query]
+fn canister_creation_status() -> CanisterCreationStatus {
+    *CANISTER_CREATION_STATUS.lock().unwrap()
+}
+
 fn main() {}
+
+#[cfg(test)]
+mod tests {
+    use crate::CanisterCreationStatus;
+    use candid_parser::utils::{CandidSource, service_equal};
+
+    #[test]
+    fn test_implemented_interface_matches_declared_interface_exactly() {
+        let declared_interface = include_str!("../statesync_test.did");
+        let declared_interface = CandidSource::Text(declared_interface);
+
+        // The line below generates did types and service definition from the
+        // methods declared above. The definition is then
+        // obtained with `__export_service()`.
+        candid::export_service!();
+        let implemented_interface_str = __export_service();
+        let implemented_interface = CandidSource::Text(&implemented_interface_str);
+
+        let result = service_equal(declared_interface, implemented_interface);
+        assert!(result.is_ok(), "{:?}\n\n", result.unwrap_err());
+    }
+}

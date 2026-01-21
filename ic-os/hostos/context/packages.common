@@ -62,6 +62,7 @@ checkpolicy
 dosfstools
 ethtool
 ipmitool
+lsof
 libarchive-zip-perl
 libusb-1.0-0
 locales

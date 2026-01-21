@@ -12,6 +12,7 @@ use crate::{
 use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
+use config_tool::guestos::generate_ic_config;
 use dfn_protobuf::{ProtoBuf, protobuf};
 use futures::{
     FutureExt,
@@ -947,6 +948,8 @@ pub async fn agent_with_client_identity(
         .with_url(url)
         .with_http_client(client)
         .with_identity(identity)
+        // Setting a large polling time for the sake of long-running update calls.
+        .with_max_polling_time(Duration::from_secs(3600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
@@ -1514,7 +1517,7 @@ pub fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let template = config::guestos::generate_ic_config::IcConfigTemplate {
+    let template = generate_ic_config::IcConfigTemplate {
         ipv6_address: "::".to_string(),
         ipv6_prefix: "::/64".to_string(),
         ipv4_address: "".to_string(),
@@ -1529,8 +1532,8 @@ pub fn get_config() -> ConfigOptional {
         malicious_behavior: "null".to_string(),
     };
 
-    let ic_json = config::guestos::generate_ic_config::render_ic_config(template)
-        .expect("Failed to render config template");
+    let ic_json =
+        generate_ic_config::render_ic_config(template).expect("Failed to render config template");
     ConfigSource::Literal(ic_json)
         .load()
         .expect("Failed to parse dummy config")

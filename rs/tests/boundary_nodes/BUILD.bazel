@@ -3,8 +3,6 @@ load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator"]
-
 system_test_nns(
     name = "api_bn_integration_test",
     deps = [
@@ -27,6 +25,8 @@ system_test_nns(
         "vcpus": 16,
     },
     enable_head_nns_variant = False,
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "colocate",
     ],
@@ -40,37 +40,11 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "certificate_orchestrator_test",
-    env = {
-        "CERTIFICATE_ORCHESTRATOR_WASM_PATH": "$(rootpath //rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator)",
-    },
-    runtime_deps = CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
-    deps = [
-        # Keep sorted.
-        "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-        "//rs/registry/subnet_type",
-        "//rs/tests/driver:ic-system-test-driver",
-        "//rs/types/types",
-        "@crate_index//:anyhow",
-        "@crate_index//:candid",
-        "@crate_index//:ic-agent",
-        "@crate_index//:k256",
-        "@crate_index//:rand",
-        "@crate_index//:rand_chacha",
-        "@crate_index//:slog",
-        "@crate_index//:tokio",
-    ],
-)
-
-system_test_nns(
     name = "salt_sharing_canister_test",
-    env = {
-        "SALT_SHARING_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/salt_sharing:salt_sharing_canister)",
-    },
     proc_macro_deps = [],
-    runtime_deps = [
-        "//rs/boundary_node/salt_sharing:salt_sharing_canister",
-    ],
+    runtime_deps = {
+        "SALT_SHARING_CANISTER_WASM_PATH": "//rs/boundary_node/salt_sharing:salt_sharing_canister",
+    },
     deps = [
         # Keep sorted.
         "//rs/boundary_node/salt_sharing/api:salt_sharing_api",
@@ -93,16 +67,13 @@ system_test_nns(
 
 system_test_nns(
     name = "rate_limit_canister_test",
-    env = {
-        "RATE_LIMIT_CANISTER_WASM_PATH": "$(rootpath //rs/boundary_node/rate_limits:rate_limit_canister)",
-    },
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
     ],
-    runtime_deps = [
-        "//rs/boundary_node/rate_limits:rate_limit_canister",
-    ],
+    runtime_deps = {
+        "RATE_LIMIT_CANISTER_WASM_PATH": "//rs/boundary_node/rate_limits:rate_limit_canister",
+    },
     deps = [
         # Keep sorted.
         "//rs/boundary_node/rate_limits/api:rate_limits_api",
@@ -135,6 +106,8 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
+    prometheus_vm_required_host_features = ["performance"],
     tags = ["manual"],
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
@@ -154,7 +127,9 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],
@@ -175,7 +150,9 @@ system_test(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_metrics = True,
     env_inherit = ["BOUNDARY_NODE_IPV6"],
+    prometheus_vm_required_host_features = ["performance"],
     tags = [
         "manual",
     ],

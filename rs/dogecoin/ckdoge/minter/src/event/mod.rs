@@ -112,10 +112,11 @@ pub enum CkDogeMinterEventType {
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+        /// The effective fee per byte (in millikoinu) that was used for the transaction.
+        /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
         #[serde(rename = "fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
-        fee_per_vbyte: Option<u64>,
+        effective_fee_per_byte: Option<u64>,
         /// The total fee for this transaction
         #[serde(rename = "withdrawal_fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -142,9 +143,10 @@ pub enum CkDogeMinterEventType {
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
-        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+        /// The effective fee per byte (in millikoinu) that was used for the transaction.
+        /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
         #[serde(rename = "fee")]
-        fee_per_vbyte: u64,
+        effective_fee_per_byte: u64,
         /// The total fee for this transaction
         #[serde(rename = "withdrawal_fee")]
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -285,7 +287,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                     _ => Err(format!("BUG: unexpected KYT for ckDOGE {args:?}")),
                 }?;
                 Ok(CkDogeMinterEventType::Init(
-                    crate::lifecycle::init::InitArgs::from(args),
+                    crate::lifecycle::init::InitArgs::try_from(args)?,
                 ))
             }
             CkBtcMinterEventType::Upgrade(args) => {
@@ -349,7 +351,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_vbyte,
                 withdrawal_fee,
                 signed_tx,
             } => Ok(CkDogeMinterEventType::SentDogeTransaction {
@@ -358,7 +360,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 signed_tx,
             }),
@@ -367,7 +369,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_vbyte,
                 withdrawal_fee,
                 reason,
                 new_utxos,
@@ -376,7 +378,7 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckbtc_withdrawal_fee_to_ckdoge),
                 reason,
                 new_utxos,
@@ -494,7 +496,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 withdrawal_fee,
                 signed_tx,
             } => CkBtcMinterEventType::SentBtcTransaction {
@@ -503,7 +505,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 utxos,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 signed_tx,
             },
@@ -512,7 +514,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_byte: effective_fee_per_vbyte,
                 withdrawal_fee,
                 reason,
                 new_utxos,
@@ -521,7 +523,7 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
                 new_txid,
                 change_output,
                 submitted_at,
-                fee_per_vbyte,
+                effective_fee_per_vbyte,
                 withdrawal_fee: withdrawal_fee.map(ckdoge_withdrawal_fee_to_ckbtc),
                 reason,
                 new_utxos,
@@ -594,7 +596,7 @@ fn ckdoge_withdrawal_fee_to_ckbtc(
     }
 }
 
-fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
+pub fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, String> {
     match address {
         BitcoinAddress::P2wpkhV0(_) | BitcoinAddress::P2wshV0(_) | BitcoinAddress::P2trV1(_) => {
             Err(format!("BUG: unexpected address type {address:?}"))
@@ -604,7 +606,7 @@ fn bitcoin_to_dogecoin(address: BitcoinAddress) -> Result<DogecoinAddress, Strin
     }
 }
 
-fn dogecoin_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {
+pub fn dogecoin_to_bitcoin(address: DogecoinAddress) -> BitcoinAddress {
     match address {
         DogecoinAddress::P2pkh(bytes) => BitcoinAddress::P2pkh(bytes),
         DogecoinAddress::P2sh(bytes) => BitcoinAddress::P2sh(bytes),

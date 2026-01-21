@@ -1,9 +1,13 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::dashboard::ckbtc_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::queries::{
+    DecodeLedgerMemoArgs, DecodeLedgerMemoResult, EstimateFeeArg, RetrieveBtcStatusRequest,
+    WithdrawalFee,
+};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::CkBtcMinterEvent;
 use ic_ckbtc_minter::state::{
@@ -255,13 +259,18 @@ fn get_deposit_fee() -> u64 {
     read_state(|s| s.check_fee)
 }
 
+#[query]
+fn decode_ledger_memo(arg: DecodeLedgerMemoArgs) -> DecodeLedgerMemoResult {
+    ic_ckbtc_minter::queries::decode_ledger_memo(arg)
+}
+
 #[query(hidden = true)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req)
+    ic_ckbtc_minter::queries::http_request(req, &ckbtc_dashboard(read_state(|s| s.btc_network)))
 }
 
 #[query]
