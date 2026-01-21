@@ -35,14 +35,12 @@ impl ValueQuery {
     }
 }
 
-struct IndexedScrapeLabelValueQuery<'a> {
-    value: ValueQuery,
-    label_query: IndexedScrapeLabelQuery<'a>,
+struct IndexedScrapeLabelValueQuery {
     indexes: HashSet<usize>,
 }
 
-impl<'a> IndexedScrapeLabelValueQuery<'a> {
-    fn new(label_query: IndexedScrapeLabelQuery<'a>, value: ValueQuery) -> Self {
+impl IndexedScrapeLabelValueQuery {
+    fn new(label_query: IndexedScrapeLabelQuery<'_>, value: ValueQuery) -> Self {
         let indexes_for_label_name = match label_query.scrape.index.get(&label_query.label) {
             Some(s) => s,
             None => &HashMap::new(),
@@ -80,11 +78,9 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                     if hashsets.is_empty() {
                         HashSet::new()
                     } else {
-                        hashsets[1..]
-                            .iter()
-                            .fold(hashsets[0].clone(), |acc, set| {
-                                acc.union(set).copied().collect()
-                            })
+                        hashsets[1..].iter().fold(hashsets[0].clone(), |acc, set| {
+                            acc.union(set).copied().collect()
+                        })
                     }
                 }
                 ValueQuery::DoesNotMatch(rex) => {
@@ -97,11 +93,9 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                     let hashset = if hashsets.is_empty() {
                         HashSet::new()
                     } else {
-                        hashsets[1..]
-                            .iter()
-                            .fold(hashsets[0].clone(), |acc, set| {
-                                acc.union(set).copied().collect()
-                            })
+                        hashsets[1..].iter().fold(hashsets[0].clone(), |acc, set| {
+                            acc.union(set).copied().collect()
+                        })
                     };
                     let exclude_these: Vec<&HashSet<usize>> = indexes_for_label_name
                         .iter()
@@ -125,24 +119,22 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                         .collect()
                 }
             },
-            value,
-            label_query,
         }
     }
 
-    fn equals(label_query: IndexedScrapeLabelQuery<'a>, value: &str) -> Self {
+    fn equals(label_query: IndexedScrapeLabelQuery<'_>, value: &str) -> Self {
         Self::new(label_query, ValueQuery::equals(value))
     }
 
-    fn matches(label_query: IndexedScrapeLabelQuery<'a>, value: &Regex) -> Self {
+    fn matches(label_query: IndexedScrapeLabelQuery<'_>, value: &Regex) -> Self {
         Self::new(label_query, ValueQuery::matches(value))
     }
 
-    fn does_not_equal(label_query: IndexedScrapeLabelQuery<'a>, value: &str) -> Self {
+    fn does_not_equal(label_query: IndexedScrapeLabelQuery<'_>, value: &str) -> Self {
         Self::new(label_query, ValueQuery::does_not_equal(value))
     }
 
-    fn does_not_match(label_query: IndexedScrapeLabelQuery<'a>, value: &Regex) -> Self {
+    fn does_not_match(label_query: IndexedScrapeLabelQuery<'_>, value: &Regex) -> Self {
         Self::new(label_query, ValueQuery::does_not_match(value))
     }
 }
@@ -152,20 +144,20 @@ struct IndexedScrapeLabelQuery<'a> {
     scrape: &'a IndexedScrape,
 }
 
-impl<'a> IndexedScrapeLabelQuery<'a> {
-    fn equals(self, value: &str) -> IndexedScrapeLabelValueQuery<'a> {
+impl IndexedScrapeLabelQuery<'_> {
+    fn equals(self, value: &str) -> IndexedScrapeLabelValueQuery {
         IndexedScrapeLabelValueQuery::equals(self, value)
     }
 
-    fn does_not_equal(self, value: &str) -> IndexedScrapeLabelValueQuery<'a> {
+    fn does_not_equal(self, value: &str) -> IndexedScrapeLabelValueQuery {
         IndexedScrapeLabelValueQuery::does_not_equal(self, value)
     }
 
-    fn matches(self, regex: &Regex) -> IndexedScrapeLabelValueQuery<'a> {
+    fn matches(self, regex: &Regex) -> IndexedScrapeLabelValueQuery {
         IndexedScrapeLabelValueQuery::matches(self, regex)
     }
 
-    fn does_not_match(self, regex: &Regex) -> IndexedScrapeLabelValueQuery<'a> {
+    fn does_not_match(self, regex: &Regex) -> IndexedScrapeLabelValueQuery {
         IndexedScrapeLabelValueQuery::does_not_match(self, regex)
     }
 }
@@ -309,7 +301,7 @@ impl From<Scrape> for IndexedScrape {
 #[derive(Debug)]
 pub struct IndexedSeries(usize, VecDeque<IndexedScrape>);
 
-impl<'a> IndexedSeries {
+impl IndexedSeries {
     pub fn new(capacity: usize) -> Self {
         Self(capacity, VecDeque::with_capacity(capacity))
     }
@@ -329,9 +321,9 @@ impl<'a> IndexedSeries {
         self.1.is_empty()
     }
 
-    pub fn search(
+    pub fn search<'a>(
         &'a self,
-        labelsets: impl IntoIterator<Item = (&'a str, &'a ValueQuery)> + 'a,
+        labelsets: impl IntoIterator<Item = (&'a str, &'a ValueQuery)>,
     ) -> IndexedSeriesSubset<'a> {
         IndexedSeriesSubset {
             series: self,
@@ -345,7 +337,7 @@ pub struct IndexedSeriesSubset<'a> {
     labelsets: Vec<(&'a str, &'a ValueQuery)>,
 }
 
-impl<'a> IndexedSeriesSubset<'a> {
+impl IndexedSeriesSubset<'_> {
     fn _delta_with_timestamps(
         &self,
         start_sample: usize,
