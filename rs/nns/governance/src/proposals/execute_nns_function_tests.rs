@@ -234,9 +234,7 @@ async fn test_to_self_describing_uninstall_code() {
         SelfDescribingValue::from(result.value.unwrap()),
         SelfDescribingValue::Map(hashmap! {
             "canister_id".to_string() => SelfDescribingValue::from(target_canister.to_string()),
-            "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
-                SelfDescribingValue::from(42_u64),
-            ]),
+            "sender_canister_version".to_string() => SelfDescribingValue::from(42_u64),
         })
     );
 }
@@ -477,8 +475,8 @@ async fn test_to_self_describing_nns_canister_install() {
             "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
             "initial_cycles".to_string() => SelfDescribingValue::from(1_000_000_000_000_u64),
             "name".to_string() => SelfDescribingValue::from("test-canister"),
-            "memory_allocation".to_string() => SelfDescribingValue::Array(vec![]),
-            "compute_allocation".to_string() => SelfDescribingValue::Array(vec![]),
+            "memory_allocation".to_string() => SelfDescribingValue::Null,
+            "compute_allocation".to_string() => SelfDescribingValue::Null,
         })
     );
 }
