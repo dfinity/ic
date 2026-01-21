@@ -2122,7 +2122,7 @@ impl PocketIcSubnets {
               ("API_HOST".to_string(), localhost_url.clone()),
               ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
               ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_ADDRESS_BOOK\":true,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false}",
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_ADDRESS_BOOK\":true,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false}".to_string()),
               ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
               ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
               ("HOST".to_string(), localhost_url.clone()),
