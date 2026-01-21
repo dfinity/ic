@@ -249,7 +249,8 @@ def system_test(
 def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, guestos_update, setupos, hostos_update):
     """Configure all IC-OS images based on the provided parameters."""
 
-    is_mainnet_dev = guestos == "mainnet_latest_dev"
+    if guestos and setupos and guestos != setupos:
+        fail("If both guestos and setupos are specified, they must be the same")
 
     def guestos_local(env):
         """Configure a GuestOS disk image (the GuestOS that the test starts with) built from the local workspace."""
@@ -258,13 +259,13 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
         icos_images["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG"] = "//ic-os/guestos/envs/" + env + ":update-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + env + ":launch-measurements.json"
 
-    def guestos_mainnet(version_dict, repo):
+    def guestos_mainnet(version_dict, repo, is_dev):
         """Configure a GuestOS base image (the GuestOS that the test starts with) from the version available on mainnet."""
-        url_fn = icos_dev_image_download_url if is_mainnet_dev else icos_image_download_url
+        url_fn = icos_dev_image_download_url if is_dev else icos_image_download_url
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = version_dict["version"]
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = repo + "//:guest-img"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = version_dict["dev_hash" if is_mainnet_dev else "hash"]
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = version_dict["dev_hash" if is_dev else "hash"]
         runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def guestos_update_local(guestos_env, is_test = False):
@@ -274,11 +275,12 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/" + guestos_env + ":update-img" + suffix + ".tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/" + guestos_env + ":launch-measurements" + suffix + ".json"
 
-    def guestos_update_mainnet(version_dict, repo):
+    def guestos_update_mainnet(version_dict, repo, is_dev):
         """Configure a GuestOS update image (the GuestOS that the test updates to) from the version available on mainnet."""
+        url_fn = icos_dev_image_download_url if is_dev else icos_image_download_url
         env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = version_dict["version"]
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = icos_image_download_url(version_dict["version"], "guest-os", True)
-        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = version_dict["hash"]
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = url_fn(version_dict["version"], "guest-os", True)
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = version_dict["dev_hash" if is_dev else "hash"]
         runtime_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = repo + "//:launch-measurements-guest.json"
 
     def setupos_dependencies():
@@ -292,23 +294,23 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
         icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:test-img.tar.zst"
         runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev:launch-measurements.json"
 
-    def setupos_mainnet():
+    def setupos_mainnet(is_dev):
         """Configure a SetupOS disk image (the SetupOS that the test starts with) from the version available on mainnet."""
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst" if is_mainnet_dev else "//ic-os/setupos:mainnet-latest-test-img.tar.zst"
-        runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_hostos_images_dev//:launch-measurements-guest.json" if is_mainnet_dev else "@mainnet_latest_hostos_images//:launch-measurements-guest.json"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst" if is_dev else "//ic-os/setupos:mainnet-latest-test-img.tar.zst"
+        runtime_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_latest_hostos_images_dev//:launch-measurements-guest.json" if is_dev else "@mainnet_latest_hostos_images//:launch-measurements-guest.json"
 
     def hostos_update_local(is_test = False):
         """Configure a HostOS update image (the HostOS that the test updates to) built from the local workspace."""
         env_var_files["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = "//rs/tests:version-test" if is_test else "//bazel:version.txt"
         icos_images["ENV_DEPS__HOSTOS_UPDATE_IMG"] = "//ic-os/hostos/envs/dev:update-img-test.tar.zst" if is_test else "//ic-os/hostos/envs/dev:update-img.tar.zst"
 
-    def hostos_update_mainnet():
+    def hostos_update_mainnet(is_dev):
         """Configure a HostOS update image (the HostOS that the test updates to) from the version available on mainnet."""
-        url_fn = icos_dev_image_download_url if is_mainnet_dev else icos_image_download_url
+        url_fn = icos_dev_image_download_url if is_dev else icos_image_download_url
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_URL"] = url_fn(MAINNET_LATEST_HOSTOS["version"], "host-os", True)
         env["ENV_DEPS__HOSTOS_UPDATE_IMG_VERSION"] = MAINNET_LATEST_HOSTOS["version"]
-        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["dev_hash" if is_mainnet_dev else "hash"]
+        env["ENV_DEPS__HOSTOS_UPDATE_IMG_HASH"] = MAINNET_LATEST_HOSTOS["dev_hash" if is_dev else "hash"]
 
     # GuestOS base image configuration
     if guestos == True:  # HEAD version
@@ -320,7 +322,7 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
     elif guestos == "mainnet_latest":
         guestos_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images")
     elif guestos == "mainnet_latest_dev":
-        guestos_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images_dev")
+        guestos_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", True)
     elif guestos == "mainnet_nns":
         guestos_mainnet(MAINNET_NNS, "@mainnet_nns_images")
     elif guestos == "mainnet_app":
@@ -337,6 +339,8 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
         guestos_update_local("dev-malicious")
     elif guestos_update == "mainnet_latest":
         guestos_update_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images")
+    elif guestos_update == "mainnet_latest_dev":
+        guestos_update_mainnet(MAINNET_LATEST, "@mainnet_latest_guestos_images_dev", True)
     elif guestos_update == "mainnet_nns":
         guestos_update_mainnet(MAINNET_NNS, "@mainnet_nns_images")
     elif guestos_update == "mainnet_app":
@@ -351,6 +355,9 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
     elif setupos == "mainnet_latest":
         setupos_mainnet()
         setupos_dependencies()
+    elif setupos == "mainnet_latest_dev":
+        setupos_mainnet(True)
+        setupos_dependencies()
     elif setupos:
         fail("unknown setupos: " + str(setupos))
 
@@ -361,6 +368,8 @@ def _configure_icos(env, env_var_files, icos_images, runtime_deps, guestos, gues
         hostos_update_local(is_test = True)
     elif hostos_update == "mainnet_latest":
         hostos_update_mainnet()
+    elif hostos_update == "mainnet_latest_dev":
+        hostos_update_mainnet(True)
     elif hostos_update:
         fail("unknown hostos_update: " + str(hostos_update))
 

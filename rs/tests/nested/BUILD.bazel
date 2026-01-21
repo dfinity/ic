@@ -94,7 +94,7 @@ system_test_nns(
     flaky = True,
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
-    setupos = "mainnet_latest",
+    setupos = "mainnet_latest_dev",
     tags = ["long_test"],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
