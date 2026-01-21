@@ -1,8 +1,6 @@
 use super::*;
 
-use crate::{
-    proposals::self_describing::LocallyDescribableProposalAction,
-};
+use crate::proposals::self_describing::LocallyDescribableProposalAction;
 use ic_nervous_system_common_test_utils::assert_contains_all_key_words;
 use ic_nns_governance_api::SelfDescribingValue;
 use maplit::hashmap;
