@@ -977,7 +977,8 @@ impl Ledger {
             // Only enforce strict validation if existing metadata has no invalid keys.
             // This allows ledgers with legacy invalid keys to still be upgraded.
             let existing_all_valid = self.metadata.iter().all(|(k, _)| k.is_valid());
-            self.metadata = map_metadata_or_trap(upgrade_metadata_args, existing_all_valid, sink.clone());
+            self.metadata =
+                map_metadata_or_trap(upgrade_metadata_args, existing_all_valid, sink.clone());
         }
         if let Some(token_name) = args.token_name {
             self.token_name = token_name;
