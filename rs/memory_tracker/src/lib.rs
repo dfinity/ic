@@ -14,7 +14,7 @@ use std::{
     cell::Cell,
     ops::Range,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, AtomicUsize, Ordering},
     },
     time::Duration,
@@ -382,7 +382,7 @@ pub trait MemoryTracker {
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
         memory_limits: MemoryLimits,
-        decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync>,
+        decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
     ) -> nix::Result<Self>
     where
         Self: Sized;
@@ -438,7 +438,7 @@ pub fn new(
     page_map: PageMap,
     missing_page_handler_kind: Option<MissingPageHandlerKind>,
     memory_limits: MemoryLimits,
-    decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync>,
+    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 ) -> nix::Result<SigsegvMemoryTracker> {
     match missing_page_handler_kind {
         Some(MissingPageHandlerKind::Deterministic) => {

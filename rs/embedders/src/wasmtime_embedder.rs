@@ -590,13 +590,13 @@ impl WasmtimeEmbedder {
         // 2. The Global is a lightweight handle that references data in the Store
         // 3. The memory tracker (which holds this closure) is also owned by WasmtimeInstance
         // 4. All are dropped together when WasmtimeInstance is dropped
-        let decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync> = {
+        let decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>> = {
             if let Some(global) = store.data().num_instructions_global {
                 // Store a wrapped pointer to the Store and a copy of the Global
                 let mut store_ptr = StorePtr(&mut store as *mut wasmtime::Store<StoreData>);
                 let global_copy = global;
 
-                Arc::new(move |instructions_to_subtract: u64| {
+                Arc::new(Mutex::new(move |instructions_to_subtract: u64| {
                     // SAFETY: Accessing the Store and Global from the signal handler.
                     // Both pointers are guaranteed valid by the lifetime relationship described above.
                     unsafe {
@@ -606,9 +606,9 @@ impl WasmtimeEmbedder {
                             let _ = global_copy.set(store_ref, Val::I64(new_value));
                         }
                     }
-                })
+                }))
             } else {
-                Arc::new(|_| {})
+                Arc::new(Mutex::new(|_| {}))
             }
         };
 
@@ -780,7 +780,7 @@ fn sigsegv_memory_tracker<S>(
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
     deterministic_memory_tracker: FlagStatus,
-    decrement_instruction_counter: Arc<dyn FnMut(u64) + Send + Sync>,
+    decrement_instruction_counter: Arc<Mutex<dyn FnMut(u64) + Send>>,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
     let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
         FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
