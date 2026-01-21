@@ -70,7 +70,7 @@ impl MetadataKey {
     /// When present, should be the same as the result of the icrc1_name query call.
     pub const ICRC1_NAME: &'static str = "icrc1:name";
 
-    /// The token currency code (see ISO-4217).
+    /// The token currency code.
     /// When present, should be the same as the result of the icrc1_symbol query call.
     pub const ICRC1_SYMBOL: &'static str = "icrc1:symbol";
 
