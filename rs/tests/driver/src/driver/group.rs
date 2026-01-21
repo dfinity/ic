@@ -2,7 +2,10 @@
 use crate::driver::{
     farm::{Farm, HostFeature},
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
+    test_env_api::{
+        FarmBaseUrl, HasFarmUrl, HasGroupSetup, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot,
+    },
     {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
@@ -31,7 +34,7 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
-use crate::util::block_on;
+use crate::util::{MetricsFetcher, block_on};
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -420,7 +423,8 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    teardown: Option<Box<dyn PotSetupFn>>,
+    teardown: Vec<Box<dyn PotSetupFn>>,
+    check_nodes_in_teardown: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -459,6 +463,7 @@ impl SystemTestGroup {
         Self {
             setup: Default::default(),
             teardown: Default::default(),
+            check_nodes_in_teardown: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -486,7 +491,12 @@ impl SystemTestGroup {
     }
 
     pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
-        self.teardown = Some(Box::new(teardown));
+        self.teardown.push(Box::new(teardown));
+        self
+    }
+
+    pub fn with_check_nodes_in_teardown(mut self) -> Self {
+        self.check_nodes_in_teardown = true;
         self
     }
 
@@ -682,29 +692,64 @@ impl SystemTestGroup {
             false,
         );
 
-        let teardown_plan = self.teardown.map(|teardown_fn| {
-            let logger = logger.clone();
-            let group_ctx = group_ctx.clone();
-            let teardown_task = subproc(
-                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
-                move || {
-                    debug!(logger, ">>> teardown_fn");
-                    let env = ensure_setup_env(group_ctx);
-                    teardown_fn(env);
-                },
-                &mut compose_ctx,
-                false,
-            );
-            timed(
-                vec![Plan::Leaf {
-                    task: Box::from(teardown_task),
-                }],
-                EvalOrder::Sequential,
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
-        });
+        let check_nodes_in_teardown_fn: Option<Box<dyn PotSetupFn>> =
+            if self.check_nodes_in_teardown {
+                let teardown_fn = |env: TestEnv| {
+                    let nodes: Vec<IcNodeSnapshot> = env
+                        .topology_snapshot()
+                        .subnets()
+                        .flat_map(|subnet| subnet.nodes())
+                        .collect();
+                    for node in nodes {
+                        block_on(async {
+                            let metric_name = "replica_process_start_attempts";
+                            let metrics = MetricsFetcher::new_with_port(
+                                std::iter::once(node),
+                                vec![metric_name.to_string()],
+                                9091,
+                            );
+                            let vals = metrics
+                                .fetch::<u64>()
+                                .await
+                                .expect("Failed to fetch orchestrator metrics");
+                            assert_eq!(vals[metric_name][0], 1);
+                        });
+                    }
+                };
+                Some(Box::new(teardown_fn))
+            } else {
+                None
+            };
+
+        let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
+            .teardown
+            .into_iter()
+            .chain(check_nodes_in_teardown_fn)
+            .enumerate()
+            .map(|(i, teardown_fn)| {
+                let logger = logger.clone();
+                let group_ctx = group_ctx.clone();
+                let teardown_task = subproc(
+                    TaskId::Test(format!("{TEARDOWN_TASK_NAME}_{i}")),
+                    move || {
+                        debug!(logger, ">>> teardown_fn {i}");
+                        let env = ensure_setup_env(group_ctx);
+                        teardown_fn(env);
+                    },
+                    &mut compose_ctx,
+                    false,
+                );
+                timed(
+                    vec![Plan::Leaf {
+                        task: Box::from(teardown_task),
+                    }],
+                    EvalOrder::Sequential,
+                    compose_ctx.timeout_per_test,
+                    None,
+                    &mut compose_ctx,
+                )
+            })
+            .collect();
 
         let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
             task: Box::from(setup_task),
