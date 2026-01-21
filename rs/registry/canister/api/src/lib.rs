@@ -189,8 +189,6 @@ pub struct AddNodePayload {
 
     /// SEV-SNP attestation package for node registration. When provided, the registry canister
     /// will verify the attestation and extract the chip_id from the attestation report.
-    /// This is the preferred method for nodes running on SEV-SNP hardware.
-    /// The bytes should be a protobuf-encoded `SevAttestationPackage`.
     #[serde(default)]
     pub node_registration_attestation: Option<Vec<u8>>,
 

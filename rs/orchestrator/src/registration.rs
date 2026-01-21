@@ -257,7 +257,6 @@ impl NodeRegistration {
                 .unwrap()
                 .expect("Failed to retrieve current node public keys");
 
-        // Generate attestation package for SEV-SNP nodes
         let node_registration_attestation = generate_node_registration_attestation(&self.log);
 
         AddNodePayload {

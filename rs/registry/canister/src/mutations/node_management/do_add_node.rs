@@ -192,7 +192,6 @@ impl Registry {
             ));
         }
 
-        // Determine chip_id: prefer extracting from attestation package if provided
         let chip_id = extract_chip_id_from_payload(&payload)?;
 
         // Create the Node Record
@@ -438,7 +437,6 @@ mod tests {
             idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
             xnet_endpoint: format!("128.0.{mutation_id}.100:1234"),
             http_endpoint: format!("128.0.{mutation_id}.100:4321"),
-            chip_id: None,
             node_registration_attestation: None,
             public_ipv4_config: None,
             domain: Some("api-example.com".to_string()),
@@ -478,7 +476,6 @@ mod tests {
             idkg_dealing_encryption_pk: Some(vec![]),
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
-            chip_id: None,
             node_registration_attestation: None,
             public_ipv4_config: None,
             domain: None,
