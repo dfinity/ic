@@ -9,10 +9,6 @@ on:
       crate-version:
         description: 'The version of the crate to publish'
         required: true
-      commit-sha:
-        description: 'The commit SHA to build and publish crates from'
-        required: true
-
 
 jobs:
   publish-crates:
@@ -20,9 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: publish-crates
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.inputs.commit-sha }}
+      - uses: actions/checkout@v6
 
       - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
         id: auth
