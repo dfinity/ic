@@ -4600,6 +4600,12 @@ pub enum SelfDescribingValue {
     Map(HashMap<String, SelfDescribingValue>),
 }
 
+impl From<String> for SelfDescribingValue {
+    fn from(value: String) -> Self {
+        SelfDescribingValue::Text(value)
+    }
+}
+
 impl From<&str> for SelfDescribingValue {
     fn from(value: &str) -> Self {
         SelfDescribingValue::Text(value.to_string())
@@ -4621,6 +4627,12 @@ impl From<u32> for SelfDescribingValue {
 impl From<Vec<u8>> for SelfDescribingValue {
     fn from(value: Vec<u8>) -> Self {
         SelfDescribingValue::Blob(value)
+    }
+}
+
+impl From<PrincipalId> for SelfDescribingValue {
+    fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
     }
 }
 

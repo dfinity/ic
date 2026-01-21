@@ -170,6 +170,9 @@ pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 /// Maximum number of controllers allowed in a request (specified in the interface spec).
 pub const MAX_ALLOWED_CONTROLLERS_COUNT: usize = 10;
 
+/// Default maximum number of canisters per subnet if not set in the registry.
+pub const DEFAULT_MAX_NUMBER_OF_CANISTERS: u64 = 120_000;
+
 /// Maximum number of canister snapshots that can be stored for a single canister.
 pub const MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER: usize = 10;
 

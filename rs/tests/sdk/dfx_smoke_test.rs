@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
@@ -9,7 +9,6 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::systest;
-use nns_dapp::nns_dapp_customizations;
 use sdk_system_tests::{
     asset::get_asset_as_string,
     config::configure_local_network,
@@ -41,10 +40,7 @@ pub fn setup(env: TestEnv) {
             .expect("Failed waiting for all nodes to become healthy")
     });
 
-    install_nns_with_customizations_and_check_progress(
-        env.topology_snapshot(),
-        nns_dapp_customizations(),
-    );
+    install_nns_and_check_progress(env.topology_snapshot());
 
     IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .disable_ipv4()
