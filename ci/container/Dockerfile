@@ -8,7 +8,8 @@ ARG PACKAGE_FILE=ci/container/files/packages.common
 COPY ${PACKAGE_FILE} /tmp/
 COPY ./ci/container/files/gitconfig /etc/gitconfig
 COPY ./ci/container/files/containers.conf /etc/containers/containers.conf
-COPY ./ci/container/TAG /home/ubuntu/.DFINITY-TAG
+# marker for scripts to check if they are running in this container
+RUN touch /home/ubuntu/.ic-build-container
 
 # Todo: split out essential packages from application-level packages
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -54,13 +55,6 @@ ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.
 RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
     rm "/usr/local/bin/LICENSE" && \
     echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
-
-# Add buf
-ARG BUF_BIN="/usr/local/bin/buf"
-ARG BUF_VERSION="1.46.0"
-RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
-    echo "04c92815f92431bea637d834bee9d2941e979b1c821c59805667c032e2e8fc1f  ${BUF_BIN}" | shasum -a 256 -c - && \
-    chmod +x "${BUF_BIN}"
 
 # Add mold linker
 ARG MOLD_BIN="/usr/local/bin/mold"
