@@ -58,13 +58,15 @@ mkdir "$RUNFILES"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     relative_dep_path="${!env_var}"
-    # TODO: in bazel-8 $relative_dep_path may contain .. parent references.
+
+    # In bazel-8 $relative_dep_path may contain .. parent references.
     # Those will clash with the following mkdir and cp commands.
-    # Think about how to handle them ...
-    # What about we detect them and copy them to a special directory under $RUNFILES ?
-    mkdir -p "$(dirname "$RUNFILES/$relative_dep_path")"
-    cp --symbolic-link "$ORIG_RUNFILES/$relative_dep_path" "$RUNFILES/$relative_dep_path"
-    export "$env_var=$RUNFILES/$relative_dep_path"
+    # So we sanitize them here by creating a mirror structure of the parent paths under $RUNFILES.
+    sanitized_relative_dep_path="$(sed 's|\.\.|__parent__|g' <<<"$relative_dep_path")"
+
+    mkdir -p "$(dirname "$RUNFILES/$sanitized_relative_dep_path")"
+    cp --symbolic-link "$ORIG_RUNFILES/$relative_dep_path" "$RUNFILES/$sanitized_relative_dep_path"
+    export "$env_var=$RUNFILES/$sanitized_relative_dep_path"
 done
 
 # TODO: remove the following comment
