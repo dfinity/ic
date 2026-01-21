@@ -85,6 +85,8 @@ else
     CONTAINER_CMD=(docker)
 fi
 
+echo "Building $IMAGE_NAME:$DOCKER_IMG_TAG"
+
 DOCKER_BUILDKIT=1 "${CONTAINER_CMD[@]}" build "${BUILD_ARGS[@]}" \
     --target "$BUILD_TARGET" \
     -t $IMAGE_NAME:"$DOCKER_IMG_TAG" \
