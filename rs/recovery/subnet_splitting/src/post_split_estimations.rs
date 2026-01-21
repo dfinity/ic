@@ -50,7 +50,7 @@ pub fn estimate(
 
 fn read_manifest(path: &Path) -> anyhow::Result<Manifest> {
     let file =
-        File::open(path).with_context(|| anyhow!("Failed to open file at {}", path.display()))?;
+        File::open(path).with_context(|| format!("Failed to open file at {}", path.display()))?;
     let (version, files, chunks, _hash) =
         parse_manifest(file).map_err(|err| anyhow!("Failed to parse the manifest file: {err}"))?;
 
@@ -113,7 +113,7 @@ impl std::ops::SubAssign for LoadSample {
 fn read_load_samples(path: &Path) -> anyhow::Result<BTreeMap<CanisterId, LoadSample>> {
     let mut samples = BTreeMap::new();
     let file = File::open(path)
-        .with_context(|| anyhow!("Failed to open the file at {}", path.display()))?;
+        .with_context(|| format!("Failed to open the file at {}", path.display()))?;
     let reader = BufReader::new(file);
     let mut csv_reader = csv::Reader::from_reader(reader);
 
