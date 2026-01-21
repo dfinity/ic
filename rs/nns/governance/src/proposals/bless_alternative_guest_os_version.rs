@@ -1,7 +1,6 @@
 use super::*;
 
 use crate::{
-    are_bless_alternative_guest_os_version_proposals_enabled,
     pb::v1::SelfDescribingValue,
     proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
 };
@@ -27,13 +26,6 @@ impl BlessAlternativeGuestOsVersion {
     ///    a. Nonempty.
     ///    b. Each element is valid per GuestLaunchMeasurement (singular).
     pub(crate) fn validate(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         let mut defects = Vec::new();
 
         defects.extend(validate_chip_ids(&self.chip_ids));
@@ -50,13 +42,6 @@ impl BlessAlternativeGuestOsVersion {
     }
 
     pub(crate) fn execute(&self) -> Result<(), GovernanceError> {
-        if !are_bless_alternative_guest_os_version_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "BlessAlternativeGuestOsVersion proposals are not enabled yet.".to_string(),
-            ));
-        }
-
         // Like with Motion proposals, the execution of these proposals is
         // trivial. The reason for trivial execution in this case is that the
         // way this is actually effected is by a node operator manually running
