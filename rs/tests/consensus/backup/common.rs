@@ -78,12 +78,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures()
-                            {
-                                7
-                            } else {
-                                0
-                            },
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
                             key_id,
                         })
                         .collect(),
@@ -103,7 +100,7 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version();
+    let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
     // Bless target version
