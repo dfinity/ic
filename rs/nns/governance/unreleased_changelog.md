@@ -11,6 +11,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.
+
 ## Deprecated
 
 ## Removed
