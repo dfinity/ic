@@ -1,4 +1,3 @@
-use ic_crypto_internal_basic_sig_ecdsa_secp256r1::der_encoding_from_xy_coordinates as p256_from_coordinates;
 use ic_crypto_internal_basic_sig_rsa_pkcs1::RsaPublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 
@@ -138,9 +137,11 @@ impl CosePublicKey {
                     ));
                 }
 
-                let der = p256_from_coordinates(x, y).map_err(|_| {
+                let pk = ic_secp256r1::PublicKey::deserialize_from_xy(x, y).map_err(|_| {
                     CosePublicKeyParseError::MalformedPublicKey(AlgorithmId::EcdsaP256)
                 })?;
+
+                let der = pk.serialize_der();
                 Ok(Self::EcdsaP256Sha256(der))
             }
             (_, _) => Err(CosePublicKeyParseError::MalformedPublicKey(

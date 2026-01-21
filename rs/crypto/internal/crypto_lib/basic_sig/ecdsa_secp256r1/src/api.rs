@@ -32,27 +32,6 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
     Ok(types::PublicKeyBytes::from(pk_bytes))
 }
 
-/// Parse a secp256r1 public key from the x/y affine coordinates
-///
-/// # Arguments
-/// * `x` the x coordinate of the public point
-/// * `y` the y coordinate of the public point
-/// # Errors
-/// * `MalformedPublicKey` if the public key could not be parsed
-/// # Returns
-/// The DER encoding of the public key
-pub fn der_encoding_from_xy_coordinates(x: &[u8], y: &[u8]) -> CryptoResult<Vec<u8>> {
-    let pk = ic_secp256r1::PublicKey::deserialize_from_xy(x, y).map_err(|e| {
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: None,
-            internal_error: format!("{:?}", e),
-        }
-    })?;
-
-    Ok(pk.serialize_der())
-}
-
 /// Sign a message using a secp256r1 private key
 ///
 /// # Arguments
