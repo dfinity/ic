@@ -1816,6 +1816,7 @@ pub mod testing {
 
     pub trait StreamTesting {
         /// Creates a new `Stream` with the given `messages` and `signals_end`.
+        #[allow(clippy::new_ret_no_self)]
         fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream;
 
         /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
