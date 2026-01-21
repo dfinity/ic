@@ -475,8 +475,8 @@ async fn test_to_self_describing_nns_canister_install() {
             "arg_hash".to_string() => SelfDescribingValue::from(arg_hash),
             "initial_cycles".to_string() => SelfDescribingValue::from(1_000_000_000_000_u64),
             "name".to_string() => SelfDescribingValue::from("test-canister"),
-            "memory_allocation".to_string() => SelfDescribingValue::Array(vec![]),
-            "compute_allocation".to_string() => SelfDescribingValue::Array(vec![]),
+            "memory_allocation".to_string() => SelfDescribingValue::Null,
+            "compute_allocation".to_string() => SelfDescribingValue::Null,
         })
     );
 }
