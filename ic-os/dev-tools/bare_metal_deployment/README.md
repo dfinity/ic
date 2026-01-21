@@ -22,7 +22,7 @@ The config files must be accessible from inside the container - e.g., at the roo
 ```bash
 bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     --config_path $(realpath ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml) \
-    --csv_filename $(realpath ./zh2-dll01.csv)
+    --ini_filename $(realpath ./zh2-dll01.csv)
 ```
 
 If your current username does not match the username used to log into the file shares, you must specify it:
@@ -32,7 +32,7 @@ bazel run //ic-os/setupos/envs/dev:launch_bare_metal --config=local -- \
     # --file_share_ssh_key <custom ssh private key> # Specify if a special ssh key is needed \
     --config_path $(realpath ./ic-os/dev-tools/bare_metal_deployment/zh2-dll01.yaml) \
     --inject_image_pub_key "XXX" # Optional SSH key for access to the node after deploying, required for benchmarking \
-    --csv_filename $(realpath ./zh2-dll01.csv)
+    --ini_filename $(realpath ./zh2-dll01.csv)
 ```
 
 
@@ -143,7 +143,7 @@ Keep an eye on the first one via the iDRAC remote console. If the first one fail
 poetry run ./deploy.py --file_share_url <ip addr or hostname> \
     --file_share_dir <directory images are served from> \ 
     --file_share_image_filename <setupos image filename> \
-    --csv_filename <csv filename>
+    --ini_filename <ini filename>
 ```
 
 Deploy to servers listed in csv file.
@@ -151,7 +151,7 @@ Deploy to servers listed in csv file.
 poetry run ./deploy.py --file_share_url 10.10.101.254 \
      --file_share_dir /srv/images \ 
     --file_share_image_filename setupos.img \
-    --csv_filename ./zh2-dll01.csv \
+    --ini_filename ./zh2-dll01.csv \
 ```
 
 Use the `--upload_file` flag to upload compressed image to fileshare, unpack to correct dir and rename. Then deploy to servers listed in csv file. SSH cert access is required for the file share. `--file_share_username` may be required to access the fileshare. Current username is used otherwise.
@@ -160,6 +160,6 @@ poetry run ./deploy.py --file_share_url 10.10.101.254 \
     --file_share_username dfnadmin \
     --file_share_dir /srv/images \ 
     --file_share_image_filename setupos.img \
-    --csv_filename ./zh2-dll01.csv \
+    --ini_filename ./zh2-dll01.csv \
     --upload_file ./setupos-img.dev.tar.zst
 ```
