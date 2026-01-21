@@ -11,4 +11,3 @@ rust_library(
         "@crate_index//:sev",
     ],
 )
-
