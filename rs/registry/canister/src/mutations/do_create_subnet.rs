@@ -519,6 +519,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
                 .collect::<Vec<_>>(),
             max_ingress_bytes_per_message: val.max_ingress_bytes_per_message,
             max_ingress_messages_per_block: val.max_ingress_messages_per_block,
+            max_ingress_bytes_per_block: 0,
             max_block_payload_size: val.max_block_payload_size,
             replica_version_id: val.replica_version_id.clone(),
             unit_delay_millis: val.unit_delay_millis,
