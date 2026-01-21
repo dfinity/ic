@@ -88,25 +88,6 @@ fn public_key_to_der(pk: &types::PublicKeyBytes) -> CryptoResult<Vec<u8>> {
     Ok(pkey.serialize_der())
 }
 
-/// Decode an ECDSA signature from the DER encoding
-///
-/// # Arguments
-/// `sig_der` the DER encoded signature, as a pair of integers (r,s)
-/// # Errors
-/// * `MalformedSignature` if the data could not be decoded as a DER ECDSA
-///   signature
-pub fn signature_from_der(sig_der: &[u8]) -> CryptoResult<types::SignatureBytes> {
-    let sig =
-        p256::ecdsa::Signature::from_der(sig_der).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::EcdsaP256,
-            sig_bytes: sig_der.to_vec(),
-            internal_error: format!("Error parsing DER signature: {e}"),
-        })?;
-
-    let sig_bytes: [u8; 64] = sig.to_bytes().into();
-    Ok(types::SignatureBytes(sig_bytes))
-}
-
 /// Sign a message using a secp256r1 private key
 ///
 /// # Arguments

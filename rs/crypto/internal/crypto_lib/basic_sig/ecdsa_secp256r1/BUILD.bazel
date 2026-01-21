@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",

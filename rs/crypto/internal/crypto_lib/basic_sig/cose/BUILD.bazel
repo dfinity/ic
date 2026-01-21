@@ -15,8 +15,8 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-secp256r1",
     "//rs/crypto/internal/test_vectors",
-    "//rs/crypto/sha2",
     "@crate_index//:hex",
 ]
 

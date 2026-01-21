@@ -15,5 +15,5 @@ serde_cbor = { workspace = true }
 
 [dev-dependencies]
 hex = { workspace = true }
+ic-secp256r1 = { path = "../../../../../../packages/ic-secp256r1" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
-ic-crypto-sha2 = { path = "../../../../sha2" }

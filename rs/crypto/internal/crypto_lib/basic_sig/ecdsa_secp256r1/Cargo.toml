@@ -12,7 +12,6 @@ ic-secp256r1 = { path = "../../../../../../packages/ic-secp256r1" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
-p256 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
