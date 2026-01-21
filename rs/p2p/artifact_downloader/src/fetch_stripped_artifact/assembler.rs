@@ -486,7 +486,7 @@ impl BlockProposalAssembler {
                     .map(|message| (id.ingress_message_id, message))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let reconstructed_ingress_payload = IngressPayload::from(ingresses);
+        let reconstructed_ingress_payload = IngressPayload::from_iter(ingresses);
 
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(reconstructed_ingress_payload);

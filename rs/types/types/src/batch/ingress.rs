@@ -154,19 +154,6 @@ impl CountBytes for IngressPayload {
     }
 }
 
-impl<'a> FromIterator<(IngressMessageId, &'a SignedIngress)> for IngressPayload {
-    fn from_iter<I: IntoIterator<Item = (IngressMessageId, &'a SignedIngress)>>(msgs: I) -> Self {
-        let serialized_ingress_messages = msgs
-            .into_iter()
-            .map(|(ingress_message_id, ingress)| (ingress_message_id, ingress.binary().clone()))
-            .collect();
-
-        Self {
-            serialized_ingress_messages,
-        }
-    }
-}
-
 impl From<Vec<SignedIngress>> for IngressPayload {
     fn from(msgs: Vec<SignedIngress>) -> IngressPayload {
         IngressPayload::from_iter(
