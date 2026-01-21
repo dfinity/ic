@@ -41,13 +41,13 @@ async fn scrape(client: Arc<reqwest::Client>, url: &str) -> Result<IndexedScrape
 
 struct PollTask {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<AppEvent>,
+    sender: mpsc::Sender<AppEvent>,
     client: Arc<reqwest::Client>,
 }
 
 impl PollTask {
     /// Constructs a new instance of [`PollTask`].
-    fn new(sender: mpsc::UnboundedSender<AppEvent>) -> Self {
+    fn new(sender: mpsc::Sender<AppEvent>) -> Self {
         Self {
             sender,
             // Accept self-signed certificates used by internal metrics endpoints
@@ -82,9 +82,9 @@ impl PollTask {
                 );
                 // Ignores the result because shutting down the app drops the receiver, which causes the send
                 // operation to fail. This is expected behavior and should not panic.
-                let _ = self.sender.send(AppEvent::NewHostOSNodeExporterScrape(hn));
-                let _ = self.sender.send(AppEvent::NewGuestOSNodeExporterScrape(gn));
-                let _ = self.sender.send(AppEvent::NewGuestOSReplicaScrape(gr));
+                let _ = self.sender.try_send(AppEvent::NewHostOSNodeExporterScrape(hn));
+                let _ = self.sender.try_send(AppEvent::NewGuestOSNodeExporterScrape(gn));
+                let _ = self.sender.try_send(AppEvent::NewGuestOSReplicaScrape(gr));
               }
             };
         }
@@ -95,12 +95,12 @@ impl PollTask {
 /// A task that handles reading crossterm events.
 struct EventTask {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<AppEvent>,
+    sender: mpsc::Sender<AppEvent>,
 }
 
 impl EventTask {
     /// Constructs a new instance of [`EventTask`].
-    fn new(sender: mpsc::UnboundedSender<AppEvent>) -> Self {
+    fn new(sender: mpsc::Sender<AppEvent>) -> Self {
         Self { sender }
     }
 
@@ -118,7 +118,7 @@ impl EventTask {
               Some(Ok(evt)) = crossterm_event => {
                 // Ignores the result because shutting down the app drops the receiver, which causes the send
                 // operation to fail. This is expected behavior and should not panic.
-                let _ = self.sender.send(AppEvent::Crossterm(evt));
+                let _ = self.sender.try_send(AppEvent::Crossterm(evt));
               }
             };
         }
@@ -129,16 +129,18 @@ impl EventTask {
 #[derive(Debug)]
 pub struct EventHandler {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<AppEvent>,
+    sender: mpsc::Sender<AppEvent>,
     /// Event receiver channel.
-    receiver: mpsc::UnboundedReceiver<AppEvent>,
+    receiver: mpsc::Receiver<AppEvent>,
 }
+
+/// Channel capacity for the event handler
+const EVENT_CHANNEL_CAPACITY: usize = 100;
 
 impl EventHandler {
     /// Constructs a new instance of [`EventHandler`] and spawns a new thread to handle events.
     pub fn new(hostname: String, sample_freq: std::time::Duration) -> Self {
-        #[allow(clippy::disallowed_methods)]
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, receiver) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
         let actor = EventTask::new(sender.clone());
         let poller = PollTask::new(sender.clone());
         tokio::spawn(async move { actor.run().await });
@@ -169,6 +171,6 @@ impl EventHandler {
     pub fn send(&mut self, app_event: AppEvent) {
         // Ignore the result as the receiver cannot be dropped while this struct still has a
         // reference to it
-        let _ = self.sender.send(app_event);
+        let _ = self.sender.try_send(app_event);
     }
 }
