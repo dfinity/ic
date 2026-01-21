@@ -1,9 +1,9 @@
-use candid::{Nat, Principal};
-use ic_icrc_rosetta::common::storage::schema;
-use ic_icrc_rosetta::common::storage::storage_operations::*;
-use ic_icrc_rosetta::common::storage::types::{
+use super::*;
+use crate::common::storage::schema;
+use crate::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
+use candid::{Nat, Principal};
 use icrc_ledger_types::icrc1::account::Account;
 use rusqlite::{Connection, params};
 use tempfile::tempdir;
