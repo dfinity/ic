@@ -110,8 +110,9 @@ pub fn verify(
 /// This includes checking that the key is a point on the curve and
 /// in the right subgroup.
 pub fn verify_public_key(pk: &types::PublicKeyBytes) -> bool {
-    match curve25519_dalek::edwards::CompressedEdwardsY(pk.0).decompress() {
-        None => false,
-        Some(edwards_point) => edwards_point.is_torsion_free(),
+    if let Ok(pk) = ic_ed25519::PublicKey::deserialize_raw(&pk.0) {
+        pk.is_torsion_free()
+    } else {
+        false
     }
 }
