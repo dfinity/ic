@@ -1,5 +1,5 @@
 use super::event::{AppEvent, EventHandler};
-use super::promdb::{IndexedSeries, ValueQuery};
+use super::promdb::{IndexedScrape, IndexedSeries, ValueQuery};
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -173,6 +173,21 @@ struct GuestOSNodeExporterSnapshot {
 #[derive(Debug)]
 struct GuestOSReplicaSnapshot {
     block_height: Option<usize>,
+}
+
+/// Updates a series with a new scrape result.
+fn update_series(series: &mut Result<IndexedSeries, String>, result: Result<IndexedScrape, String>) {
+    match result {
+        Ok(scrape) => match series {
+            Ok(s) => s.push(scrape),
+            Err(_) => {
+                let mut s = IndexedSeries::new(MAX_SCRAPES);
+                s.push(scrape);
+                *series = Ok(s);
+            }
+        },
+        Err(e) => *series = Err(e),
+    }
 }
 
 #[derive(Debug)]
@@ -676,46 +691,16 @@ impl App {
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             match self.events.next().await? {
-                AppEvent::NewHostOSNodeExporterScrape(indexed_scrape_or_error) => {
-                    match indexed_scrape_or_error {
-                        Ok(indexed_scrape) => match &mut self.hostos_node_exporter_series {
-                            Ok(series) => series.push(indexed_scrape),
-                            Err(_) => {
-                                let mut s = IndexedSeries::new(MAX_SCRAPES);
-                                s.push(indexed_scrape);
-                                self.hostos_node_exporter_series = Ok(s);
-                            }
-                        },
-                        Err(e) => self.hostos_node_exporter_series = Err(e),
-                    }
+                AppEvent::NewHostOSNodeExporterScrape(result) => {
+                    update_series(&mut self.hostos_node_exporter_series, result);
                     self.recalc_hostos_node_exporter_metrics()
                 }
-                AppEvent::NewGuestOSNodeExporterScrape(indexed_scrape_or_error) => {
-                    match indexed_scrape_or_error {
-                        Ok(indexed_scrape) => match &mut self.guestos_node_exporter_series {
-                            Ok(series) => series.push(indexed_scrape),
-                            Err(_) => {
-                                let mut s = IndexedSeries::new(MAX_SCRAPES);
-                                s.push(indexed_scrape);
-                                self.guestos_node_exporter_series = Ok(s);
-                            }
-                        },
-                        Err(e) => self.guestos_node_exporter_series = Err(e),
-                    }
+                AppEvent::NewGuestOSNodeExporterScrape(result) => {
+                    update_series(&mut self.guestos_node_exporter_series, result);
                     self.recalc_guestos_node_exporter_metrics()
                 }
-                AppEvent::NewGuestOSReplicaScrape(indexed_scrape_or_error) => {
-                    match indexed_scrape_or_error {
-                        Ok(indexed_scrape) => match &mut self.guestos_replica_series {
-                            Ok(series) => series.push(indexed_scrape),
-                            Err(_) => {
-                                let mut s = IndexedSeries::new(MAX_SCRAPES);
-                                s.push(indexed_scrape);
-                                self.guestos_replica_series = Ok(s);
-                            }
-                        },
-                        Err(e) => self.guestos_replica_series = Err(e),
-                    }
+                AppEvent::NewGuestOSReplicaScrape(result) => {
+                    update_series(&mut self.guestos_replica_series, result);
                     self.recalc_guestos_replica_metrics()
                 }
                 AppEvent::Crossterm(event) => match event {
