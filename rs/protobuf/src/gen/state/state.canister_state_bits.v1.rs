@@ -5,6 +5,8 @@ pub struct CallContext {
     pub responded: bool,
     #[prost(message, optional, tag = "6")]
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    #[prost(message, optional, tag = "13")]
+    pub available_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]
@@ -318,17 +320,27 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 3, 5")]
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 6, 3, 5")]
         pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
     pub mod aborted_execution {
+        #[derive(Clone, PartialEq, ::prost::Message)]
+        pub struct AbortedResponse {
+            #[prost(message, optional, tag = "7")]
+            pub response: ::core::option::Option<super::super::super::super::queues::v1::Response>,
+            #[prost(message, optional, tag = "8")]
+            pub callback: ::core::option::Option<super::super::Callback>,
+        }
         #[derive(Clone, PartialEq, ::prost::Oneof)]
         pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
+            /// TODO(DSM-95): Remove once we switch to `AbortedResponse` below.
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
+            #[prost(message, tag = "6")]
+            AbortedResponse(AbortedResponse),
             #[prost(message, tag = "3")]
             Ingress(super::super::super::super::ingress::v1::Ingress),
             #[prost(enumeration = "super::CanisterTask", tag = "5")]

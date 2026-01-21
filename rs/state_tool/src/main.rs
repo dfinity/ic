@@ -338,7 +338,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(1)]
         );
     }
@@ -375,7 +375,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(3)]
         );
     }
@@ -409,7 +409,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(2)]
         );
     }
@@ -447,7 +447,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            dst_layout.checkpoint_heights().unwrap(),
+            dst_layout.verified_checkpoint_heights().unwrap(),
             vec![Height::new(1), Height::new(3)]
         );
     }

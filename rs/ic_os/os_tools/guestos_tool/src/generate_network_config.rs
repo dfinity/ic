@@ -269,8 +269,8 @@ fn is_valid_network_interface(path: &&PathBuf) -> bool {
     };
     let filename = filename.to_string_lossy();
 
-    let first3_chars = filename.chars().take(3).collect::<String>().to_lowercase();
-    matches!(first3_chars.as_str(), "enp")
+    let first2_chars = filename.chars().take(2).collect::<String>().to_lowercase();
+    matches!(first2_chars.as_str(), "en")
 }
 
 // Turn off duplicate address detection for testnets running on k8s

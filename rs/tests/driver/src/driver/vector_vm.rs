@@ -14,17 +14,22 @@ use crate::driver::{
     log_events::LogEvent,
     nested::HasNestedVms,
     test_env::TestEnvAttribute,
-    test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession, scp_send_to},
+    test_env_api::{
+        HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo, SshSession, scp_send_to,
+    },
     test_setup::GroupSetup,
     universal_vm::UniversalVms,
 };
 
 use super::{
+    config::NODES_INFO,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
     test_env::TestEnv,
     test_env_api::get_dependency_path,
     universal_vm::UniversalVm,
 };
+
+use ic_types::NodeId;
 
 // Default labels
 const IC_NODE: &str = "ic_node";
@@ -129,6 +134,11 @@ impl VectorVm {
         let log = env.logger();
         info!(log, "Syncing vector targets.");
 
+        let testnet_nodes = env
+            .read_json_object::<NodesInfo, _>(NODES_INFO)
+            .expect("Couldn't read info of the nodes from file")
+            .into_keys()
+            .collect::<Vec<NodeId>>();
         match env.safe_topology_snapshot() {
             Err(e) => warn!(
                 log,
@@ -142,7 +152,14 @@ impl VectorVm {
                     .chain(snapshot.api_boundary_nodes());
 
                 for node in nodes {
-                    let node_id = node.node_id.get();
+                    let node_id = node.node_id;
+                    // Only consider nodes that are part of the testnet to make up for system tests
+                    // that use mainnet state, where the registry could contain nodes that are not
+                    // part of the testnet.
+                    if !testnet_nodes.contains(&node_id) {
+                        continue;
+                    }
+
                     let ip = node.get_ip_addr();
 
                     let labels = [

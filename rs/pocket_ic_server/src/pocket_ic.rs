@@ -166,8 +166,12 @@ use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(askama::Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    height: Height,
+    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+}
 
 const MAINNET_NNS_SUBNET_ID: &str =
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
@@ -635,7 +639,7 @@ impl PocketIcSubnets {
             subnet_config.scheduler_config.max_instructions_per_slice = instruction_limit;
             subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts = instruction_limit;
+                .max_instructions_per_query_message = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
         }
         // bound PocketIc resource consumption
