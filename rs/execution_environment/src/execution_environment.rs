@@ -4463,7 +4463,11 @@ fn execute_canister_input(
                 load_metrics.remote_subnet_messages_executed += 1;
             }
         }
-        CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
+        CanisterMessageOrTask::Message(CanisterMessage::Response(response))
+        | CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
+            response,
+            callback: _,
+        }) => {
             if network_topology.route(response.respondent.get()) == Some(exec_env.own_subnet_id) {
                 load_metrics.local_subnet_messages_executed += 1;
             } else {
