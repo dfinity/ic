@@ -50,11 +50,12 @@ impl PollTask {
     fn new(sender: mpsc::UnboundedSender<AppEvent>) -> Self {
         Self {
             sender,
+            // Accept self-signed certificates used by internal metrics endpoints
             client: Arc::new(
                 reqwest::Client::builder()
                     .danger_accept_invalid_certs(true)
                     .build()
-                    .expect("reqwest::Client should have been built!"),
+                    .expect("Failed to build reqwest client"),
             ),
         }
     }
