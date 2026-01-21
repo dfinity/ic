@@ -253,6 +253,9 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
     )
     .await;
 
+    // This handles errors such as not being able to acquire canister lock,
+    // which gets emited directly by exclusively_stop_and_start_canister
+    // itself.
     let result = match result {
         Ok(ok) => ok,
         Err(err) => {
@@ -260,6 +263,9 @@ pub async fn change_canister(request: ChangeCanisterRequest) -> Result<(), Strin
         }
     };
 
+    // This handles errors coming from install_code (which is more or less a
+    // thin wrapper around the Management canister method), such as the
+    // DESTINATION_INVALID (3) reject code.
     result.map_err(|(rejection_code, message)| {
         format!(
             "Attempt to call install_code with request {request_str} failed with code \
