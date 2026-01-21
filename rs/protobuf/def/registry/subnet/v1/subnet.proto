@@ -49,8 +49,7 @@ message SubnetRecord {
 
   // The maximum number of canisters that may be present on the subnet at any given time.
   //
-  // A value of 0 is equivalent to setting no limit. This also provides an easy way
-  // to maintain compatibility of different versions of replica and registry.
+  // A value of 0 means that the replica's default value will be used.
   uint64 max_number_of_canisters = 24;
 
   // The list of public keys whose owners have "readonly" SSH access to all replicas on this subnet,

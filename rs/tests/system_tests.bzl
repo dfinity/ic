@@ -9,7 +9,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "icos_dev_image_download_url", "icos_image_download_url")
-load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "NNS_CANISTER_RUNTIME_DEPS")
 
 default_vm_resources = {
     "vcpus": None,
@@ -21,7 +21,7 @@ def system_test(
         name,
         test_name = None,
         test_driver_target = None,
-        runtime_deps = [],
+        runtime_deps = {},
         tags = [],
         test_timeout = "long",
         flaky = False,
@@ -43,6 +43,7 @@ def system_test(
         env = {},
         env_inherit = [],
         exclude_logs = ["prometheus", "vector"],
+        data = [],
         additional_colocate_tags = [],
         logs = True,
         **kwargs):
@@ -91,6 +92,7 @@ def system_test(
       additional_colocate_tags: additional tags to pass to the colocated test.
       logs: Specifies if vector vm for scraping logs should not be spawned.
       exclude_logs: Specifies uvm name patterns to exclude from streaming.
+      data: List of files used by the test driver.
       **kwargs: additional arguments to pass to the rust_binary rule.
 
     Returns:
@@ -123,7 +125,9 @@ def system_test(
 
     # Environment variable names to targets (targets are resolved)
     # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
-    _runtime_deps = {}
+
+    _runtime_deps = dict(runtime_deps)
+
     env_var_files = {}
     icos_images = dict()
 
@@ -257,8 +261,6 @@ def system_test(
     extra_args_simple = []
     extra_args_colocated = []
 
-    data = list(runtime_deps)
-
     # We use the RUN_SCRIPT_ prefix for variables that are processed by the run
     # script, and not passed directly to the test.
 
@@ -289,6 +291,7 @@ def system_test(
         name: "$(rootpath {})".format(dep)
         for name, dep in _runtime_deps.items()
     }
+    data = list(data)
     for dep in _runtime_deps.values():  # Bazel 7.X does not have 'set()', Bazel 8 does
         if dep not in data:
             data.append(dep)
@@ -344,6 +347,7 @@ def system_test(
         visibility = visibility,
     )
 
+    # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
         name = test_name + "_colocate",
@@ -362,7 +366,7 @@ def system_test(
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |
               ({"COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT": "1"} if colocated_test_driver_vm_forward_ssh_agent else {}),
-        tags = tags + (["colocated"] if "colocate" in tags else ["manual"]) + additional_colocate_tags,
+        tags = tags + (["manual"] if not "colocate" in tags else []) + additional_colocate_tags,
         target_compatible_with = ["@platforms//os:linux"],
         timeout = test_timeout,
         flaky = flaky,
@@ -370,7 +374,7 @@ def system_test(
     )
     return struct(test_driver_target = test_driver_target)
 
-def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, **kwargs):
+def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_variant = True, runtime_deps = {}, **kwargs):
     """Declares a system-test that uses the mainnet NNS and a variant that use the HEAD NNS.
 
     Declares two system-tests:
@@ -395,13 +399,14 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
         name: the name of the system-tests.
         enable_head_nns_variant: whether to run the head_nns variant daily.
         enable_mainnet_nns_variant: whether to run the mainnet variant.
+        runtime_deps: dependencies to make available to the test when it runs. For the mainnet variant this gets merged with the mainnet NNS canisters and for the _head_nns variant it gets merged with the HEAD NNS canisters.
         **kwargs: the arguments of the system-tests.
 
     Returns:
       This macro declares 2 bazel targets.
       It returns a struct specifying test_driver_target which is the name of the test driver target ("<name>_bin") such that it can be used by other system-tests.
     """
-    runtime_deps = kwargs.pop("runtime_deps", [])
+
     env = kwargs.pop("env", {})
 
     original_tags = kwargs.pop("tags", [])
@@ -413,8 +418,8 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
 
     mainnet_nns_systest = system_test(
         name,
-        env = env | MAINNET_NNS_CANISTER_ENV,
-        runtime_deps = runtime_deps + MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        runtime_deps = runtime_deps | MAINNET_NNS_CANISTER_RUNTIME_DEPS,
+        env = env,
         tags = [tag for tag in original_tags if tag not in extra_mainnet_nns_tags] + extra_mainnet_nns_tags,
         **kwargs
     )
@@ -431,8 +436,8 @@ def system_test_nns(name, enable_head_nns_variant = True, enable_mainnet_nns_var
     kwargs["test_driver_target"] = mainnet_nns_systest.test_driver_target
     system_test(
         name + "_head_nns",
-        env = env | NNS_CANISTER_ENV,
-        runtime_deps = runtime_deps + NNS_CANISTER_RUNTIME_DEPS,
+        runtime_deps = runtime_deps | NNS_CANISTER_RUNTIME_DEPS,
+        env = env,
         tags = [tag for tag in original_tags if tag not in extra_head_nns_tags] + extra_head_nns_tags,
         **kwargs
     )

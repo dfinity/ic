@@ -32,7 +32,6 @@ use crate::{
 // Constants
 pub const IC_GATEWAY_VM_NAME: &str = "ic-gateway";
 const IC_GATEWAY_VM_FILE: &str = "vm.json";
-const IMAGE_PATH: &str = "rs/tests/ic_gateway_uvm_config_image.zst";
 const IC_GATEWAY_VMS_DIR: &str = "ic_gateway_vms";
 const PLAYNET_URL_FILE: &str = "playnet_url.json";
 const IC_GATEWAY_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "ic_gateway_aaaa_records_created_event";
@@ -87,7 +86,9 @@ impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
         let universal_vm = UniversalVm::new(name.to_string())
-            .with_config_img(get_dependency_path(IMAGE_PATH))
+            .with_config_img(get_dependency_path(
+                std::env::var("IC_GATEWAY_UVM_CONFIG_IMAGE_PATH").unwrap(),
+            ))
             .enable_ipv4();
         Self { universal_vm }
     }
