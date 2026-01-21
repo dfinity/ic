@@ -8,6 +8,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+rand = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tonic = { workspace = true }
 attestation = { path = "../../attestation" }

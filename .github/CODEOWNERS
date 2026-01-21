@@ -95,16 +95,7 @@ go.sum                    @dfinity/idx
 /rs/                                                    @dfinity/ic-interface-owners
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/backup/                                             @dfinity/consensus
-/rs/bitcoin/                                            @dfinity/ic-interface-owners
-/rs/bitcoin/adapter/                                    @dfinity/consensus @dfinity/defi-team
-/rs/bitcoin/ckbtc/                                      @dfinity/defi-team
-/rs/bitcoin/mock/                                       @dfinity/defi-team
-/rs/bitcoin/client/                                     @dfinity/consensus
-/rs/bitcoin/consensus/                                  @dfinity/team-dsm @dfinity/consensus
-/rs/bitcoin/checker/                                    @dfinity/defi-team
-/rs/bitcoin/service/                                    @dfinity/consensus
-/rs/bitcoin/replica_types/                              @dfinity/team-dsm
-/rs/bitcoin/validation                                  @dfinity/consensus @dfinity/team-dsm
+/rs/bitcoin/                                            @dfinity/defi-team
 /rs/boundary_node/                                      @dfinity/node
 /rs/canister_client/                                    @dfinity/consensus
 /rs/canister_sandbox/                                   @dfinity/team-dsm
