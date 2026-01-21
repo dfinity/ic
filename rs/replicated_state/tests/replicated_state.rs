@@ -36,7 +36,7 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{
     CallbackId, CanisterCall, CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Refund,
-    RejectContext, Request, RequestOrResponse, Response,
+    RejectContext, Request, RequestOrResponse, Response, SubnetMessage,
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::StreamIndex;
@@ -973,7 +973,7 @@ fn time_out_messages_in_subnet_queues() {
     // Second request should still be in the queue.
     assert_matches!(
         fixture.state.pop_subnet_input(),
-        Some(CanisterMessage::Request(request)) if request.deadline == second_request_deadline
+        Some(SubnetMessage::Request(request)) if request.deadline == second_request_deadline
     );
     assert_eq!(None, fixture.state.pop_subnet_input());
 }
