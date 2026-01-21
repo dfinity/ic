@@ -646,6 +646,7 @@ pub fn wasm_token_type() -> String {
 fn map_metadata_or_trap(
     arg_metadata: Vec<(String, Value)>,
     require_valid: bool,
+    sink: impl Sink + Clone
 ) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         MetadataKey::ICRC1_DECIMALS,
@@ -665,15 +666,18 @@ fn map_metadata_or_trap(
                     key_str
                 ));
             }
-            let metadata_key = if require_valid {
-                match MetadataKey::parse(&key_str) {
-                    Ok(key) => key,
-                    Err(e) => ic_cdk::trap(format!("invalid metadata key '{}': {}", key_str, e)),
+            let metadata_key = MetadataKey::parse(&key_str).unwrap_or_else(|e| {
+                if require_valid {
+                    ic_cdk::trap(format!("invalid metadata key '{}': {}", key_str, e))
+                } else {
+                    // For backwards compat with ledgers that have legacy invalid keys
+                    log!(
+                        sink,
+                        "Warning: accepting invalid metadata key '{}' for backwards compatibility", key_str
+                    );
+                    MetadataKey::unchecked_from_string(key_str)
                 }
-            } else {
-                // For backwards compat with ledgers that have legacy invalid keys
-                MetadataKey::unchecked_from_string(key_str)
-            };
+            });
             (metadata_key, StoredValue::from(v))
         })
         .collect()
@@ -720,7 +724,7 @@ impl Ledger {
             token_symbol,
             token_name,
             decimals: decimals.unwrap_or_else(default_decimals),
-            metadata: map_metadata_or_trap(metadata, true), // require_valid=true for init
+            metadata: map_metadata_or_trap(metadata, true, sink), // require_valid=true for init
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
             maximum_number_of_accounts: 0,
@@ -972,7 +976,7 @@ impl Ledger {
             // Only enforce strict validation if existing metadata has no invalid keys.
             // This allows ledgers with legacy invalid keys to still be upgraded.
             let existing_all_valid = self.metadata.iter().all(|(k, _)| k.is_valid());
-            self.metadata = map_metadata_or_trap(upgrade_metadata_args, existing_all_valid);
+            self.metadata = map_metadata_or_trap(upgrade_metadata_args, existing_all_valid, sink);
         }
         if let Some(token_name) = args.token_name {
             self.token_name = token_name;
