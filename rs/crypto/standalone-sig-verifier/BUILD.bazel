@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "//rs/crypto/sha2",
     "//rs/types/types",
+    "@crate_index//:simple_asn1",
 ]
 
 DEV_DEPENDENCIES = [
@@ -26,7 +27,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:p256",
     "@crate_index//:rand",
-    "@crate_index//:simple_asn1",
     "@crate_index//:strum",
 ]
 

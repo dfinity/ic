@@ -8160,7 +8160,6 @@ name = "ic-crypto-internal-basic-sig-cose"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
@@ -8168,7 +8167,6 @@ dependencies = [
  "ic-types",
  "serde",
  "serde_cbor",
- "simple_asn1",
 ]
 
 [[package]]
@@ -8187,7 +8185,6 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
- "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
@@ -8197,7 +8194,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -8209,7 +8205,6 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "hex",
- "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
@@ -8220,7 +8215,6 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
- "simple_asn1",
  "wycheproof",
  "zeroize",
 ]
@@ -8297,7 +8291,6 @@ name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha2",
  "ic-types",
  "num-bigint 0.4.6",

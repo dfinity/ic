@@ -17,6 +17,7 @@ ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
+simple_asn1 = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -27,5 +28,4 @@ ic-crypto-test-utils-canister-sigs = { path = "../test_utils/canister_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 p256 = { workspace = true }
 rand = { workspace = true }
-simple_asn1 = { workspace = true }
 strum = { workspace = true }

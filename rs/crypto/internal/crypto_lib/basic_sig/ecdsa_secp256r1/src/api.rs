@@ -1,16 +1,6 @@
 //! ECDSA signature methods
 use super::types;
-use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use simple_asn1::oid;
-
-/// Return the algorithm identifier associated with ECDSA P-256
-pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
-    PkixAlgorithmIdentifier::new_with_oid_param(
-        oid!(1, 2, 840, 10045, 2, 1),
-        oid!(1, 2, 840, 10045, 3, 1, 7),
-    )
-}
 
 /// Parse a secp256r1 public key from the DER enncoding
 ///

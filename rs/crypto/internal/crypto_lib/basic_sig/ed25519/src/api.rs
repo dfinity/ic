@@ -21,13 +21,6 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(
     (sk, pk)
 }
 
-/// The object identifier for Ed25519 public keys
-///
-/// See [RFC 8410](https://tools.ietf.org/html/rfc8410).
-pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
-    der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(1, 3, 101, 112))
-}
-
 /// Decodes an Ed25519 public key from a DER-encoding according to
 /// [RFC 8410, Section 4](https://tools.ietf.org/html/rfc8410#section-4).
 ///
@@ -38,10 +31,12 @@ pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
 ///   RFC 8410, or the OID in incorrect, or the key length is incorrect.
 pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes> {
     let expected_pk_len = 32;
+    let algorithm_identifier =
+        der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(1, 3, 101, 112));
     let pk_bytes = der_utils::parse_public_key(
         pk_der,
         AlgorithmId::Ed25519,
-        algorithm_identifier(),
+        algorithm_identifier,
         Some(expected_pk_len),
     )?;
     types::PublicKeyBytes::try_from(pk_bytes)
