@@ -1023,6 +1023,7 @@ fn notify_create_canister(
     };
 
     let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+
     #[allow(deprecated)]
     let notify_args = NotifyCreateCanister {
         block_index,
@@ -1515,6 +1516,7 @@ fn notify_top_up_as(
     amount: Tokens,
     caller: PrincipalId,
 ) -> Result<Cycles, NotifyError> {
+    /*
     let transfer_args = TransferArgs {
         memo: MEMO_TOP_UP_CANISTER,
         amount,
@@ -1529,6 +1531,54 @@ fn notify_top_up_as(
     };
 
     let block_index = send_transfer(state_machine, &transfer_args).expect("transfer failed");
+    */
+
+    // Transfer ICP to CMC.
+    // Declare that the purpose of this transfer is to fund a canister top up operation.
+    let memo = vec![0x54_u8, 0x50, 0x55, 0x50, 0, 0, 0, 0];
+    // Equivalently, you can use u64::to_le_bytes.
+    assert_eq!(memo, Vec::<u8>::from(0x50555054_u64.to_le_bytes()));
+    let memo = Some(icrc_ledger_types::icrc1::transfer::Memo(
+        serde_bytes::ByteBuf::from(memo)
+    ));
+    let request = icrc_ledger_types::icrc1::transfer::TransferArg {  // DO NOT MERGE
+        memo,
+
+        to: Account {
+            owner: CYCLES_MINTING_CANISTER_ID.get().into(),
+            subaccount: Some(Subaccount::from(&canister_id.get()).0),
+        },
+        amount: amount.into(),
+
+        fee: Some(Tokens::from_e8s(10_000).into()),
+        from_subaccount: None,
+        created_at_time: None,
+    };
+    let transfer_result = state_machine
+        .execute_ingress_as(
+            *TEST_USER1_PRINCIPAL, // caller
+            LEDGER_CANISTER_ID,    // callee
+            "icrc1_transfer",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let block_index = match transfer_result {
+        WasmResult::Reply(ok) => {
+            use num_traits::cast::ToPrimitive;
+            Decode!(
+                &ok,
+                Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError>
+            )
+            .unwrap()
+            .unwrap()
+            .0
+            .to_u64()
+            .unwrap()
+        }
+
+        _ => panic!("{:#?}", transfer_result),
+    };
+
     let notify_args = NotifyTopUp {
         block_index,
         canister_id,
