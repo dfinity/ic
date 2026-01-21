@@ -50,6 +50,25 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
+# Copy all runtime_deps into "$TEST_TMPDIR/runfiles"
+# and reset the env vars pointing to the new location using absolute paths.
+ORIG_RUNFILES="$PWD"
+RUNFILES="$TEST_TMPDIR/runfiles"
+mkdir "$RUNFILES"
+IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
+for env_var in "${runtime_dep_env_vars[@]}"; do
+    relative_dep_path="${!env_var}"
+    # TODO: it's important to preserve the original directory structure encoded in $relative_dep_path
+    # in $RUNFILES. Otherwise we could end up with filename clashes.
+    # But how to handle .. paths !!!
+    cp --symbolic-link "$ORIG_RUNFILES/$relative_dep_path" "$RUNFILES/"
+    export "$env_var=$RUNFILES/$relative_dep_path"
+done
+
+# TODO: remove the following comment
+# and adapt from_location_specified_by_env_var() and get_dependency_path()
+# to not read the $RUNFILES env var.
+#
 # We export RUNFILES such that the from_location_specified_by_env_var() function in
 # rs/rust_canisters/canister_test/src/canister.rs and get_dependency_path()
 # can find runtime dependencies relative to the $RUNFILES directory.
@@ -59,9 +78,10 @@ read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 # instead of via hard-code paths relative to $RUNFILES.
 cd "$TEST_TMPDIR"
 
+env
+
 exec \
-    env RUNFILES="$PWD" \
-    "$RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
+    "$ORIG_RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \
     "$@" run

@@ -329,6 +329,8 @@ def system_test(
         if dep not in data:
             data.append(dep)
 
+    env["RUNTIME_DEP_ENV_VARS"] = ";".join(_runtime_deps.keys())
+
     tags = tags + ["requires-network", "system_test"]
 
     sh_test(
