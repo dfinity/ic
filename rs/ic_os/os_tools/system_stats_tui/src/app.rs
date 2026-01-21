@@ -138,16 +138,6 @@ struct NICInfo {
     rx_errors: Option<f64>,
     // Total count of carrier changes since boot.
     carrier_changes: usize,
-    // IPv4 addresses of the system, with scope.
-    // Addresses with global scope go first.
-    // If this is None, the node exporter collector
-    // netdev.address-info was not enabled.
-    v4_addresses: Option<Vec<(std::net::Ipv4Addr, String)>>,
-    // IPv4 addresses of the system, with scope.
-    // Addresses with global scope go first.
-    // If this is None, the node exporter collector
-    // netdev.address-info was not enabled.
-    v6_addresses: Option<Vec<(std::net::Ipv6Addr, String)>>,
 }
 
 type HostOSNetworkInfo = BTreeMap<String, NICInfo>;
@@ -250,55 +240,16 @@ impl App {
             header_block.inner(instructions_slot),
         );
 
-        let ip_address_list = if let Ok(i) = &self.hostos_node_exporter_latest_sample {
-            i.network
-                .values()
-                .flat_map(|v| {
-                    [
-                        v.v6_addresses
-                            .as_ref()
-                            .map(|v| {
-                                v.iter()
-                                    .filter_map(|(addr, scope)| match scope.as_str() {
-                                        "global" => Some(addr.to_string()),
-                                        _ => None,
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default(),
-                        v.v4_addresses
-                            .as_ref()
-                            .map(|v| {
-                                v.iter()
-                                    .filter_map(|(addr, scope)| match scope.as_str() {
-                                        "global" => Some(addr.to_string()),
-                                        _ => None,
-                                    })
-                                    .collect::<Vec<_>>()
-                            })
-                            .unwrap_or_default(),
-                    ]
-                    .concat()
-                })
-                .collect::<Vec<_>>()
-        } else {
-            vec![]
-        };
-
-        let mut icinfo_rows = vec![Row::new(vec![
-            Cell::from("HostOS version"),
-            match &self.hostos_node_exporter_latest_sample {
-                Ok(sn) => Cell::from(sn.ic.hostos_version.clone().unwrap_or("(not found)".into())),
-                Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
-            },
-        ])];
-        if !ip_address_list.is_empty() {
-            icinfo_rows.push(Row::new(vec![
-                Cell::from("HostOS IPs"),
-                Cell::from(ip_address_list.join(" • ")),
-            ]))
-        }
-        icinfo_rows.append(&mut vec![
+        let icinfo_rows = vec![
+            Row::new(vec![
+                Cell::from("HostOS version"),
+                match &self.hostos_node_exporter_latest_sample {
+                    Ok(sn) => {
+                        Cell::from(sn.ic.hostos_version.clone().unwrap_or("(not found)".into()))
+                    }
+                    Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
+                },
+            ]),
             Row::new(vec![
                 Cell::from("GuestOS version"),
                 match &self.guestos_node_exporter_latest_sample {
@@ -319,7 +270,7 @@ impl App {
                     Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),
                 },
             ]),
-        ]);
+        ];
 
         let mut metrics_constraints = vec![
             // Host / Guest / Replica info, always shown.
@@ -842,42 +793,6 @@ impl App {
             }
         }
 
-        for s in {
-            let mut ss = latest_samples(
-                theseries,
-                [("__name__", &ValueQuery::equals("node_network_address_info"))],
-            );
-            ss.sort_by_key(|k| match k.labels.get("scope") {
-                Some("global") => 0,
-                Some("link-local") => 1,
-                None => 3,
-                _ => 2,
-            });
-            ss
-        }
-        .iter()
-        {
-            if let Some(device) = s.labels.get("device")
-                && let Some(nic) = iface_info.get_mut(device)
-                && let (Some(address_string), Some(scope)) =
-                    (s.labels.get("address"), s.labels.get("scope"))
-            {
-                match address_string.parse() {
-                    Ok(std::net::IpAddr::V4(addr)) => {
-                        let mut v4_addresses = nic.v4_addresses.take().unwrap_or_default();
-                        v4_addresses.push((addr, scope.to_string()));
-                        nic.v4_addresses = Some(v4_addresses);
-                    }
-                    Ok(std::net::IpAddr::V6(addr)) => {
-                        let mut v6_addresses = nic.v6_addresses.take().unwrap_or_default();
-                        v6_addresses.push((addr, scope.to_string()));
-                        nic.v6_addresses = Some(v6_addresses);
-                    }
-                    Err(_) => (),
-                }
-            }
-        }
-
         let mut temp_info: HostOSTempInfo = BTreeMap::new();
         for s in latest_samples(
             theseries,
@@ -1099,9 +1014,6 @@ impl App {
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 self.events.send(AppEvent::Quit)
             }
-            //KeyCode::Right => self.events.send(AppEvent::Increment),
-            //KeyCode::Left => self.events.send(AppEvent::Decrement),
-            // Other handlers you could add here.
             _ => {}
         }
         Ok(())
