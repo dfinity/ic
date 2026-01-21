@@ -293,7 +293,7 @@ fn test_create_service_nervous_system_to_self_describing() {
                 "duration".to_string() => SelfDescribingValue::Map(hashmap! {
                     "seconds".to_string() => SelfDescribingValue::from(604_800_u64),
                 }),
-                "neurons_fund_participation".to_string() => SelfDescribingValue::from(0_u64),
+                "neurons_fund_participation".to_string() => SelfDescribingValue::from(false),
                 "minimum_icp".to_string() => SelfDescribingValue::Null,
                 "maximum_icp".to_string() => SelfDescribingValue::Null,
                 "neurons_fund_investment_icp".to_string() => SelfDescribingValue::Null,

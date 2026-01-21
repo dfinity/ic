@@ -4598,6 +4598,7 @@ pub enum SelfDescribingValue {
     Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
+    Bool(bool),
 }
 
 impl From<String> for SelfDescribingValue {
@@ -4633,6 +4634,12 @@ impl From<Vec<u8>> for SelfDescribingValue {
 impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
         SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue::Bool(value)
     }
 }
 
