@@ -16,6 +16,8 @@ use crate::driver::{
 };
 use crate::driver::{
     keepalive_task::{KEEPALIVE_TASK_NAME, keepalive_task},
+    metrics_setup_task::{METRICS_SETUP_TASK_NAME, metrics_setup_task},
+    metrics_sync_task::{METRICS_SYNC_TASK_NAME, metrics_sync_task},
     report::SystemTestGroupError,
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
@@ -29,9 +31,11 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
+use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, trace};
@@ -44,7 +48,6 @@ const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 mi
 pub const MAX_RUNTIME_THREADS: usize = 16;
 pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
-const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
@@ -109,6 +112,12 @@ pub struct CliArgs {
         value_parser = CliArgs::parse_host_feature
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(
+        long = "enable-metrics",
+        help = "If set, the PrometheusVm, running Prometheus and Grafana, will be spawned."
+    )]
+    pub enable_metrics: bool,
 
     #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
     pub no_logs: bool,
@@ -183,7 +192,18 @@ impl TestEnvAttribute for SetupResult {
 }
 
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && task_name.ne(VECTOR_LOGGING_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(
+        task_id,
+        TaskId::Test(task_name)
+        if task_name.ne(REPORT_TASK_NAME)
+           && task_name.ne(KEEPALIVE_TASK_NAME)
+           && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME)
+           && task_name.ne(METRICS_SETUP_TASK_NAME)
+           && task_name.ne(METRICS_SYNC_TASK_NAME)
+           && task_name.ne(VECTOR_LOGGING_TASK_NAME)
+           && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX)
+           && !task_name.starts_with("dummy(")
+    )
 }
 
 pub struct ComposeContext<'a> {
@@ -211,24 +231,30 @@ fn subproc(
 }
 
 fn timed(
-    plan: Plan<Box<dyn Task>>,
+    children: Vec<Plan<Box<dyn Task>>>,
+    ordering: EvalOrder,
     timeout: Duration,
     descriptor: Option<String>,
     ctx: &mut ComposeContext,
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})", &plan, &timeout
+        "timed(children={:?}, timeout={:?})", &children, &timeout
     );
     let timeout_task = TimeoutTask::new(
         ctx.rh.clone(),
         timeout,
-        TaskId::Timeout(descriptor.unwrap_or_else(|| plan.root_task_id().name())),
+        TaskId::Timeout(descriptor.unwrap_or_else(|| {
+            children
+                .iter()
+                .map(|child| child.root_task_id().name())
+                .join(", ")
+        })),
     );
     Plan::Supervised {
         supervisor: Box::from(timeout_task) as Box<dyn Task>,
-        ordering: EvalOrder::Sequential, // the order is irrelevant since there is only one child
-        children: vec![plan],
+        ordering,
+        children,
     }
 }
 
@@ -379,9 +405,10 @@ impl SystemTestSubGroup {
                     }
                 };
                 timed(
-                    Plan::Leaf {
+                    vec![Plan::Leaf {
                         task: Box::from(subproc(task_id, closure, ctx, false)),
-                    },
+                    }],
+                    EvalOrder::Sequential,
                     ctx.timeout_per_test,
                     None,
                     ctx,
@@ -551,7 +578,8 @@ impl SystemTestGroup {
     }
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
-        debug!(group_ctx.log(), "SystemTestGroup.make_plan");
+        let logger = group_ctx.logger();
+        debug!(logger, "SystemTestGroup.make_plan");
         let start_time = Utc::now();
 
         let quiet = group_ctx.quiet;
@@ -560,7 +588,7 @@ impl SystemTestGroup {
             rh,
             group_ctx: group_ctx.clone(),
             empty_task_counter: 0,
-            logger: group_ctx.logger().clone(),
+            logger: logger.clone(),
             timeout_per_test: self.effective_timeout_per_test(),
         };
 
@@ -590,6 +618,23 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        // The metrics_sync_task periodically syncs the targets in the current IC topology with Prometheus.
+        let metrics_sync_task_id = TaskId::Test(String::from(METRICS_SYNC_TASK_NAME));
+        let metrics_sync_task = if group_ctx.enable_metrics {
+            let metrics_sync_task = subproc(
+                metrics_sync_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_sync_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            Box::from(metrics_sync_task) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(metrics_sync_task_id)) as Box<dyn Task>
+        };
+
         let vector_logging_task_id = TaskId::Test(String::from(VECTOR_LOGGING_TASK_NAME));
         let vector_logging_task = if group_ctx.logs_enabled {
             let group_ctx = group_ctx.clone();
@@ -606,18 +651,18 @@ impl SystemTestGroup {
 
             Box::from(vector_logging_task) as Box<dyn Task>
         } else {
-            debug!(group_ctx.logger(), "Not spawning vector logging task");
+            debug!(logger, "Not spawning vector logging task");
             Box::from(EmptyTask::new(vector_logging_task_id)) as Box<dyn Task>
         };
 
-        let setup_plan = {
-            let logger = group_ctx.logger().clone();
-            let group_ctx = group_ctx.clone();
-            let setup_fn = self
-                .setup
-                .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
-            let setup_task = subproc(
-                TaskId::Test(String::from(SETUP_TASK_NAME)),
+        let setup_fn = self
+            .setup
+            .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
+        let setup_task = subproc(
+            TaskId::Test(String::from(SETUP_TASK_NAME)),
+            {
+                let group_ctx = group_ctx.clone();
+                let logger = logger.clone();
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let cli_arguments = CliArguments {
@@ -631,22 +676,14 @@ impl SystemTestGroup {
 
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
-                },
-                &mut compose_ctx,
-                false,
-            );
-            timed(
-                Plan::Leaf {
-                    task: Box::from(setup_task),
-                },
-                compose_ctx.timeout_per_test,
-                None,
-                &mut compose_ctx,
-            )
-        };
+                }
+            },
+            &mut compose_ctx,
+            false,
+        );
 
         let teardown_plan = self.teardown.map(|teardown_fn| {
-            let logger = group_ctx.logger().clone();
+            let logger = logger.clone();
             let group_ctx = group_ctx.clone();
             let teardown_task = subproc(
                 TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
@@ -659,14 +696,49 @@ impl SystemTestGroup {
                 false,
             );
             timed(
-                Plan::Leaf {
+                vec![Plan::Leaf {
                     task: Box::from(teardown_task),
-                },
+                }],
+                EvalOrder::Sequential,
                 compose_ctx.timeout_per_test,
                 None,
                 &mut compose_ctx,
             )
         });
+
+        let setup_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::from(setup_task),
+        };
+
+        // The setup_tasks always includes the setup_task which executes the setup function.
+        // In case metrics is enabled it also includes the metrics_setup_task which sets up the PrometheusVm.
+        // These tasks are executed in parallel as part of the setup_plan below.
+        let mut setup_tasks: Vec<Plan<Box<dyn Task>>> = vec![setup_plan];
+        if group_ctx.enable_metrics {
+            let metrics_setup_task_id = TaskId::Test(String::from(METRICS_SETUP_TASK_NAME));
+            let metrics_setup_task = subproc(
+                metrics_setup_task_id,
+                {
+                    let group_ctx = group_ctx.clone();
+                    move || metrics_setup_task(group_ctx)
+                },
+                &mut compose_ctx,
+                quiet,
+            );
+            let metrics_setup_task = Box::from(metrics_setup_task) as Box<dyn Task>;
+            let metrics_setup_plan = Plan::Leaf {
+                task: metrics_setup_task,
+            };
+            setup_tasks.push(metrics_setup_plan);
+        }
+
+        let setup_plan = timed(
+            setup_tasks,
+            EvalOrder::Parallel,
+            compose_ctx.timeout_per_test,
+            None,
+            &mut compose_ctx,
+        );
 
         // normal case: no keepalive, overall timeout is active
         if !group_ctx.keepalive {
@@ -703,6 +775,13 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let metrics_sync_plan = compose(
+                Some(metrics_sync_task),
+                EvalOrder::Sequential,
+                vec![logs_plan],
+                &mut compose_ctx,
+            );
+
             let report_plan = Ok(compose(
                 Some(Box::new(EmptyTask::new(TaskId::Test(
                     REPORT_TASK_NAME.to_string(),
@@ -710,13 +789,14 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        logs_plan,
+                        vec![metrics_sync_plan],
+                        EvalOrder::Sequential,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    logs_plan
+                    metrics_sync_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -746,6 +826,13 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
+        let metrics_sync_plan = compose(
+            Some(metrics_sync_task),
+            EvalOrder::Sequential,
+            vec![logs_plan],
+            &mut compose_ctx,
+        );
+
         let report_plan = compose(
             Some(Box::new(EmptyTask::new(TaskId::Test(
                 REPORT_TASK_NAME.to_string(),
@@ -770,7 +857,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, logs_plan],
+            vec![report_plan, metrics_sync_plan],
             &mut compose_ctx,
         ))
     }
@@ -795,6 +882,7 @@ impl SystemTestGroup {
             args.keepalive,
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
+            args.enable_metrics,
             !args.no_logs,
             args.exclude_logs,
             args.quiet,
@@ -950,8 +1038,8 @@ impl SystemTestGroup {
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
         let farm_url = env.get_farm_url().unwrap();
-        let farm = Farm::new(farm_url, env.logger());
+        let farm = block_on(Farm::new(farm_url, env.logger()));
         let group_name = group_setup.infra_group_name;
-        farm.delete_group(&group_name);
+        block_on(farm.delete_group(&group_name));
     }
 }

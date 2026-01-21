@@ -1,4 +1,5 @@
 use crate::{OutPoint, Txid, Utxo};
+use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::{Satoshi, state::utxos::UtxoSet};
 use proptest::collection::SizeRange;
 use proptest::prelude::Just;
@@ -37,6 +38,10 @@ pub fn utxo_set(
                 })
                 .collect::<UtxoSet>()
         })
+}
+
+pub fn fee_rate(rates: impl Strategy<Value = u64>) -> impl Strategy<Value = FeeRate> {
+    rates.prop_map(FeeRate::from_millis_per_byte)
 }
 
 fn txid() -> impl Strategy<Value = Txid> {
@@ -111,7 +116,7 @@ pub mod ckbtc {
         ]
     }
 
-    fn amount() -> impl Strategy<Value = Satoshi> {
+    pub fn amount() -> impl Strategy<Value = Satoshi> {
         1..10_000_000_000u64
     }
 
@@ -238,7 +243,7 @@ pub mod ckbtc {
             utxos: pvec(utxo(amount()), 0..10_000),
             change_output: option::of(change_output()),
             submitted_at: any::<u64>(),
-            fee_per_vbyte: option::of(any::<u64>()),
+            effective_fee_per_vbyte: option::of(any::<u64>()),
             withdrawal_fee: option::of(withdrawal_fee()),
             signed_tx: option::of(pvec(any::<u8>(), 1..10_000)),
         })
@@ -250,7 +255,7 @@ pub mod ckbtc {
             new_txid: txid(),
             change_output: change_output(),
             submitted_at: any::<u64>(),
-            fee_per_vbyte: any::<u64>(),
+            effective_fee_per_vbyte: any::<u64>(),
             withdrawal_fee: option::of(withdrawal_fee()),
             reason: option::of(replaced_reason()),
             new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),
@@ -405,7 +410,7 @@ pub mod ckbtc {
         ]
     }
 
-    fn retrieve_btc_request(
+    pub(crate) fn retrieve_btc_request(
         amount: impl Strategy<Value = Satoshi>,
     ) -> impl Strategy<Value = RetrieveBtcRequest> {
         prop_struct!(RetrieveBtcRequest {

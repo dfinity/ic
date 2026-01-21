@@ -1,7 +1,7 @@
 use crate::{
     args::OrchestratorArgs,
     boundary_node::BoundaryNodeManager,
-    catch_up_package_provider::CatchUpPackageProvider,
+    catch_up_package_provider::{CatchUpPackageProvider, LocalCUPReader},
     dashboard::{Dashboard, OrchestratorDashboard},
     firewall::Firewall,
     hostos_upgrade::HostosUpgrader,
@@ -227,14 +227,19 @@ impl Orchestrator {
             .unwrap_or(&PathBuf::from("/tmp"))
             .clone();
 
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
+        // Create a read-only CUP reader that can be shared among Dashboard and Firewall
+        // They read from the same file, so they'll see the same persisted CUP
+        let local_cup_reader = LocalCUPReader::new(args.cup_dir.clone(), logger.clone());
+
+        // Create the cup_provider for the Upgrade module
+        let cup_provider = CatchUpPackageProvider::new(
             Arc::clone(&registry),
-            args.cup_dir.clone(),
+            local_cup_reader.clone(),
             Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
             logger.clone(),
             node_id,
-        ));
+        );
 
         if args.enable_provisional_registration {
             // will not return until the node is registered
@@ -254,7 +259,7 @@ impl Orchestrator {
                 Arc::clone(&registry),
                 Arc::clone(&metrics),
                 Arc::clone(&replica_process),
-                Arc::clone(&cup_provider),
+                cup_provider,
                 Arc::clone(&subnet_assignment),
                 replica_version.clone(),
                 args.replica_config_file.clone(),
@@ -311,7 +316,7 @@ impl Orchestrator {
             Arc::clone(&metrics),
             config.firewall.clone(),
             config.boundary_node_firewall.clone(),
-            cup_provider.clone(),
+            local_cup_reader.clone(),
             logger.clone(),
         );
 
@@ -339,7 +344,7 @@ impl Orchestrator {
             Arc::clone(&subnet_assignment),
             replica_version,
             hostos_version.ok(),
-            cup_provider,
+            local_cup_reader,
             logger.clone(),
         ));
 
@@ -737,7 +742,7 @@ impl TaskTracker {
                         error!(self.logger, "Task `{task_name}` panicked: {err}");
                         self.metrics
                             .critical_error_task_failed
-                            .with_label_values(&[&task_name, "panic"])
+                            .with_label_values(&[task_name.as_str(), "panic"])
                             .inc();
                     } else {
                         info!(self.logger, "Task `{task_name}` was cancelled");

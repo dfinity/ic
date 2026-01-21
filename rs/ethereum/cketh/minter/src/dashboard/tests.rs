@@ -510,7 +510,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
 
     let dashboard = {
         let mut state = initial_state_with_usdc_support();
-        for (req, tx, _signed_tx, _receipt) in vec![
+        for (req, tx, _signed_tx, _receipt) in [
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
@@ -536,7 +536,7 @@ fn should_display_pending_transactions_sorted_by_decreasing_cketh_ledger_burn_in
             );
         }
 
-        for (req, tx, signed_tx, _receipt) in vec![
+        for (req, tx, signed_tx, _receipt) in [
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(17),
                 TransactionNonce::from(2_u8),
@@ -645,7 +645,7 @@ fn should_display_finalized_transactions_sorted_by_decreasing_cketh_ledger_burn_
                 mint_block_index: LedgerMintIndex::new(43),
             },
         );
-        for (req, tx, signed_tx, receipt) in vec![
+        for (req, tx, signed_tx, receipt) in [
             cketh_withdrawal_flow(
                 LedgerBurnIndex::new(15),
                 TransactionNonce::from(0_u8),
@@ -785,7 +785,7 @@ fn should_display_reimbursed_requests() {
             },
         );
 
-        for ((req, tx, signed_tx, receipt), is_reimbursed) in vec![
+        for ((req, tx, signed_tx, receipt), is_reimbursed) in [
             (
                 cketh_withdrawal_flow(
                     LedgerBurnIndex::new(15),
@@ -1556,7 +1556,7 @@ mod assertions {
             self.has_href_value(
                 &format!(
                     "#helper-smart-contract-{} > td:nth-child(4) > code > a",
-                    lower_alphanumeric(id).unwrap()
+                    lower_alphanumeric::default().execute(id, &()).unwrap()
                 ),
                 expected_href,
                 &format!("wrong last {id} synced block href"),
@@ -1624,7 +1624,7 @@ mod assertions {
         pub fn has_no_helper_contract(&self, id: LogScrapingId) -> &Self {
             self.has_no_elements_matching(&format!(
                 "#helper-smart-contract-{}",
-                lower_alphanumeric(id).unwrap()
+                lower_alphanumeric::default().execute(id, &()).unwrap()
             ))
         }
 
@@ -1636,7 +1636,7 @@ mod assertions {
             self.has_string_value(
                 &format!(
                     "#helper-smart-contract-{} > td:nth-child(2)",
-                    lower_alphanumeric(id).unwrap()
+                    lower_alphanumeric::default().execute(id, &()).unwrap()
                 ),
                 expected_address,
                 &format!("wrong {id} helper contract address"),

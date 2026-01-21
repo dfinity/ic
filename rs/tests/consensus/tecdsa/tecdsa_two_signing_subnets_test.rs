@@ -58,7 +58,7 @@ fn setup(env: TestEnv) {
                 .with_chain_key_config(ChainKeyConfig {
                     key_configs: vec![KeyConfig {
                         max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-                        pre_signatures_to_create_in_advance: 5,
+                        pre_signatures_to_create_in_advance: Some(5),
                         key_id: MasterPublicKeyId::Ecdsa(make_key(KEY_ID1)),
                     }],
                     signature_request_timeout_ns: None,

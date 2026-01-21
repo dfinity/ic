@@ -10,10 +10,6 @@ use std::fmt;
 const DOGE_MAINNET_P2PKH_PREFIX: u8 = 30;
 const DOGE_MAINNET_P2SH_PREFIX: u8 = 22;
 
-// See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L327
-const DOGE_TESTNET_P2PKH_PREFIX: u8 = 113;
-const DOGE_TESTNET_P2SH_PREFIX: u8 = 196;
-
 // See https://github.com/dogecoin/dogecoin/blob/7237da74b8c356568644cbe4fba19d994704355b/src/chainparams.cpp#L472
 const DOGE_REGTEST_P2PKH_PREFIX: u8 = 111;
 const DOGE_REGTEST_P2SH_PREFIX: u8 = 196;
@@ -92,20 +88,12 @@ impl DogecoinAddress {
 
         match (bytes[0], network) {
             (DOGE_MAINNET_P2PKH_PREFIX, Network::Mainnet)
-            | (DOGE_TESTNET_P2PKH_PREFIX, Network::Testnet)
             | (DOGE_REGTEST_P2PKH_PREFIX, Network::Regtest) => Ok(Self::P2pkh(data)),
             (DOGE_MAINNET_P2SH_PREFIX, Network::Mainnet)
-            | (DOGE_TESTNET_P2SH_PREFIX, Network::Testnet)
             | (DOGE_REGTEST_P2SH_PREFIX, Network::Regtest) => Ok(Self::P2sh(data)),
             (DOGE_MAINNET_P2PKH_PREFIX, _) | (DOGE_MAINNET_P2SH_PREFIX, _) => {
                 Err(ParseAddressError::WrongNetwork {
                     actual: Network::Mainnet,
-                    expected: *network,
-                })
-            }
-            (DOGE_TESTNET_P2PKH_PREFIX, _) | (DOGE_TESTNET_P2SH_PREFIX, _) => {
-                Err(ParseAddressError::WrongNetwork {
-                    actual: Network::Testnet,
                     expected: *network,
                 })
             }
@@ -121,15 +109,20 @@ impl DogecoinAddress {
         let prefix = match (self, network) {
             (DogecoinAddress::P2pkh(_), Network::Mainnet) => DOGE_MAINNET_P2PKH_PREFIX,
             (DogecoinAddress::P2sh(_), Network::Mainnet) => DOGE_MAINNET_P2SH_PREFIX,
-            (DogecoinAddress::P2pkh(_), Network::Testnet) => DOGE_TESTNET_P2PKH_PREFIX,
-            (DogecoinAddress::P2sh(_), Network::Testnet) => DOGE_TESTNET_P2SH_PREFIX,
             (DogecoinAddress::P2pkh(_), Network::Regtest) => DOGE_REGTEST_P2PKH_PREFIX,
             (DogecoinAddress::P2sh(_), Network::Regtest) => DOGE_REGTEST_P2SH_PREFIX,
         };
         version_and_hash_to_address(prefix, self.as_array())
     }
 
-    fn as_array(&self) -> &[u8; 20] {
+    pub fn as_array(&self) -> &[u8; 20] {
+        match self {
+            DogecoinAddress::P2pkh(data) => data,
+            DogecoinAddress::P2sh(data) => data,
+        }
+    }
+
+    pub fn into_array(self) -> [u8; 20] {
         match self {
             DogecoinAddress::P2pkh(data) => data,
             DogecoinAddress::P2sh(data) => data,
@@ -143,7 +136,8 @@ impl DogecoinAddress {
         }
     }
 
-    pub fn from_compressed_public_key(public_key: &[u8; 33]) -> Self {
+    /// Create a Dogecoin address from a **compressed** public key (33 bytes).
+    pub fn p2pkh_from_public_key(public_key: &[u8; 33]) -> Self {
         assert!(public_key[0] == 0x02 || public_key[0] == 0x03);
         DogecoinAddress::P2pkh(ic_ckbtc_minter::tx::hash160(public_key))
     }

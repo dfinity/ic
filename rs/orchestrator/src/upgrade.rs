@@ -87,7 +87,7 @@ pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
     pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-    cup_provider: Arc<CatchUpPackageProvider>,
+    cup_provider: CatchUpPackageProvider,
     subnet_assignment: Arc<RwLock<SubnetAssignment>>,
     replica_version: ReplicaVersion,
     replica_config_file: PathBuf,
@@ -108,7 +108,7 @@ impl Upgrade {
         registry: Arc<RegistryHelper>,
         metrics: Arc<OrchestratorMetrics>,
         replica_process: Arc<Mutex<ProcessManager<ReplicaProcess>>>,
-        cup_provider: Arc<CatchUpPackageProvider>,
+        cup_provider: CatchUpPackageProvider,
         subnet_assignment: Arc<RwLock<SubnetAssignment>>,
         replica_version: ReplicaVersion,
         replica_config_file: PathBuf,
@@ -553,6 +553,7 @@ impl Upgrade {
             return Ok(());
         }
         info!(self.logger, "Starting new replica process");
+        self.metrics.replica_process_start_attempts.inc();
         let cup_path = self.cup_provider.get_cup_path();
         let replica_binary = self
             .ic_binary_dir

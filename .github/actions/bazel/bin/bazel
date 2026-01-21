@@ -71,6 +71,9 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         # cache instance
         --remote_max_connections=50
 
+        # increase timeout to handle slow connections in CI (default is 60s)
+        --remote_timeout=90s
+
         --color=yes # Nice CI output
 
         # Write build events to the dedicated tempdir

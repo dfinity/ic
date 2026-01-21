@@ -30,7 +30,7 @@ const DEFAULT_SYNC_NODES: usize = 5;
 const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
-const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
+const SECONDS_IN_DAY: u64 = 24 * 60 * 60;
 const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
@@ -93,6 +93,7 @@ impl BackupManager {
 
         let downloads = Arc::new(Mutex::new(true));
         let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
+        let logs_dir = Arc::new(Mutex::new(config.root_dir.join("logs")));
 
         for subnet_config in config.subnets {
             let subnet_log =
@@ -118,6 +119,10 @@ impl BackupManager {
                 registry_client: registry_replicator.get_registry_client(),
                 notification_client,
                 downloads_guard: downloads.clone(),
+                logs_dir: logs_dir.clone(),
+                max_logs_age_to_keep: config
+                    .max_logs_age_to_keep_days
+                    .map(|days| Duration::from_secs(days * SECONDS_IN_DAY)),
                 hot_disk_resource_threshold_percentage: config
                     .hot_disk_resource_threshold_percentage,
                 cold_disk_resource_threshold_percentage: config

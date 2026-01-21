@@ -30,8 +30,9 @@ pub mod mock {
     use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
     use ic_ckbtc_minter::{
-        CanisterRuntime, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-        Network, state::eventlog::CkBtcEventLogger, tx,
+        CanisterRuntime, ECDSAPublicKey, GetCurrentFeePercentilesRequest, GetUtxosRequest,
+        GetUtxosResponse, Network, state::eventlog::CkBtcEventLogger, tx::FeeRate,
+        tx::SignedRawTransaction, tx::UnsignedTransaction,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -58,12 +59,12 @@ pub mod mock {
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn event_logger(&self) -> CkBtcEventLogger;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
-            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<FeeRate>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
-            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+            async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String, ) -> Result<BtcAddressCheckStatus, CallError>;
         }

@@ -52,7 +52,7 @@ fn initialize_execution_test(
         .with_install_code_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
         .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
+        .with_instruction_limit_per_query_message(LARGE_INSTRUCTION_LIMIT)
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT);
 
     if is_wasm64 {
