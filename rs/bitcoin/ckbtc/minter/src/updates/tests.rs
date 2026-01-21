@@ -176,7 +176,6 @@ mod update_balance {
                 value: utxo_value,
                 ..ignored_utxo()
             };
-            println!("Ignore UTXO {ignored_utxo:?} for {account}");
             mutate_state(|s| {
                 s.deposit_btc_min_amount = initial_deposit_btc_min_amount;
                 s.check_fee = initial_check_fee;
