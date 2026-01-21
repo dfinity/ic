@@ -240,11 +240,12 @@ where
         assert_eq!(balance_after - self.balance_before, total_minted_amount);
     }
 
-    pub fn expect_no_mint_value_too_small(self) {
+    pub fn expect_no_mint_value_too_small(self) -> UpdateBalanceFlow<S> {
         let rejected_deposits: BTreeSet<_> = self
             .result
+            .as_ref()
             .expect("BUG: update_balance error")
-            .into_iter()
+            .iter()
             .filter_map(|status| match status {
                 UtxoStatus::ValueTooSmall(utxo)
                     if self.deposit_transactions.contains(&utxo.outpoint.txid) =>
@@ -266,5 +267,11 @@ where
             self.balance_before, balance_after,
             "BUG: balance should not change"
         );
+
+        UpdateBalanceFlow {
+            setup: self.setup,
+            account: self.account,
+            deposit_transactions: self.deposit_transactions,
+        }
     }
 }
