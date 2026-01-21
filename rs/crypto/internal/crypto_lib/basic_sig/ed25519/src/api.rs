@@ -1,10 +1,8 @@
 //! API for Ed25519 basic signature
 use super::types;
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
-use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
@@ -30,16 +28,18 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(
 /// * `MalformedPublicKey` if the input is not a valid DER-encoding according to
 ///   RFC 8410, or the OID in incorrect, or the key length is incorrect.
 pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes> {
-    let expected_pk_len = 32;
-    let algorithm_identifier =
-        der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(1, 3, 101, 112));
-    let pk_bytes = der_utils::parse_public_key(
-        pk_der,
-        AlgorithmId::Ed25519,
-        algorithm_identifier,
-        Some(expected_pk_len),
-    )?;
-    types::PublicKeyBytes::try_from(pk_bytes)
+    match ic_ed25519::PublicKey::deserialize_rfc8410_der(pk_der) {
+        Ok(pk) => {
+            Ok(types::PublicKeyBytes(pk.serialize_raw()))
+        }
+        Err(e) => {
+            Err(CryptoError::MalformedPublicKey {
+                algorithm: AlgorithmId::Ed25519,
+                key_bytes: Some(pk_der.to_vec()),
+                internal_error: format!("{:?}", e)
+            })
+        }
+    }
 }
 
 /// Encodes the given `key` as DER-encoded Ed25519 public key according to
