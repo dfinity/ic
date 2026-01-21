@@ -1193,7 +1193,6 @@ fn test_decode_task_queue_forward_compatibility() {
     let make_callback = |respondent: CanisterId| {
         Arc::new(Callback {
             call_context_id: CallContextId::new(1),
-            originator: canister_test_id(0),
             respondent,
             cycles_sent: Cycles::new(100),
             prepayment_for_response_execution: Cycles::zero(),
@@ -1279,7 +1278,6 @@ mod mainnet_compatibility_tests {
             let make_callback = |respondent: CanisterId| {
                 Arc::new(Callback {
                     call_context_id: CallContextId::new(1),
-                    originator: canister_test_id(0),
                     respondent,
                     cycles_sent: Cycles::new(100),
                     prepayment_for_response_execution: Cycles::zero(),
