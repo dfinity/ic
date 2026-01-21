@@ -78,11 +78,12 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                             false => None,
                         })
                         .collect();
-                    match hashsets.len() {
-                        0 => HashSet::new(),
-                        _ => hashsets[1..]
+                    if hashsets.is_empty() {
+                        HashSet::new()
+                    } else {
+                        hashsets[1..]
                             .iter()
-                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set)),
+                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set))
                     }
                 }
                 ValueQuery::DoesNotMatch(rex) => {
@@ -92,11 +93,12 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                         .values()
                         .flat_map(|x| x.values())
                         .collect();
-                    let hashset = match hashsets.len() {
-                        0 => HashSet::new(),
-                        _ => hashsets[1..]
+                    let hashset = if hashsets.is_empty() {
+                        HashSet::new()
+                    } else {
+                        hashsets[1..]
                             .iter()
-                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set)),
+                            .fold(hashsets[0].clone(), |acc, set| acc.bitor(set))
                     };
                     let exclude_these: Vec<&HashSet<usize>> = indexes_for_label_name
                         .iter()
@@ -105,11 +107,12 @@ impl<'a> IndexedScrapeLabelValueQuery<'a> {
                             false => None,
                         })
                         .collect();
-                    let exclude_these_indexes = match exclude_these.len() {
-                        0 => HashSet::new(),
-                        _ => exclude_these[1..]
+                    let exclude_these_indexes = if exclude_these.is_empty() {
+                        HashSet::new()
+                    } else {
+                        exclude_these[1..]
                             .iter()
-                            .fold(exclude_these[0].clone(), |acc, set| acc.bitor(set)),
+                            .fold(exclude_these[0].clone(), |acc, set| acc.bitor(set))
                     };
                     hashset
                         .difference(&exclude_these_indexes)
@@ -221,14 +224,15 @@ impl IndexedScrape {
                 }
             })
             .collect();
-        let indexes = match hashsets.len() {
-            0 => HashSet::new(),
-            _ => hashsets[1..]
+        let indexes = if hashsets.is_empty() {
+            HashSet::new()
+        } else {
+            hashsets[1..]
                 .iter()
                 .fold(hashsets[0].clone(), |mut acc, set| {
                     acc.retain(|item| set.contains(item));
                     acc
-                }),
+                })
         };
         indexes.iter().map(|idx| &self.samples[*idx]).collect()
     }
@@ -386,8 +390,6 @@ impl<'a> IndexedSeriesSubset<'a> {
         let mut new_samples: Vec<(Sample, TimeDelta)> = vec![];
         for sample in first_scrape.search(self.labelsets.clone().into_iter()) {
             let sample_before = last_scrape.find_matching_sample(sample);
-            //println!("{:?}", sample_before);
-            //println!("{:?}\n", sample);
             if let Some(sample_before) = sample_before {
                 let delta = match (&sample_before.value, &sample.value) {
                     (Value::Gauge(b), Value::Gauge(n)) => Some(Value::Gauge(n - b)),
@@ -395,7 +397,7 @@ impl<'a> IndexedSeriesSubset<'a> {
                     (Value::Counter(b), Value::Counter(n)) => Some(Value::Counter(n - b)),
                     (Value::Histogram(_), Value::Histogram(_)) => None, // "don't know how to deal with histograms".to_string(),
                     (Value::Summary(_), Value::Summary(_)) => None, // "don't know how to deal with summaries".to_string(),
-                    (_, _) => None, //format!("mismatch between types of {:?} and {:?}", otherbefore, otherafter),
+                    (_, _) => None,
                 };
                 if let Some(delta) = delta {
                     let mut new_sample = Sample::clone(sample);

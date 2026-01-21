@@ -110,33 +110,29 @@ struct HostOSICInfo {
 
 #[derive(Debug, Default)]
 struct BDInfo {
-    // Bytes read per second.
     bytes_read_per_second: f64,
-    // Bytes written per second.
     bytes_written_per_second: f64,
-    // Sectors discarded per second.
     sectors_discarded_per_second: f64,
-    // Seconds spent doing I/O each second.
     seconds_spent_on_io_per_second: f64,
 }
 
 #[derive(Debug, Default, Clone)]
 struct NICInfo {
-    // Network interface name.
+    /// Network interface name.
     name: String,
-    // MAC address.
+    /// MAC address.
     mac: String,
-    // Up / Down / Unknown / other string.
+    /// Up / Down / Unknown / other string.
     state: String,
-    // Rate of transmitted bytes.
+    /// Rate of transmitted bytes per second.
     tx_bytes: Option<f64>,
-    // Rate of received bytes.
+    /// Rate of received bytes per second.
     rx_bytes: Option<f64>,
-    // Rate of transmission errors.
+    /// Rate of transmission errors per second.
     tx_errors: Option<f64>,
-    // Rate of reception errors.
+    /// Rate of reception errors per second.
     rx_errors: Option<f64>,
-    // Total count of carrier changes since boot.
+    /// Total count of carrier changes since boot.
     carrier_changes: usize,
 }
 
@@ -176,7 +172,10 @@ struct GuestOSReplicaSnapshot {
 }
 
 /// Updates a series with a new scrape result.
-fn update_series(series: &mut Result<IndexedSeries, String>, result: Result<IndexedScrape, String>) {
+fn update_series(
+    series: &mut Result<IndexedSeries, String>,
+    result: Result<IndexedScrape, String>,
+) {
     match result {
         Ok(scrape) => match series {
             Ok(s) => s.push(scrape),
