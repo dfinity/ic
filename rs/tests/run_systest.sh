@@ -51,11 +51,17 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
 # We export RUNFILES such that the from_location_specified_by_env_var() function in
-# rs/rust_canisters/canister_test/src/canister.rs can find canisters
-# relative to the $RUNFILES directory.
+# rs/rust_canisters/canister_test/src/canister.rs and get_dependency_path()
+# can find runtime dependencies relative to the $RUNFILES directory.
+
+# Change current working directory to be different than $RUNFILES
+# to ensure the test accesses all its runtime dependencies via environment variables
+# instead of via hard-code paths relative to $RUNFILES.
+cd "$TEST_TMPDIR"
+
 exec \
     env RUNFILES="$PWD" \
-    "$RUN_SCRIPT_TEST_EXECUTABLE" \
+    "$RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \
     "$@" run
