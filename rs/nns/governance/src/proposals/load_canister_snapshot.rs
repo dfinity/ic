@@ -9,13 +9,6 @@ use ic_nns_handler_root_interface::LoadCanisterSnapshotRequest;
 
 impl LoadCanisterSnapshot {
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if !crate::are_canister_snapshot_proposals_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "LoadCanisterSnapshot proposals are not enabled yet.",
-            ));
-        }
-
         let Self {
             canister_id,
             snapshot_id,
