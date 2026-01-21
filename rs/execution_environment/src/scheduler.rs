@@ -2205,7 +2205,7 @@ fn can_execute_subnet_msg(
         CanisterMessage::Request(request) => {
             Ic00Method::from_str(request.method_name.as_str()).ok()
         }
-        CanisterMessage::Response(_) => None,
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If there is no method name, we can execute the subnet message.
@@ -2255,7 +2255,7 @@ fn get_instructions_limits_for_subnet_message(
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
-        CanisterMessage::Response(_) => {
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => {
             return default_limits;
         }
         CanisterMessage::Ingress(ingress) => &ingress.method_name,
