@@ -17,8 +17,6 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-ed25519 = { path = "../../../../../../packages/ic-ed25519" }
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
-rand = { workspace = true }
-rand_chacha = { workspace = true }
 serde = { workspace = true }
 simple_asn1 = { workspace = true }
 zeroize = { workspace = true }

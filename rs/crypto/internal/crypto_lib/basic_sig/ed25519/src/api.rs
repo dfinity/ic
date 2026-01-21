@@ -1,19 +1,17 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
 #[cfg(test)]
 mod tests;
 
-/// Generates an Ed25519 keypair.
-pub fn keypair_from_rng<R: Rng + CryptoRng>(
-    csprng: &mut R,
-) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
-    let signing_key = ic_ed25519::PrivateKey::generate_using_rng(csprng);
+/// Generates an Ed25519 keypair from a seed.
+pub fn keypair_from_seed(seed: Seed) -> (types::SecretKeyBytes, types::PublicKeyBytes) {
+    let signing_key = ic_ed25519::PrivateKey::generate_using_rng(&mut seed.into_rng());
     let sk = types::SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
         &signing_key.serialize_raw(),
     ));
