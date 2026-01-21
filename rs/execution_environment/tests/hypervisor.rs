@@ -10703,12 +10703,7 @@ fn test_deep_i32_eqz_chain() {
     let mut test = ExecutionTestBuilder::new().build();
     let result = test.canister_from_wat(&wat);
 
-    // Compilation of this Wasm doesn't overflow on arm.
-    #[cfg(target_arch = "x86_64")]
-    result
-        .unwrap_err()
-        .assert_contains(ErrorCode::CanisterWasmEngineError, "compiler died");
-
-    #[cfg(not(target_arch = "x86_64"))]
+    // The patch was made available in v40.0.2 and compilation
+    // should succeed there after
     result.unwrap();
 }
