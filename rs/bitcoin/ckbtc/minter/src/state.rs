@@ -1816,6 +1816,13 @@ impl CkBtcMinterState {
         }
         accounts
     }
+
+    /// Compute the minimum BTC amount that can be deposited.
+    /// UTXOs with a lower value will be ignored.
+    pub fn effective_deposit_min_btc_amount(&self) -> u64 {
+        self.deposit_btc_min_amount
+            .max(self.check_fee.saturating_add(1))
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]

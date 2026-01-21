@@ -87,7 +87,7 @@ pub struct MinterInfo {
     // Serialize to the old name to be backward compatible in Candid.
     #[serde(rename = "kyt_fee")]
     pub check_fee: u64,
-    //TODO DEFI-2572: add deposit_min_btc
+    pub deposit_btc_min_amount: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]

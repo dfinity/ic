@@ -267,6 +267,10 @@ type MinterInfo = record {
     // accept a Dogecoin transaction.
     min_confirmations : nat32;
 
+    // Minimal amount of DOGE that can be deposited to be converted into ckDOGE.
+    // UTXOs with lower values will be ignored.
+    deposit_doge_min_amount : opt nat64;
+
     // This amount is based on the `retrieve_doge_min_amount` setting during canister
     // initialization or upgrades, but may vary according to current network fees.
     retrieve_doge_min_amount : nat64;

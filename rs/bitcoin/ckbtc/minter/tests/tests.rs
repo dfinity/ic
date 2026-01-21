@@ -1628,6 +1628,30 @@ fn test_transaction_finalization() {
 }
 
 #[test]
+fn test_min_deposit_amount() {
+    let ckbtc = CkBtcSetup::new();
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        deposit_btc_min_amount: Some(CHECK_FEE),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE + 1));
+
+    ckbtc.upgrade_with(Some(UpgradeArgs {
+        check_fee: Some(CHECK_FEE - 2),
+        ..Default::default()
+    }));
+
+    let deposit_btc_min_amount = ckbtc.get_minter_info().deposit_btc_min_amount;
+    assert_eq!(deposit_btc_min_amount, Some(CHECK_FEE));
+}
+
+#[test]
 fn test_min_retrieval_amount_default() {
     let ckbtc = CkBtcSetup::new();
 

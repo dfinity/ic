@@ -378,6 +378,9 @@ type MinterInfo = record {
     retrieve_btc_min_amount : nat64;
     // The same as `check_fee`, but the old name is kept here to be backward compatible.
     kyt_fee : nat64;
+    // Minimal amount of BTC that can be deposited to be converted into ckBTC.
+    // UTXOs with lower values will be ignored.
+    deposit_btc_min_amount : opt nat64;
 };
 
 type ReimbursementReason = variant {

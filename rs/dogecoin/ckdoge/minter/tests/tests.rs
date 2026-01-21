@@ -4,8 +4,8 @@ use ic_ckdoge_minter::candid_api::{
     RetrieveDogeWithApprovalError, WithdrawalFee,
 };
 use ic_ckdoge_minter_test_utils::{
-    DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS, MinterCanister,
-    RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
+    DEPOSIT_DOGE_MIN_AMOUNT, DOGE, DogecoinUsers, LEDGER_TRANSFER_FEE, MIN_CONFIRMATIONS,
+    MinterCanister, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
 use ic_management_canister_types::CanisterStatusType;
 
@@ -601,6 +601,7 @@ fn should_get_minter_info() {
         minter_info,
         MinterInfo {
             min_confirmations: MIN_CONFIRMATIONS,
+            deposit_doge_min_amount: DEPOSIT_DOGE_MIN_AMOUNT,
             retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
         }
     );
