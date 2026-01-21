@@ -29,6 +29,7 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -r | --rebuild          Rebuild the container image
+    -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
     --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
                                 otherwise will choose based on detected environment)
@@ -39,13 +40,11 @@ To run a different shell or command, pass it as arguments, e.g.:
     $0 /usr/bin/zsh
     $0 bash -l
 
-Script uses dfinity/ic-build image by default.
 EOF
 }
 
 REBUILD_IMAGE=false
-
-IMAGE="ghcr.io/dfinity/ic-dev"
+IMAGE_NAME="ic-dev"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
@@ -53,6 +52,16 @@ while test $# -gt $CTR; do
         -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -r | --rebuild)
             REBUILD_IMAGE=true
+            shift
+            ;;
+        -i | --image)
+            if [[ $# -gt "$CTR + 1" ]]; then
+                IMAGE_NAME="$2"
+            else
+                eprintln "Missing argument for -i | --image!"
+                usage && exit 1
+            fi
+            shift
             shift
             ;;
         --container-cmd)
@@ -99,13 +108,13 @@ fi
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="$IMAGE:$IMAGE_TAG"
+IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
     "$REPO_ROOT"/ci/container/build-image.sh
 elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
-        "$REPO_ROOT"/ci/container/build-image.sh --dev
+        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
     fi
 fi
 

@@ -7,8 +7,7 @@ usage() {
     echo " "
     echo "Options:"
     echo "-h, --help   show brief help"
-    echo "--ci              build the CI image"
-    echo "--dev             build the devenv image"
+    echo "-i | --image <image>     ic-build or ic-dev (default: ic-dev)"
     echo "--container-cmd <cmd>    specify container build command (e.g., 'docker', 'podman', or 'sudo podman';"
     echo "                         otherwise will choose based on detected environment)"
     echo "--build-args <args>      specify additional build arguments for docker build command (default --rm=true)"
@@ -17,6 +16,7 @@ usage() {
 
 CONTAINER_CMD=() # Default: empty, will auto-detect later
 BUILD_ARGS=("--rm=true")
+IMAGE_NAME="ic-dev"
 
 while test $# -gt 0; do
     case "$1" in
@@ -24,13 +24,15 @@ while test $# -gt 0; do
             usage >&2
             exit 0
             ;;
-        --ci)
-            BUILD_TARGET="ci"
-            IMAGE_NAME="ic-build"
-            ;;
-        --dev)
-            BUILD_TARGET="dev"
-            IMAGE_NAME="ic-dev"
+        -i | --image)
+            if [[ $# -gt "$CTR + 1" ]]; then
+                IMAGE_NAME="$2"
+            else
+                eprintln "Missing argument for -i | --image!"
+                usage && exit 1
+            fi
+            shift
+            shift
             ;;
         --container-cmd)
             shift
@@ -63,8 +65,12 @@ while test $# -gt 0; do
     shift
 done
 
-if [ -z "$BUILD_TARGET" ]; then
-    echo "Error: You must specify either --ci or --dev"
+if [ $IMAGE_NAME == "ic-build" ]; then
+    BUILD_TARGET="--ci"
+elif [ $IMAGE_NAME == "ic-dev" ]; then
+    BUILD_TARGET="--dev"
+else
+    echo "Unknown image name: $IMAGE_NAME" >&2
     usage >&2
     exit 1
 fi
