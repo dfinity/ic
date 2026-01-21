@@ -845,19 +845,15 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 name = "attestation"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "attestation_testing",
  "candid",
- "config_types",
  "der 0.7.9",
  "hex",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-types",
- "ic_sev",
  "itertools 0.12.1",
- "pem 3.0.6",
  "prost 0.13.4",
  "prost-build 0.13.4",
  "rand 0.8.5",
@@ -865,19 +861,25 @@ dependencies = [
  "serde",
  "sev",
  "thiserror 2.0.17",
- "tonic 0.12.3",
 ]
 
 [[package]]
 name = "attestation_testing"
 version = "0.0.0"
 dependencies = [
+ "der 0.7.9",
  "ic-interfaces-registry-mocks",
  "ic-protobuf",
  "ic-registry-keys",
  "ic-types",
  "mockall",
+ "p384",
  "prost 0.13.4",
+ "rand 0.8.5",
+ "rsa",
+ "sev",
+ "sha2 0.10.9",
+ "x509-cert",
 ]
 
 [[package]]
@@ -2560,7 +2562,6 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
- "ic_sev",
  "macaddr",
  "network",
  "once_cell",
@@ -2569,6 +2570,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with 1.14.0",
+ "sev_guest",
  "tempfile",
  "url",
  "utils",
@@ -5355,13 +5357,14 @@ dependencies = [
  "config_types",
  "ic-sys",
  "ic_device",
- "ic_sev",
  "itertools 0.12.1",
  "libcryptsetup-rs",
  "nix 0.24.3",
  "parking_lot",
  "rand 0.8.5",
  "sev",
+ "sev_guest",
+ "sev_guest_testing",
  "tempfile",
 ]
 
@@ -5383,10 +5386,10 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-registry-client",
  "ic-registry-nns-data-provider-wrappers",
- "ic_sev",
  "rcgen 0.13.2",
  "rustls 0.23.27",
  "sev",
+ "sev_guest",
  "tokio",
  "tonic 0.12.3",
  "tower 0.5.2",
@@ -5407,10 +5410,10 @@ dependencies = [
  "hyper 1.8.1",
  "hyper-util",
  "ic-interfaces-registry",
- "ic_sev",
  "rcgen 0.13.2",
  "rustls 0.23.27",
  "sev",
+ "sev_guest",
  "thiserror 2.0.17",
  "tokio",
  "tokio-rustls 0.26.1",
@@ -5447,8 +5450,9 @@ dependencies = [
  "guest_upgrade_shared",
  "ic-interfaces-registry",
  "ic-protobuf",
- "ic_sev",
  "rustls 0.23.27",
+ "sev_guest",
+ "sev_guest_testing",
  "tempfile",
  "tokio",
  "vsock_lib",
@@ -5470,11 +5474,11 @@ dependencies = [
  "grub",
  "ic-metrics-tool",
  "ic_device",
- "ic_sev",
  "macaddr",
  "memchr",
  "nix 0.24.3",
  "regex",
+ "sev_host",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "sysinfo",
@@ -16042,29 +16046,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic_sev"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "base64 0.13.1",
- "der 0.7.9",
- "hkdf",
- "mockall",
- "p384",
- "pem 3.0.6",
- "rand 0.8.5",
- "rcgen 0.13.2",
- "reqwest",
- "rsa",
- "sev",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.17",
- "tokio",
- "x509-cert",
-]
-
-[[package]]
 name = "ic_stable_memory_integrity"
 version = "0.9.0"
 dependencies = [
@@ -21213,10 +21194,11 @@ dependencies = [
  "attestation",
  "config_tool",
  "config_types",
- "ic_sev",
  "rand 0.8.5",
  "remote_attestation_shared",
  "sev",
+ "sev_guest",
+ "sev_guest_testing",
  "tokio",
  "tonic 0.12.3",
 ]
@@ -22608,6 +22590,55 @@ dependencies = [
  "static_assertions",
  "uuid",
  "x509-cert",
+]
+
+[[package]]
+name = "sev_guest"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "attestation",
+ "base64 0.13.1",
+ "config_types",
+ "hkdf",
+ "pem 3.0.6",
+ "rand 0.8.5",
+ "sev",
+ "sev_guest_firmware",
+ "sev_guest_testing",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "sev_guest_firmware"
+version = "0.0.0"
+dependencies = [
+ "mockall",
+ "sev",
+]
+
+[[package]]
+name = "sev_guest_testing"
+version = "0.0.0"
+dependencies = [
+ "attestation_testing",
+ "sev",
+ "sev_guest_firmware",
+]
+
+[[package]]
+name = "sev_host"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "der 0.7.9",
+ "mockall",
+ "pem 3.0.6",
+ "rcgen 0.13.2",
+ "reqwest",
+ "sev",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]

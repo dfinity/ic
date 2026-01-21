@@ -4,14 +4,13 @@ use std::fmt::{Debug, Display, Formatter};
 pub mod attestation_package;
 pub mod custom_data;
 pub mod registry;
-pub mod verification;
 
 #[cfg(test)]
 mod e2e_tests;
 
 pub use verification_error::Detail as VerificationErrorDetail;
 
-tonic::include_proto!("attestation");
+include!(concat!(env!("OUT_DIR"), "/attestation.rs"));
 
 impl VerificationError {
     pub fn internal(err: impl Display) -> Self {

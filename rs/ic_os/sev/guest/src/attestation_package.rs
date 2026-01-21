@@ -1,11 +1,11 @@
-use crate::SevCertificateChain;
-use crate::custom_data::EncodeSevCustomData;
-use crate::verification::{
-    AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
-};
+use crate::firmware::SevGuestFirmware;
 use anyhow::{Context, Result, anyhow, bail};
+use attestation::SevCertificateChain;
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+};
+use attestation::custom_data::EncodeSevCustomData;
 use config_types::TrustedExecutionEnvironmentConfig;
-use ic_sev::guest::firmware::SevGuestFirmware;
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
 use std::fmt::Debug;
@@ -112,11 +112,9 @@ fn certificate_chain_from_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::custom_data::SevCustomDataNamespace;
-    use crate::verification::AttestationVerifier;
-    use ic_sev::guest::custom_data::SevCustomData;
-    use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+    use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
     use rand::SeedableRng;
+    use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 
     #[test]
     fn test_generate_attestation_package_success() {
