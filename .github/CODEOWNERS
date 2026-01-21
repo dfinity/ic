@@ -131,6 +131,7 @@ go.sum                    @dfinity/idx
 /rs/ic_os/                                              @dfinity/node
 /rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/consensus
 /rs/ic_os/nss_icos/                                     @dfinity/dre
+/rs/ic_os/os_tools/system_stats_tui/                    @dfinity/dre
 /rs/ingress_manager/                                    @dfinity/consensus
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
