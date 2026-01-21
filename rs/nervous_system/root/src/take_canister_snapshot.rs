@@ -68,7 +68,7 @@ pub async fn take_canister_snapshot(
         }
     };
 
-    let result = exclusively_stop_and_start_canister::<_, _, _>(
+    let result = exclusively_stop_and_start_canister(
         canister_id,
         &operation_description,
         true, // stop_before
