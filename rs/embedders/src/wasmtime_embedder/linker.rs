@@ -176,8 +176,13 @@ fn charge_direct_fee(
         instruction_counter = system_api.out_of_instructions(instruction_counter)?;
     }
 
+    // If the fee can't fit into an i64 without overflowing, we'll run out of instructions anyway (even with DTS) so just fail.
+    let fee = fee.get().try_into().map_err(|_| {
+        HypervisorError::InstructionLimitExceeded(NumInstructions::from(instruction_limit as u64))
+    })?;
+
     // Now we can subtract the fee and store the new instruction counter.
-    instruction_counter -= fee.get() as i64;
+    instruction_counter = instruction_counter.saturating_sub(fee);
     store_value(&num_instructions_global, instruction_counter, caller)?;
 
     // If the instruction counter became negative after subtracting the fee,
