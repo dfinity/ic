@@ -2835,6 +2835,7 @@ pub struct FulfillSubnetRentalRequest {
     candid::Deserialize,
     serde::Serialize,
     comparable::Comparable,
+    ic_nns_governance_derive_self_describing::SelfDescribing,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -4190,7 +4191,10 @@ pub struct FinalizeDisburseMaturity {
     ::prost::Message,
 )]
 pub struct SelfDescribingValue {
-    #[prost(oneof = "self_describing_value::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    #[prost(
+        oneof = "self_describing_value::Value",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8"
+    )]
     pub value: ::core::option::Option<self_describing_value::Value>,
 }
 /// Nested message and enum types in `SelfDescribingValue`.
@@ -4220,6 +4224,8 @@ pub mod self_describing_value {
         Map(super::SelfDescribingValueMap),
         #[prost(message, tag = "7")]
         Null(super::Empty),
+        #[prost(bool, tag = "8")]
+        Bool(bool),
     }
 }
 #[derive(

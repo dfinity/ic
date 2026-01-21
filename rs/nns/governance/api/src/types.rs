@@ -4598,6 +4598,13 @@ pub enum SelfDescribingValue {
     Null,
     Array(Vec<SelfDescribingValue>),
     Map(HashMap<String, SelfDescribingValue>),
+    Bool(bool),
+}
+
+impl From<String> for SelfDescribingValue {
+    fn from(value: String) -> Self {
+        SelfDescribingValue::Text(value)
+    }
 }
 
 impl From<&str> for SelfDescribingValue {
@@ -4615,6 +4622,24 @@ impl From<u64> for SelfDescribingValue {
 impl From<u32> for SelfDescribingValue {
     fn from(value: u32) -> Self {
         SelfDescribingValue::Nat(Nat::from(value))
+    }
+}
+
+impl From<Vec<u8>> for SelfDescribingValue {
+    fn from(value: Vec<u8>) -> Self {
+        SelfDescribingValue::Blob(value)
+    }
+}
+
+impl From<PrincipalId> for SelfDescribingValue {
+    fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<bool> for SelfDescribingValue {
+    fn from(value: bool) -> Self {
+        SelfDescribingValue::Bool(value)
     }
 }
 

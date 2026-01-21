@@ -55,7 +55,11 @@ libvirt-dev
 mtools # used for mcopy and mmd
 nasm # to build OVMF
 zstd
+iputils-ping # for ping6 required by the bazel-test-bare-metal
 
 # Unknown
 containernetworking-plugins
 buildah
+
+# For ci/githubstats/query.py
+libpq-dev
