@@ -1,9 +1,9 @@
 use crate::{
     DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
-        consent_given, print_height_info, read_existing_path, read_optional,
-        read_optional_data_location, read_optional_node_ids, read_optional_subnet_id,
-        read_optional_version, wait_for_confirmation,
+        consent_given, print_height_info, read_optional, read_optional_data_location,
+        read_optional_node_ids, read_optional_subnet_id, read_optional_version,
+        wait_for_confirmation,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -311,18 +311,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 }
-
-                if let Some(upgrade_version) = &self.params.upgrade_version
-                    && self.params.upgrade_image_launch_measurements_path.is_none()
-                {
-                    self.params.upgrade_image_launch_measurements_path = Some(read_existing_path(
-                        &self.logger,
-                        &format!(
-                            "Enter path to guest launch measurements file for version {}: ",
-                            upgrade_version,
-                        ),
-                    ));
-                }
             }
 
             StepType::ProposeCup => {
@@ -463,23 +451,41 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::BlessVersion => {
-                if let (Some(upgrade_version), Some(guest_launch_measurements_path)) = (
-                    &self.params.upgrade_version,
-                    &self.params.upgrade_image_launch_measurements_path,
-                ) {
+                if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
-                    let (url, hash) = params
-                        .upgrade_image_url
-                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
-                        .or_else(|| Recovery::get_img_url_and_sha(upgrade_version).ok())
-                        .ok_or(RecoveryError::UnexpectedError(
-                            "couldn't retrieve the upgrade image params".into(),
-                        ))?;
+                    let (url, hash, measurements_path) = match (
+                        params.upgrade_image_url,
+                        params.upgrade_image_hash,
+                        params.upgrade_image_launch_measurements_path,
+                    ) {
+                        (Some(url), Some(hash), Some(measurements_path)) => {
+                            (url, hash, measurements_path)
+                        }
+                        _ => {
+                            let (url, hash, measurements) =
+                                Recovery::get_img_url_sha_and_measurements(upgrade_version)?;
+
+                            let measurements_path = self
+                                .recovery
+                                .work_dir
+                                .join("guest_launch_measurements.json");
+
+                            std::fs::write(
+                                &measurements_path,
+                                serde_json::to_string_pretty(&measurements)
+                                    .map_err(RecoveryError::parsing_error)?,
+                            )
+                            .map_err(|e| RecoveryError::file_error(&measurements_path, e))?;
+
+                            (url, hash, measurements_path)
+                        }
+                    };
+
                     let step = self.recovery.elect_replica_version(
                         upgrade_version,
                         url,
                         hash,
-                        guest_launch_measurements_path,
+                        &measurements_path,
                     )?;
                     Ok(Box::new(step))
                 } else {

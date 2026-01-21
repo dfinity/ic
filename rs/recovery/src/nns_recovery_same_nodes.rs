@@ -1,8 +1,8 @@
 use crate::{
     RecoveryArgs, RecoveryResult,
     cli::{
-        consent_given, print_height_info, read_existing_path, read_optional,
-        read_optional_data_location, read_optional_version,
+        consent_given, print_height_info, read_optional, read_optional_data_location,
+        read_optional_version,
     },
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
@@ -11,6 +11,7 @@ use crate::{
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
@@ -292,29 +293,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 };
-                if let Some(upgrade_version) = &self.params.upgrade_version {
-                    if self.params.add_and_bless_upgrade_version.is_none() {
-                        self.params.add_and_bless_upgrade_version = Some(consent_given(
-                            &self.logger,
-                            &format!(
-                                "Add and bless version {} before upgrading the subnet?",
-                                upgrade_version
-                            ),
-                        ));
-                    }
-
-                    if self.params.add_and_bless_upgrade_version == Some(true)
-                        && self.params.upgrade_image_launch_measurements_path.is_none()
-                    {
-                        self.params.upgrade_image_launch_measurements_path =
-                            Some(read_existing_path(
-                                &self.logger,
-                                &format!(
-                                    "Enter path to guest launch measurements file for version {}: ",
-                                    upgrade_version,
-                                ),
-                            ));
-                    }
+                if self.params.upgrade_version.is_some()
+                    && self.params.add_and_bless_upgrade_version.is_none()
+                {
+                    self.params.add_and_bless_upgrade_version = Some(consent_given(
+                        &self.logger,
+                        "Add and bless the upgrade version before upgrading the subnet?",
+                    ));
                 }
 
                 if self.params.replay_until_height.is_none() {
@@ -414,21 +399,32 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             },
 
             StepType::ICReplay => {
-                if let Some(upgrade_version) = self.params.upgrade_version.clone() {
+                if let Some(upgrade_version) = &self.params.upgrade_version {
                     let params = self.params.clone();
-                    let (url, hash) = params
-                        .upgrade_image_url
-                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
-                        .or_else(|| Recovery::get_img_url_and_sha(&upgrade_version).ok())
-                        .ok_or(RecoveryError::UnexpectedError(
-                            "couldn't retrieve the upgrade image params".into(),
-                        ))?;
+                    let (url, hash, measurements) = match (
+                        params.upgrade_image_url,
+                        params.upgrade_image_hash,
+                        params.upgrade_image_launch_measurements_path,
+                    ) {
+                        (Some(url), Some(hash), Some(measurements_path)) => {
+                            let measurements_json = std::fs::read(&measurements_path)
+                                .map_err(|e| RecoveryError::file_error(&measurements_path, e))?;
+                            let measurements = serde_json::from_slice::<GuestLaunchMeasurements>(
+                                &measurements_json,
+                            )
+                            .map_err(RecoveryError::parsing_error)?;
+
+                            (url, hash, measurements)
+                        }
+                        _ => Recovery::get_img_url_sha_and_measurements(upgrade_version)?,
+                    };
+
                     Ok(Box::new(self.recovery.get_replay_with_upgrade_step(
                         self.params.subnet_id,
                         upgrade_version,
                         url,
                         hash,
-                        params.upgrade_image_launch_measurements_path,
+                        measurements,
                         params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),

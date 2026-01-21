@@ -470,28 +470,20 @@ impl Recovery {
     pub fn get_replay_with_upgrade_step(
         &self,
         subnet_id: SubnetId,
-        upgrade_version: ReplicaVersion,
+        upgrade_version: &ReplicaVersion,
         upgrade_url: Url,
         sha256: String,
-        guest_launch_measurements_path: Option<PathBuf>,
+        guest_launch_measurements: GuestLaunchMeasurements,
         add_and_bless_replica_version: bool,
         replay_until_height: Option<u64>,
         skip_prompts: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let guest_launch_measurements = guest_launch_measurements_path
-            .map(|path| {
-                let measurements_json =
-                    std::fs::read(&path).map_err(|e| RecoveryError::file_error(&path, e))?;
-                serde_json::from_slice::<GuestLaunchMeasurements>(&measurements_json)
-                    .map_err(RecoveryError::parsing_error)
-            })
-            .transpose()?;
-
         let version_record = ReplicaVersionRecord {
             release_package_sha256_hex: sha256,
             release_package_urls: vec![upgrade_url.to_string()],
-            guest_launch_measurements,
+            guest_launch_measurements: Some(guest_launch_measurements),
         };
+
         Ok(self.get_replay_step(
             subnet_id,
             Some(ReplaySubCmd {
@@ -640,22 +632,37 @@ impl Recovery {
         }
     }
 
-    /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
-    pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
+    /// Lookup the image [Url], and sha256 hash and guest launch measurements of the
+    /// given [ReplicaVersion].
+    pub fn get_img_url_sha_and_measurements(
+        version: &ReplicaVersion,
+    ) -> RecoveryResult<(Url, String, GuestLaunchMeasurements)> {
         let version_string = version.to_string();
         let url_base =
             format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
-
         let image_name = "update-img.tar.zst";
-        let upgrade_url_string = format!("{url_base}{image_name}");
         let invalid_url =
             |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
+
+        let upgrade_url_string = format!("{url_base}{image_name}");
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 
         let sha_url_string = format!("{url_base}SHA256SUMS");
         let sha_url = Url::parse(&sha_url_string).map_err(|e| invalid_url(sha_url_string, e))?;
 
+        let sha256 = Self::get_img_sha256(&sha_url, image_name)?;
+
+        let measurements_url_string = format!("{url_base}launch-measurements.json");
+        let measurements_url = Url::parse(&measurements_url_string)
+            .map_err(|e| invalid_url(measurements_url_string, e))?;
+
+        let guest_launch_measurements = Self::get_img_measurements(&measurements_url)?;
+
+        Ok((upgrade_url, sha256, guest_launch_measurements))
+    }
+
+    fn get_img_sha256(sha_url: &Url, image_name: &str) -> RecoveryResult<String> {
         // fetch the `SHA256SUMS` file
         let mut curl = Command::new("curl");
         curl.arg(sha_url.to_string());
@@ -671,7 +678,7 @@ impl Recovery {
         for pair in hashes.iter() {
             match pair.as_slice() {
                 &[sha256, name] if name == image_name => {
-                    return Ok((upgrade_url, sha256.to_string()));
+                    return Ok(sha256.to_string());
                 }
                 _ => {}
             }
@@ -680,6 +687,18 @@ impl Recovery {
         Err(RecoveryError::invalid_output_error(format!(
             "No hash found in the SHA256SUMS file: {output}"
         )))
+    }
+
+    fn get_img_measurements(measurements_url: &Url) -> RecoveryResult<GuestLaunchMeasurements> {
+        // fetch the `launch-measurements.json` file
+        let mut curl = Command::new("curl");
+        curl.arg(measurements_url.to_string());
+        let output = exec_cmd(&mut curl)?.unwrap_or_default();
+
+        let guest_launch_measurements = serde_json::from_str::<GuestLaunchMeasurements>(&output)
+            .map_err(RecoveryError::parsing_error)?;
+
+        Ok(guest_launch_measurements)
     }
 
     /// Return an [AdminStep] step electing the given [ReplicaVersion].
