@@ -10,7 +10,6 @@ rust_library(
     proc_macro_deps = [],
     target_compatible_with = [
         "@platforms//os:linux",
-        # Should this maybe support macos as well?
     ],
     deps = [
         "@crate_index//:anyhow",

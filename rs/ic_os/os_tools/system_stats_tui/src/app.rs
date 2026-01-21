@@ -1,32 +1,21 @@
-use super::event::AppEvent;
-use super::event::EventHandler;
-use super::promdb::IndexedSeries;
-use super::promdb::ValueQuery;
+use super::event::{AppEvent, EventHandler};
+use super::promdb::{IndexedSeries, ValueQuery};
 
 use anyhow::Result;
 use chrono::{Datelike, Timelike};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use humansize::{DECIMAL, format_size_i};
 use lazy_static::lazy_static;
-use prometheus_parse::Sample;
-use prometheus_parse::Value;
-use ratatui::layout::Alignment;
-use ratatui::layout::Flex;
-use ratatui::layout::Margin;
-use ratatui::text::Text;
-use ratatui::widgets::Cell;
-use ratatui::widgets::Row;
-use ratatui::widgets::Table;
+use prometheus_parse::{Sample, Value};
 use ratatui::{
     DefaultTerminal, Frame,
-    layout::{Constraint, Direction, Layout},
+    layout::{Alignment, Constraint, Direction, Flex, Layout, Margin},
     style::{Color, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Paragraph},
+    text::{Line, Span, Text},
+    widgets::{Block, Cell, Paragraph, Row, Table},
 };
 use regex::Regex;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 const MAX_SCRAPES: usize = 4;
 

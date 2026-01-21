@@ -46,7 +46,7 @@ struct PollTask {
 }
 
 impl PollTask {
-    /// Constructs a new instance of [`EventThread`].
+    /// Constructs a new instance of [`PollTask`].
     fn new(sender: mpsc::UnboundedSender<AppEvent>) -> Self {
         Self {
             sender,
@@ -59,9 +59,9 @@ impl PollTask {
         }
     }
 
-    /// Runs the event thread.
+    /// Runs the poll task.
     ///
-    /// This function emits tick events at a fixed rate and polls for crossterm events in between.
+    /// This function scrapes metrics endpoints at a fixed rate.
     async fn run(self, hostname: String, sample_freq: std::time::Duration) -> anyhow::Result<()> {
         let mut tick = tokio::time::interval(sample_freq);
         let hostos_node_exporter = format!("{hostname}:9100/metrics");
@@ -91,21 +91,21 @@ impl PollTask {
     }
 }
 
-/// A thread that handles reading crossterm events and emitting tick events on a regular schedule.
+/// A task that handles reading crossterm events.
 struct EventTask {
     /// Event sender channel.
     sender: mpsc::UnboundedSender<AppEvent>,
 }
 
 impl EventTask {
-    /// Constructs a new instance of [`EventThread`].
+    /// Constructs a new instance of [`EventTask`].
     fn new(sender: mpsc::UnboundedSender<AppEvent>) -> Self {
         Self { sender }
     }
 
-    /// Runs the event thread.
+    /// Runs the event task.
     ///
-    /// This function emits tick events at a fixed rate and polls for crossterm events in between.
+    /// This function reads crossterm events from the terminal.
     async fn run(self) -> anyhow::Result<()> {
         let mut reader = crossterm::event::EventStream::new();
         loop {
@@ -115,18 +115,13 @@ impl EventTask {
                 break;
               }
               Some(Ok(evt)) = crossterm_event => {
-                self.send(AppEvent::Crossterm(evt));
+                // Ignores the result because shutting down the app drops the receiver, which causes the send
+                // operation to fail. This is expected behavior and should not panic.
+                let _ = self.sender.send(AppEvent::Crossterm(evt));
               }
             };
         }
         Ok(())
-    }
-
-    /// Sends an event to the receiver.
-    fn send(&self, event: AppEvent) {
-        // Ignores the result because shutting down the app drops the receiver, which causes the send
-        // operation to fail. This is expected behavior and should not panic.
-        let _ = self.sender.send(event);
     }
 }
 
@@ -150,9 +145,9 @@ impl EventHandler {
         Self { sender, receiver }
     }
 
-    /// Receives an event from the sender.
+    /// Receives the next event from the channel.
     ///
-    /// This function blocks until an event is received.
+    /// This function awaits until an event is received.
     ///
     /// # Errors
     ///
