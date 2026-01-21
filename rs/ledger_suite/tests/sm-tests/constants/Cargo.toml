@@ -7,6 +7,5 @@ edition.workspace = true
 documentation.workspace = true
 
 [dependencies]
-icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 
 [features]
