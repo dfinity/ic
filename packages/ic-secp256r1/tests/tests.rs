@@ -109,6 +109,30 @@ fn should_accept_signatures_that_we_generate() {
 }
 
 #[test]
+fn should_accept_der_encoded_signatures_that_we_generate() {
+    use rand::RngCore;
+
+    let rng = &mut test_rng();
+
+    let sk = PrivateKey::generate_using_rng(rng);
+    let pk = sk.public_key();
+
+    for m in 0..100 {
+        let mut msg = vec![0u8; m];
+        rng.fill_bytes(&mut msg);
+        let sig = sk.sign_message_with_der_encoded_sig(&msg);
+
+        assert_eq!(
+            sk.sign_message_with_der_encoded_sig(&msg),
+            sig,
+            "ECDSA signature generation is deterministic"
+        );
+
+        assert!(pk.verify_signature_with_der_encoded_sig(&msg, &sig));
+    }
+}
+
+#[test]
 fn should_serialization_and_deserialization_round_trip_for_private_keys()
 -> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();

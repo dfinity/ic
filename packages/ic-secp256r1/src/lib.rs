@@ -563,6 +563,20 @@ impl PublicKey {
         self.key.verify(message, &signature).is_ok()
     }
 
+    /// Verify a (message,signature) pair
+    ///
+    /// This is a variant of verify_signature which requires that the signature
+    /// be in the DER encoded form which is used by certain protocols
+    pub fn verify_signature_with_der_encoded_sig(&self, message: &[u8], signature: &[u8]) -> bool {
+        use p256::ecdsa::signature::Verifier;
+        let signature = match p256::ecdsa::Signature::from_der(signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        self.key.verify(message, &signature).is_ok()
+    }
+
     /// Verify a (message digest,signature) pair
     pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::hazmat::PrehashVerifier;
