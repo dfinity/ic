@@ -596,6 +596,7 @@ service : (ledger_arg : LedgerArg) -> {
   icrc106_get_index_principal : () -> (GetIndexPrincipalResult) query;
 
   icrc107_set_fee_collector : (SetFeeCollectorArgs) -> (SetFeeCollectorResult);
+  icrc107_get_fee_collector: () -> (variant { Ok: opt Account; Err: record { error_code : nat; message : text } }) query;
 
   is_ledger_ready : () -> (bool) query
 }

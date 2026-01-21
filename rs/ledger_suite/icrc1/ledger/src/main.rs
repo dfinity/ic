@@ -16,7 +16,9 @@ use ic_icrc1::{
     Operation, Transaction,
     endpoints::{StandardRecord, convert_transfer_error},
 };
-use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
+use ic_icrc1_ledger::{
+    GetFeeCollectorError, InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState,
+};
 use ic_icrc1_ledger::{
     LEDGER_VERSION, UPGRADES_MEMORY, balances_len, clear_stable_allowance_data,
     clear_stable_balances_data, clear_stable_blocks_data, get_allowances, is_ready, ledger_state,
@@ -1210,6 +1212,11 @@ async fn icrc107_set_fee_collector(arg: SetFeeCollectorArgs) -> Result<Nat, SetF
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
+}
+
+#[query]
+fn icrc107_get_fee_collector() -> Result<Option<Account>, GetFeeCollectorError> {
+    Ok(Access::with_ledger(|ledger| ledger.fee_collector()))
 }
 
 candid::export_service!();

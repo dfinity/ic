@@ -1477,3 +1477,9 @@ impl BlockDataContainer for StableBlockDataContainer {
         BLOCKS_MEMORY.with(|cell| f(&mut cell.borrow_mut()))
     }
 }
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct GetFeeCollectorError {
+    pub error_code: Nat,
+    pub message: String,
+}
