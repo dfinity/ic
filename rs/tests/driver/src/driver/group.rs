@@ -702,7 +702,7 @@ impl SystemTestGroup {
                         .collect();
                     for node in nodes {
                         block_on(async {
-                            let metric_name = "replica_process_start_attempts";
+                            let metric_name = "orchestrator_replica_process_start_attempts_total";
                             let metrics = MetricsFetcher::new_with_port(
                                 std::iter::once(node),
                                 vec![metric_name.to_string()],
