@@ -173,6 +173,19 @@ impl From<Vec<SignedIngress>> for IngressPayload {
     }
 }
 
+impl From<Vec<(IngressMessageId, SignedIngress)>> for IngressPayload {
+    fn from(msgs: Vec<(IngressMessageId, SignedIngress)>) -> IngressPayload {
+        let serialized_ingress_messages = msgs
+            .into_iter()
+            .map(|(id, ingress)| (id, SignedRequestBytes::from(ingress)))
+            .collect();
+
+        Self {
+            serialized_ingress_messages,
+        }
+    }
+}
+
 impl TryFrom<IngressPayload> for Vec<SignedIngress> {
     type Error = IngressPayloadError;
     fn try_from(payload: IngressPayload) -> Result<Vec<SignedIngress>, Self::Error> {
