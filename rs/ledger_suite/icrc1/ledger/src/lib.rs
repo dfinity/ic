@@ -71,13 +71,6 @@ const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
 #[allow(dead_code)]
 const MAX_U64_ENCODING_BYTES: usize = 10;
 const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
-const METADATA_DECIMALS: &str = MetadataKey::ICRC1_DECIMALS;
-const METADATA_NAME: &str = MetadataKey::ICRC1_NAME;
-const METADATA_SYMBOL: &str = MetadataKey::ICRC1_SYMBOL;
-const METADATA_FEE: &str = MetadataKey::ICRC1_FEE;
-const METADATA_MAX_MEMO_LENGTH: &str = MetadataKey::ICRC1_MAX_MEMO_LENGTH;
-const METADATA_PUBLIC_ALLOWANCES: &str = MetadataKey::ICRC103_PUBLIC_ALLOWANCES;
-const METADATA_MAX_TAKE_ALLOWANCES: &str = MetadataKey::ICRC103_MAX_TAKE_VALUE;
 const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 #[cfg(not(feature = "u256-tokens"))]
@@ -655,13 +648,13 @@ fn map_metadata_or_trap(
     require_valid: bool,
 ) -> Vec<(MetadataKey, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
-        METADATA_DECIMALS,
-        METADATA_NAME,
-        METADATA_SYMBOL,
-        METADATA_FEE,
-        METADATA_MAX_MEMO_LENGTH,
-        METADATA_PUBLIC_ALLOWANCES,
-        METADATA_MAX_TAKE_ALLOWANCES,
+        MetadataKey::ICRC1_DECIMALS,
+        MetadataKey::ICRC1_NAME,
+        MetadataKey::ICRC1_SYMBOL,
+        MetadataKey::ICRC1_FEE,
+        MetadataKey::ICRC1_MAX_MEMO_LENGTH,
+        MetadataKey::ICRC103_PUBLIC_ALLOWANCES,
+        MetadataKey::ICRC103_MAX_TAKE_VALUE,
     ];
     arg_metadata
         .into_iter()
@@ -935,16 +928,16 @@ impl Ledger {
             .into_iter()
             .map(|(k, v)| (k, StoredValue::into(v)))
             .collect();
-        records.push(Value::entry(METADATA_DECIMALS, self.decimals() as u64).unwrap());
-        records.push(Value::entry(METADATA_NAME, self.token_name()).unwrap());
-        records.push(Value::entry(METADATA_SYMBOL, self.token_symbol()).unwrap());
-        records.push(Value::entry(METADATA_FEE, Nat::from(self.transfer_fee())).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_DECIMALS, self.decimals() as u64).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_NAME, self.token_name()).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_SYMBOL, self.token_symbol()).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC1_FEE, Nat::from(self.transfer_fee())).unwrap());
         records
-            .push(Value::entry(METADATA_MAX_MEMO_LENGTH, self.max_memo_length() as u64).unwrap());
-        records.push(Value::entry(METADATA_PUBLIC_ALLOWANCES, "true").unwrap());
+            .push(Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, self.max_memo_length() as u64).unwrap());
+        records.push(Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap());
         records.push(
             Value::entry(
-                METADATA_MAX_TAKE_ALLOWANCES,
+                MetadataKey::ICRC103_MAX_TAKE_VALUE,
                 Nat::from(self.max_take_allowances()),
             )
             .unwrap(),
