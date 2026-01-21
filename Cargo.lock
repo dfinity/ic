@@ -8479,7 +8479,7 @@ name = "ic-crypto-internal-hmac"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-sha2",
+ "ic-crypto-sha2",
  "wycheproof",
 ]
 
@@ -8526,14 +8526,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-internal-sha2"
-version = "0.9.0"
-dependencies = [
- "hex",
- "sha2 0.10.9",
 ]
 
 [[package]]
@@ -8745,7 +8737,8 @@ dependencies = [
 name = "ic-crypto-sha2"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-sha2",
+ "hex",
+ "sha2 0.10.9",
 ]
 
 [[package]]
