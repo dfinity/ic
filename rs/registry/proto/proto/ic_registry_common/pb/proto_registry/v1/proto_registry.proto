@@ -10,4 +10,5 @@ message ProtoRegistryRecord {
   string key = 1;
   uint64 version = 2;
   google.protobuf.BytesValue value = 3;
+  uint64 timestamp_nanoseconds = 5; 
 }
