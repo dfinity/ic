@@ -161,8 +161,12 @@ impl Upgrade {
         Ok(())
     }
 
-    /// Checks for a new release package, and if found, upgrades to this release
-    /// package
+    /// This fucntion is resonsible for:
+    /// 1. Determining whether we are assigned to a subnet or unassigned. The field
+    ///    `self.subnet_assignment` is updated accordingly for other tasks of the orchestrator to
+    ///    use.
+    /// 2. Downloading and upgrading to a new replica version if necessary.
+    /// 3. Launching the replica process if assigned to a subnet.
     pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
 
