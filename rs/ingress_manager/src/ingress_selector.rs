@@ -244,11 +244,12 @@ impl IngressSelector for IngressManager {
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from_iter(
-                messages_in_payload
-                    .iter()
-                    .map(|ingress| (IngressMessageId::from(*ingress), &ingress.signed_ingress)),
-            );
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().map(|ingress| {
+                (
+                    IngressMessageId::from(*ingress),
+                    ingress.signed_ingress.clone(),
+                )
+            }));
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
