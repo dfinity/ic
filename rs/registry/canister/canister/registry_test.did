@@ -44,6 +44,7 @@ type AddNodePayload = record {
   ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
   node_reward_type : opt text;
+  node_registration_attestation : opt blob;
 };
 
 type AddNodesToSubnetPayload = record {
