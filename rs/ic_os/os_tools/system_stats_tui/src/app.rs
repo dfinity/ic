@@ -2,7 +2,6 @@ use super::event::{AppEvent, EventHandler};
 use super::promdb::{IndexedSeries, ValueQuery};
 
 use anyhow::Result;
-use chrono::{Datelike, Timelike};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use humansize::{DECIMAL, format_size_i};
 use lazy_static::lazy_static;
@@ -237,17 +236,9 @@ impl App {
         let header_block = Block::bordered().title(title);
         frame.render_widget(&header_block, instructions_slot);
 
-        let current_time = chrono::Utc::now();
-        let formatted_time = format!(
-            "{}-{}-{} {}:{}:{}.{} UTC",
-            current_time.year(),
-            current_time.month(),
-            current_time.day(),
-            current_time.hour(),
-            current_time.minute(),
-            current_time.second(),
-            current_time.timestamp_subsec_millis(),
-        );
+        let formatted_time = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S%.3f UTC")
+            .to_string();
         let instructions = "`Esc`, `Ctrl-C` or `q` to quit.";
 
         frame.render_widget(

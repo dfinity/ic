@@ -22,7 +22,7 @@ pub enum AppEvent {
 }
 
 async fn scrape(client: Arc<reqwest::Client>, url: &str) -> Result<IndexedScrape, String> {
-    let resp = client.get(url).send().await.map_err(|e| format!("{}", e))?;
+    let resp = client.get(url).send().await.map_err(|e| e.to_string())?;
     match resp.status() {
         StatusCode::OK => (),
         other => return Err(format!("non-OK status {other} from {url}")),
@@ -31,11 +31,11 @@ async fn scrape(client: Arc<reqwest::Client>, url: &str) -> Result<IndexedScrape
         prometheus_parse::Scrape::parse(
             resp.text()
                 .await
-                .map_err(|e| format!("{}", e))?
+                .map_err(|e| e.to_string())?
                 .lines()
                 .map(|s| Ok(s.to_owned())),
         )
-        .map_err(|e| format!("{}", e))?,
+        .map_err(|e| e.to_string())?,
     ))
 }
 
