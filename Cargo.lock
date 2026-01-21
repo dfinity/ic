@@ -11642,6 +11642,7 @@ dependencies = [
  "async-trait",
  "candid",
  "dfn_core",
+ "ic-base-types",
  "ic-cdk",
  "ic-crypto-sha2",
  "ic-management-canister-types-private",
@@ -12198,6 +12199,7 @@ dependencies = [
  "ic-cdk",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
+ "ic-nervous-system-root",
  "ic-nns-constants",
  "serde",
 ]
