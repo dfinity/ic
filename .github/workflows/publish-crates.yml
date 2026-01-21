@@ -1,0 +1,45 @@
+name: Publish ic crates to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      crate-name:
+        description: 'The name of the crate to publish'
+        required: true
+      crate-version:
+        description: 'The version of the crate to publish'
+        required: true
+      commit-sha:
+        description: 'The commit SHA to build and publish crates from'
+        required: true
+
+
+jobs:
+  publish-crates:
+    name: Publish Crates
+    runs-on: ubuntu-latest
+    environment: publish-crates
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit-sha }}
+
+      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec
+        id: auth
+
+      - name: Check crate version
+        run: |
+          actual_version=$(grep '^version =' crates/${{ github.event.inputs.crate-name }}/Cargo.toml | head -1 | cut -d '"' -f2)
+          if [ "$actual_version" != "${{ github.event.inputs.crate-version }}" ]; then
+            echo "Version mismatch: expected ${{ github.event.inputs.crate-version }}, found $actual_version"
+            exit 1
+          fi
+
+      - name: Build and Test Crate
+        run: |
+          cargo build --package ${{ github.event.inputs.crate-name }}
+          cargo test --package ${{ github.event.inputs.crate-name }}
+
+      - run: cargo publish --package ${{ github.event.inputs.crate-name }} --allow-dirty
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
