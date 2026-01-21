@@ -22594,7 +22594,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "attestation",
- "attestation_testing",
  "base64 0.13.1",
  "config_types",
  "hkdf",
