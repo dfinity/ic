@@ -68,7 +68,6 @@ go.sum                    @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/components/ic/share/ic-boundary.env                              @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -129,8 +128,8 @@ go.sum                    @dfinity/idx
 /rs/https_outcalls/                                     @dfinity/consensus
 /rs/https_outcalls/consensus/                           @dfinity/consensus
 /rs/ic_os/                                              @dfinity/node
-/rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/consensus
-/rs/ic_os/nss_icos/                                     @dfinity/dre
+/rs/ic_os/metrics/fstrim_tool/                          @dfinity/node @dfinity/consensus
+/rs/ic_os/networking/nss_icos/                          @dfinity/dre
 /rs/ingress_manager/                                    @dfinity/consensus
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
