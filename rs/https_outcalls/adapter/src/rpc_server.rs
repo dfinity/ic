@@ -244,7 +244,6 @@ impl HttpsOutcallsService for CanisterHttp {
         &self,
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResult>, Status> {
-
         self.metrics.requests.inc();
 
         // Mutable state to track metrics across the lifecycle
