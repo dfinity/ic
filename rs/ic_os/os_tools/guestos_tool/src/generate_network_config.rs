@@ -262,14 +262,15 @@ fn get_interface_name() -> Result<String> {
     let interfaces = get_interface_paths()
         .into_iter()
         .map(|x| get_valid_interface_name(&x))
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()
+        .context("ERROR: Unable to extract interface name")?;
     eprintln!("Found network interfaces: {interfaces:?}");
 
     let valid_interface =
         pick_best_interface(interfaces).context("ERROR: No valid network interfaces found")?;
 
     eprintln!("Chosen interface name: {valid_interface:?}");
-    Ok(valid_interface.clone())
+    Ok(valid_interface)
 }
 
 // Turn off duplicate address detection for testnets running on k8s
