@@ -148,7 +148,4 @@ mod create_service_nervous_system;
 mod registry_get_chunk;
 
 #[cfg(test)]
-mod node_provider_remuneration_with_golden_nns_state;
-
-#[cfg(test)]
 mod canister_snapshot;

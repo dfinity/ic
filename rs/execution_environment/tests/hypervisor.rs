@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
@@ -1078,6 +1078,56 @@ fn ic0_debug_print_out_of_bounds_works() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
+}
+
+#[test]
+fn ic0_debug_print_with_large_memory_wasm64() {
+    // Enable debug_print by disabling rate limiting
+    let mut config = ic_config::execution_environment::Config::default();
+    config
+        .embedders_config
+        .feature_flags
+        .rate_limiting_of_debug_prints = FlagStatus::Disabled;
+    let mut test = ExecutionTestBuilder::new()
+        .with_execution_config(config)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "debug_print" (func $ic0_debug_print (param i64) (param i64)))
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func $test (export "canister_update test")
+                (local $i i64)
+                ;; Call debug_print with offset 0 and large negative size
+                ;; (when interpreted as unsigned, this is a huge number)
+                i64.const 0
+                i64.const -9223372034854775815
+                call $ic0_debug_print
+                ;; Loop to a large count
+                (loop $my_loop
+                    local.get $i
+                    i64.const 1
+                    i64.add
+                    local.tee $i
+                    i64.const 9223372034854775815
+                    i64.lt_s
+                    br_if $my_loop
+                )
+                (call $msg_reply)
+            )
+            (memory i64 49000)
+        )"#;
+    // Give the canister a trillion cycles to ensure it doesn't run out
+    let initial_cycles = Cycles::new(1_000_000_000_000_000);
+    let canister_id = test
+        .canister_from_cycles_and_wat(initial_cycles, wat)
+        .unwrap();
+    // Calling debug_print with the large size argument should trap with InstructionLimitExceeded.
+    let result = test.ingress(canister_id, "test", vec![]);
+    let err = result.unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterInstructionLimitExceeded,
+        "Canister exceeded the limit",
+    );
 }
 
 #[test]
@@ -3956,7 +4006,9 @@ fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
 
 #[test]
 fn wasm_page_metrics_are_recorded_even_if_execution_fails() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = r#"
         (module
             (func (export "canister_update write")
@@ -4015,7 +4067,9 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
     #[case] inject_trap: &str,
     #[case] expected_error_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = format!(
         r#"
         (module
@@ -4056,7 +4110,9 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
 #[test]
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 fn query_stable_memory_metrics_are_recorded() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     // The following canister will touch 2 pages worth of stable memory.
     let wat = r#"
         (module
@@ -9618,7 +9674,9 @@ fn page_metrics_are_recorded(
     #[case] maybe_trap: &str,
     #[case] expected_code: ErrorCode,
 ) {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
+        .build();
     let wat = format!(
         r#"
         (module
@@ -10703,12 +10761,7 @@ fn test_deep_i32_eqz_chain() {
     let mut test = ExecutionTestBuilder::new().build();
     let result = test.canister_from_wat(&wat);
 
-    // Compilation of this Wasm doesn't overflow on arm.
-    #[cfg(target_arch = "x86_64")]
-    result
-        .unwrap_err()
-        .assert_contains(ErrorCode::CanisterWasmEngineError, "compiler died");
-
-    #[cfg(not(target_arch = "x86_64"))]
+    // The patch was made available in v40.0.2 and compilation
+    // should succeed there after
     result.unwrap();
 }

@@ -95,9 +95,9 @@ echo "Building $IMAGE_NAME:$DOCKER_IMG_TAG"
 
 DOCKER_BUILDKIT=1 "${CONTAINER_CMD[@]}" build "${BUILD_ARGS[@]}" \
     --target "$BUILD_TARGET" \
-    -t $IMAGE_NAME:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/$IMAGE_NAME:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/$IMAGE_NAME:latest \
+    -t ic-build:"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/ic-build:latest \
     -f ci/container/Dockerfile .
 
 popd
