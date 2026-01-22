@@ -3769,6 +3769,7 @@ dependencies = [
  "local-ip-address",
  "loopdev-3",
  "lru 0.7.8",
+ "lzma-sys",
  "macaddr",
  "maplit",
  "maxminddb 0.24.0",

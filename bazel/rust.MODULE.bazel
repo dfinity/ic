@@ -903,6 +903,10 @@ crate.spec(
     version = "^0.7.8",
 )
 crate.spec(
+    package = "lzma-sys",
+    version = "^0.1.20",
+)
+crate.spec(
     package = "macaddr",
     version = "^1.0",
 )
@@ -2058,6 +2062,14 @@ crate.annotation(
     # to the built static archive
     patch_args = ["-p1"],
     patches = ["@@//bazel:lmdb_rkv_sys.patch"],
+)
+crate.annotation(
+    crate = "lzma-sys",
+    build_script_env = {
+      # Force lzma-sys to use the crate's embedded liblzma source code
+      # rather than looking for one in the environment.
+      "LZMA_API_STATIC": "1",
+    },
 )
 crate.annotation(
     crate = "p256",

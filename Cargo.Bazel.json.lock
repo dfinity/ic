@@ -1,5 +1,5 @@
 {
-  "checksum": "f94b4e1ee27524427fe3a0731636d696bcc8262a225061d7ea6084fb5430adb3",
+  "checksum": "c18592d3c500aba1b176bd17660fbc2efeb053d2d2692cd21add2d0ef4f09153",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21903,6 +21903,10 @@
             {
               "id": "lru 0.7.8",
               "target": "lru"
+            },
+            {
+              "id": "lzma-sys 0.1.20",
+              "target": "lzma_sys"
             },
             {
               "id": "macaddr 1.0.1",
@@ -47431,6 +47435,12 @@
               "target": "pkg_config"
             }
           ],
+          "selects": {}
+        },
+        "build_script_env": {
+          "common": {
+            "LZMA_API_STATIC": "1"
+          },
           "selects": {}
         },
         "links": "lzma"
@@ -98575,6 +98585,7 @@
     "local-ip-address 0.5.6",
     "loopdev-3 0.5.1",
     "lru 0.7.8",
+    "lzma-sys 0.1.20",
     "macaddr 1.0.1",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
