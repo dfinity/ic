@@ -10,6 +10,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/secrets_containers",
         "//rs/crypto/sha2",

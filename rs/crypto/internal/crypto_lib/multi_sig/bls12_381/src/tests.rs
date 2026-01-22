@@ -5,6 +5,7 @@ use crate::{
     types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
     types::arbitrary,
 };
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
 fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8]) {
@@ -29,8 +30,6 @@ fn check_multi_signature_verifies(keys: &[(SecretKey, PublicKey)], message: &[u8
 mod stability {
     use super::*;
     use crate::types::PublicKeyBytes;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     #[test]
     fn message_to_g1() {
@@ -45,8 +44,8 @@ mod stability {
     }
     #[test]
     fn public_key_to_g1() {
-        let mut csprng = ChaCha20Rng::seed_from_u64(42);
-        let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
+        let seed = Seed::from_bytes(&[42u8]);
+        let (_secret_key, public_key) = multi_crypto::keypair_from_rng(&mut seed.into_rng());
         let public_key_bytes = PublicKeyBytes::from(&public_key);
         assert_eq!(
             hex::encode(
@@ -54,26 +53,26 @@ mod stability {
                     .to_affine()
                     .serialize()
             ),
-            "b02fd0d54faab7498924d7e230f84b00519ea7f3846cd30f82b149c1f172ad79ee68adb2ea2fc8a2d40ffdf3fd5df02a"
+            "a09ed55a4473ee51bc413640f84e701aa3707a5d78b5b08d35112503fa986ac7a8a4b4eebe0d3a8947a477924249a237"
         );
     }
 
     #[test]
-    fn secret_key_from_fixed_rng() {
-        let mut csprng = ChaCha20Rng::seed_from_u64(9000);
-        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
+    fn secret_key_from_fixed_seed() {
+        let seed = Seed::from_bytes(&[42u8]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut seed.into_rng());
         let secret_key_bytes = SecretKeyBytes::from(&secret_key);
 
         assert_eq!(
             hex::encode(serde_cbor::to_vec(&secret_key_bytes).unwrap()),
-            "582020bfd7f85be7ce1f54ea1b0d750ae3324ab7897fde3235e189ec697f0fade983"
+            "582073481d06d01187a77fe0752b5d8ddffda57f1bbda3bd455b25a661290beafa49"
         );
 
         let public_key_bytes = PublicKeyBytes::from(&public_key);
 
         assert_eq!(
             hex::encode(serde_cbor::to_vec(&public_key_bytes).unwrap()),
-            "5860805197d0cf9a60da1acc5750be523048f14622dadef70e7c2648b674181555881092e20e26440f6ad277380b33ea84f412f99c5fe4c993198e5c5233e39d1dd55656add17bdbf65d889fec7cc05befb0466bc9ad1b55bb57539c4f9d74c43c5a"
+            "5860a0006d9c7a98d3267552f132cf2ddc9ebd13ff5913dbb02d756275edb9bdedb474ac511e911f544d5a892ede57db614f035c72f5c11f95ca1417be429ad2a5d7c4e4cd3a03fffb106d4e8fcc847955f11913a46cc65a9a8e012f61df9aa8b9bd"
         )
     }
 }
@@ -94,8 +93,9 @@ mod basic_functionality {
         })]
 
         #[test]
-        fn keypair_from_seed_works(seed: [u64; 4]) {
-            multi_crypto::keypair_from_seed(seed);
+        fn keypair_from_seed_works(seed: [u8; 32]) {
+            let seed = Seed::from_bytes(&seed);
+            api::keypair_from_seed(seed);
         }
 
         #[test]
@@ -163,7 +163,7 @@ mod advanced_functionality {
 
     #[test]
     fn single_point_signature_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let point = multi_crypto::hash_message_to_g1(b"abba");
         let signature = multi_crypto::sign_point(&point, &secret_key);
         assert!(multi_crypto::verify_point(
@@ -175,7 +175,7 @@ mod advanced_functionality {
 
     #[test]
     fn individual_multi_signature_contribution_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let message = b"bjork";
         let signature = multi_crypto::sign_message(message, &secret_key);
         assert!(multi_crypto::verify_individual_message_signature(
@@ -187,14 +187,14 @@ mod advanced_functionality {
 
     #[test]
     fn pop_verifies() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         assert!(multi_crypto::verify_pop(&pop, &public_key));
     }
 
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_with_unset_compressed_flag() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(&pop);
         let mut public_key_bytes = PublicKeyBytes::from(&public_key);
@@ -207,7 +207,7 @@ mod advanced_functionality {
 
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_not_on_curve() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(&pop);
         let mut public_key_bytes = PublicKeyBytes::from(&public_key);
@@ -226,7 +226,7 @@ mod advanced_functionality {
 
     #[test]
     fn verify_pop_throws_error_on_public_key_bytes_not_in_subgroup() {
-        let (secret_key, public_key) = multi_crypto::keypair_from_seed([1, 2, 3, 4]);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut reproducible_rng());
         let pop = multi_crypto::create_pop(&public_key, &secret_key);
         let pop_bytes = PopBytes::from(&pop);
         let mut public_key_bytes = PublicKeyBytes::from(&public_key);
@@ -245,9 +245,10 @@ mod advanced_functionality {
 
     #[test]
     fn double_signature_verifies() {
+        let rng = &mut reproducible_rng();
         let keys = [
-            multi_crypto::keypair_from_seed([1, 2, 3, 4]),
-            multi_crypto::keypair_from_seed([5, 6, 7, 8]),
+            multi_crypto::keypair_from_rng(rng),
+            multi_crypto::keypair_from_rng(rng),
         ];
         check_multi_signature_verifies(&keys, b"abba");
     }
