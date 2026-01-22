@@ -50,34 +50,24 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
-# We export RUNFILES such that the from_location_specified_by_env_var() function in
-# rs/rust_canisters/canister_test/src/canister.rs and get_dependency_path()
-# can find runtime dependencies relative to the $RUNFILES directory.
 export RUNFILES="$TEST_TMPDIR/runfiles"
-
-# Create symlinks under "$RUNFILES" pointing to the runtime dependencies in runtime_deps
-# and reset the env vars pointing to the new location using relative paths.
-export ORIG_RUNFILES="$PWD"
 mkdir "$RUNFILES"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     relative_dep_path="${!env_var}"
-
-    # We want folks to reference runtime dependencies using environment variables defined by runtime_deps.
-    # To make it less likely folks reference dependencies via paths we replace all '/'s by '-'s.
-    # This additionally fixes an issue with Bazel >= 8 where
-    # $(rootpath @some_repo//some_target) can point outside the runfiles directory,
-    # as in, the path will contain '..'s.
     sanitized_relative_dep_path="$(sed 's|/|-|g' <<<"$relative_dep_path")"
-
-    ln -s "$ORIG_RUNFILES/$relative_dep_path" \
+    ln -s "$PWD/$relative_dep_path" \
           "$RUNFILES/$sanitized_relative_dep_path"
     export "$env_var=$sanitized_relative_dep_path"
 done
 
+if [ -n "${COLOCATE_UVM_CONFIG_IMAGE_PATH:-}" ]; then
+    export COLOCATE_UVM_CONFIG_IMAGE_PATH="$PWD/$COLOCATE_UVM_CONFIG_IMAGE_PATH"
+fi
+
 exec \
     env -C "$TEST_TMPDIR" \
-    "$ORIG_RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
+    "$PWD/$RUN_SCRIPT_TEST_EXECUTABLE" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \
     "$@" run

@@ -69,8 +69,7 @@ fn setup(env: TestEnv) {
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
         .with_config_img(
-            Path::new(&std::env::var("ORIG_RUNFILES").unwrap())
-                .join(env::var("COLOCATE_UVM_CONFIG_IMAGE_PATH").unwrap()),
+            Path::new(&env::var("COLOCATE_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
         );
 
     let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
