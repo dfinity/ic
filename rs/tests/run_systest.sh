@@ -50,39 +50,33 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
-# Copy all runtime_deps into "$TEST_TMPDIR/runfiles"
-# and reset the env vars pointing to the new location using absolute paths.
-ORIG_RUNFILES="$PWD"
-RUNFILES="$TEST_TMPDIR/runfiles"
+# We export RUNFILES such that the from_location_specified_by_env_var() function in
+# rs/rust_canisters/canister_test/src/canister.rs and get_dependency_path()
+# can find runtime dependencies relative to the $RUNFILES directory.
+export RUNFILES="$TEST_TMPDIR/runfiles"
+
+# Create symlinks under "$RUNFILES" pointing to the runtime dependencies in runtime_deps
+# and reset the env vars pointing to the new location using relative paths.
+export ORIG_RUNFILES="$PWD"
 mkdir "$RUNFILES"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     relative_dep_path="${!env_var}"
 
-    # In bazel-8 $relative_dep_path may contain .. parent references.
-    # Those will clash with the following mkdir and cp commands.
-    # So we sanitize them here by creating a mirror structure of the parent paths under $RUNFILES.
-    sanitized_relative_dep_path="$(sed 's|\.\.|__parent__|g' <<<"$relative_dep_path")"
+    # We want folks to reference runtime dependencies using environment variables defined by runtime_deps.
+    # To make it less likely folks reference dependencies via paths we replace all '/'s by '-'s.
+    # This additionally fixes an issue with Bazel >= 8 where
+    # $(rootpath @some_repo//some_target) can point outside the runfiles directory,
+    # as in, the path will contain '..'s.
+    sanitized_relative_dep_path="$(sed 's|/|-|g' <<<"$relative_dep_path")"
 
-    mkdir -p "$(dirname "$RUNFILES/$sanitized_relative_dep_path")"
-    cp --symbolic-link "$ORIG_RUNFILES/$relative_dep_path" "$RUNFILES/$sanitized_relative_dep_path"
-    export "$env_var=$RUNFILES/$sanitized_relative_dep_path"
+    ln -s "$ORIG_RUNFILES/$relative_dep_path" \
+          "$RUNFILES/$sanitized_relative_dep_path"
+    export "$env_var=$sanitized_relative_dep_path"
 done
 
-# TODO: remove the following comment
-# and adapt from_location_specified_by_env_var() and get_dependency_path()
-# to not read the $RUNFILES env var.
-#
-# We export RUNFILES such that the from_location_specified_by_env_var() function in
-# rs/rust_canisters/canister_test/src/canister.rs and get_dependency_path()
-# can find runtime dependencies relative to the $RUNFILES directory.
-
-# Change current working directory to be different than $RUNFILES
-# to ensure the test accesses all its runtime dependencies via environment variables
-# instead of via hard-code paths relative to $RUNFILES.
-cd "$TEST_TMPDIR"
-
 exec \
+    env -C "$TEST_TMPDIR" \
     "$ORIG_RUNFILES/$RUN_SCRIPT_TEST_EXECUTABLE" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \
