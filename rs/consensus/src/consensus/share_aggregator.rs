@@ -131,51 +131,32 @@ impl ShareAggregator {
 
     /// Attempt to construct `CatchUpPackage`s.
     fn aggregate_catch_up_package_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
-        let mut start_block = pool.get_highest_finalized_summary_block();
+        let summary_block = pool.get_highest_finalized_summary_block();
         let current_cup_height = pool.get_catch_up_height();
 
-        while start_block.height() > current_cup_height {
-            let height = start_block.height();
-            let shares = pool.get_catch_up_package_shares(height).map(|share| {
-                let block = pool
-                    .get_block(&share.content.block, height)
-                    .unwrap_or_else(|err| panic!("Block not found for {share:?}, error: {err:?}"));
-                Signed {
-                    content: CatchUpContent::from_share_content(share.content, block.into_inner()),
-                    signature: share.signature,
-                }
-            });
-            let state_reader = pool.as_cache();
-            let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
-            let result = aggregate(
-                &self.log,
-                self.membership.as_ref(),
-                self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id.clone()),
-                shares,
-            );
-            if !result.is_empty() {
-                return to_messages(result);
-            }
-
-            let Some(block_from_last_interval) =
-                pool.get_finalized_block(start_block.height.decrement())
-            else {
-                break;
-            };
-
-            let next_start_height = block_from_last_interval
-                .payload
-                .as_ref()
-                .dkg_interval_start_height();
-
-            let Some(new_start_block) = pool.get_finalized_block(next_start_height) else {
-                break;
-            };
-
-            start_block = new_start_block;
+        if summary_block.height() <= current_cup_height {
+            return Vec::new();
         }
-        Vec::new()
+
+        let height = summary_block.height();
+        let shares = pool
+            .get_catch_up_package_shares(height)
+            .map(|share| Signed {
+                content: CatchUpContent::from_share_content(share.content, summary_block.clone()),
+                signature: share.signature,
+            });
+        let state_reader = pool.as_cache();
+        let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
+
+        let result = aggregate(
+            &self.log,
+            self.membership.as_ref(),
+            self.crypto.as_aggregate(),
+            Box::new(|_| dkg_id.clone()),
+            shares,
+        );
+
+        to_messages(result)
     }
 }
 
