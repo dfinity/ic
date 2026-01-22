@@ -3,7 +3,7 @@
 set -eEo pipefail
 
 usage() {
-    echo "Build ic-build docker image."
+    echo "Build ic-build or ic-dev docker image."
     echo " "
     echo "Options:"
     echo "-h, --help   show brief help"
@@ -95,9 +95,9 @@ echo "Building $IMAGE_NAME:$DOCKER_IMG_TAG"
 
 DOCKER_BUILDKIT=1 "${CONTAINER_CMD[@]}" build "${BUILD_ARGS[@]}" \
     --target "$BUILD_TARGET" \
-    -t ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
-    -t ghcr.io/dfinity/ic-build:latest \
+    -t $IMAGE_NAME:"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/$IMAGE_NAME:"$DOCKER_IMG_TAG" \
+    -t ghcr.io/dfinity/$IMAGE_NAME:latest \
     -f ci/container/Dockerfile .
 
 popd
