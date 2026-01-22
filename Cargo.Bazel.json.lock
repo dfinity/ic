@@ -1,5 +1,5 @@
 {
-  "checksum": "c18592d3c500aba1b176bd17660fbc2efeb053d2d2692cd21add2d0ef4f09153",
+  "checksum": "15776da91864855a178721676d10dd8c94a74d300e1a77edc4c6a3f2054048a9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -47398,6 +47398,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "static"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -47435,12 +47441,6 @@
               "target": "pkg_config"
             }
           ],
-          "selects": {}
-        },
-        "build_script_env": {
-          "common": {
-            "LZMA_API_STATIC": "1"
-          },
           "selects": {}
         },
         "links": "lzma"
