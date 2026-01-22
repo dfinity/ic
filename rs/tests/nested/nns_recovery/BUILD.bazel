@@ -45,9 +45,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -66,12 +66,12 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
         "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -86,9 +86,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -106,9 +106,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -126,9 +126,9 @@ system_test_nns(
     env = ENV,
     flaky = True,
     guestos_update = "test",
+    setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.

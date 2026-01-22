@@ -253,7 +253,7 @@ pub fn routing_table_insert_subnet(
     routing_table.insert(canister_id_range, subnet_id)
 }
 
-/// Stores an ordered map mapping CanisterId ranges to SubnetIds.  The ranges
+/// Stores an ordered map mapping `CanisterId` ranges to `SubnetIds`. The ranges
 /// tracked are inclusive of start and end, i.e. can be denoted as `[a, b]`.
 ///
 /// INVARIANT: `self.well_formed() == Ok(())`
@@ -546,6 +546,9 @@ impl IntoIterator for RoutingTable {
     }
 }
 
+/// An ordered map of `CanisterIdRanges` to migration traces (lists of
+/// `SubnetIds`) representing canisters that are currently migrating between
+/// said subnets.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct CanisterMigrations(BTreeMap<CanisterIdRange, Vec<SubnetId>>);
 
@@ -578,6 +581,11 @@ impl CanisterMigrations {
     /// Returns an iterator over all canister ID ranges in order.
     pub fn ranges(&self) -> impl std::iter::Iterator<Item = &CanisterIdRange> {
         self.0.keys()
+    }
+
+    /// Returns `true` if there are no in-progress canister migrations.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Returns Ok if the canister migrations are well-formed (ranges are

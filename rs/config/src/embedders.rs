@@ -126,6 +126,8 @@ pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// If this flag is enabled, then the environment variables are supported.
     pub environment_variables: FlagStatus,
+    /// Use deterministic memory tracker.
+    pub deterministic_memory_tracker: FlagStatus,
 }
 
 impl FeatureFlags {
@@ -133,6 +135,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             environment_variables: FlagStatus::Enabled,
+            deterministic_memory_tracker: FlagStatus::Disabled,
         }
     }
 }
