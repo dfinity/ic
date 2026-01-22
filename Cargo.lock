@@ -7725,6 +7725,7 @@ dependencies = [
  "ic-error-types 0.2.0",
  "ic-execution-environment",
  "ic-https-outcalls-consensus",
+ "ic-https-outcalls-pricing",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
@@ -10043,6 +10044,7 @@ dependencies = [
  "ic-config",
  "ic-error-types 0.2.0",
  "ic-http-endpoints-async-utils",
+ "ic-https-outcalls-pricing",
  "ic-https-outcalls-service",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -10097,6 +10099,13 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+]
+
+[[package]]
+name = "ic-https-outcalls-pricing"
+version = "0.9.0"
+dependencies = [
+ "ic-types",
 ]
 
 [[package]]
@@ -13363,6 +13372,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
  "ic-https-outcalls-consensus",
+ "ic-https-outcalls-pricing",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -14429,6 +14439,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-endpoints-public",
  "ic-https-outcalls-consensus",
+ "ic-https-outcalls-pricing",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
