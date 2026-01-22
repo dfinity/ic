@@ -2689,6 +2689,8 @@ impl StateManager for StateManagerImpl {
         let mut tip = states.tip.take().expect("failed to get TIP");
 
         let (target_snapshot, target_hash) = match states.snapshots.back() {
+            // The most recent available state is more recent than what we have in the tip,
+            // e.g. because we are catching up.
             Some(snapshot) if snapshot.height > tip_height => {
                 let tip_height = snapshot.height;
 
@@ -2706,12 +2708,16 @@ impl StateManager for StateManagerImpl {
 
                 (snapshot.clone(), tip_hash)
             }
+            // The tip is the most recent state we know of, proceed with that.
+            // Also write the state hash to the replicated state.
             _ => {
                 let tip_hash = if let Some(tip_metadata) =
                     states.certifications_metadata.get(&tip_height)
                 {
+                    // We have the hash because we calculated it with the state in the previous round.
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
                 } else {
+                    // We have the initial state, which has no previous state hash.
                     std::mem::drop(states);
 
                     let mut tip_certification_metadata = Self::compute_certification_metadata(
