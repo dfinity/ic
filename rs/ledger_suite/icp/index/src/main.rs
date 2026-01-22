@@ -376,6 +376,9 @@ pub async fn build_index() -> Option<()> {
             remaining -= candid_blocks.len() as u64;
             if let Err(err) = append_blocks(candid_blocks) {
                 log!(P0, "[build_index]: failed to append blocks: {}", err);
+                log!(P0, "[build_index]: Stopping the indexing timer.");
+                ic_cdk::eprintln!("Stopping the indexing timer.");
+                clear_build_index_timer();
                 return Some(());
             }
         }
@@ -389,6 +392,9 @@ pub async fn build_index() -> Option<()> {
     log!(P0, "[build_index]: received {} blocks", tx_indexed_count);
     if let Err(err) = append_blocks(res.blocks) {
         log!(P0, "[build_index]: failed to append blocks: {}", err);
+        log!(P0, "[build_index]: Stopping the indexing timer.");
+        ic_cdk::eprintln!("Stopping the indexing timer.");
+        clear_build_index_timer();
         return Some(());
     }
     let retrieve_blocks_from_ledger_interval =
@@ -407,6 +413,11 @@ fn set_build_index_timer(after: Duration) {
         let _ = build_index().await;
     });
     TIMER_ID.with(|tid| *tid.borrow_mut() = timer_id);
+}
+
+fn clear_build_index_timer() {
+    let timer_id = TIMER_ID.with(|tid| *tid.borrow());
+    ic_cdk_timers::clear_timer(timer_id);
 }
 
 fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
