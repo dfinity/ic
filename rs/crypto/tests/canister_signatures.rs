@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use ic_crypto_interfaces_sig_verification::CanisterSigVerifier;
-use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_standalone_sig_verifier::{KeyBytesContentType, user_public_key_from_bytes};
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
@@ -20,9 +19,9 @@ pub const ROOT_SUBNET_ID: SubnetId = SUBNET_1;
 
 #[test]
 fn should_correctly_parse_der_encoded_iccsa_pubkey() {
-    let pubkey_bytes = canister_sig_pub_key_to_bytes(CanisterId::from_u64(42), b"seed");
     let pubkey_der =
-        subject_public_key_info_der(oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2), &pubkey_bytes).unwrap();
+        hex::decode("3020300c060a2b0601040183b84301020310000a000000000000002a010173656564")
+            .unwrap();
 
     let (parsed_pubkey, content_type) = user_public_key_from_bytes(&pubkey_der).unwrap();
 
