@@ -48,6 +48,7 @@ DEPENDENCIES = [
     "//rs/utils",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:der",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:ic-cdk",

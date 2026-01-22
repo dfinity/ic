@@ -257,11 +257,14 @@ impl NodeRegistration {
                 .unwrap()
                 .expect("Failed to retrieve current node public keys");
 
-        let node_registration_attestation = generate_node_registration_attestation(&self.log);
+        let node_signing_pk = protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap());
+
+        let node_registration_attestation =
+            generate_node_registration_attestation(&self.log, &node_signing_pk);
 
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
-            node_signing_pk: protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap()),
+            node_signing_pk,
             committee_signing_pk: protobuf_to_vec(
                 node_pub_keys.committee_signing_public_key.unwrap(),
             ),
@@ -801,12 +804,17 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 ///
 /// Returns `None` if SEV is not active or if attestation package generation fails.
 #[cfg(target_os = "linux")]
-fn generate_node_registration_attestation(log: &ReplicaLogger) -> Option<Vec<u8>> {
+fn generate_node_registration_attestation(
+    log: &ReplicaLogger,
+    node_signing_pk: &[u8],
+) -> Option<Vec<u8>> {
     use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
     use config_types::GuestOSConfig;
+    use der::asn1::OctetStringRef;
     use sev::firmware::guest::Firmware;
     use sev_guest::attestation_package::generate_attestation_package;
     use sev_guest::is_sev_active;
+    use sha2::{Digest, Sha256};
 
     // Check if SEV is active
     let is_sev_active = match is_sev_active() {
@@ -872,11 +880,28 @@ fn generate_node_registration_attestation(log: &ReplicaLogger) -> Option<Vec<u8>
         }
     };
 
+    let pk_hash: [u8; 32] = Sha256::digest(node_signing_pk).into();
+    let node_signing_pk_hash = match OctetStringRef::new(&pk_hash) {
+        Ok(hash) => hash,
+        Err(e) => {
+            error!(log, "Failed to create OctetStringRef from hash: {:?}", e);
+            UtilityCommand::notify_host(
+                &format!("Failed to create OctetStringRef from hash: {e:?}"),
+                1,
+            );
+            return None;
+        }
+    };
+
+    let custom_data = NodeRegistrationAttestationCustomData {
+        node_signing_pk_hash,
+    };
+
     // Generate the attestation package with NodeRegistration custom data
     let attestation_package = match generate_attestation_package(
         &mut firmware,
         &trusted_execution_config,
-        &NodeRegistrationAttestationCustomData,
+        &custom_data,
     ) {
         Ok(package) => package,
         Err(e) => {
@@ -908,7 +933,10 @@ fn generate_node_registration_attestation(log: &ReplicaLogger) -> Option<Vec<u8>
 
 /// Non-Linux stub that always returns None.
 #[cfg(not(target_os = "linux"))]
-fn generate_node_registration_attestation(_log: &ReplicaLogger) -> Option<Vec<u8>> {
+fn generate_node_registration_attestation(
+    _log: &ReplicaLogger,
+    _node_signing_pk: &[u8],
+) -> Option<Vec<u8>> {
     None
 }
 

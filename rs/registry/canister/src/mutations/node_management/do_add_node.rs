@@ -6,10 +6,12 @@ use attestation::{
     },
     custom_data::NodeRegistrationAttestationCustomData,
 };
+use der::asn1::OctetStringRef;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -290,10 +292,20 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
     )
     .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to verify attestation package: {e}"))?;
 
+    // Compute the expected custom data using the hash of the node signing public key
+    // This ensures the attestation was generated specifically for this node
+    let pk_hash: [u8; 32] = Sha256::hash(&payload.node_signing_pk);
+    let expected_custom_data = NodeRegistrationAttestationCustomData {
+        node_signing_pk_hash: OctetStringRef::new(&pk_hash).expect("hash is valid"),
+    };
+
     let parsed = parsed
-        .verify_custom_data(&NodeRegistrationAttestationCustomData)
+        .verify_custom_data(&expected_custom_data)
         .map_err(|e| {
-            format!("{LOG_PREFIX}do_add_node: Attestation custom data verification failed: {e}")
+            format!(
+                "{LOG_PREFIX}do_add_node: Attestation custom data verification failed. \
+                 The attestation report may have been generated for a different node. Error: {e}"
+            )
         })?;
 
     let chip_id = parsed.attestation_report().chip_id.to_vec();
