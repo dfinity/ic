@@ -5309,15 +5309,7 @@ fn upload_chunk_charges_if_failing() {
             SCHEDULER_CORES as u64 * (EMPTY_CANISTER_MEMORY_USAGE + restricted_capacity).get(),
         )
         .build();
-
     let canister_id = test.create_canister(CYCLES);
-
-    // Verify we are in the expected restricted state (1022 KiB available).
-    assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        restricted_capacity.get() as i64
-    );
-
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
     let expected_charge = test.cycles_account_manager().execution_cost(
@@ -5325,6 +5317,11 @@ fn upload_chunk_charges_if_failing() {
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
+    );
+    // Verify we are in the expected restricted state (1022 KiB available).
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        restricted_capacity.get() as i64
     );
 
     // Attempt to upload a small chunk. This requires `max_chunk_size` (1024 KiB) availability,
@@ -5334,7 +5331,6 @@ fn upload_chunk_charges_if_failing() {
         chunk: vec![42; 10],
     }
     .encode();
-
     let err = test.subnet_message("upload_chunk", payload).unwrap_err();
 
     // Verify the error is SubnetOversubscribed and contains the expected values.
