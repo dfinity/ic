@@ -508,6 +508,8 @@ impl NodeRegistration {
     /// without TLS configuration.
     /// Then builds an IC agent with the selected NNS URL and TLS configuration, using the provided
     /// identity to sign messages.
+    /// Finally, the root key of the agent is set to the NNS public key fetched from the registry or
+    /// the config.
     fn get_https_agent_to_random_nns_url<I: 'static + Identity>(
         &self,
         identity: I,
