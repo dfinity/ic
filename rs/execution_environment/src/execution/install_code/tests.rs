@@ -631,9 +631,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
-    // 900_000
-    // 6_355_740 - 5_100_000 = 1_255_740
-    let canister_id = test.create_canister(Cycles::new(0) + freezing_threshold_cycles);
+    let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
