@@ -416,6 +416,29 @@ impl CanisterManager {
             }
         }
 
+        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
+            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
+        )));
+        let (min_limit, max_limit) = (
+            NumBytes::new(MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+            NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64),
+        );
+        match log_memory_limit {
+            Some(bytes) if bytes < min_limit => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
+                    bytes,
+                    limit: min_limit,
+                });
+            }
+            Some(bytes) if bytes > max_limit => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
+                    bytes,
+                    limit: max_limit,
+                });
+            }
+            _ => {}
+        }
+
         let allocated_bytes = new_memory_bytes.saturating_sub(&old_memory_bytes);
         let reservation_cycles = self.cycles_account_manager.storage_reservation_cycles(
             allocated_bytes,
@@ -454,29 +477,6 @@ impl CanisterManager {
                 available: canister_cycles_balance,
                 threshold: reservation_cycles,
             });
-        }
-
-        let log_memory_limit = settings.log_memory_limit().or(Some(NumBytes::new(
-            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64,
-        )));
-        let (min_limit, max_limit) = (
-            NumBytes::new(MIN_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-            NumBytes::new(MAX_AGGREGATE_LOG_MEMORY_LIMIT as u64),
-        );
-        match log_memory_limit {
-            Some(bytes) if bytes < min_limit => {
-                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
-                    bytes,
-                    limit: min_limit,
-                });
-            }
-            Some(bytes) if bytes > max_limit => {
-                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
-                    bytes,
-                    limit: max_limit,
-                });
-            }
-            _ => {}
         }
 
         Ok(ValidatedCanisterSettings::new(
@@ -564,6 +564,11 @@ impl CanisterManager {
         }
         if let Some(log_memory_limit) = settings.log_memory_limit() {
             canister.system_state.log_memory_limit = log_memory_limit;
+            let log_memory_store = &mut canister.system_state.log_memory_store;
+            let limit = log_memory_limit.get() as usize;
+            if log_memory_store.byte_capacity() != limit {
+                log_memory_store.set_log_memory_limit(limit);
+            }
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);

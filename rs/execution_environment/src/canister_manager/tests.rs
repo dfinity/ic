@@ -110,6 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const KIB: u64 = 1024;
 const MIB: u64 = 1 << 20;
 const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
@@ -4772,39 +4773,55 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     let canister_id = test.create_canister(CYCLES);
 
     let canister_history_memory_usage = |test: &mut ExecutionTest| {
-        let canister_history_memory_usage = test
-            .canister_state(canister_id)
-            .canister_history_memory_usage()
-            .get();
-        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
-        let canister_memory_allocated_bytes = test
-            .canister_state(canister_id)
-            .memory_allocated_bytes()
-            .get();
-        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        let canister_state = test.canister_state(canister_id);
+        let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
+        let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+        let canister_memory_usage = canister_state.memory_usage().get();
+        let canister_memory_allocated_bytes = canister_state.memory_allocated_bytes().get();
+        assert_eq!(
+            canister_history_memory_usage + log_memory_store_memory_usage,
+            canister_memory_usage
+        );
         assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
         canister_history_memory_usage
     };
 
     let initial_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
+    // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert!(initial_canister_history_memory_usage > 0);
+    let initial_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    // Assert that canister log memory store memory was non empty.
+    assert!(initial_log_memory_store_memory_usage > 0);
 
     test.uninstall_code(canister_id).unwrap();
 
     let final_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
-    assert!(final_subnet_available_memory < initial_subnet_available_memory);
+    // Assert that canister history memory usage has increased.
     let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert!(final_canister_history_memory_usage > initial_canister_history_memory_usage);
+    // Assert that canister log memory store memory was cleared.
+    let final_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    assert_eq!(final_log_memory_store_memory_usage, 0);
 
-    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_subnet_available_memory_usage =
+        final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
-        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+        final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
+    let extra_canister_log_memory_store_memory_usage =
+        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
+    // Assert that subnet available memory usage has opposite sign to canister memory usage.
     assert_eq!(
-        extra_subnet_memory_usage,
-        extra_canister_history_memory_usage
+        -extra_subnet_available_memory_usage,
+        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
     );
 }
 
@@ -5293,16 +5310,32 @@ fn upload_chunk_charges_canister_cycles() {
 
 #[test]
 fn upload_chunk_charges_if_failing() {
+    const SCHEDULER_CORES: usize = 2;
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    // We restrict the subnet memory to be slightly less than the max chunk size (1MiB).
+    // This ensures `upload_chunk` fails with `SubnetOversubscribed`, allowing us to verify charging.
+    let max_chunk_size = wasm_chunk_store::chunk_size(); // 1024 KiB
+    let restricted_capacity = max_chunk_size - NumBytes::from(2 * KIB); // 1022 KiB
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_memory_reservation(0)
-        .with_subnet_execution_memory(10)
+        .with_scheduler_cores(SCHEDULER_CORES)
+        .with_subnet_execution_memory(
+            SCHEDULER_CORES as u64 * (EMPTY_CANISTER_MEMORY_USAGE + restricted_capacity).get(),
+        )
         .build();
+
     let canister_id = test.create_canister(CYCLES);
+
+    // Verify we are in the expected restricted state (1022 KiB available).
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        restricted_capacity.get() as i64
+    );
+
     let initial_balance = test.canister_state(canister_id).system_state.balance();
-    // Expected charge is the same as if the upload succeeds.
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
@@ -5310,14 +5343,22 @@ fn upload_chunk_charges_if_failing() {
         test.canister_wasm_execution_mode(canister_id),
     );
 
+    // Attempt to upload a small chunk. This requires `max_chunk_size` (1024 KiB) availability,
+    // but we only have `restricted_capacity` (1022 KiB).
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
         chunk: vec![42; 10],
     }
     .encode();
-    // Upload will fail because subnet does not have space.
-    let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
 
+    let err = test.subnet_message("upload_chunk", payload).unwrap_err();
+
+    // Verify the error is SubnetOversubscribed and contains the expected values.
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    let msg = err.description();
+    assert!(msg.contains(&format!("{}", max_chunk_size.get() / KIB)));
+    assert!(msg.contains(&format!("{}", restricted_capacity.get() / KIB)));
+    // Verify the canister was charged despite the failure.
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
@@ -5385,7 +5426,8 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
+const LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB;
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + LOG_MEMORY_STORE_USAGE);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -7477,12 +7519,14 @@ fn create_canister_updates_subnet_available_memory() {
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
     assert!(subnet_available_memory < initial_subnet_available_memory);
     let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
-    let canister_history_memory_usage = test
-        .canister_state(canister_id)
-        .canister_history_memory_usage()
-        .get();
+    let canister_state = test.canister_state(canister_id);
+    let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+    let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
     assert!(canister_history_memory_usage > 0);
-    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+    assert_eq!(
+        subnet_memory_usage,
+        canister_history_memory_usage + log_memory_store_memory_usage
+    );
 }
 
 #[test]
