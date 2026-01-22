@@ -10,7 +10,6 @@ documentation.workspace = true
 crossbeam-channel = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
-ic-config = { path = "../config" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
