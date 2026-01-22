@@ -646,7 +646,7 @@ pub fn syscalls<
                 let mut num_bytes = logging_charge_bytes(&mut caller, length)?;
                 let debug_print_is_enabled = debug_print_is_enabled(&mut caller, &feature_flags)?;
                 if debug_print_is_enabled {
-                    num_bytes += length;
+                    num_bytes = num_bytes.saturating_add(length);
                 }
                 charge_for_cpu_and_mem(&mut caller, overhead::DEBUG_PRINT, num_bytes)?;
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
@@ -667,7 +667,7 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>, offset: I, length: I| -> Result<(), _> {
                 let offset: usize = offset.try_into().expect("Failed to convert I to usize");
                 let length: usize = length.try_into().expect("Failed to convert I to usize");
-                let num_bytes = length + logging_charge_bytes(&mut caller, length)?;
+                let num_bytes = length.saturating_add(logging_charge_bytes(&mut caller, length)?);
                 charge_for_cpu_and_mem(&mut caller, overhead::TRAP, num_bytes)?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_trap(offset, length, memory)
