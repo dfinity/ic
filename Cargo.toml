@@ -727,6 +727,7 @@ lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca
 lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f1dca79de855af892b444d7112567b58d" }
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
+lzma-sys = { version = "0.1.20", features = ["static"] }
 macaddr = "1.0"
 memchr = "2.7"
 memmap2 = "0.9.5"
@@ -904,6 +905,7 @@ wast = "243.0.0"
 wat = "1.243.0"
 which = "6.0.3"
 wirm = { version = "2.1.0", features = ["parallel"] }
+xz2 = { version = "0.1.7", features = ["static"] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
