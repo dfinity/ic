@@ -46337,7 +46337,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "c54b03d81b325beaaf52c3dedd9bc55fe480dcd8"
+            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
           }
         }
       },
@@ -46404,7 +46404,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "c54b03d81b325beaaf52c3dedd9bc55fe480dcd8"
+            "Rev": "64eb770caa940f215190d86d61e4c132511be5e2"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
