@@ -3501,8 +3501,7 @@ impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
         let _timer = self.read_certified_state_duration_histogram.start_timer();
 
         let mixed_hash_tree = {
-            let lazy_tree =
-                replicated_state_as_lazy_tree(self.certification.height, self.get_state());
+            let lazy_tree = replicated_state_as_lazy_tree(self.get_height(), self.get_state());
             let partial_tree = materialize_partial(&lazy_tree, paths, exclusion.map(|v| &v[..]));
             self.hash_tree.witness::<MixedHashTree>(&partial_tree)
         }
