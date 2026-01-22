@@ -44,10 +44,7 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
 
 #[test]
 fn should_have_stable_representation_of_private_key() {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-
-    let seed = Seed::from_rng(&mut ChaCha20Rng::from_seed([0x42u8; 32]));
+    let seed = Seed::from_bytes(&[0x42u8; 32]);
 
     let (_cert, secret_key) =
         generate_tls_key_pair_der(seed, "common name", not_before(), not_after())
@@ -57,7 +54,7 @@ fn should_have_stable_representation_of_private_key() {
 
     assert_eq!(
         hex::encode(serialized_sk),
-        "a16562797465735830302e020100300506032b65700422042068063121e45dac37b373bcf29480610ebcedef221604e87fb4c6181de77a6ed2"
+        "a16562797465735830302e020100300506032b6570042204208c585dc5f5032b3c022716cdda961ef9aa9dfb7270e39cb5fb3531cf8a9b30c3"
     );
 }
 
