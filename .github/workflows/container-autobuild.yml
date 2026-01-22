@@ -31,7 +31,7 @@ jobs:
     name: Build Image Prep
     runs-on: ubuntu-latest
     outputs:
-      build_image: ${{ steps.set-output.outputs.build }}
+      build_image: ${{ steps.set-output.outputs.build_image }}
       image_tag: ${{ steps.set-output.outputs.image_tag }}
     steps:
       - name: Checkout
