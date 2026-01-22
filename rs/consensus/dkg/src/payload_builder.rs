@@ -19,7 +19,7 @@ use ic_types::{
     batch::ValidationContext,
     consensus::{
         Block,
-        dkg::{DealingMessages, DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
+        dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
         get_faults_tolerated,
     },
     crypto::threshold_sig::ni_dkg::{
@@ -109,7 +109,7 @@ fn create_data_payload(
     let dealers_from_chain = utils::get_dealers_from_chain(pool_reader, parent);
     // Filter from the validated pool all dealings whose dealer has no dealing on
     // the chain yet.
-    let new_validated_dealings: DealingMessages = dkg_pool
+    let new_validated_dealings = dkg_pool
         .read()
         .expect("Couldn't lock DKG pool for reading.")
         .get_validated()
@@ -122,14 +122,6 @@ fn create_data_payload(
         .take(max_dealings_per_block)
         .cloned()
         .collect();
-
-    // If we have dealings in the payload, we will not try to make transcripts as well
-    if !new_validated_dealings.is_empty() {
-        return Ok(DkgDataPayload::new(
-            last_summary_block.height,
-            new_validated_dealings,
-        ));
-    }
 
     let remote_dkg_transcripts = create_early_remote_transcripts(
         pool_reader,
@@ -153,6 +145,7 @@ fn create_data_payload(
     // Try to include remote transcripts
     Ok(DkgDataPayload::new_with_remote_dkg_transcripts(
         last_summary_block.height,
+        new_validated_dealings,
         remote_dkg_transcripts,
     ))
 }
@@ -183,34 +176,41 @@ pub(crate) fn create_early_remote_transcripts(
     // Get all dealings that have not been used in a transcript already
     let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
 
-    // Collect map of remote target_ids to dkg_ids
-    let remote_contexts: BTreeMap<NiDkgTargetId, Vec<NiDkgId>> = all_dealings
-        .iter()
-        .filter_map(|(dkg_id, _)| match dkg_id.target_subnet {
-            NiDkgTargetSubnet::Local => None,
-            NiDkgTargetSubnet::Remote(target_id) => Some((target_id, dkg_id.clone())),
-        })
-        .fold(BTreeMap::new(), |mut acc, (target_id, dkg_id)| {
-            acc.entry(target_id).or_default().push(dkg_id);
-            acc
-        });
+    // Collect map of remote target_ids to dkg configs
+    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<(&NiDkgId, &NiDkgConfig)>> =
+        BTreeMap::new();
+    for (dkg_id, config) in last_dkg_summary.configs.iter() {
+        if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
+            remote_contexts
+                .entry(target_id)
+                .or_default()
+                .push((dkg_id, config));
+        }
+    }
 
     let state_ref = state.get_ref();
     let mut selected_transcripts = vec![];
-    for (_, dkg_ids) in remote_contexts {
-        // For each target_id, try to build the necessary (dkg_id, callback_id, transcript) triple
-        let mut transcripts: Vec<_> = dkg_ids
+    for (_, configs) in remote_contexts {
+        // If any of the configs has less dealings than the threshold, we skip this target_id
+        if configs.iter().any(|(dkg_id, config)| {
+            let dealings_count = all_dealings
+                .get(dkg_id)
+                .map_or(0, |dealings| dealings.len());
+            dealings_count < config.threshold().get().get() as usize
+        }) {
+            continue;
+        }
+
+        // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
+        let mut transcripts: Vec<_> = configs
             .iter()
-            .filter_map(|dkg_id| {
-                // Lookup the config from the summary
-                let config = last_dkg_summary.configs.get(dkg_id)?;
+            .filter_map(|(dkg_id, config)| {
                 // Lookup the callback id
                 let callback_id = get_callback_id_from_id(state_ref, dkg_id)?;
                 // Generate the transcript. We just skip errors, they will
                 // be handled in the summary block, if we fail to create an early transcript
                 let transcript = create_transcript(crypto, config, &all_dealings, &logger).ok()?;
-
-                Some((dkg_id.clone(), callback_id, Ok::<_, String>(transcript)))
+                Some(((*dkg_id).clone(), callback_id, Ok::<_, String>(transcript)))
             })
             .collect();
 
@@ -228,11 +228,7 @@ pub(crate) fn create_early_remote_transcripts(
                     .iter()
                     .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
                     .collect();
-                let expected_tags: BTreeSet<_> = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold]
-                    .iter()
-                    .cloned()
-                    .collect();
-                tags == expected_tags
+                tags.contains(&NiDkgTag::LowThreshold) && tags.contains(&NiDkgTag::HighThreshold)
             }
             _ => false, // Other combinations are not supported
         };

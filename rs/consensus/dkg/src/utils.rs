@@ -107,10 +107,8 @@ pub(super) fn get_dkg_dealings(
     exclude_used: bool,
 ) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
     let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
-    let mut used_dealings: BTreeSet<NiDkgId> = BTreeSet::new();
+    let mut excluded: BTreeSet<NiDkgId> = BTreeSet::new();
 
-    // Note that the chain iterator is guaranteed to iterate from
-    // newest to oldest blocks and that transcripts can not appear before their dealings.
     for block in pool_reader
         .chain_iterator(block.clone())
         .take_while(|block| !block.payload.is_summary())
@@ -118,35 +116,26 @@ pub(super) fn get_dkg_dealings(
         let payload = &block.payload.as_ref().as_data().dkg;
 
         if exclude_used {
-            // Update used dealings
-            used_dealings.extend(
-                payload
-                    .transcripts_for_remote_subnets
-                    .iter()
-                    .filter(|transcript| transcript.2.is_ok())
-                    .map(|transcript| transcript.0.clone()),
-            );
+            for (dkg_id, _, _) in payload.transcripts_for_remote_subnets.iter() {
+                // Add the finished DKG to excluded list
+                excluded.insert(dkg_id.clone());
+                // Remove already selected dealings
+                dealings.remove(dkg_id);
+            }
         }
 
-        // Find new dealings in this payload
-        for (signer, ni_dkg_id, dealing) in payload
-            .messages
-            .iter()
-            // Filter out if they are already used
-            .filter(|message| !used_dealings.contains(&message.content.dkg_id))
-            .map(|message| {
-                (
-                    message.signature.signer,
-                    message.content.dkg_id.clone(),
-                    message.content.dealing.clone(),
-                )
-            })
-        {
-            let entry = dealings.entry(ni_dkg_id).or_default();
-            let old_entry = entry.insert(signer, dealing);
+        for message in payload.messages.iter() {
+            if excluded.contains(&message.content.dkg_id) {
+                continue;
+            }
+
+            let old_dealing = dealings
+                .entry(message.content.dkg_id.clone())
+                .or_default()
+                .insert(message.signature.signer, message.content.dealing.clone());
 
             assert!(
-                old_entry.is_none(),
+                old_dealing.is_none(),
                 "Dealings from the same dealers discovered."
             );
         }

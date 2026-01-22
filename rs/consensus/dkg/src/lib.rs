@@ -1673,15 +1673,12 @@ mod tests {
 
             // Put a dealing in the pool and check that it gets included
             // Additionally check that there are no remote transcripts
-            dkg_pool
-                .write()
-                .unwrap()
-                .apply(vec![ChangeAction::AddToValidated(create_dealing(
-                    1,
-                    remote_dkg_ids[0].clone(),
-                ))]);
+            let dealings = (0..3)
+                .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[0].clone())))
+                .collect::<Vec<_>>();
+            dkg_pool.write().unwrap().apply(dealings);
             pool.advance_round_normal_operation();
-            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // For the next round, we put nothing into the pool
@@ -1693,15 +1690,12 @@ mod tests {
 
             // Now we put the other dealing into the pool
             // The payload builder will include the dealing
-            dkg_pool
-                .write()
-                .unwrap()
-                .apply(vec![ChangeAction::AddToValidated(create_dealing(
-                    1,
-                    remote_dkg_ids[1].clone(),
-                ))]);
+            let dealings = (0..3)
+                .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[1].clone())))
+                .collect::<Vec<_>>();
+            dkg_pool.write().unwrap().apply(dealings);
             pool.advance_round_normal_operation();
-            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 1);
+            assert_eq!(extract_dealings_from_highest_block(&pool).len(), 3);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // Now sufficient dealings are in the pool, check that payload contains early remote transcripts
