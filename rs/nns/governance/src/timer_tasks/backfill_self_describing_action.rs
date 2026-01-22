@@ -11,6 +11,16 @@ use std::{cell::RefCell, ops::Bound, thread::LocalKey, time::Duration};
 const BACKFILL_INTERVAL: Duration = Duration::from_secs(5);
 const NO_PROPOSALS_TO_BACKFILL_INTERVAL: Duration = Duration::from_secs(86_400); // 1 day
 
+/// A task that backfills the self_describing_action field one proposal at a time.
+///
+/// This is done as a timer task (as opposed to within post_upgrade) because inter-canister calls
+/// are needed to get the self-describing action for ExecuteNnsFunction proposals (and post_upgrade
+/// cannot make inter-canister calls).
+///
+/// We are not doing the backfill in a single for-loop because there is a small risk or running out
+/// of the instruction limit (50B) if there are a lot of consecutive proposals that are not
+/// ExecuteNnsFunction proposals (some proposals are large as they contain WASMs). Instead, we
+/// backfill one proposal, wait for 5s, and then backfill the next proposal.
 pub(super) struct BackfillSelfDescribingActionTask {
     governance: &'static LocalKey<RefCell<Governance>>,
     /// The start bound for searching proposals needing backfill.
@@ -35,6 +45,12 @@ impl BackfillSelfDescribingActionTask {
 
 #[async_trait]
 impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
+    const NAME: &'static str = "backfill_self_describing_action";
+
+    fn initial_delay(&self) -> Duration {
+        Duration::from_secs(0)
+    }
+
     async fn execute(self) -> (Duration, Self) {
         // Find one proposal that needs backfilling (self_describing_action is None)
         // starting from `start_bound`.
@@ -60,7 +76,7 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
                 // No proposals need backfilling, schedule with longer delay and reset
                 // start_bound to Unbounded so next run starts from the beginning.
                 println!(
-                    "{}Backfill self_describing_action: No proposals need backfilling, \
+                    "{}Backfill self_describing_action: No more proposals need backfilling, \
                     scheduling with longer delay",
                     LOG_PREFIX
                 );
@@ -71,12 +87,12 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
             }
         };
 
-        // Try to convert the action to ValidProposalAction
         let valid_action = match ValidProposalAction::try_from(Some(action)) {
             Ok(valid_action) => valid_action,
             Err(e) => {
-                // Conversion to ValidProposalAction failed - skip this proposal and continue
-                // from this point on the next run.
+                // This should not happen, as existing proposals should be valid. However, it's not
+                // harmful to skip it. Ideally, we would NOT try again in the next loop, but that's
+                // also not harmful as we don't retry very often.
                 println!(
                     "{}Backfill self_describing_action: Failed to convert action for \
                     proposal {} to ValidProposalAction: {:?}",
@@ -89,32 +105,32 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
             }
         };
 
-        // Get the environment for the async call
         let env = self
             .governance
             .with_borrow(|governance| governance.env.clone());
 
-        // Try to get the self-describing action
         let result = valid_action.to_self_describing(env).await;
 
         match result {
             Ok(self_describing_action) => {
-                // Update the proposal with the self-describing action
                 self.governance.with_borrow_mut(|governance| {
-                    if let Some(proposal_data) =
-                        governance.heap_data.proposals.get_mut(&proposal_id)
-                        && let Some(proposal) = proposal_data.proposal.as_mut()
-                    {
-                        proposal.self_describing_action = Some(self_describing_action.clone());
+                    let proposal = governance
+                        .heap_data
+                        .proposals
+                        .get_mut(&proposal_id)
+                        .and_then(|proposal_data| proposal_data.proposal.as_mut());
+                    if let Some(proposal) = proposal {
+                        println!(
+                            "{}Backfill self_describing_action: Successfully backfilled proposal {}: {:?}",
+                            LOG_PREFIX, proposal_id, self_describing_action
+                        );
+                        proposal.self_describing_action = Some(self_describing_action);
                     }
                 });
-
-                println!(
-                    "{}Backfill self_describing_action: Successfully backfilled proposal {}: {:?}",
-                    LOG_PREFIX, proposal_id, self_describing_action
-                );
             }
             Err(e) => {
+                // This is the main reason why we loop back to the beginning of the proposal list
+                // after all proposals have been tried.
                 println!(
                     "{}Backfill self_describing_action: Failed for proposal {}: {:?}",
                     LOG_PREFIX, proposal_id, e
@@ -122,18 +138,11 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
             }
         }
 
-        // Continue from this proposal on the next run (whether success or failure)
         (
             BACKFILL_INTERVAL,
             self.with_start_bound(Bound::Excluded(proposal_id)),
         )
     }
-
-    fn initial_delay(&self) -> Duration {
-        Duration::from_secs(0)
-    }
-
-    const NAME: &'static str = "backfill_self_describing_action";
 }
 
 #[cfg(test)]
