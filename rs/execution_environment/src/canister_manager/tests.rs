@@ -110,7 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
-const KIB: u64 = 1024;
+const KIB: u64 = 1 << 10;
 const MIB: u64 = 1 << 20;
 const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
@@ -118,9 +118,9 @@ const T: u128 = 1_000_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
+const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * GIB); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
+const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * KIB; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 // The simplest valid Wasm binary: "(module)"
 const MINIMAL_WASM: [u8; 8] = [
