@@ -45,7 +45,6 @@ EOF
 REBUILD_IMAGE=false
 IMAGE_NAME="ic-dev"
 
-IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
