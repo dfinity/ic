@@ -300,7 +300,7 @@ async fn upgrade_to(
     // root hash from logs of each node
     let graceful_stops_handle = try_join_all(healthy_nodes.iter().map(|node| {
         let node_cl = node.clone();
-        tokio::spawn(async move { assert_orchestrator_stopped_gracefully(&node_cl) })
+        tokio::task::spawn_blocking(move || assert_orchestrator_stopped_gracefully(&node_cl))
     }));
     let fetch_hashes_handle = {
         let logger_cl = logger.clone();
