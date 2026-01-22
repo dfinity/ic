@@ -63,7 +63,7 @@ mod tests {
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,
-        testing::ReplicatedStateTesting,
+        testing::{ReplicatedStateTesting, StreamTesting},
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
