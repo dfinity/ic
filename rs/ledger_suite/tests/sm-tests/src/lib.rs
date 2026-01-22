@@ -5382,8 +5382,12 @@ where
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
-    env.upgrade_canister(canister_id, ledger_wasm.clone(), Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
 
     send_tx_and_verify_fee_collection(
         &env,
@@ -5438,6 +5442,41 @@ where
         None,
         vec![fee_collector_1, fee_collector_2],
     );
+}
+
+pub fn test_fee_collector_107_init_fc<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: Some(fee_collector),
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
+
+    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector), vec![]);
+}
+
+pub fn test_fee_collector_107_init_no_fc<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+
+    let args = encode_init_args(InitArgs {
+        fee_collector_account: None,
+        ..init_args(vec![])
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env.install_canister(ledger_wasm, args, None).unwrap();
+
+    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![]);
 }
 
 pub mod metadata {
