@@ -5220,19 +5220,33 @@ fn set_fc_107(
     .expect("failed to decode set fee collector result")
 }
 
+fn set_fc_107_by_controller(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    fee_collector: Option<Account>,
+) {
+    let controllers = env
+        .get_controllers(canister_id)
+        .expect("ledger should have a controller");
+    assert_eq!(controllers.len(), 1);
+    let controller = controllers[0];
+    let result = set_fc_107(&env, canister_id, controller, fee_collector);
+    assert!(result.is_ok());
+}
+
 fn send_tx_and_verify_fee_collection(
     env: &StateMachine,
     canister_id: CanisterId,
-    from: Account,
     active_fc: Option<Account>,
     inactive_fcs: Vec<Account>,
 ) {
-    let spender = Account::from(PrincipalId::new_user_test_id(1001).0);
-    let to = Account::from(PrincipalId::new_user_test_id(1002).0);
-    assert_ne!(spender, from);
-    assert_ne!(to, from);
+    let from = Account::from(PrincipalId::new_user_test_id(1001).0);
+    let spender = Account::from(PrincipalId::new_user_test_id(1002).0);
+    let to = Account::from(PrincipalId::new_user_test_id(1003).0);
     let from_balance = balance_of(&env, canister_id, from);
+
     let fc_balance = if let Some(fc) = active_fc {
+        assert_ne!(from, fc);
         assert_ne!(spender, fc);
         assert_ne!(to, fc);
         Some(balance_of(&env, canister_id, fc))
@@ -5242,32 +5256,43 @@ fn send_tx_and_verify_fee_collection(
     let mut inactive_fcs_balances = vec![];
     for fc in &inactive_fcs {
         inactive_fcs_balances.push(balance_of(&env, canister_id, *fc));
+        assert_ne!(from, *fc);
         assert_ne!(spender, *fc);
         assert_ne!(to, *fc);
     }
     let tot_supply = total_supply(&env, canister_id);
 
-    const NUM_TX: u64 = 3;
+    const NUM_FEE_COLLECTED: u64 = 3;
+    const MINT_AMOUNT: u64 = 1_000_000;
+    const BURN_AMOUNT: u64 = 12_000;
 
+    transfer(&env, canister_id, MINTER, from, MINT_AMOUNT).expect("failed to mint funds");
     transfer(&env, canister_id, from, to, 1).expect("failed to transfer funds");
     let approve_args = default_approve_args(spender.owner, u64::MAX);
     send_approval(&env, canister_id, from.owner, &approve_args).expect("approval failed");
     let transfer_from_args = default_transfer_from_args(from.owner, to.owner, 1);
     send_transfer_from(&env, canister_id, spender.owner, &transfer_from_args)
         .expect("transfer from failed");
+    transfer(&env, canister_id, from, MINTER, BURN_AMOUNT).expect("failed to burn funds");
 
     assert_eq!(
         balance_of(&env, canister_id, from),
-        from_balance - 2 - NUM_TX * FEE
+        from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_COLLECTED * FEE
     );
     if let Some(fc) = active_fc {
         assert_eq!(
             balance_of(&env, canister_id, fc),
-            fc_balance.unwrap() + NUM_TX * FEE
+            fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
         );
-        assert_eq!(total_supply(&env, canister_id), tot_supply);
+        assert_eq!(
+            total_supply(&env, canister_id),
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT
+        );
     } else {
-        assert_eq!(total_supply(&env, canister_id), tot_supply - NUM_TX * FEE);
+        assert_eq!(
+            total_supply(&env, canister_id),
+            tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_COLLECTED * FEE
+        );
     }
 
     for (fc, balance) in inactive_fcs.iter().zip(inactive_fcs_balances.iter()) {
@@ -5275,39 +5300,69 @@ fn send_tx_and_verify_fee_collection(
     }
 }
 
-pub fn test_fee_collector_107<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
+pub fn test_set_fee_collector_access_denied<T>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
     T: CandidType,
 {
-    let from = Account::from(PrincipalId::new_user_test_id(1).0);
-    let fee_collector = Account::from(PrincipalId::new_user_test_id(2).0);
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
-    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![(from, 100_000)]);
-
-    let controllers = env
-        .get_controllers(canister_id)
-        .expect("ledger should have a controller");
-    assert!(
-        !controllers.is_empty(),
-        "ledger should have at least one controller"
+    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
+    let non_controller = Account::from(PrincipalId::new_user_test_id(2).0);
+    let result = set_fc_107(
+        &env,
+        canister_id,
+        non_controller.owner.into(),
+        Some(fee_collector),
     );
-    let controller = controllers[0];
-    let result = set_fc_107(&env, canister_id, from.owner.into(), Some(fee_collector));
 
     let err = result.unwrap_err();
     assert_eq!(err, SetFeeCollectorError::AccessDenied("The `icrc107_set_fee_collector` endpoint can only be called by the canister controller".to_string()));
+}
 
-    send_tx_and_verify_fee_collection(&env, canister_id, from, None, vec![]);
+pub fn test_fee_collector_107_smoke<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
 
-    let result = set_fc_107(&env, canister_id, controller, Some(fee_collector));
-    assert!(result.is_ok());
+    let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
+    let fee_collector_2 = Account::from(PrincipalId::new_user_test_id(2).0);
 
-    let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
-    for block in resp.blocks {
-        println!("{block}");
-    }
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
 
-    send_tx_and_verify_fee_collection(&env, canister_id, from, Some(fee_collector), vec![]);
+    set_fc_107_by_controller(&env, canister_id, Some(fee_collector_1));
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_1),
+        vec![fee_collector_2],
+    );
+
+    set_fc_107_by_controller(&env, canister_id, Some(fee_collector_2));
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_2),
+        vec![fee_collector_1],
+    );
+
+    set_fc_107_by_controller(&env, canister_id, None);
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
 }
 
 pub mod metadata {

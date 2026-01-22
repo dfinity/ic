@@ -950,8 +950,16 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
 }
 
 #[test]
-fn test_fee_collector_107() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107(ledger_wasm(), encode_init_args);
+fn test_fee_collector_107_smoke() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_set_fee_collector_access_denied() {
+    ic_ledger_suite_state_machine_tests::test_set_fee_collector_access_denied(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 mod metrics {
