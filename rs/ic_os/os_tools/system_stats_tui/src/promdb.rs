@@ -364,9 +364,11 @@ impl IndexedSeriesSubset<'_> {
                     (Value::Gauge(b), Value::Gauge(n)) => Some(Value::Gauge(n - b)),
                     (Value::Untyped(b), Value::Untyped(n)) => Some(Value::Untyped(n - b)),
                     (Value::Counter(b), Value::Counter(n)) => Some(Value::Counter(n - b)),
-                    (Value::Histogram(_), Value::Histogram(_)) => None, // "don't know how to deal with histograms".to_string(),
-                    (Value::Summary(_), Value::Summary(_)) => None, // "don't know how to deal with summaries".to_string(),
-                    (_, _) => None,
+                    (Value::Histogram(_), Value::Histogram(_)) => {
+                        panic!("no support for histograms")
+                    }
+                    (Value::Summary(_), Value::Summary(_)) => panic!("no support for summaries"),
+                    (_, _) => panic!("type mismatch when calculating delta"),
                 };
                 if let Some(delta) = delta {
                     let mut new_sample = Sample::clone(sample);

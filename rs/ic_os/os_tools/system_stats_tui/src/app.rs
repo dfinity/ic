@@ -1001,6 +1001,7 @@ impl App {
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 self.events.send(AppEvent::Quit)
             }
+            // Other handlers can be added here.
             _ => {}
         }
         Ok(())
