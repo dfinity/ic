@@ -54,11 +54,10 @@ export RUNFILES="$TEST_TMPDIR/runfiles"
 mkdir "$RUNFILES"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
-    relative_dep_path="${!env_var}"
-    sanitized_relative_dep_path="$(sed 's|/|-|g' <<<"$relative_dep_path")"
-    ln -s "$PWD/$relative_dep_path" \
-          "$RUNFILES/$sanitized_relative_dep_path"
-    export "$env_var=$sanitized_relative_dep_path"
+    old_dep="${!env_var}"
+    new_dep="$(sed 's|/|-|g' <<<"$old_dep")"
+    ln -s "$PWD/$old_dep" "$RUNFILES/$new_dep"
+    export "$env_var=$new_dep"
 done
 
 if [ -n "${COLOCATE_UVM_CONFIG_IMAGE_PATH:-}" ]; then
