@@ -1,0 +1,15 @@
+#TODO(urgent): do we need all this
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+#TODO(urgent): make this more private
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "pricing",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_https_outcalls_pricing",
+    version = "0.1.0",
+    deps = [
+        "//rs/types/types",
+    ],
+)
