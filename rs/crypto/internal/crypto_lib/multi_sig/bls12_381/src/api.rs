@@ -8,9 +8,6 @@ use ic_crypto_internal_seed::Seed;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
 /// Generates a keypair from the given `seed`.
 pub fn keypair_from_seed(seed: Seed) -> (SecretKeyBytes, PublicKeyBytes) {
     let (secret_key, public_key) = crypto::keypair_from_rng(&mut seed.into_rng());
