@@ -1590,12 +1590,8 @@ fn test_post_upgrade_start_timer() {
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    env.upgrade_canister(
-        index_id,
-        index_wasm(),
-        Encode!(&None::<UpgradeArg>).unwrap(),
-    )
-    .unwrap();
+    env.upgrade_canister(index_id, index_wasm(), Encode!(&()).unwrap())
+        .unwrap();
 
     // Check that the index syncs the new block (wait_until_sync_is_completed fails
     // if the new block is not synced).
