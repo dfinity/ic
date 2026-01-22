@@ -188,18 +188,14 @@ impl RandomOracle {
         Ok(input)
     }
 
-    /// Consume the random oracle and generate a bytestring as output
-    ///
-    /// Due to limitations of XMD this can produce only a limited amount of data,
-    /// at most 8160 bytes.
-    pub fn output_bytestring(self, output_length: usize) -> CanisterThresholdResult<Vec<u8>> {
+    /// Consume the random oracle and generate a 32 bytes as output
+    pub fn output_32_bytes(self) -> CanisterThresholdResult<[u8; 32]> {
         let ro_input = self.form_ro_input()?;
 
-        Ok(xmd::<ic_crypto_sha2::Sha256>(
+        Ok(xmd::<32, ic_crypto_sha2::Sha256>(
             &ro_input,
             self.domain_separator.as_bytes(),
-            output_length,
-        )?)
+        ))
     }
 
     /// Consume the random oracle and generate a point as output

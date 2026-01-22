@@ -48,7 +48,7 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     ro.add_scalar("c2", &c2)?;
     ro.add_u64("round", 3)?;
 
-    let byte_output = ro.output_bytestring(32)?;
+    let byte_output = ro.output_32_bytes()?;
 
     assert_eq!(
         hex::encode(&byte_output),

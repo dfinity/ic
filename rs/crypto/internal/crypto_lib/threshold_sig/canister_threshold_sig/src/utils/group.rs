@@ -331,7 +331,7 @@ impl EccScalar {
         let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
         let len_in_bytes = count * field_len;
 
-        let uniform_bytes = ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(
+        let uniform_bytes = ic_crypto_internal_seed::varlen_xmd::<ic_crypto_sha2::Sha256>(
             input,
             domain_separator,
             len_in_bytes,
