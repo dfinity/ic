@@ -23,7 +23,10 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource, Request},
 };
-use std::time::{Duration, Instant};
+use std::{
+    sync::{Arc, atomic::AtomicU64},
+    time::{Duration, Instant},
+};
 use tokio::{
     runtime::Handle,
     sync::mpsc::{
@@ -215,7 +218,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 )
             })
             .and_then(|(adapter_response, elapsed)| async move {
-                //TODO(next): use alapsed and the adapter_metrics to use in teh budget.
+                //TODO(next): use elapsed and the adapter_metrics to use in the budget.
                 let HttpsOutcallResult {
                     metrics: adapter_metrics,
                     result,
@@ -271,9 +274,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     body,
                 };
 
+                let status_str = status.to_string();
                 metrics
                     .http_request_duration
-                    .with_label_values(&[&status.to_string(), request_http_method.as_str()])
+                    .with_label_values(&[status_str.as_str(), request_http_method.as_str()])
                     .observe(elapsed.as_secs_f64());
 
                 validate_http_headers_and_body(
@@ -291,7 +295,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 let transform_timer = metrics.transform_execution_duration.start_timer();
                 let transform_response = match &request_transform {
                     Some(transform) => {
-                        let transform_result = transform_adapter_response(
+                        let (transform_result, instruction_count) = transform_adapter_response(
                             query_handler,
                             canister_http_payload,
                             request_sender,
@@ -302,6 +306,23 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             Ok(data) => data.len(),
                             Err((_, msg)) => msg.len(),
                         };
+
+                        info!(
+                            log,
+                            "Received canister http response: request_size: {}, \
+                            response_time {}, downloaded_bytes {}, reply_callback_id {}, \
+                            sender {}, process_id: {}, transformed_response_size: {}, \
+                            transform_instructions_used: {}, max_response_size: {}",
+                            request_size,
+                            elapsed.as_millis(),
+                            adapter_metrics.map_or(0, |m| m.downloaded_bytes),
+                            reply_callback_id,
+                            request_sender,
+                            std::process::id(),
+                            transform_result_size,
+                            instruction_count,
+                            max_response_size_bytes,
+                        );
 
                         if transform_result_size as u64 > max_response_size_bytes {
                             let err_msg = format!(
@@ -317,7 +338,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             RejectCode::SysFatal,
                             format!(
                                 "Failed to parse adapter http response \
-                                    to 'http_response' candid: {encode_error}"
+                                to 'http_response' candid: {encode_error}"
                             ),
                         )
                     }),
@@ -380,51 +401,65 @@ async fn transform_adapter_response(
     canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
-) -> Result<Vec<u8>, (RejectCode, String)> {
+) -> (Result<Vec<u8>, (RejectCode, String)>, u64) {
     let transform_args = TransformArgs {
         response: canister_http_response,
         context: transform.context.clone(),
     };
-    let method_payload = Encode!(&transform_args).map_err(|encode_error| {
-        (
-            RejectCode::SysFatal,
-            format!("Failed to parse http response to 'http_response' candid: {encode_error}"),
-        )
-    })?;
 
-    // Query to execution.
-    let query = Query {
-        source: QuerySource::System,
-        receiver: transform_canister,
-        method_name: transform.method_name.to_string(),
-        method_payload,
-    };
+    let instruction_observation = Arc::new(AtomicU64::new(0));
 
-    let query_execution_input = TransformExecutionInput { query };
+    let instruction_observation_clone = instruction_observation.clone();
 
-    match Oneshot::new(query_handler, query_execution_input).await {
-        Ok(query_response) => match query_response {
-            Ok((res, _time)) => match res {
-                Ok(wasm_result) => match wasm_result {
-                    WasmResult::Reply(reply) => Ok(reply),
-                    WasmResult::Reject(reject_message) => {
-                        Err((RejectCode::CanisterReject, reject_message))
-                    }
+    let execution_result = async move {
+        let method_payload = Encode!(&transform_args).map_err(|encode_error| {
+            (
+                RejectCode::SysFatal,
+                format!("Failed to parse http response to 'http_response' candid: {encode_error}"),
+            )
+        })?;
+
+        let query = Query {
+            source: QuerySource::System,
+            receiver: transform_canister,
+            method_name: transform.method_name.to_string(),
+            method_payload,
+        };
+
+        let query_execution_input = TransformExecutionInput {
+            query,
+            instruction_observation: instruction_observation_clone,
+        };
+
+        match Oneshot::new(query_handler, query_execution_input).await {
+            Ok(query_response) => match query_response {
+                Ok((res, _time)) => match res {
+                    Ok(wasm_result) => match wasm_result {
+                        WasmResult::Reply(reply) => Ok(reply),
+                        WasmResult::Reject(reject_message) => {
+                            Err((RejectCode::CanisterReject, reject_message))
+                        }
+                    },
+                    Err(user_error) => Err((user_error.reject_code(), user_error.to_string())),
                 },
-                Err(user_error) => Err((user_error.reject_code(), user_error.to_string())),
+                Err(query_execution_error) => {
+                    Err((RejectCode::SysTransient, query_execution_error.to_string()))
+                }
             },
-            Err(query_execution_error) => {
-                Err((RejectCode::SysTransient, query_execution_error.to_string()))
-            }
-        },
-        Err(err) => Err((
-            RejectCode::SysFatal,
-            format!(
-                "Calling transform function '{}' failed: {}",
-                transform.method_name, err
-            ),
-        )),
+            Err(err) => Err((
+                RejectCode::SysFatal,
+                format!(
+                    "Calling transform function '{}' failed: {}",
+                    transform.method_name, err
+                ),
+            )),
+        }
     }
+    .await;
+
+    let instructions_used = instruction_observation.load(std::sync::atomic::Ordering::Relaxed);
+
+    (execution_result, instructions_used)
 }
 
 pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {

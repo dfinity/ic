@@ -2493,7 +2493,7 @@ fn expected_cycle_cost(
             .build(),
         request.into(),
         &BTreeSet::new(),
-        0,
+        subnet_size,
         &mut rand::thread_rng(),
     )
     .unwrap();
