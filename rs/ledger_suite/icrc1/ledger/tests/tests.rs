@@ -955,6 +955,11 @@ fn test_fee_collector_107_smoke() {
 }
 
 #[test]
+fn test_fee_collector_107_upgrade() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_set_fee_collector_access_denied() {
     ic_ledger_suite_state_machine_tests::test_set_fee_collector_access_denied(
         ledger_wasm(),

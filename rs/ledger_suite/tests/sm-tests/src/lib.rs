@@ -5365,6 +5365,81 @@ where
     );
 }
 
+pub fn test_fee_collector_107_upgrade<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
+    let fee_collector_2 = Account::from(PrincipalId::new_user_test_id(2).0);
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
+    env.upgrade_canister(canister_id, ledger_wasm.clone(), Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector_1)),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_1),
+        vec![fee_collector_2],
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        Some(fee_collector_1),
+        vec![fee_collector_2],
+    );
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        change_fee_collector: Some(ChangeFeeCollector::Unset),
+        ..UpgradeArgs::default()
+    }));
+    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the ledger");
+
+    send_tx_and_verify_fee_collection(
+        &env,
+        canister_id,
+        None,
+        vec![fee_collector_1, fee_collector_2],
+    );
+}
+
 pub mod metadata {
     use super::*;
 
