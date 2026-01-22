@@ -781,6 +781,9 @@ fn get_running_canister_status_from_another_canister() {
             + test
                 .canister_state(canister)
                 .canister_history_memory_usage()
+            + test
+                .canister_state(canister)
+                .log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
@@ -890,12 +893,14 @@ fn get_canister_status_memory_metrics() {
     let stable_memory_size = csr.stable_memory_size();
     let global_memory_size = csr.global_memory_size();
     let wasm_binary_size = csr.wasm_binary_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let custom_sections_size = csr.custom_sections_size();
 
     let execution_memory_size = wasm_memory_size
         + stable_memory_size
         + global_memory_size
         + wasm_binary_size
+        + log_memory_store_size
         + custom_sections_size;
 
     let canister_history_size = csr.canister_history_size();

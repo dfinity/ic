@@ -483,9 +483,10 @@ fn queries_to_frozen_canisters_are_rejected() {
     //
     // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
     //       5_000_000 cycles are needed for update call execution
+    //         690_250 cycles are needed for log memory store
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
-    let low_cycles = Cycles::new(300_005_633_530);
+    let low_cycles = Cycles::new(300_006_323_780);
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
