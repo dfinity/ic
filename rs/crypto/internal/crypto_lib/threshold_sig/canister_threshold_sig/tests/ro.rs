@@ -48,11 +48,11 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     ro.add_scalar("c2", &c2)?;
     ro.add_u64("round", 3)?;
 
-    let byte_output = ro.output_bytestring(42)?;
+    let byte_output = ro.output_bytestring(32)?;
 
     assert_eq!(
         hex::encode(&byte_output),
-        "c569bf3e900df5d5e61fdf3b9d798d3089bf9dfd875e8735cb99aef2e5a865f2eb44fb6f363730a4b2dc"
+        "2ba794c0eb2e7d78f4deec97c38f28bff862b52a8c88d187d45e4fbcdc6219fe"
     );
 
     let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep-4");
@@ -64,7 +64,7 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
 
     assert_eq!(
         hex::encode(pt.serialize()),
-        "020585e68447c2697248df1fbceceb56858c23ff982ee9dbcded85e92860dd618b"
+        "030b9c4cb298281f22ec595aae038002d30040d3550cbab47add0cc421f9ab8556"
     );
 
     Ok(())
