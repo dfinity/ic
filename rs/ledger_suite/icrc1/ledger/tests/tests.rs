@@ -950,6 +950,14 @@ fn test_cycles_for_archive_creation_default_spawns_archive() {
 }
 
 #[test]
+fn test_set_fee_collector_access_denied() {
+    ic_ledger_suite_state_machine_tests::test_set_fee_collector_access_denied(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_fee_collector_107_smoke() {
     ic_ledger_suite_state_machine_tests::test_fee_collector_107_smoke(
         ledger_wasm(),
@@ -982,8 +990,18 @@ fn test_fee_collector_107_init_no_fc() {
 }
 
 #[test]
-fn test_set_fee_collector_access_denied() {
-    ic_ledger_suite_state_machine_tests::test_set_fee_collector_access_denied(
+fn test_fee_collector_107_upgrade_legacy_none_to_notset() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_none_to_notset(
+        ledger_mainnet_wasm(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_fee_collector_107_upgrade_legacy_none_to_none() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_none_to_none(
+        ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
     );
