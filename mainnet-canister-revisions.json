@@ -84,20 +84,20 @@
     "sha256": "bce508df3db43b47b158c0aab9a7c9a3709a78e055a7ced76d5ff89832f9e778"
   },
   "governance": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "ba8493ec7bc2be6360e62c5e9297d7f4c548992d944185cf4e3508fb7b23da4d"
+    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
+    "sha256": "70b9e15632552f316c84b48e3ea732997bfa71417255fb5d60c44aae8fe420d8"
   },
   "governance-canister_test": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "94d064aaae624d159ece411533965a12794582bb78e089e221597337c1269cf3"
+    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
+    "sha256": "affcfdbf835312c9a8f859f3c9c4b00f1c35e0974f48a2a10df81bd8c697ba21"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "51aa14f7d88a389e3d3434cd135967ac9b24ddd61c17a45e21d46006776016b3",
-    "tag": "release-2025-12-05"
+    "sha256": "2c45c2aad6647f5bd9300dee7f6dd4eddf26ff9253cda4895a0aaa1b9e10ab43",
+    "tag": "release-2026-01-16"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -108,24 +108,24 @@
     "sha256": "0d9221e28781e8b627c0e0696b16c0301424d4387514ed5fdae4fa74ad4b696b"
   },
   "migration": {
-    "rev": "ccc1ff6c7fd4dec3cadefcaf1eb168ee3892e03f",
-    "sha256": "2bcf1c2c8adba6f7bff5e7abda164f22e0a8f6a07120fbe3596c94234727d04c"
+    "rev": "789e5a187985cedc654988f0f337467d6d5b3dcb",
+    "sha256": "a7c87d163a0cc69f6a5e4ed11f9a99618bde8658d21e8d84207963bb2400347c"
   },
   "nns_dapp_test": {
-    "sha256": "37935da32289fb7f42d5b166b1e858322a7144422eccd9b03c6081da51b878f3",
-    "tag": "proposal-139676"
+    "sha256": "fefa040b4e98dbd18f383ee5985b84e79a73fc7c06e27c783dc0ce37222c3669",
+    "tag": "proposal-140007"
   },
   "node-rewards": {
-    "rev": "d2a13f0ecb29c96818d24076925d5da19ae61e93",
-    "sha256": "53cc70006aa957e655c28d30198ba945dffda4d71515954c4c7e596c0caede59"
+    "rev": "2f21d74c33949bf556a980c85f8c1ddf85a78439",
+    "sha256": "19b893f2e17ec04a17e21c386fa62b8b9a55f98a4f4d9753c5c065bd21513fe4"
   },
   "registry": {
-    "rev": "c9ab58bfd048522d56401b879ddb890626e111e5",
-    "sha256": "c5ceecda0dbc8bc50d246ef0fa6aa93fb02138e09192533bb9ca150fd9e348ee"
+    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
+    "sha256": "0f4a7386dd0d9a2cada8d215788f53a1a4c2f33544bee77e3687df845eb819e8"
   },
   "root": {
-    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
-    "sha256": "8a20146911216bd7bbd902c724e2a81d1503358eb07c5b92bb736278d2d0549f"
+    "rev": "1b25ff7b66627df8413677f55919010c4d6719d0",
+    "sha256": "b0d15266ff3b38e15e6ae4638e0655034c330ab42ed5388e013885ecd4a8e2da"
   },
   "sns-wasm": {
     "rev": "ff761f361981cff6a760b7d181f696551878b92a",
@@ -158,6 +158,10 @@
   "sns_root": {
     "rev": "724ae4101bfdd8d4443126a6a8b1ec5ca9b68a12",
     "sha256": "d26b930d8756bb75b6caa5195346499b18bbd6448810386e1b8f2f1f808ade86"
+  },
+  "subnet_rental": {
+    "sha256": "f18e2effe4a0495c3b08b546bb4c63428dac9852ad7dd4316afb5daf210c4ab5",
+    "tag": "0.4.0"
   },
   "swap": {
     "rev": "0e4c8234a9e0508ae30c5b8a7498406294c25e95",

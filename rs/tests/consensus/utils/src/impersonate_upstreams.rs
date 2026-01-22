@@ -35,6 +35,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
     get_upstreams_uvm(env)
         .block_on_bash_script(&format!(
             r#"
+                set -euo pipefail
                 # Generate TLS certificates for the upstreams.
                 mkdir -p {CERTS_ROOT}
                 cd {CERTS_ROOT}
@@ -80,12 +81,12 @@ pub fn uvm_serve_recovery_image(
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
     artifacts_path: &Path,
-    artifacts_hash: &str,
+    recovery_hash_prefix: &str,
 ) -> Result<()> {
     uvm_serve_file(
         env,
         artifacts_path,
-        Path::new(&format!("recovery/{artifacts_hash}/recovery.tar.zst")),
+        Path::new(&format!("recovery/{recovery_hash_prefix}/recovery.tar.zst")),
     )
 }
 
@@ -113,6 +114,7 @@ fn get_spoof_commands(server_ipv6: &Ipv6Addr) -> String {
     // original with a bind mount.
     let mut command = String::from(
         r#"
+            set -euo pipefail
             sudo cp /etc/hosts /tmp/hosts
         "#,
     );

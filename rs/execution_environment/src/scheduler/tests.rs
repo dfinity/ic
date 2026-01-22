@@ -74,8 +74,9 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1 << 30),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -532,8 +533,9 @@ fn inner_loop_stops_when_no_instructions_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -578,8 +580,9 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(100),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -626,8 +629,9 @@ fn basic_induct_messages_on_same_subnet_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(55),
-            max_instructions_per_message_without_dts: NumInstructions::from(55),
+            max_instructions_per_query_message: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -675,8 +679,9 @@ fn induct_messages_on_same_subnet_handles_foreign_subnet() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -716,8 +721,9 @@ fn induct_messages_to_self_works() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
             max_instructions_per_message: NumInstructions::new(55),
-            max_instructions_per_message_without_dts: NumInstructions::from(55),
+            max_instructions_per_query_message: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -772,8 +778,9 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 scheduler_cores: 2,
                 max_instructions_per_round: NumInstructions::new(1),
                 max_instructions_per_message: NumInstructions::new(1),
-                max_instructions_per_message_without_dts: NumInstructions::from(1),
+                max_instructions_per_query_message: NumInstructions::from(1),
                 max_instructions_per_slice: NumInstructions::new(1),
+                max_instructions_per_install_code_slice: NumInstructions::new(1),
                 instruction_overhead_per_execution: NumInstructions::from(0),
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
@@ -859,8 +866,9 @@ fn test_message_limit_from_message_overhead() {
     let scheduler_config = SchedulerConfig {
         scheduler_cores: 2,
         max_instructions_per_message: NumInstructions::from(5_000_000_000),
-        max_instructions_per_message_without_dts: NumInstructions::from(5_000_000_000),
+        max_instructions_per_query_message: NumInstructions::from(5_000_000_000),
         max_instructions_per_slice: NumInstructions::from(5_000_000_000),
+        max_instructions_per_install_code_slice: NumInstructions::from(5_000_000_000),
         max_instructions_per_round: NumInstructions::from(7_000_000_000),
         instruction_overhead_per_execution: NumInstructions::from(2_000_000),
         instruction_overhead_per_canister: NumInstructions::from(0),
@@ -927,8 +935,9 @@ fn test_multiple_iterations_of_inner_loop() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(200),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::new(50),
+            max_instructions_per_query_message: NumInstructions::new(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -979,8 +988,9 @@ fn canister_can_run_for_multiple_iterations() {
             // The number of instructions will limit the canister to running at most 6 times.
             max_instructions_per_round: NumInstructions::new(300),
             max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -1025,8 +1035,9 @@ fn validate_consumed_instructions_metric() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::new(50),
+            max_instructions_per_install_code_slice: NumInstructions::new(50),
             max_instructions_per_round: NumInstructions::from(400),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -1121,8 +1132,9 @@ fn charging_for_message_memory_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::from(1),
+            max_instructions_per_query_message: NumInstructions::from(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             max_instructions_per_round: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -1249,8 +1261,9 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             scheduler_cores: 2,
             max_instructions_per_round: instructions_per_message - NumInstructions::from(1),
             max_instructions_per_message: instructions_per_message,
-            max_instructions_per_message_without_dts: instructions_per_message,
+            max_instructions_per_query_message: instructions_per_message,
             max_instructions_per_slice: instructions_per_message,
+            max_instructions_per_install_code_slice: instructions_per_message,
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1639,8 +1652,9 @@ fn can_execute_messages_with_just_enough_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(50 * 3),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1698,8 +1712,9 @@ fn execute_idle_and_canisters_with_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_query_message: NumInstructions::from(50),
             max_instructions_per_slice: NumInstructions::from(50),
+            max_instructions_per_install_code_slice: NumInstructions::from(50),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -1820,8 +1835,9 @@ fn max_canisters_per_round() {
                 scheduler_cores: 2,
                 max_instructions_per_round: 100.into(),
                 max_instructions_per_message: 10.into(),
-                max_instructions_per_message_without_dts: 10.into(),
+                max_instructions_per_query_message: 10.into(),
                 max_instructions_per_slice: 10.into(),
+                max_instructions_per_install_code_slice: 10.into(),
                 instruction_overhead_per_execution: 0.into(),
                 instruction_overhead_per_canister: 10.into(),
                 ..SchedulerConfig::application_subnet()
@@ -1890,8 +1906,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
             scheduler_cores,
             max_instructions_per_round: slice_instructions.into(),
             max_instructions_per_message: message_instructions.into(),
-            max_instructions_per_message_without_dts: slice_instructions.into(),
+            max_instructions_per_query_message: slice_instructions.into(),
             max_instructions_per_slice: slice_instructions.into(),
+            max_instructions_per_install_code_slice: slice_instructions.into(),
             instruction_overhead_per_execution: 0.into(),
             instruction_overhead_per_canister: 0.into(),
             ..SchedulerConfig::application_subnet()
@@ -1989,8 +2006,9 @@ fn can_fully_execute_canisters_deterministically_until_out_of_cycles() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(51),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2053,8 +2071,9 @@ fn can_execute_messages_from_multiple_canisters_until_out_of_instructions() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::from(5),
+            max_instructions_per_query_message: NumInstructions::from(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2117,7 +2136,7 @@ fn subnet_messages_respect_instruction_limit_per_round() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(400),
             max_instructions_per_message: NumInstructions::new(10),
-            max_instructions_per_message_without_dts: NumInstructions::new(10),
+            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::new(10),
             max_instructions_per_install_code: NumInstructions::new(10),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
@@ -2293,8 +2312,9 @@ fn execute_heartbeat_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2325,8 +2345,9 @@ fn execute_global_timer_before_messages() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1),
             max_instructions_per_message: NumInstructions::new(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::new(1),
+            max_instructions_per_install_code_slice: NumInstructions::new(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2361,8 +2382,9 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2453,8 +2475,9 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2497,8 +2520,9 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(instructions_per_slice),
             max_instructions_per_message: NumInstructions::from(instructions_per_slice * 100),
-            max_instructions_per_message_without_dts: NumInstructions::new(instructions_per_slice),
+            max_instructions_per_query_message: NumInstructions::new(instructions_per_slice),
             max_instructions_per_slice: NumInstructions::from(instructions_per_slice),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions_per_slice),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2539,8 +2563,9 @@ fn scheduler_executes_postponed_raw_rand_requests() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2615,8 +2640,9 @@ fn execute_multiple_heartbeats() {
             scheduler_cores: 5,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -2676,8 +2702,9 @@ fn can_record_metrics_single_scheduler_thread() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(18),
             max_instructions_per_message: NumInstructions::from(5),
-            max_instructions_per_message_without_dts: NumInstructions::new(5),
+            max_instructions_per_query_message: NumInstructions::new(5),
             max_instructions_per_slice: NumInstructions::from(5),
+            max_instructions_per_install_code_slice: NumInstructions::from(5),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -2718,8 +2745,9 @@ fn can_record_metrics_for_a_round() {
             scheduler_cores,
             max_instructions_per_round: NumInstructions::from(instructions * 2),
             max_instructions_per_message: NumInstructions::from(instructions),
-            max_instructions_per_message_without_dts: NumInstructions::new(instructions),
+            max_instructions_per_query_message: NumInstructions::new(instructions),
             max_instructions_per_slice: NumInstructions::from(instructions),
+            max_instructions_per_install_code_slice: NumInstructions::from(instructions),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -2831,8 +2859,9 @@ fn prepay_failures_counted() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -3230,8 +3259,9 @@ fn execution_round_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(400),
             max_instructions_per_message: NumInstructions::from(10),
-            max_instructions_per_message_without_dts: NumInstructions::new(10),
+            max_instructions_per_query_message: NumInstructions::new(10),
             max_instructions_per_slice: NumInstructions::from(10),
+            max_instructions_per_install_code_slice: NumInstructions::from(10),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -3403,8 +3433,9 @@ fn heartbeat_metrics_are_recorded() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(1000),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::system_subnet()
@@ -3472,8 +3503,9 @@ fn execution_round_does_not_end_too_early() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(150),
             max_instructions_per_message: NumInstructions::from(100),
-            max_instructions_per_message_without_dts: NumInstructions::new(100),
+            max_instructions_per_query_message: NumInstructions::new(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -3718,8 +3750,9 @@ fn scheduler_maintains_canister_order() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -4430,10 +4463,11 @@ fn construct_scheduler_for_prop_test(
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
         max_instructions_per_message: NumInstructions::from(instructions_per_message as u64),
-        max_instructions_per_message_without_dts: NumInstructions::from(
+        max_instructions_per_query_message: NumInstructions::from(instructions_per_message as u64),
+        max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
+        max_instructions_per_install_code_slice: NumInstructions::from(
             instructions_per_message as u64,
         ),
-        max_instructions_per_slice: NumInstructions::from(instructions_per_message as u64),
         instruction_overhead_per_execution: NumInstructions::from(0),
         instruction_overhead_per_canister: NumInstructions::from(0),
         ..SchedulerConfig::application_subnet()
@@ -4847,8 +4881,9 @@ fn dts_long_execution_completes() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -4922,8 +4957,9 @@ fn cannot_execute_management_message_for_targeted_long_execution_canister() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -4988,8 +5024,9 @@ fn dts_long_execution_runs_out_of_instructions() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5027,8 +5064,9 @@ fn complete_concurrent_long_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -5068,8 +5106,9 @@ fn respect_max_paused_executions(
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100 * num_slices),
             max_instructions_per_message: NumInstructions::from(100 * num_slices),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             max_paused_executions,
             ..SchedulerConfig::application_subnet()
         })
@@ -5122,7 +5161,7 @@ fn break_after_long_executions(#[strategy(2..10_usize)] scheduler_cores: usize) 
             scheduler_cores,
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
+            max_instructions_per_query_message: max_instructions_per_slice.into(),
             max_paused_executions: num_canisters,
             ..SchedulerConfig::application_subnet()
         })
@@ -5188,7 +5227,7 @@ fn filter_after_long_executions() {
         .with_scheduler_config(SchedulerConfig {
             max_instructions_per_round: (max_instructions_per_slice * 2).into(),
             max_instructions_per_message: (max_instructions_per_slice * 2).into(),
-            max_instructions_per_message_without_dts: max_instructions_per_slice.into(),
+            max_instructions_per_query_message: max_instructions_per_slice.into(),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5227,7 +5266,7 @@ fn dts_allow_only_one_long_install_code_execution_at_any_time() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(160),
             max_instructions_per_message: NumInstructions::from(40),
-            max_instructions_per_message_without_dts: NumInstructions::from(10),
+            max_instructions_per_query_message: NumInstructions::from(10),
             max_instructions_per_slice: NumInstructions::from(10),
             max_instructions_per_install_code: NumInstructions::new(40),
             max_instructions_per_install_code_slice: NumInstructions::new(10),
@@ -5447,8 +5486,9 @@ fn dts_resume_long_execution_after_abort() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(100),
             max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_install_code_slice: NumInstructions::from(100),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -5495,8 +5535,9 @@ fn dts_update_and_heartbeat() {
             instruction_overhead_per_canister: NumInstructions::from(0),
             max_instructions_per_round: NumInstructions::from(300),
             max_instructions_per_message: NumInstructions::from(1000),
-            max_instructions_per_message_without_dts: NumInstructions::from(200),
-            max_instructions_per_slice: NumInstructions::from(100),
+            max_instructions_per_query_message: NumInstructions::from(200),
+            max_instructions_per_slice: NumInstructions::from(200),
+            max_instructions_per_install_code_slice: NumInstructions::from(200),
             ..SchedulerConfig::application_subnet()
         })
         .build();
@@ -6172,8 +6213,9 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::from(100),
             max_instructions_per_message: NumInstructions::from(1),
-            max_instructions_per_message_without_dts: NumInstructions::new(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
             max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             ..SchedulerConfig::application_subnet()
@@ -6235,6 +6277,93 @@ fn clean_in_progress_raw_rand_request_from_subnet_call_context_manager() {
     // Simulate a subnet split that migrates the canister to another subnet.
     test.state_mut().take_canister_state(&canister_id);
     after_split(test.state_mut());
+
+    // Should have removed the `RawRandContext` and produced a reject response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+}
+
+#[test]
+fn subnet_split_cleans_in_progress_raw_rand_requests() {
+    let canister_id = canister_test_id(2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::from(100),
+            max_instructions_per_message: NumInstructions::from(1),
+            max_instructions_per_query_message: NumInstructions::new(1),
+            max_instructions_per_slice: NumInstructions::from(1),
+            max_instructions_per_install_code_slice: NumInstructions::from(1),
+            instruction_overhead_per_execution: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+    test.advance_to_round(ExecutionRound::new(2));
+    let last_round = test.last_round();
+
+    // Inject fake request to be able to create a response.
+    let canister = get_running_canister(canister_id);
+    test.inject_call_to_ic00(
+        Method::RawRand,
+        EmptyBlob.encode(),
+        Cycles::new(0),
+        canister_id,
+        InputQueueType::LocalSubnet,
+    );
+    let state = test.state_mut();
+    state.put_canister_state(canister);
+    state.pop_subnet_input();
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_raw_rand_request(
+            RequestBuilder::new().sender(canister_id).build(),
+            last_round,
+            UNIX_EPOCH,
+        );
+    // `SubnetCallContextManager` contains one `RawRandContext`.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+
+    let own_subnet_id = test.state().metadata.own_subnet_id;
+    let other_subnet_id = subnet_test_id(13);
+    assert!(own_subnet_id != other_subnet_id);
+
+    // A no-op subnet split (no canisters migrated).
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, own_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
+
+    // Retains the `RawRandContext` and does not produce a response.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .raw_rand_contexts
+            .len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Simulate a subnet split that migrates the canister to another subnet.
+    Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
+        .assign_canister(canister_id, other_subnet_id);
+    test.online_split_state(own_subnet_id, other_subnet_id);
 
     // Should have removed the `RawRandContext` and produced a reject response.
     assert_eq!(
@@ -6377,8 +6506,9 @@ fn inner_round_first_execution_is_not_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (instructions * max_messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_message_without_dts: instructions.into(),
+            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
+            max_instructions_per_install_code_slice: instructions.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -6439,8 +6569,9 @@ fn inner_round_long_execution_is_a_full_execution() {
             scheduler_cores,
             max_instructions_per_round: (slice * 2).into(),
             max_instructions_per_message: (slice * 10).into(),
-            max_instructions_per_message_without_dts: slice.into(),
+            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
@@ -6497,8 +6628,9 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             scheduler_cores,
             max_instructions_per_round: (instructions * messages_per_round).into(),
             max_instructions_per_message: instructions.into(),
-            max_instructions_per_message_without_dts: instructions.into(),
+            max_instructions_per_query_message: instructions.into(),
             max_instructions_per_slice: instructions.into(),
+            max_instructions_per_install_code_slice: instructions.into(),
             instruction_overhead_per_execution: 0.into(),
             instruction_overhead_per_canister: 0.into(),
             instruction_overhead_per_canister_for_finalization: 0.into(),
@@ -6591,8 +6723,9 @@ fn charge_idle_canisters_for_full_execution_round() {
             scheduler_cores,
             max_instructions_per_round: slice.into(),
             max_instructions_per_message: slice.into(),
-            max_instructions_per_message_without_dts: slice.into(),
+            max_instructions_per_query_message: slice.into(),
             max_instructions_per_slice: slice.into(),
+            max_instructions_per_install_code_slice: slice.into(),
             instruction_overhead_per_execution: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
             instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),

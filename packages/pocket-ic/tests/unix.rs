@@ -12,13 +12,13 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::RegistryGetLatestVersionResponse;
 use pocket_ic::common::rest::{
-    BlockmakerConfigs, CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures,
-    IcpFeaturesConfig, IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
-    RawSubnetBlockmaker, TickConfigs,
+    CreateInstanceResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
+    IncompleteStateFlag, InstanceConfig, InstanceHttpGatewayConfig,
 };
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
-    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid_as,
+    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, SubnetBlockmakers, TickConfigs,
+    start_server, update_candid_as,
 };
 use prost::Message;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -375,16 +375,14 @@ fn test_custom_blockmaker_metrics() {
     let blockmaker_1 = node_ids[0].get().0;
     let blockmaker_2 = node_ids[1].get().0;
 
-    let subnets_blockmakers = vec![RawSubnetBlockmaker {
-        subnet: application_subnet.into(),
-        blockmaker: blockmaker_1.into(),
-        failed_blockmakers: vec![blockmaker_2.into()],
+    let blockmakers = vec![SubnetBlockmakers {
+        subnet: application_subnet,
+        blockmaker: blockmaker_1,
+        failed_blockmakers: vec![blockmaker_2],
     }];
 
     let tick_configs = TickConfigs {
-        blockmakers: Some(BlockmakerConfigs {
-            blockmakers_per_subnet: subnets_blockmakers,
-        }),
+        blockmakers: Some(blockmakers),
     };
     let daily_blocks = 5;
 

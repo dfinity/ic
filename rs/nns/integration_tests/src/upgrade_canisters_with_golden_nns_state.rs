@@ -3,7 +3,6 @@ use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::CanisterStatusType;
-use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -403,6 +402,9 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
 
 mod sanity_check {
     use super::*;
+    use ic_nervous_system_common::ONE_MONTH_SECONDS;
+    use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+    use ic_nns_governance_api::DateUtc;
 
     /// Metrics fetched from canisters either before or after testing.
     pub struct Metrics {
@@ -428,14 +430,35 @@ mod sanity_check {
         state_machine: &StateMachine,
         before: Metrics,
     ) {
-        advance_time(state_machine);
+        advance_time(
+            state_machine,
+            before
+                .governance_most_recent_monthly_node_provider_rewards
+                .timestamp,
+        );
         let after = fetch_metrics(state_machine);
         MetricsBeforeAndAfter { before, after }.check_all();
     }
 
-    fn advance_time(state_machine: &StateMachine) {
-        // This duration is picked so that node rewards will definitely be distributed.
-        state_machine.advance_time(std::time::Duration::from_secs(ONE_MONTH_SECONDS));
+    fn advance_time(state_machine: &StateMachine, before_timestamp: u64) {
+        // Advance time in the state machine to just before the next node provider
+        // rewards distribution time.
+        let seconds_to_node_provider_reward_distribution = before_timestamp
+            + NODE_PROVIDER_REWARD_PERIOD_SECONDS
+            - state_machine.get_time().as_secs_since_unix_epoch();
+        state_machine.advance_time(std::time::Duration::from_secs(
+            seconds_to_node_provider_reward_distribution - 1,
+        ));
+        for _ in 0..100 {
+            state_machine.advance_time(std::time::Duration::from_secs(1));
+            state_machine.tick();
+        }
+
+        // Advance time in the state machine by one month to ensure that voting rewards
+        // are also distributed.
+        state_machine.advance_time(std::time::Duration::from_secs(
+            ONE_MONTH_SECONDS - seconds_to_node_provider_reward_distribution,
+        ));
         for _ in 0..100 {
             state_machine.advance_time(std::time::Duration::from_secs(1));
             state_machine.tick();
@@ -526,6 +549,25 @@ mod sanity_check {
                 |before, after| {
                     assert_increased(before, after, "node provider rewards timestamp");
                 },
+            );
+
+            // Check node provider rewards cover contiguous periods.
+            let before_end_date = self
+                .before
+                .governance_most_recent_monthly_node_provider_rewards
+                .end_date
+                .clone()
+                .unwrap();
+            let expected_after_start_date = DateUtc {
+                year: before_end_date.year,
+                month: before_end_date.month,
+                day: before_end_date.day + 1,
+            };
+            assert_eq!(
+                self.after
+                    .governance_most_recent_monthly_node_provider_rewards
+                    .start_date,
+                Some(expected_after_start_date)
             );
         }
 

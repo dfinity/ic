@@ -8,7 +8,6 @@ use ic_config::{
     adapters::AdaptersConfig,
     bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig,
     execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus,
     message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES},
     state_manager::LsmtConfig,
     subnet_config::SubnetConfig,
@@ -477,11 +476,9 @@ fn add_subnet_local_registry_records(
                 .keys()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                        1
-                    } else {
-                        0
-                    },
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(1),
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                 })
                 .collect(),
@@ -1207,8 +1204,6 @@ pub struct StateMachineBuilder {
     is_ecdsa_signing_enabled: bool,
     is_schnorr_signing_enabled: bool,
     is_vetkd_enabled: bool,
-    is_snapshot_download_enabled: bool,
-    is_snapshot_upload_enabled: bool,
     features: SubnetFeatures,
     runtime: Option<Arc<Runtime>>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
@@ -1249,8 +1244,6 @@ impl StateMachineBuilder {
             is_ecdsa_signing_enabled: true,
             is_schnorr_signing_enabled: true,
             is_vetkd_enabled: true,
-            is_snapshot_download_enabled: false,
-            is_snapshot_upload_enabled: false,
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -1464,20 +1457,6 @@ impl StateMachineBuilder {
         }
     }
 
-    pub fn with_snapshot_download_enabled(self, is_snapshot_download_enabled: bool) -> Self {
-        Self {
-            is_snapshot_download_enabled,
-            ..self
-        }
-    }
-
-    pub fn with_snapshot_upload_enabled(self, is_snapshot_upload_enabled: bool) -> Self {
-        Self {
-            is_snapshot_upload_enabled,
-            ..self
-        }
-    }
-
     pub fn with_execute_round_time_increment(self, execute_round_time_increment: Duration) -> Self {
         Self {
             execute_round_time_increment,
@@ -1542,8 +1521,6 @@ impl StateMachineBuilder {
             self.is_ecdsa_signing_enabled,
             self.is_schnorr_signing_enabled,
             self.is_vetkd_enabled,
-            self.is_snapshot_download_enabled,
-            self.is_snapshot_upload_enabled,
             self.features,
             self.runtime.unwrap_or_else(|| {
                 tokio::runtime::Builder::new_current_thread()
@@ -1887,8 +1864,6 @@ impl StateMachine {
         is_ecdsa_signing_enabled: bool,
         is_schnorr_signing_enabled: bool,
         is_vetkd_enabled: bool,
-        is_snapshot_download_enabled: bool,
-        is_snapshot_upload_enabled: bool,
         features: SubnetFeatures,
         runtime: Arc<Runtime>,
         execute_round_time_increment: Duration,
@@ -1908,16 +1883,10 @@ impl StateMachine {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let (mut subnet_config, mut hypervisor_config) = match config {
+        let (mut subnet_config, hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
             None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
-        if is_snapshot_download_enabled {
-            hypervisor_config.canister_snapshot_download = FlagStatus::Enabled;
-        }
-        if is_snapshot_upload_enabled {
-            hypervisor_config.canister_snapshot_upload = FlagStatus::Enabled;
-        }
         if let Some(ecdsa_signature_fee) = ecdsa_signature_fee {
             subnet_config
                 .cycles_account_manager_config
@@ -2364,7 +2333,6 @@ impl StateMachine {
             .with_nonce(nonce)
             .with_time(time)
             .with_checkpoint_interval_length(checkpoint_interval_length)
-            .with_snapshot_download_enabled(true)
             .build()
     }
 
@@ -2888,6 +2856,46 @@ impl StateMachine {
     /// Advances time by 1ns (to make sure that time is strictly monotonic)
     /// and triggers a single round of execution with the given payload as input.
     pub fn execute_payload(&self, payload: PayloadBuilder) -> Height {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        let checkpoint_interval_length_plus_one = checkpoint_interval_length.saturating_add(1);
+        let requires_full_state_hash = self
+            .message_routing
+            .expected_batch_height()
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
+        let content = BatchContent::Data {
+            batch_messages: BatchMessages {
+                signed_ingress_msgs: payload.ingress_messages,
+                certified_stream_slices: payload.xnet_payload.stream_slices,
+                bitcoin_adapter_responses: payload
+                    .self_validating
+                    .map(|p| p.get().to_vec())
+                    .unwrap_or_default(),
+                query_stats: payload.query_stats,
+            },
+            chain_key_data: ChainKeyData {
+                master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                idkg_pre_signatures: BTreeMap::new(),
+                nidkg_ids: self.ni_dkg_ids.clone(),
+            },
+            consensus_responses: payload.consensus_responses,
+            requires_full_state_hash,
+        };
+        let blockmaker_metrics = payload
+            .blockmaker_metrics
+            .unwrap_or(BlockmakerMetrics::new_for_test());
+
+        self.execute_payload_impl(content, blockmaker_metrics)
+    }
+
+    /// Advances time by 1ns (to make sure that time is strictly monotonic)
+    /// and triggers a single round of execution with the given batch content and
+    /// blockmaker metrics as input.
+    fn execute_payload_impl(
+        &self,
+        content: BatchContent,
+        blockmaker_metrics: BlockmakerMetrics,
+    ) -> Height {
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -2904,9 +2912,6 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash = batch_number
-            .get()
-            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
@@ -2915,32 +2920,11 @@ impl StateMachine {
             current_time
         };
 
-        let blockmaker_metrics = payload
-            .blockmaker_metrics
-            .unwrap_or(BlockmakerMetrics::new_for_test());
-
         let batch = Batch {
             batch_number,
             batch_summary,
             blockmaker_metrics,
-            content: BatchContent::Data {
-                batch_messages: BatchMessages {
-                    signed_ingress_msgs: payload.ingress_messages,
-                    certified_stream_slices: payload.xnet_payload.stream_slices,
-                    bitcoin_adapter_responses: payload
-                        .self_validating
-                        .map(|p| p.get().to_vec())
-                        .unwrap_or_default(),
-                    query_stats: payload.query_stats,
-                },
-                chain_key_data: ChainKeyData {
-                    master_public_keys: self.chain_key_subnet_public_keys.clone(),
-                    idkg_pre_signatures: BTreeMap::new(),
-                    nidkg_ids: self.ni_dkg_ids.clone(),
-                },
-                consensus_responses: payload.consensus_responses,
-                requires_full_state_hash,
-            },
+            content,
             randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
@@ -3274,6 +3258,21 @@ impl StateMachine {
         self.set_checkpoint_interval_length(checkpoint_interval_length);
     }
 
+    /// Executes an online subnet split round with checkpointing enabled.
+    pub fn split_tick(&self, other_subnet_id: SubnetId) {
+        let checkpoint_interval_length = self.checkpoint_interval_length.load(Ordering::Relaxed);
+        self.set_checkpoints_enabled(true);
+
+        let content = BatchContent::Splitting {
+            new_subnet_id: self.subnet_id,
+            other_subnet_id,
+        };
+        let blockmaker_metrics = BlockmakerMetrics::new_for_test();
+        self.execute_payload_impl(content, blockmaker_metrics);
+
+        self.set_checkpoint_interval_length(checkpoint_interval_length);
+    }
+
     /// Replaces the canister state in this state machine with the canister
     /// state in given source replicated state.
     ///
@@ -3549,6 +3548,89 @@ impl StateMachine {
             CertificationScope::Full,
             None,
         );
+
+        Ok(env)
+    }
+
+    /// Triggers an online subnet split, with the corresponding registry entries
+    /// assumed to have been done beforehand, i.e. `make_registry_entries_for_subnet_split`
+    /// should have been called first using the same `seed`.
+    ///
+    /// The process has the following steps:
+    ///  1. Write a checkpoint on `self`.
+    ///  2. Clone its enire state directory into a new `state_dir`.
+    ///  3. Create a new `StateMachine` using this `state_dir` and the provided
+    ///     `seed`.
+    ///  4. Reload the registry and update it to the latest version.
+    ///  5. Call `split_tick()` on both `self` and the new `StateMachine`.
+    ///
+    /// Step (1) (the checkpoint) does not happen in an actual online subnet split,
+    /// but is done here because cloning the state machine (the equivalent of having
+    /// had two sets of replicas, each branching off here) is not trivial.
+    ///
+    /// Returns an error if the routing table does not contain the subnet ID of the
+    /// new `env` that was just created or if the split itself fails.
+    pub fn online_split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+
+        // Write a checkpoint.
+        self.checkpointed_tick();
+        self.state_manager.flush_tip_channel();
+
+        // Create a state dir for the new env; and copy the our state layout into it.
+        let state_dir = Box::new(TempDir::new().expect("failed to create a temporary directory"));
+        fs_extra::dir::copy(
+            self.state_manager.state_layout().raw_path(),
+            state_dir.path(),
+            &fs_extra::dir::CopyOptions {
+                content_only: true,
+                ..fs_extra::dir::CopyOptions::new()
+            },
+        )
+        .expect("failed to copy state layout");
+
+        // Create a new `StateMachine` using the same XNet pool.
+        let env = StateMachineBuilder::new()
+            .with_state_machine_state_dir(state_dir)
+            .with_nonce(self.nonce.load(Ordering::Relaxed))
+            .with_time(Time::from_nanos_since_unix_epoch(
+                self.time.load(Ordering::Relaxed),
+            ))
+            .with_checkpoint_interval_length(
+                self.checkpoint_interval_length.load(Ordering::Relaxed),
+            )
+            .with_subnet_size(self.nodes.len())
+            .with_subnet_seed(seed)
+            .with_subnet_type(self.subnet_type)
+            .with_registry_data_provider(self.registry_data_provider.clone())
+            .build_with_subnets(
+                (*self.pocket_xnet.read().unwrap())
+                    .as_ref()
+                    .ok_or("no XNet layer found")?
+                    .subnets(),
+            );
+
+        // Get the newest registry version.
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+
+        // Check that the new subnet is in the routing table.
+        let last_version = self.registry_client.get_latest_version();
+        let routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+        if routing_table.ranges(env.get_subnet_id()).is_empty() {
+            return Err("Routing table does not contain the new subnet".to_string());
+        }
+
+        // Perform the split on `self`.
+        self.split_tick(env.subnet_id);
+
+        // Perform the split on `env`, which requires preserving the `prev_state_hash`
+        // (as opposed to MVP subnet splitting where it is adjusted manually).
+        env.split_tick(self.subnet_id);
 
         Ok(env)
     }

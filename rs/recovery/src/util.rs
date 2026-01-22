@@ -4,6 +4,7 @@ use crate::{
 };
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use serde::{Deserialize, Serialize};
 use slog::{Drain, Logger, o};
 use std::{
@@ -82,13 +83,5 @@ pub fn make_logger() -> Logger {
 }
 
 pub fn write_public_key_to_file(der_bytes: &[u8], path: &Path) -> RecoveryResult<()> {
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
-    for chunk in base64::encode(der_bytes).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\n");
-
-    write_bytes(path, bytes)
+    write_bytes(path, public_key_der_to_pem(der_bytes))
 }

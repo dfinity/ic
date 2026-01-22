@@ -43,5 +43,9 @@ name = "rejoin_test_large_state"
 path = "rejoin_test_large_state.rs"
 
 [[bin]]
+name = "rejoin_test_long_rounds"
+path = "rejoin_test_long_rounds.rs"
+
+[[bin]]
 name = "state_sync_malicious_chunk_test"
 path = "state_sync_malicious_chunk_test.rs"

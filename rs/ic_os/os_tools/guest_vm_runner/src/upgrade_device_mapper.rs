@@ -182,7 +182,7 @@ mod tests {
 
         let backing_file = backing_file.into_temp_path();
 
-        let loop_device = LoopDeviceWrapper::attach_to_next_free(&backing_file).unwrap();
+        let loop_device = LoopDeviceWrapper::attach_to_next_free(&backing_file, 0).unwrap();
         let loop_device_path = loop_device.path().expect("Failed to get loop device path");
 
         let mut gpt = GptConfig::new()

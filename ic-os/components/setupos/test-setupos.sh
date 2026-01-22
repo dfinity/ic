@@ -59,6 +59,7 @@ function test_validate_domain_name() {
 
 function test_detect_hardware_generation() {
     # Gen1 test
+    test_detect_hardware_generation_helper 0 "type0" "1"
     test_detect_hardware_generation_helper 0 "type1" "1"
     test_detect_hardware_generation_helper 0 "type1.1" "1"
     test_detect_hardware_generation_helper 0 "type1.9" "1"

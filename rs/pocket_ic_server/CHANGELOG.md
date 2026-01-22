@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The CLI option `--fetch-mainnet-routing-table` to specify that the mainnet routing table should be fetched from the mainnet registry
   does not require a file path specified as `--mainnet-routing-table`.
+- The field `blockmakers` in the argument of the endpoint `/instances/<instance_id>/update/tick`
+  has been flattened into an optional vector of blockmakers per subnet.
 
 
 

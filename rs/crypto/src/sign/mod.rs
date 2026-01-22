@@ -432,8 +432,6 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
 }
 
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
-    // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
-    // ThresholdSigDataNotFoundError>
     fn sign_threshold(
         &self,
         message: &T,

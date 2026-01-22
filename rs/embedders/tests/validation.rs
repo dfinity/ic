@@ -19,7 +19,7 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
+use ic_embedders::WASM_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {

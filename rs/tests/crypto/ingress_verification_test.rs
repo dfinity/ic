@@ -394,7 +394,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let signer = &identities[identities.len() - 1];
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    let update_result = perform_update_call_with_delegations(
+                    let response = perform_update_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -404,15 +404,15 @@ pub fn requests_with_delegations(env: TestEnv) {
                     .await;
 
                     if delegation_count <= 20 {
-                        let expected_update = if api_ver == 2 { 202 } else { 200 };
-                        assert_eq!(update_result, expected_update);
+                        response.expect_update_ok(api_ver);
                     } else {
-                        assert_eq!(update_result, 400);
+                        assert_eq!(response.status(), 400);
+                        response.expect_text_error(&format!("Invalid delegation: Chain of delegations is too long: got {delegation_count} delegations, but at most 20 are allowed."));
                     }
                 }
 
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    let query_result = perform_query_call_with_delegations(
+                    let response = perform_query_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -422,9 +422,10 @@ pub fn requests_with_delegations(env: TestEnv) {
                     .await;
 
                     if delegation_count <= 20 {
-                        assert_eq!(query_result, 200);
+                        response.expect_query_ok(api_ver);
                     } else {
-                        assert_eq!(query_result, 400);
+                        assert_eq!(response.status(), 400);
+                        response.expect_text_error(&format!("Invalid delegation: Chain of delegations is too long: got {delegation_count} delegations, but at most 20 are allowed."));
                     }
                 }
             }
@@ -463,23 +464,31 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             struct DelegationTest {
                 note: &'static str,
                 targets: Vec<Vec<CanisterId>>,
-                expect_success: bool,
+                expected_err: Option<String>,
             }
 
             impl DelegationTest {
+                fn expect_success(&self) -> bool {
+                    self.expected_err.is_none()
+                }
+
                 fn accept(note: &'static str, targets: Vec<Vec<CanisterId>>) -> Self {
                     Self {
                         note,
                         targets,
-                        expect_success: true,
+                        expected_err: None,
                     }
                 }
 
-                fn reject(note: &'static str, targets: Vec<Vec<CanisterId>>) -> Self {
+                fn reject(
+                    note: &'static str,
+                    targets: Vec<Vec<CanisterId>>,
+                    expected_err: &str,
+                ) -> Self {
                     Self {
                         note,
                         targets,
-                        expect_success: false,
+                        expected_err: Some(expected_err.to_owned()),
                     }
                 }
             }
@@ -524,14 +533,17 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 DelegationTest::reject(
                     "Not containing the requested canister ID",
                     vec![vec![random_canister_id(rng)]],
+                    "is not one of the delegation targets",
                 ),
                 DelegationTest::reject(
                     "With more than 1000 different targets containing the requested canister ID (1001)",
                     vec![random_canister_ids_including(&canister_id, 1001, 1, rng)],
+                    "Invalid delegation: Delegation target error: expected at most 1000 targets per delegation, but got 1001",
                 ),
                 DelegationTest::reject(
                     "With more than 1000 different targets containing the requested canister ID (2000)",
                     vec![random_canister_ids_including(&canister_id, 2000, 1, rng)],
+                    "Invalid delegation: Delegation target error: expected at most 1000 targets per delegation, but got 2000",
                 ),
                 DelegationTest::reject(
                     "With an empty target intersection of multiple delegations with non-empty sets of targets",
@@ -539,10 +551,12 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                         vec![random_canister_id(rng)],
                         vec![canister_id, random_canister_id(rng)],
                     ],
+                    "is not one of the delegation targets",
                 ),
                 DelegationTest::reject(
                     "With an empty target intersection of multiple delegations",
                     vec![vec![random_canister_id(rng)], vec![random_canister_id(rng)]],
+                    "is not one of the delegation targets",
                 ),
             ];
 
@@ -562,7 +576,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 let signer = &identities[identities.len() - 1];
 
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    let query_result = perform_query_call_with_delegations(
+                    let response = perform_query_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -571,23 +585,21 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     )
                     .await;
 
-                    if scenario.expect_success {
-                        assert_eq!(
-                            query_result, 200,
-                            "Test scenario {} (query) using {api_ver} unexpectedly failed",
-                            scenario.note
-                        );
+                    if scenario.expect_success() {
+                        response.expect_query_ok(api_ver);
                     } else {
                         assert_eq!(
-                            query_result, 400,
+                            response.status(),
+                            400,
                             "Test scenario {} (query) using {api_ver} unexpectedly succeeded",
                             scenario.note
                         );
+                        response.expect_text_error(&scenario.expected_err.clone().unwrap());
                     }
                 }
 
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                    let read_state_result = perform_read_state_call_with_delegations(
+                    let response = perform_read_state_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -596,24 +608,31 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     )
                     .await;
 
-                    if scenario.expect_success {
-                        assert_eq!(
-                            read_state_result, 200,
-                            "Test scenario {} (read_state) using {api_ver} unexpectedly failed",
-                            scenario.note
-                        );
+                    if scenario.expect_success() {
+                        response.expect_read_state_ok(api_ver);
                     } else {
                         // Which error code is returned depends on API version and the specific scenario
                         assert!(
-                            read_state_result == 400 || read_state_result == 403,
+                            response.status() == 400 || response.status() == 403,
                             "Test scenario {} (read_state) using {api_ver} unexpectedly succeeded",
                             scenario.note
                         );
+
+                        let err_msg = scenario.expected_err.clone().unwrap();
+
+                        // The read request sometimes returns a different error message
+                        // than update/query depending on the type of malformed req.
+
+                        if err_msg.contains("expected at most") {
+                            response.expect_text_error(&err_msg);
+                        } else {
+                            response.expect_text_error("The user tries to access request IDs for canisters not belonging to sender delegation targets.");
+                        }
                     }
                 }
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    let update_result = perform_update_call_with_delegations(
+                    let response = perform_update_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -622,20 +641,16 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     )
                     .await;
 
-                    if scenario.expect_success {
-                        let expected_update_result = if api_ver == 2 { 202 } else { 200 };
-
-                        assert_eq!(
-                            update_result, expected_update_result,
-                            "Test scenario {} (update) using {api_ver} unexpectedly failed with {update_result}",
-                            scenario.note
-                        );
+                    if scenario.expect_success() {
+                        response.expect_update_ok(api_ver);
                     } else {
                         assert_eq!(
-                            update_result, 400,
-                            "Test scenario {} (update) using {api_ver} unexpectedly returned {update_result}",
+                            response.status(),
+                            400,
+                            "Test scenario {} (update) using {api_ver} returned unexpected code",
                             scenario.note
                         );
+                        response.expect_text_error(&scenario.expected_err.clone().unwrap());
                     }
                 }
             }
@@ -672,6 +687,9 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
             };
 
             // Both a self-loop and an indirect cycle in delegations should be rejected
+
+            let expected_err_msg = "Invalid delegation: Chain of delegations contains at least one cycle: first repeating public key encountered";
+
             let ids_to_generate = 3;
             for duplicated_id_index in [
                 ids_to_generate - 1, /* self-loop */
@@ -689,7 +707,7 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
                 let signer = &identities.last().unwrap();
 
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    let query_result = perform_query_call_with_delegations(
+                    let response = perform_query_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -697,11 +715,12 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
                         &delegations,
                     )
                     .await;
-                    assert_eq!(query_result, 400);
+                    assert_eq!(response.status(), 400);
+                    response.expect_text_error(expected_err_msg);
                 }
 
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    let update_result = perform_update_call_with_delegations(
+                    let response = perform_update_call_with_delegations(
                         api_ver,
                         &test_info,
                         sender,
@@ -710,7 +729,8 @@ pub fn requests_with_delegation_loop(env: TestEnv) {
                     )
                     .await;
 
-                    assert_eq!(update_result, 400);
+                    assert_eq!(response.status(), 400);
+                    response.expect_text_error(expected_err_msg);
                 }
             }
         }
@@ -819,7 +839,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
                     let signature = signer.sign_update(&content);
 
-                    let update_status = send_request(
+                    let response = send_request(
                         api_ver,
                         &test_info,
                         "call",
@@ -828,14 +848,15 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                         Some(delegations.to_vec()),
                         signature,
                     )
-                    .await
-                    .status();
+                    .await;
 
                     if include_mgmt_canister_id {
-                        let expected_update = if api_ver == 2 { 202 } else { 200 };
-                        assert_eq!(update_status, expected_update);
+                        response.expect_update_ok(api_ver);
                     } else {
-                        assert_eq!(update_status, 400);
+                        assert_eq!(response.status(), 400);
+                        response.expect_text_error(
+                            "Canister 'aaaaa-aa' is not one of the delegation targets.",
+                        );
                     }
                 }
 
@@ -908,12 +929,12 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     )
                     .await;
 
-                    let read_state_result = response.status();
-
                     if include_mgmt_canister_id {
-                        assert_eq!(read_state_result, 200);
+                        assert_eq!(response.status(), 200);
+                        response.expect_certificate();
                     } else {
-                        assert_eq!(read_state_result, 403);
+                        assert_eq!(response.status(), 403);
+                        response.expect_text_error("The user tries to access request IDs for canisters not belonging to sender delegation targets.");
                     }
                 }
 
@@ -937,7 +958,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
 
                     let signature = signer.sign_query(&content);
 
-                    let query = send_request(
+                    let response = send_request(
                         api_ver,
                         &test_info,
                         "query",
@@ -948,11 +969,13 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv) {
                     )
                     .await;
 
-                    let query_status = query.status();
                     if include_mgmt_canister_id {
-                        assert_eq!(query_status, 200);
+                        response.expect_query_ok(api_ver);
                     } else {
-                        assert_eq!(query_status, 400);
+                        assert_eq!(response.status(), 400);
+                        response.expect_text_error(
+                            "Canister 'aaaaa-aa' is not one of the delegation targets.",
+                        );
                     }
                 }
             }
@@ -990,25 +1013,36 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
             let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
             let id = GenericIdentity::new(id_type, rng);
 
+            let expiry_error_text =
+                "Invalid request expiry: Specified ingress_expiry not within expected range";
             for expiry in [0_u64, u64::MAX] {
                 for &api_ver in ALL_QUERY_API_VERSIONS {
+                    let response =
+                        perform_query_with_expiry(api_ver, &test_info, &id, &id, expiry).await;
+                    response.expect_text_error(expiry_error_text);
                     assert_eq!(
-                        perform_query_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
+                        response.status(),
                         400,
                         "query should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    let response =
+                        perform_update_with_expiry(api_ver, &test_info, &id, &id, expiry).await;
+                    response.expect_text_error(expiry_error_text);
                     assert_eq!(
-                        perform_update_with_expiry(api_ver, &test_info, &id, &id, expiry).await,
+                        response.status(),
                         400,
                         "update should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                    assert_eq!(
+                    let response =
                         perform_read_state_call_with_expiry(api_ver, &test_info, &id, &id, expiry)
-                            .await,
+                            .await;
+                    response.expect_text_error(expiry_error_text);
+                    assert_eq!(
+                        response.status(),
                         400,
                         "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
@@ -1047,34 +1081,29 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                     canister_id: canister_id_from_principal(&c1.canister_id()),
                 };
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    assert_eq!(
+                    let response =
                         perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[])
-                            .await,
-                        200,
-                        "query should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
+                            .await;
+
+                    response.expect_query_ok(api_ver);
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
-                    assert_eq!(
+                    let response =
                         perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[])
-                            .await,
-                        if api_ver == 2 { 202 } else { 200 },
-                        "update should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
+                            .await;
+                    response.expect_update_ok(api_ver);
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                    assert_eq!(
-                        perform_read_state_call_with_delegations(
-                            api_ver,
-                            &test_info,
-                            &id,
-                            &id,
-                            &[]
-                        )
-                        .await,
-                        200,
-                        "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
-                    );
+                    let response = perform_read_state_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        &id,
+                        &id,
+                        &[],
+                    )
+                    .await;
+
+                    response.expect_read_state_ok(api_ver);
                 }
             }
 
@@ -1088,6 +1117,9 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 "Installed Universal Canister 2";
                 "canister_id" => format!("{:?}", c2.canister_id())
             );
+
+            let canister_sig_err_text = "Invalid signature: Invalid canister signature: ";
+
             let seed = b"seed";
             let id = GenericIdentity::new_canister(CanisterSigner::new(&c1, seed.to_vec()));
             let wrong_seed = b"wrong_seed";
@@ -1101,37 +1133,44 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                     canister_id: canister_id_from_principal(&c1.canister_id()),
                 };
                 for &api_ver in ALL_QUERY_API_VERSIONS {
-                    assert_eq!(
+                    let response =
                         perform_query_call_with_delegations(api_ver, &test_info, &sender, &id, &[])
-                            .await,
+                            .await;
+                    response.expect_text_error(canister_sig_err_text);
+                    assert_eq!(
+                        response.status(),
                         400,
                         "query should be rejected for api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    let response = perform_update_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        &sender,
+                        &id,
+                        &[],
+                    )
+                    .await;
+                    response.expect_text_error(canister_sig_err_text);
                     assert_eq!(
-                        perform_update_call_with_delegations(
-                            api_ver,
-                            &test_info,
-                            &sender,
-                            &id,
-                            &[]
-                        )
-                        .await,
+                        response.status(),
                         400,
                         "update should be rejected for api_ver={api_ver}"
                     );
                 }
                 for &api_ver in ALL_READ_STATE_API_VERSIONS {
+                    let response = perform_read_state_call_with_delegations(
+                        api_ver,
+                        &test_info,
+                        &sender,
+                        &id,
+                        &[],
+                    )
+                    .await;
+                    response.expect_text_error(canister_sig_err_text);
                     assert_eq!(
-                        perform_read_state_call_with_delegations(
-                            api_ver,
-                            &test_info,
-                            &sender,
-                            &id,
-                            &[]
-                        )
-                        .await,
+                        response.status(),
                         400,
                         "read_state should be rejected for api_ver={api_ver}"
                     );
@@ -1150,23 +1189,32 @@ pub fn requests_with_canister_signature(env: TestEnv) {
                 canister_id: canister_id_from_principal(&c1.canister_id()),
             };
             for &api_ver in ALL_QUERY_API_VERSIONS {
+                let response =
+                    perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await;
+                response.expect_text_error(canister_sig_err_text);
                 assert_eq!(
-                    perform_query_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                    response.status(),
                     400,
                     "query should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
             }
             for &api_ver in ALL_UPDATE_API_VERSIONS {
+                let response =
+                    perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await;
+                response.expect_text_error(canister_sig_err_text);
                 assert_eq!(
-                    perform_update_call_with_delegations(api_ver, &test_info, &id, &id, &[]).await,
+                    response.status(),
                     400,
                     "update should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
             }
             for &api_ver in ALL_READ_STATE_API_VERSIONS {
-                assert_eq!(
+                let response =
                     perform_read_state_call_with_delegations(api_ver, &test_info, &id, &id, &[])
-                        .await,
+                        .await;
+                response.expect_text_error(canister_sig_err_text);
+                assert_eq!(
+                    response.status(),
                     400,
                     "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
                 );
@@ -1269,6 +1317,105 @@ fn sign_delegation(delegation: Delegation, identity: &GenericIdentity<'_>) -> Si
     SignedDelegation::new(delegation, signature)
 }
 
+#[derive(Clone, Debug)]
+enum ResponseBody {
+    Empty,
+    Text(String),
+    Cbor(serde_cbor::Value),
+}
+
+#[derive(Clone, Debug)]
+struct ReplicaResponse {
+    status: StatusCode,
+    body: ResponseBody,
+}
+
+impl ReplicaResponse {
+    fn status(&self) -> StatusCode {
+        self.status
+    }
+
+    fn expect_read_state_ok(&self, _api_ver: usize) {
+        assert_eq!(self.status(), 200);
+        self.expect_certificate();
+    }
+
+    fn expect_query_ok(&self, _api_ver: usize) {
+        assert_eq!(self.status(), 200);
+        self.expect_cbor_reply();
+    }
+
+    fn expect_update_ok(&self, api_ver: usize) {
+        if api_ver == 2 {
+            assert_eq!(self.status(), 202);
+            self.expect_empty_body();
+        } else {
+            assert_eq!(self.status(), 200);
+            self.expect_certificate();
+        }
+    }
+
+    fn expect_empty_body(&self) {
+        match &self.body {
+            ResponseBody::Empty => {}
+            ResponseBody::Cbor(c) => panic!("Expected empty body but got CBOR instead: {:?}", c),
+            ResponseBody::Text(t) => panic!("Expected empty body but got text instead: {:?}", t),
+        }
+    }
+
+    fn expect_certificate(&self) {
+        match &self.body {
+            ResponseBody::Empty => panic!("Expected certificate response but got empty instead"),
+            ResponseBody::Cbor(c) => match &c {
+                serde_cbor::Value::Map(m) => {
+                    if !m.contains_key(&serde_cbor::Value::Text("certificate".to_owned())) {
+                        panic!("Missing certificate field in CBOR {:?}", m);
+                    }
+                }
+                other => {
+                    panic!("Unexpected CBOR response type {:?}", other);
+                }
+            },
+            ResponseBody::Text(t) => panic!(
+                "Expected certificate response but got text instead: {:?}",
+                t
+            ),
+        }
+    }
+
+    fn expect_cbor_reply(&self) {
+        match &self.body {
+            ResponseBody::Empty => panic!("Expected CBOR response but got empty instead"),
+            ResponseBody::Cbor(c) => match &c {
+                serde_cbor::Value::Map(m) => {
+                    if !m.contains_key(&serde_cbor::Value::Text("reply".to_owned())) {
+                        panic!("Missing reply field in CBOR {:?}", m);
+                    }
+                }
+                other => {
+                    panic!("Unexpected CBOR response type {:?}", other);
+                }
+            },
+            ResponseBody::Text(t) => panic!("Expected CBOR response but got text instead: {:?}", t),
+        }
+    }
+
+    fn expect_text_error(&self, substr: &str) {
+        match &self.body {
+            ResponseBody::Empty => panic!("Expected text body but got empty instead"),
+            ResponseBody::Cbor(c) => panic!("Expected text body but got CBOR instead: {:?}", c),
+            ResponseBody::Text(t) => {
+                assert!(
+                    t.contains(substr),
+                    "Missing expected error '{}' in '{}'",
+                    substr,
+                    t
+                );
+            }
+        }
+    }
+}
+
 async fn send_request<C: serde::ser::Serialize>(
     api_ver: usize,
     test: &TestInformation,
@@ -1277,7 +1424,7 @@ async fn send_request<C: serde::ser::Serialize>(
     sender_pubkey: Vec<u8>,
     sender_delegation: Option<Vec<SignedDelegation>>,
     sender_sig: Vec<u8>,
-) -> reqwest::Response {
+) -> ReplicaResponse {
     let envelope = HttpRequestEnvelope {
         content,
         sender_delegation,
@@ -1293,13 +1440,44 @@ async fn send_request<C: serde::ser::Serialize>(
         test.url, api_ver, test.canister_id, req_type
     );
 
-    client
+    let response = client
         .post(url)
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
         .await
-        .unwrap()
+        .unwrap();
+
+    let status = response.status();
+
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .map(|s| s.to_str().expect("Invalid Content-Type").to_owned());
+
+    let bytes = response
+        .bytes()
+        .await
+        .expect("Failed to get response body")
+        .to_vec();
+
+    let body = match content_type.as_deref() {
+        None => {
+            assert_eq!(bytes.len(), 0);
+            ResponseBody::Empty
+        }
+        Some("application/cbor") => ResponseBody::Cbor(
+            serde_cbor::from_slice(&bytes).expect("Failed to parse CBOR response"),
+        ),
+        Some("text/plain; charset=utf-8") => ResponseBody::Text(
+            String::from_utf8(bytes).expect("Replica sent invalid text response"),
+        ),
+        Some(other) => {
+            panic!("Unknown content type {}", other);
+        }
+    };
+
+    ReplicaResponse { status, body }
 }
 
 async fn perform_query_call_with_delegations(
@@ -1308,12 +1486,12 @@ async fn perform_query_call_with_delegations(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
-) -> StatusCode {
+) -> ReplicaResponse {
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "query".to_string(),
-            arg: Blob(vec![]),
+            arg: Blob(wasm().reply_data(b"query_reply").build()),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
@@ -1322,7 +1500,7 @@ async fn perform_query_call_with_delegations(
 
     let signature = signer.sign_query(&content);
 
-    let response = send_request(
+    send_request(
         api_ver,
         test,
         "query",
@@ -1331,9 +1509,7 @@ async fn perform_query_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await;
-
-    response.status()
+    .await
 }
 
 async fn perform_update_call_with_delegations(
@@ -1342,12 +1518,12 @@ async fn perform_update_call_with_delegations(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
-) -> StatusCode {
+) -> ReplicaResponse {
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(vec![]),
+            arg: Blob(wasm().reply_data(b"update_reply").build()),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
@@ -1366,7 +1542,6 @@ async fn perform_update_call_with_delegations(
         signature,
     )
     .await
-    .status()
 }
 
 async fn perform_read_state_call_with_delegations(
@@ -1375,7 +1550,7 @@ async fn perform_read_state_call_with_delegations(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
-) -> StatusCode {
+) -> ReplicaResponse {
     /*
      * In order to properly test read state request we must have another
      * call to check the status of.
@@ -1426,7 +1601,7 @@ async fn perform_read_state_call_with_delegations(
 
     let signature = signer.sign_read_state(&content);
 
-    let response = send_request(
+    send_request(
         api_ver,
         test,
         "read_state",
@@ -1435,9 +1610,7 @@ async fn perform_read_state_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await;
-
-    response.status()
+    .await
 }
 
 async fn perform_query_with_expiry(
@@ -1446,12 +1619,12 @@ async fn perform_query_with_expiry(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
-) -> StatusCode {
+) -> ReplicaResponse {
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "query".to_string(),
-            arg: Blob(vec![]),
+            arg: Blob(wasm().reply_data(b"update_reply").build()),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
@@ -1470,7 +1643,6 @@ async fn perform_query_with_expiry(
         signature,
     )
     .await
-    .status()
 }
 
 async fn perform_update_with_expiry(
@@ -1479,12 +1651,12 @@ async fn perform_update_with_expiry(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
-) -> StatusCode {
+) -> ReplicaResponse {
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(vec![]),
+            arg: Blob(wasm().reply_data(b"update_reply").build()),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry,
             nonce: None,
@@ -1503,7 +1675,6 @@ async fn perform_update_with_expiry(
         signature,
     )
     .await
-    .status()
 }
 
 async fn perform_read_state_call_with_expiry(
@@ -1512,7 +1683,7 @@ async fn perform_read_state_call_with_expiry(
     sender: &GenericIdentity<'_>,
     signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
-) -> StatusCode {
+) -> ReplicaResponse {
     let content = HttpReadStateContent::ReadState {
         read_state: HttpReadState {
             sender: Blob(sender.principal().as_slice().to_vec()),
@@ -1534,7 +1705,6 @@ async fn perform_read_state_call_with_expiry(
         signature,
     )
     .await
-    .status()
 }
 
 fn random_n_bytes<R: Rng + CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
@@ -1558,7 +1728,7 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
 
-    let random_g1 = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+    let random_g1 = G1Affine::hash("bls_signature", &rng.r#gen::<[u8; 32]>());
     certificate.signature = random_g1.serialize().to_vec();
     assert_eq!(certificate.signature.len(), 48);
     assert_ne!(certificate.signature, previous_signature);

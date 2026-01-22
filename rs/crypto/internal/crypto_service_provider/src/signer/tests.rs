@@ -32,7 +32,7 @@ mod sign_common {
     use super::*;
 
     #[test]
-    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
+    fn should_fail_with_internal_error_if_secret_key_not_found_in_key_store() {
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -45,7 +45,7 @@ mod sign_common {
 
         let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_secret_key_not_found());
+        assert!(result.unwrap_err().is_internal_error());
     }
 
     #[test]
@@ -109,7 +109,7 @@ mod sign_ed25519 {
 
         let result = csp.sign(AlgorithmId::Ed25519, b"msg".to_vec(), KeyId::from(KEY_ID));
 
-        assert!(result.unwrap_err().is_invalid_argument());
+        assert!(result.unwrap_err().is_internal_error());
     }
 }
 

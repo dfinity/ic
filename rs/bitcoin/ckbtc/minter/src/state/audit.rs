@@ -9,8 +9,8 @@ use super::{
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::storage::record_event;
+use crate::tx::FeeRate;
 use crate::{CanisterRuntime, Timestamp};
-use candid::Principal;
 use ic_btc_interface::{Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -95,7 +95,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
             utxos: tx.used_utxos.clone(),
             change_output: tx.change_output.clone(),
             submitted_at: tx.submitted_at,
-            fee_per_vbyte: tx.fee_per_vbyte,
+            effective_fee_per_vbyte: tx.effective_fee_per_vbyte.map(FeeRate::millis),
             withdrawal_fee: tx.withdrawal_fee,
             signed_tx: tx.signed_tx.clone(),
         },
@@ -224,9 +224,10 @@ pub fn replace_transaction<R: CanisterRuntime>(
                 .clone()
                 .expect("bug: all replacement transactions must have the change output"),
             submitted_at: new_tx.submitted_at,
-            fee_per_vbyte: new_tx
-                .fee_per_vbyte
-                .expect("bug: all replacement transactions must have the fee"),
+            effective_fee_per_vbyte: new_tx
+                .effective_fee_per_vbyte
+                .expect("bug: all replacement transactions must have the fee")
+                .millis(),
             withdrawal_fee: new_tx.withdrawal_fee,
             reason: Some(reason),
             new_utxos,
@@ -234,24 +235,6 @@ pub fn replace_transaction<R: CanisterRuntime>(
         runtime,
     );
     state.replace_transaction(&old_txid, new_tx);
-}
-
-pub fn distributed_kyt_fee<R: CanisterRuntime>(
-    state: &mut CkBtcMinterState,
-    kyt_provider: Principal,
-    amount: u64,
-    block_index: u64,
-    runtime: &R,
-) -> Result<(), super::Overdraft> {
-    record_event(
-        EventType::DistributedKytFee {
-            kyt_provider,
-            amount,
-            block_index,
-        },
-        runtime,
-    );
-    state.distribute_kyt_fee(kyt_provider, amount)
 }
 
 pub fn reimburse_withdrawal<R: CanisterRuntime>(

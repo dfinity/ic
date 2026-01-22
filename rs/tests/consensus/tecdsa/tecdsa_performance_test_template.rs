@@ -70,7 +70,7 @@ use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
-    prometheus_vm::{HasPrometheus, PrometheusVm},
+    prometheus_vm::HasPrometheus,
     simulate_network::{FixedNetworkSimulation, SimulateNetwork},
     test_env::TestEnv,
     test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsCustomizations},
@@ -181,11 +181,6 @@ pub fn setup(env: TestEnv) {
     let key_ids = make_key_ids();
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
-    PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
-        .start(&env)
-        .expect("Failed to start prometheus VM");
-
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(64)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
@@ -212,7 +207,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: MAX_QUEUE_SIZE,
-                            pre_signatures_to_create_in_advance: PRE_SIGNATURES_TO_CREATE,
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(PRE_SIGNATURES_TO_CREATE),
                             key_id,
                         })
                         .collect(),
@@ -229,7 +226,6 @@ pub fn setup(env: TestEnv) {
         env.topology_snapshot(),
         NnsCustomizations::default(),
     );
-    env.sync_with_prometheus();
 }
 
 pub fn test(env: TestEnv) {

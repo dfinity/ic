@@ -217,17 +217,17 @@ pub struct RenameToArgs {
 /// This is a success if the call is a success or the replaced canister does not exist,
 /// i.e., a previous call to rename the replaced canister was a success.
 pub async fn rename_canister(
-    migrated: Principal,
+    migrated_canister: Principal,
     migrated_canister_version: u64,
-    replaced: Principal,
+    replaced_canister: Principal,
     replaced_canister_subnet: Principal,
     total_num_changes: u64,
     requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
-        canister_id: replaced,
+        canister_id: replaced_canister,
         rename_to: RenameToArgs {
-            canister_id: migrated,
+            canister_id: migrated_canister,
             version: migrated_canister_version,
             total_num_changes,
         },
@@ -243,7 +243,7 @@ pub async fn rename_canister(
         Err(e) => {
             println!(
                 "Call `rename_canister` for canister`: {}, subnet: {} failed: {:?}",
-                replaced, replaced_canister_subnet, e
+                replaced_canister, replaced_canister_subnet, e
             );
             match e {
                 CallFailed::CallRejected(e) => {
@@ -268,7 +268,9 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
             if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
-                ProcessingResult::FatalFailure(ValidationError::ReplacedHasSnapshots(Reserved))
+                ProcessingResult::FatalFailure(ValidationError::ReplacedCanisterHasSnapshots(
+                    Reserved,
+                ))
             }
         }
         Err(e) => {

@@ -107,18 +107,24 @@ pub mod requests {
         REQUESTS.with_borrow(|req| req.keys().filter(predicate).collect())
     }
 
-    pub fn find_request(migrated: Principal, replaced: Principal) -> Option<RequestState> {
+    pub fn find_request(
+        migrated_canister: Principal,
+        replaced_canister: Principal,
+    ) -> Option<RequestState> {
         // We perform a linear scan here which is fine since
         // there can only be at most `RATE_LIMIT` (50) requests
         // at any time.
         let requests: Vec<_> = REQUESTS.with_borrow(|r| {
             r.keys()
-                .filter(|x| x.request().migrated == migrated && x.request().replaced == replaced)
+                .filter(|x| {
+                    x.request().migrated_canister == migrated_canister
+                        && x.request().replaced_canister == replaced_canister
+                })
                 .collect()
         });
         assert!(
             requests.len() <= 1,
-            "There should only be a single request for a given pair of canister IDs."
+            "There should only be a single request for a given pair of migrated and replaced canisters."
         );
         requests.first().cloned()
     }
@@ -160,16 +166,22 @@ pub mod events {
         HISTORY.with_borrow(|h| h.len())
     }
 
-    pub fn find_last_event(migrated: Principal, replaced: Principal) -> Option<Event> {
+    pub fn find_last_event(
+        migrated_canister: Principal,
+        replaced_canister: Principal,
+    ) -> Option<Event> {
         let idx = LAST_EVENT.with_borrow(|l| {
-            let args = CanisterMigrationArgs { migrated, replaced };
+            let args = CanisterMigrationArgs {
+                migrated_canister,
+                replaced_canister,
+            };
             l.get(&args)
         });
         if let Some(idx) = idx {
             HISTORY.with_borrow(|h| {
                 let event = h.get(&idx);
                 if event.is_none() {
-                    println!("Missing event for migrated={} and replaced={} with idx={} in history! This is a bug!", migrated, replaced, idx);
+                    println!("Missing event for migrated_canister={} and replaced_canister={} with idx={} in history! This is a bug!", migrated_canister, replaced_canister, idx);
                 }
                 event
             })

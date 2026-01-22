@@ -1,10 +1,13 @@
-use crate::pb::v1::{
-    SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
-    self_describing_value::Value,
+use crate::{
+    pb::v1::{
+        Empty, SelfDescribingValue, SelfDescribingValueArray, SelfDescribingValueMap,
+        self_describing_value::Value,
+    },
+    proposals::self_describing::{to_self_describing_int, to_self_describing_nat},
 };
 
 use candid::{
-    IDLValue, Int, Nat,
+    IDLValue,
     types::value::{IDLField, VariantValue},
 };
 use candid_parser::{IDLArgs, IDLProg, TypeEnv, check_prog};
@@ -19,7 +22,9 @@ pub(crate) fn decode_candid_args_to_self_describing_value(
     encoded_args: &[u8],
 ) -> Result<SelfDescribingValue, String> {
     let arg = convert_encoded_candid_args_to_idl(schema, method_name, encoded_args)?;
-    Ok(candid_value_to_self_describing(arg))
+    Ok(SelfDescribingValue {
+        value: Some(candid_value_to_self_describing(arg)),
+    })
 }
 
 fn convert_encoded_candid_args_to_idl(
@@ -61,10 +66,10 @@ fn convert_encoded_candid_args_to_idl(
     Ok(decoded_arg)
 }
 
-fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValue {
-    let value = match candid_value {
+fn candid_value_to_self_describing(candid_value: IDLValue) -> Value {
+    match candid_value {
         // Boolean types are converted to Nat.
-        IDLValue::Bool(bool) => to_self_describing_nat(if bool { 1u8 } else { 0u8 }),
+        IDLValue::Bool(bool) => Value::Bool(bool),
 
         // Unsigned integer types are converted to Nat.
         IDLValue::Nat(i) => to_self_describing_nat(i),
@@ -92,17 +97,15 @@ fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValu
         IDLValue::Text(s) => Value::Text(s),
         IDLValue::Principal(p) => Value::Text(format!("{}", p)),
 
-        IDLValue::Opt(value) => Value::Array(SelfDescribingValueArray {
-            values: vec![candid_value_to_self_describing(*value)],
-        }),
-        IDLValue::Null => Value::Array(SelfDescribingValueArray { values: vec![] }),
-        IDLValue::None => Value::Array(SelfDescribingValueArray { values: vec![] }),
-        IDLValue::Reserved => Value::Array(SelfDescribingValueArray { values: vec![] }),
+        IDLValue::Opt(value) => candid_value_to_self_describing(*value),
+        IDLValue::Null | IDLValue::None | IDLValue::Reserved => Value::Null(Empty {}),
 
         IDLValue::Vec(value) => Value::Array(SelfDescribingValueArray {
             values: value
                 .into_iter()
-                .map(candid_value_to_self_describing)
+                .map(|idl_value| SelfDescribingValue {
+                    value: Some(candid_value_to_self_describing(idl_value)),
+                })
                 .collect(),
         }),
         IDLValue::Record(value) => Value::Map(SelfDescribingValueMap {
@@ -111,7 +114,9 @@ fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValu
                 .map(|field| {
                     (
                         format!("{}", field.id),
-                        candid_value_to_self_describing(field.val),
+                        SelfDescribingValue {
+                            value: Some(candid_value_to_self_describing(field.val)),
+                        },
                     )
                 })
                 .collect(),
@@ -121,44 +126,33 @@ fn candid_value_to_self_describing(candid_value: IDLValue) -> SelfDescribingValu
         IDLValue::Service(_) | IDLValue::Func(..) => {
             panic!("Unexpected IDLValue: {:?}", candid_value)
         }
-    };
-
-    SelfDescribingValue { value: Some(value) }
+    }
 }
 
 fn convert_variant_to_self_describing(
     variant_value: VariantValue,
 ) -> crate::pb::v1::self_describing_value::Value {
-    use crate::pb::v1::self_describing_value::Value::{Array, Map, Text};
+    use crate::pb::v1::self_describing_value::Value::{Map, Null, Text};
 
     let IDLField { id, val } = *variant_value.0;
     let label = format!("{}", id);
     let generic_val = candid_value_to_self_describing(val);
 
-    // Check if the value is an empty array (represents a unit variant)
-    let is_empty_array = matches!(&generic_val.value, Some(Array(arr)) if arr.values.is_empty());
+    // Check if the value is a unit variant (null)
+    let is_null = matches!(&generic_val, Null(_));
 
-    if is_empty_array {
+    if is_null {
         Text(label)
     } else {
         let mut map = HashMap::new();
-        map.insert(label, generic_val);
+        map.insert(
+            label,
+            SelfDescribingValue {
+                value: Some(generic_val),
+            },
+        );
         Map(SelfDescribingValueMap { values: map })
     }
-}
-
-fn to_self_describing_nat(n: impl Into<Nat>) -> Value {
-    let n = n.into();
-    let mut bytes = Vec::new();
-    n.encode(&mut bytes).expect("Failed to encode Nat");
-    Value::Nat(bytes)
-}
-
-fn to_self_describing_int(i: impl Into<Int>) -> Value {
-    let i = i.into();
-    let mut bytes = Vec::new();
-    i.encode(&mut bytes).expect("Failed to encode Int");
-    Value::Int(bytes)
 }
 
 #[path = "decode_candid_args_to_self_describing_value_tests.rs"]

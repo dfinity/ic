@@ -16,13 +16,13 @@ use rand::{CryptoRng, Rng};
 /// Domain separator for Hash-to-G1 to be used for signature generation in a
 /// scheme supporting proof of possession, as specified for the Proof of
 /// Possession ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.3
-const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
-    b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
+const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG_WITH_POP: &str =
+    "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 /// Domain separator for Hash-to-G1 to be used in a proof of possession as
 /// as specified for the Proof of Possession ciphersuite in
 /// https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.3
-const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &[u8; 43] =
-    b"BLS_POP_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
+const DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP: &str =
+    "BLS_POP_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 /// Domain separation string used in the creation of proof of possessions of BLS
 /// multi-signature public keys.
 pub const DOMAIN_MULTI_SIG_BLS12_381_POP: &str = "ic-multi-sig-bls12381-pop";
@@ -33,25 +33,6 @@ pub fn hash_message_to_g1(msg: &[u8]) -> G1Projective {
 
 pub fn hash_public_key_to_g1(public_key: &[u8]) -> G1Projective {
     G1Projective::hash(DOMAIN_HASH_PUB_KEY_TO_G1_BLS12381_SIG_WITH_POP, public_key)
-}
-
-// Once upon a time we had placed the `seed` values directly into the output
-// `FrRepr` value, but this places a large burden on the caller, who must
-// guarantee `seed` represents a number strictly less than the group order, or
-// risk generating from a non-uniform distribution. Now, we use `seed` to seed a
-// RNG, then use this to generate a uniform random element.
-#[cfg(test)]
-pub fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-    let mut seed_as_u8: [u8; 32] = [0; 32];
-    for i in 0..4 {
-        let bs = seed[i].to_be_bytes();
-        for j in 0..8 {
-            seed_as_u8[i * 8 + j] = bs[j];
-        }
-    }
-    keypair_from_rng(&mut ChaCha20Rng::from_seed(seed_as_u8))
 }
 
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKey, PublicKey) {

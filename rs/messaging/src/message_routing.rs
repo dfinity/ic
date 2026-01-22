@@ -1,6 +1,8 @@
 use crate::state_machine::{StateMachine, StateMachineImpl};
 use crate::{routing, scheduling};
-use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
+use ic_config::execution_environment::{
+    BitcoinConfig, Config as HypervisorConfig, DEFAULT_MAX_NUMBER_OF_CANISTERS,
+};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{
@@ -11,7 +13,7 @@ use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKe
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
-use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_limits::{SMALL_APP_SUBNET_MAX_SIZE, SYSTEM_SUBNET_STREAM_MSG_LIMIT};
 use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
@@ -115,6 +117,7 @@ const METRIC_SUBNET_SIZE: &str = "mr_subnet_size";
 const METRIC_MAX_CANISTERS: &str = "mr_subnet_max_canisters";
 const METRIC_INITIAL_NOTARY_DELAY: &str = "mr_subnet_initial_notary_delay_seconds";
 const METRIC_MAX_BLOCK_PAYLOAD_SIZE: &str = "mr_subnet_max_block_payload_size_bytes";
+const METRIC_CANISTER_RANGES_COUNT: &str = "mr_canister_ranges_count";
 const METRIC_SUBNET_FEATURES: &str = "mr_subnet_features";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
@@ -339,6 +342,7 @@ pub(crate) struct MessageRoutingMetrics {
     max_canisters: IntGauge,
     initial_notary_delay: Gauge,
     max_block_payload_size: IntGauge,
+    canister_ranges_count: IntGauge,
     subnet_features: IntGaugeVec,
 
     /// Critical error for not being able to calculate a subnet size.
@@ -493,6 +497,10 @@ impl MessageRoutingMetrics {
             max_block_payload_size: metrics_registry.int_gauge(
                 METRIC_MAX_BLOCK_PAYLOAD_SIZE,
                 "Maximum size of a block payload, in bytes.",
+            ),
+            canister_ranges_count: metrics_registry.int_gauge(
+                METRIC_CANISTER_RANGES_COUNT,
+                "Number of canister ranges for the own subnet.",
             ),
             subnet_features: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_FEATURES,
@@ -698,6 +706,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             subnet_id,
             max_stream_messages,
             target_stream_size_bytes,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
@@ -862,7 +871,11 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
-        let max_number_of_canisters = subnet_record.max_number_of_canisters;
+        let max_number_of_canisters = if subnet_record.max_number_of_canisters == 0 {
+            DEFAULT_MAX_NUMBER_OF_CANISTERS
+        } else {
+            subnet_record.max_number_of_canisters
+        };
 
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
@@ -912,7 +925,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
             .subnet_info
-            .with_label_values(&[&own_subnet_id.to_string(), own_subnet_type.as_ref()])
+            .with_label_values(&[own_subnet_id.to_string().as_str(), own_subnet_type.as_ref()])
             .set(1);
         self.metrics.subnet_size.set(subnet_size as i64);
         self.metrics
@@ -924,6 +937,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         self.metrics
             .max_block_payload_size
             .set(subnet_record.max_block_payload_size as i64);
+        self.metrics
+            .canister_ranges_count
+            .set(network_topology.routing_table.ranges(own_subnet_id).len() as i64);
         // Please export any new features via the `subnet_features` metric below.
         let SubnetFeatures {
             canister_sandboxing,
@@ -1292,6 +1308,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         }
 
         // If the subnet is starting up after a split, execute splitting phase 2.
+        //
+        // TODO(DSM-57): Drop the `split_from` field and the `split()` and
+        // `after_split()` methods once online splitting is fully rolled out.
         if let Some(split_from) = state.metadata.split_from {
             info!(
                 self.log,
@@ -1303,6 +1322,14 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
                 .with_label_values(&[&split_from.to_string()])
                 .set(batch.batch_number.get() as i64);
             state.after_split();
+        }
+        // If this is the round after an online subnet split, record the split height.
+        if let Some(split_from) = state.metadata.subnet_split_from {
+            self.metrics
+                .subnet_split_height
+                .with_label_values(&[&split_from.to_string()])
+                .set(batch.batch_number.get() as i64);
+            state.metadata.subnet_split_from = None;
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &since);
 
@@ -1580,6 +1607,7 @@ impl MessageRoutingImpl {
             subnet_id,
             MAX_STREAM_MESSAGES,
             TARGET_STREAM_SIZE_BYTES,
+            SYSTEM_SUBNET_STREAM_MSG_LIMIT,
             metrics_registry,
             &MessageRoutingMetrics::new(metrics_registry),
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(

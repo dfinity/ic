@@ -3,14 +3,14 @@ use crate::{MAX_TIME_IN_QUEUE, NNS_ROOT_PRINCIPAL};
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
-    UtxoStatus,
+    EstimateFeeArg, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         EstimateWithdrawalFeeError, GetDogeAddressArgs, MinterInfo, RetrieveDogeOk,
         RetrieveDogeStatus, RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs,
         RetrieveDogeWithApprovalError, WithdrawalFee,
     },
-    lifecycle::init::{MinterArg, UpgradeArgs},
+    event::{CkDogeMinterEvent, CkDogeMinterEventType},
+    lifecycle::{MinterArg, upgrade::UpgradeArgs},
 };
 use ic_management_canister_types::{CanisterId, CanisterStatusResult};
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
@@ -190,11 +190,14 @@ impl MinterCanister {
             .expect("BUG: minter self-check failed")
     }
 
-    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+    pub fn await_submitted_doge_transaction<P>(&self, ledger_burn_index: u64, predicate: P) -> Txid
+    where
+        P: Fn(&Txid) -> bool,
+    {
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
         let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
-            matches!(tx_status, RetrieveDogeStatus::Submitted { .. })
+            matches!(tx_status, RetrieveDogeStatus::Submitted { txid } if predicate(txid))
         });
         match status {
             RetrieveDogeStatus::Submitted { txid, .. } => txid,
@@ -221,7 +224,7 @@ impl MinterCanister {
         F: Fn(&RetrieveDogeStatus) -> bool,
     {
         let mut last_status = None;
-        let max_ticks = 10;
+        let max_ticks = 20;
         for _ in 0..max_ticks {
             let status = self.retrieve_doge_status(ledger_burn_index);
             if filter(&status) {
@@ -258,7 +261,7 @@ impl MinterCanister {
             .entries
     }
 
-    pub fn assert_that_events(&self) -> MinterEventAssert<EventType> {
+    pub fn assert_that_events(&self) -> MinterEventAssert<CkDogeMinterEventType> {
         MinterEventAssert {
             events: self
                 .get_all_events()
@@ -272,7 +275,7 @@ impl MinterCanister {
         MetricsAssert::from_http_query(self)
     }
 
-    pub fn get_all_events(&self) -> Vec<Event> {
+    pub fn get_all_events(&self) -> Vec<CkDogeMinterEvent> {
         const FIRST_BATCH_SIZE: u64 = 100;
         let mut all_events = self.get_events(0, FIRST_BATCH_SIZE);
         loop {
@@ -285,7 +288,7 @@ impl MinterCanister {
         }
     }
 
-    fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
+    fn get_events(&self, start: u64, length: u64) -> Vec<CkDogeMinterEvent> {
         use ic_ckdoge_minter::GetEventsArg;
 
         let call_result = self
@@ -297,7 +300,7 @@ impl MinterCanister {
                 Encode!(&GetEventsArg { start, length }).unwrap(),
             )
             .expect("BUG: failed to call get_events");
-        Decode!(&call_result, Vec<Event>).unwrap()
+        Decode!(&call_result, Vec<CkDogeMinterEvent>).unwrap()
     }
 
     pub fn id(&self) -> CanisterId {

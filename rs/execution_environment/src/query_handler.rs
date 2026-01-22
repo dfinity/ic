@@ -43,6 +43,7 @@ use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
+use std::sync::atomic::AtomicU64;
 use std::{
     future::Future,
     pin::Pin,
@@ -179,6 +180,7 @@ impl InternalHttpQueryHandler {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
         enable_query_stats_tracking: bool,
+        instruction_observation: Option<Arc<AtomicU64>>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -191,7 +193,7 @@ impl InternalHttpQueryHandler {
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                        self.config.fetch_canister_logs_filter,
+                        self.config.log_memory_store_feature,
                     )?;
                     let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
@@ -314,6 +316,7 @@ impl InternalHttpQueryHandler {
             &self.metrics.query_critical_error,
             query_stats_collector,
             Arc::clone(&self.cycles_account_manager),
+            instruction_observation,
         );
 
         let result = context.run(query, &self.metrics, &measurement_scope);
@@ -468,6 +471,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             state,
                             Some(data_certificate_with_delegation_metadata),
                             enable_query_stats_tracking,
+                            None,
                         );
 
                         Ok((response, time))
@@ -496,7 +500,13 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, TransformExecutionInput { query }: TransformExecutionInput) -> Self::Future {
+    fn call(
+        &mut self,
+        TransformExecutionInput {
+            query,
+            instruction_observation,
+        }: TransformExecutionInput,
+    ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
@@ -527,8 +537,13 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, None, enable_query_stats_tracking);
+                        let response = internal.query(
+                            query,
+                            state,
+                            None,
+                            enable_query_stats_tracking,
+                            Some(instruction_observation),
+                        );
 
                         Ok((response, time))
                     }

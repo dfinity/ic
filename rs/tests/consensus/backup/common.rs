@@ -78,12 +78,9 @@ pub fn setup(env: TestEnv) {
                         .into_iter()
                         .map(|key_id| KeyConfig {
                             max_queue_size: 20,
-                            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures()
-                            {
-                                7
-                            } else {
-                                0
-                            },
+                            pre_signatures_to_create_in_advance: key_id
+                                .requires_pre_signatures()
+                                .then_some(7),
                             key_id,
                         })
                         .collect(),
@@ -103,7 +100,7 @@ pub fn test(env: TestEnv) {
     let log = env.logger();
     let nns_node = get_nns_node(&env.topology_snapshot());
     info!(log, "Elect the target replica version");
-    let binary_version = get_current_branch_version();
+    let binary_version = get_ic_build_version();
     let target_version = get_guestos_update_img_version();
 
     // Bless target version
@@ -255,6 +252,7 @@ pub fn test(env: TestEnv) {
         root_dir: backup_dir.clone(),
         excluded_dirs: vec![],
         ssh_private_key: private_key_path,
+        max_logs_age_to_keep_days: None,
         hot_disk_resource_threshold_percentage: 75,
         cold_disk_resource_threshold_percentage: 95,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
@@ -393,28 +391,32 @@ pub fn test(env: TestEnv) {
     let mut hash_mismatch = false;
     for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
-        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
-            for en in dirs {
-                info!(log, "DirEntry in logs: {:?}", en);
-                match en {
-                    Ok(d) => {
-                        let contents = fs::read_to_string(d.path())
-                            .expect("Should have been able to read the log file");
-                        if i == 15 {
-                            println!("{}", contents);
-                        }
+        match fs::read_dir(backup_dir.join("logs")) {
+            Ok(dirs) => {
+                for en in dirs {
+                    info!(log, "DirEntry in logs: {:?}", en);
+                    match en {
+                        Ok(d) => {
+                            let contents = fs::read_to_string(d.path())
+                                .expect("Should have been able to read the log file");
+                            if i == 15 {
+                                println!("{}", contents);
+                            }
 
-                        if contents.contains(DIVERGENCE_LOG_STR) {
-                            hash_mismatch = true;
-                            break;
+                            if contents.contains(DIVERGENCE_LOG_STR) {
+                                hash_mismatch = true;
+                                break;
+                            }
                         }
+                        Err(e) => error!(log, "Error opening log file: {:?}", e),
                     }
-                    Err(e) => error!(log, "Error opening log file: {:?}", e),
                 }
             }
-        } else {
-            error!(log, "Error reading log file directory")
+            Err(err) => {
+                error!(log, "Error reading log file directory: {err}");
+            }
         }
+
         if hash_mismatch {
             break;
         }

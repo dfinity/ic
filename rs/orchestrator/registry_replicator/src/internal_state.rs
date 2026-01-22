@@ -409,7 +409,7 @@ pub async fn write_certified_changes_to_local_store(
     for (registry_version, changelog_entry) in changelog {
         local_store
             .store(registry_version, changelog_entry)
-            .expect("Writing to the FS failed at version {registry_version}");
+            .unwrap_or_else(|_| panic!("Writing to the FS failed at version {registry_version}"));
     }
 
     // If the local store did not panic in the loop above, then `last_version` is indeed the last

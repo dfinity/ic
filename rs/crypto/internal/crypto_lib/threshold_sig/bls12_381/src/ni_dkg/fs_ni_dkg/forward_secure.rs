@@ -931,7 +931,7 @@ pub(crate) fn extend_tau(
 /// Extends tau using the random oracle, and computes the function f
 ///
 /// See the description of Deal in Section 7.1.
-pub fn ftau_extended(
+fn ftau_extended(
     cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
@@ -973,11 +973,11 @@ pub(crate) fn ftau_partial(tau: &Tau, sys: &SysParam) -> Option<G2Projective> {
 }
 
 static SYSTEM_PARAMS: LazyLock<SysParam> =
-    LazyLock::new(|| SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"));
+    LazyLock::new(|| SysParam::create("DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"));
 
 impl SysParam {
     /// Create a set of system parameters
-    fn create(dst: &[u8]) -> Self {
+    fn create(dst: &'static str) -> Self {
         let f0 = G2Affine::hash_with_precomputation(dst, b"f0");
 
         let mut f = Vec::with_capacity(LAMBDA_T);

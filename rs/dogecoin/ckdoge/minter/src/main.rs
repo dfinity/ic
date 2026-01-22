@@ -1,16 +1,20 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
+use ic_ckbtc_minter::state::eventlog::EventLogger;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::{BuildTxError, CanisterRuntime};
 use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, MinterInfo};
+use ic_ckdoge_minter::event::CkDogeEventLogger;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
+    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
-    lifecycle::init::MinterArg,
+    ckdoge_dashboard,
+    event::CkDogeMinterEvent,
+    lifecycle::MinterArg,
     updates,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
@@ -37,7 +41,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic(true), &DOGECOIN_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic, &DOGECOIN_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
 }
 
@@ -158,16 +162,19 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckDOGE minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::{
-        state::{eventlog::replay, invariants::CheckInvariantsImpl, read_state},
-        storage,
+    use ic_ckbtc_minter::state::{
+        eventlog::EventLogger, invariants::CheckInvariantsImpl, read_state,
     };
+    use ic_ckdoge_minter::event::CkDogeEventLogger;
+
+    let events_logger = CkDogeEventLogger;
 
     read_state(|s| {
         s.check_invariants()?;
 
-        let events: Vec<_> = storage::events().collect();
-        let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
+        let events: Vec<_> = events_logger.events_iter().collect();
+        let recovered_state = events_logger
+            .replay::<CheckInvariantsImpl>(events.clone().into_iter())
             .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
 
         recovered_state.check_invariants()?;
@@ -211,16 +218,12 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
     .expect("failed to fetch canister status")
 }
 
-// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
-// both types of events:
-// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
-// 2) Some events, related to KYT are not applicable to Dogecoin.
-// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
-#[query(hidden = true)]
-fn get_events(args: GetEventsArg) -> Vec<Event> {
+#[query]
+fn get_events(args: GetEventsArg) -> Vec<CkDogeMinterEvent> {
     const MAX_EVENTS_PER_QUERY: usize = 2000;
 
-    ic_ckbtc_minter::storage::events()
+    CkDogeEventLogger
+        .events_iter()
         .skip(args.start as usize)
         .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
         .collect()
@@ -231,8 +234,10 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
     }
-
-    ic_ckbtc_minter::queries::http_request(req)
+    let network = ic_ckbtc_minter::state::read_state(|s| s.btc_network)
+        .try_into()
+        .unwrap_or_else(|err| ic_cdk::trap(err));
+    ic_ckbtc_minter::queries::http_request(req, &ckdoge_dashboard(network))
 }
 
 fn main() {}

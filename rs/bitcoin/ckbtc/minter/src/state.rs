@@ -6,7 +6,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Priority;
+use crate::{Priority, tx};
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -25,6 +25,7 @@ use crate::reimbursement::{
 };
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
     ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
@@ -183,8 +184,9 @@ pub struct SubmittedBtcTransaction {
     pub submitted_at: u64,
     /// The tx output from the submitted transaction that the minter owns.
     pub change_output: Option<ChangeOutput>,
-    /// Fee per vbyte in millisatoshi.
-    pub fee_per_vbyte: Option<u64>,
+    /// The effective fee per vbyte (in millisatoshi) that was used for the transaction.
+    /// It may be higher than the initially estimated fee rate due to signatures not having constant-size DER encodings.
+    pub effective_fee_per_vbyte: Option<FeeRate>,
     /// Include both the fee paid for the transaction and the minter fee.
     pub withdrawal_fee: Option<WithdrawalFee>,
     /// Signed transaction if included.
@@ -536,10 +538,10 @@ pub struct CkBtcMinterState {
     /// The mode in which the minter runs.
     pub mode: Mode,
 
-    pub last_fee_per_vbyte: Vec<u64>,
+    pub last_fee_per_vbyte: Vec<FeeRate>,
 
     /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
-    pub last_median_fee_per_vbyte: Option<u64>,
+    pub last_median_fee_per_vbyte: Option<FeeRate>,
 
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
@@ -1774,6 +1776,27 @@ impl CkBtcMinterState {
             "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
     }
+
+    /// Find all accounts used for the transaction previous output points.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the `output_account` map does not have an entry for
+    /// at least one of the transaction previous output points.
+    pub fn find_all_accounts(&self, tx: &tx::UnsignedTransaction) -> Vec<Account> {
+        let mut accounts = Vec::with_capacity(tx.inputs.len());
+        for input in &tx.inputs {
+            accounts.push(
+                self.outpoint_account
+                    .get(&input.previous_output)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        panic!("BUG: no account for outpoint {:?}", &input.previous_output)
+                    }),
+            )
+        }
+        accounts
+    }
 }
 
 #[derive(Eq, PartialEq, Debug, Default)]
@@ -1977,8 +2000,8 @@ impl From<InitArgs> for CkBtcMinterState {
             is_timer_running: false,
             is_distributing_fee: false,
             mode: args.mode,
-            last_fee_per_vbyte: vec![1; 100],
-            last_median_fee_per_vbyte: Some(1),
+            last_fee_per_vbyte: vec![FeeRate::from_millis_per_byte(1); 100],
+            last_median_fee_per_vbyte: Some(FeeRate::from_millis_per_byte(1)),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),

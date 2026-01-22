@@ -769,12 +769,13 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let canister_state_bits: CanisterStateBits =
-        CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
-            into_checkpoint_error(
-                format!("canister_states[{canister_id}]::canister_state_bits"),
-                err,
-            )
-        })?;
+        CanisterStateBits::try_from((canister_layout.canister().deserialize()?, *canister_id))
+            .map_err(|err| {
+                into_checkpoint_error(
+                    format!("canister_states[{canister_id}]::canister_state_bits"),
+                    err,
+                )
+            })?;
 
     durations.insert("canister_state_bits", starting_time.elapsed());
 
@@ -886,6 +887,7 @@ pub fn load_canister_state(
         wasm_chunk_store_data,
         canister_state_bits.wasm_chunk_store_metadata,
         canister_state_bits.log_visibility,
+        canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,

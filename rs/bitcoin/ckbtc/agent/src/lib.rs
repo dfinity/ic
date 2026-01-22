@@ -2,7 +2,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
-use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
+use ic_ckbtc_minter::state::eventlog::{CkBtcMinterEvent, GetEventsArg};
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
@@ -135,7 +135,7 @@ impl CkBtcMinterAgent {
         &self,
         start: u64,
         length: u64,
-    ) -> Result<Vec<Event>, CkBtcMinterAgentError> {
+    ) -> Result<Vec<CkBtcMinterEvent>, CkBtcMinterAgentError> {
         self.query("get_events", GetEventsArg { start, length })
             .await
     }

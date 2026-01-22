@@ -5,7 +5,7 @@ use crate::external_canister_types::{
 };
 use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
-use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
+use crate::{BlobStore, OpId, Operation, SubnetBlockmakers};
 use askama::Template;
 use async_trait::async_trait;
 use axum::{
@@ -53,6 +53,7 @@ use ic_https_outcalls_adapter::{
 use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
+use ic_https_outcalls_service::HttpsOutcallResult;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
 use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_icp_index::InitArg as IcpIndexInitArg;
@@ -137,7 +138,7 @@ use pocket_ic::common::rest::{
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
     IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    SubnetInstructionConfig, SubnetKind, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -165,8 +166,12 @@ use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(askama::Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    height: Height,
+    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+}
 
 const MAINNET_NNS_SUBNET_ID: &str =
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
@@ -634,7 +639,7 @@ impl PocketIcSubnets {
             subnet_config.scheduler_config.max_instructions_per_slice = instruction_limit;
             subnet_config
                 .scheduler_config
-                .max_instructions_per_message_without_dts = instruction_limit;
+                .max_instructions_per_query_message = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
         }
         // bound PocketIc resource consumption
@@ -2117,12 +2122,14 @@ impl PocketIcSubnets {
               ("API_HOST".to_string(), localhost_url.clone()),
               ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
               ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_ADDRESS_BOOK\":true,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false}".to_string()),
               ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
               ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
               ("HOST".to_string(), localhost_url.clone()),
               /* ICP swap canister is not deployed by PocketIC! */
-              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}/")),
+              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}")),
+              /* Kong swap canister is not deployed by PocketIC! */
+              ("KONG_SWAP_URL".to_string(), format!("http://xvemo-ap777-77774-qaalq-cai.raw.localhost:{gateway_port}")),
               ("IDENTITY_SERVICE_URL".to_string(), format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}")),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
@@ -3329,21 +3336,21 @@ impl Operation for ProcessCanisterHttpInternal {
 
 #[derive(Clone)]
 pub struct SingleResponseAdapter {
-    response: Result<HttpsOutcallResponse, (Code, String)>,
+    response: Result<HttpsOutcallResult, (Code, String)>,
 }
 
 impl SingleResponseAdapter {
-    fn new(response: Result<HttpsOutcallResponse, (Code, String)>) -> Self {
+    fn new(response: Result<HttpsOutcallResult, (Code, String)>) -> Self {
         Self { response }
     }
 }
 
-#[async_trait::async_trait]
+#[tonic::async_trait]
 impl HttpsOutcallsService for SingleResponseAdapter {
     async fn https_outcall(
         &self,
         _request: Request<HttpsOutcallRequest>,
-    ) -> Result<Response<HttpsOutcallResponse>, Status> {
+    ) -> Result<Response<HttpsOutcallResult>, Status> {
         match self.response.clone() {
             Ok(resp) => Ok(Response::new(resp)),
             Err((code, msg)) => Err(Status::new(code, msg)),
@@ -3352,7 +3359,7 @@ impl HttpsOutcallsService for SingleResponseAdapter {
 }
 
 async fn setup_adapter_mock(
-    adapter_response: Result<HttpsOutcallResponse, (Code, String)>,
+    adapter_response: Result<HttpsOutcallResult, (Code, String)>,
 ) -> Channel {
     let (client, server) = tokio::io::duplex(1024);
     let mock_adapter = SingleResponseAdapter::new(adapter_response);
@@ -3425,20 +3432,37 @@ fn process_mock_canister_https_response(
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
-            let grpc_channel = pic
-                .runtime
-                .block_on(setup_adapter_mock(Ok(HttpsOutcallResponse {
-                    status: reply.status.into(),
-                    headers: reply
-                        .headers
-                        .iter()
-                        .map(|h| ic_https_outcalls_service::HttpHeader {
-                            name: h.name.clone(),
-                            value: h.value.clone(),
-                        })
-                        .collect(),
-                    content: reply.body.clone(),
-                })));
+            let response = HttpsOutcallResponse {
+                status: reply.status.into(),
+                headers: reply
+                    .headers
+                    .iter()
+                    .map(|h| ic_https_outcalls_service::HttpHeader {
+                        name: h.name.clone(),
+                        value: h.value.clone(),
+                    })
+                    .collect(),
+                content: reply.body.clone(),
+            };
+
+            let headers_size: usize = response
+                .headers
+                .iter()
+                .map(|h| h.name.len() + h.value.len())
+                .sum();
+            let total_size = (response.content.len() + headers_size) as u64;
+
+            let result = ic_https_outcalls_service::HttpsOutcallResult {
+                metrics: Some(ic_https_outcalls_service::CanisterHttpAdapterMetrics {
+                    downloaded_bytes: total_size,
+                }),
+                result: Some(
+                    ic_https_outcalls_service::https_outcall_result::Result::Response(response),
+                ),
+            };
+
+            let grpc_channel = pic.runtime.block_on(setup_adapter_mock(Ok(result)));
+
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
@@ -3537,16 +3561,12 @@ impl Operation for PubKey {
 
 #[derive(Clone, Debug)]
 pub struct Tick {
-    pub configs: TickConfigs,
+    pub blockmakers: Vec<SubnetBlockmakers>,
 }
 
 impl Tick {
-    fn validate_blockmakers_per_subnet(
-        &self,
-        pic: &mut PocketIc,
-        subnets_blockmaker: &[SubnetBlockmaker],
-    ) -> Result<(), OpOut> {
-        for subnet_blockmaker in subnets_blockmaker {
+    fn validate_blockmakers(&self, pic: &PocketIc) -> Result<(), OpOut> {
+        for subnet_blockmaker in &self.blockmakers {
             if subnet_blockmaker
                 .failed_blockmakers
                 .contains(&subnet_blockmaker.blockmaker)
@@ -3577,37 +3597,26 @@ impl Tick {
 
 impl Operation for Tick {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
-        let blockmakers_per_subnet = self.configs.blockmakers.as_ref().map(|cfg| {
-            cfg.blockmakers_per_subnet
-                .iter()
-                .cloned()
-                .map(SubnetBlockmaker::from)
-                .collect_vec()
-        });
-
-        if let Some(ref bm_per_subnet) = blockmakers_per_subnet
-            && let Err(error) = self.validate_blockmakers_per_subnet(pic, bm_per_subnet)
-        {
+        if let Err(error) = self.validate_blockmakers(pic) {
             return error;
         }
 
         for subnet in pic.subnets.get_all() {
-            let subnet_id = subnet.get_subnet_id();
-            let blockmaker_metrics = blockmakers_per_subnet.as_ref().and_then(|bm_per_subnet| {
-                bm_per_subnet
-                    .iter()
-                    .find(|bm| bm.subnet == subnet_id)
-                    .map(|bm| BlockmakerMetrics {
-                        blockmaker: bm.blockmaker,
-                        failed_blockmakers: bm.failed_blockmakers.clone(),
-                    })
-            });
+            let state_machine = subnet.state_machine.clone();
+            let subnet_id = state_machine.get_subnet_id();
+
+            let blockmaker_metrics = self
+                .blockmakers
+                .iter()
+                .find(|bm| bm.subnet == subnet_id)
+                .map(|bm| BlockmakerMetrics {
+                    blockmaker: bm.blockmaker,
+                    failed_blockmakers: bm.failed_blockmakers.clone(),
+                });
 
             match blockmaker_metrics {
-                Some(metrics) => subnet
-                    .state_machine
-                    .execute_round_with_blockmaker_metrics(metrics),
-                None => subnet.state_machine.execute_round(),
+                Some(metrics) => state_machine.execute_round_with_blockmaker_metrics(metrics),
+                None => state_machine.execute_round(),
             }
         }
 

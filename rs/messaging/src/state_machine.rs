@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::{Batch, BatchContent};
-use ic_types::{Cycles, ExecutionRound, NumBytes};
+use ic_types::{ExecutionRound, NumBytes, SubnetId};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -75,6 +75,37 @@ impl StateMachineImpl {
             .with_label_values(&[phase])
             .observe(since.elapsed().as_secs_f64());
     }
+
+    /// Runs a special round during which the state is split (and no messages are
+    /// inducted, executed or routed).
+    ///
+    /// Retains the canisters mapped to `new_subnet_id` in the routing table.
+    /// Validates that all other canisters are mapped to and will be retained by
+    /// `other_subnet_id`.
+    ///
+    /// Shapshots and ingress messages are split accordingly. Streams, refunds and
+    /// subnet queues are preserved on *subnet A* only (i.e., the one retaining the
+    /// original `own_subnet_id`).
+    fn online_split(
+        &self,
+        mut state: ReplicatedState,
+        new_subnet_id: SubnetId,
+        other_subnet_id: SubnetId,
+    ) -> ReplicatedState {
+        // Abort all paused executions and wipe `SystemMetadata` caches.
+        self.scheduler
+            .checkpoint_round_with_no_execution(&mut state);
+
+        let old_subnet_id = state.metadata.own_subnet_id;
+        state
+            .online_split(new_subnet_id, other_subnet_id)
+            .unwrap_or_else(|err| {
+                fatal!(
+                    self.log,
+                    "Failed to split {new_subnet_id} from {old_subnet_id}: {err}"
+                )
+            })
+    }
 }
 
 impl StateMachine for StateMachineImpl {
@@ -126,8 +157,12 @@ impl StateMachine for StateMachineImpl {
                     requires_full_state_hash,
                 ),
 
-                BatchContent::Splitting { .. } => {
-                    unimplemented!("Subnet splitting is not yet enabled")
+                // Consensus is telling us to split, do so and return the new state.
+                BatchContent::Splitting {
+                    new_subnet_id,
+                    other_subnet_id,
+                } => {
+                    return self.online_split(state, new_subnet_id, other_subnet_id);
                 }
             };
 
@@ -240,20 +275,6 @@ impl StateMachine for StateMachineImpl {
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
-
-        // Take out all refunds from the refund pool and observe them as lost cycles.
-        //
-        // Refunds are currently not routed to streams (this will be implemented in a
-        // follow-up change). Therefore, we "lose" them here, so they don't accumulate
-        // forever.
-        if !state_after_stream_builder.refunds().is_empty() {
-            let mut lost_cycles = Cycles::new(0);
-            state_after_stream_builder.take_refunds(|refund| {
-                lost_cycles += refund.amount();
-                true
-            });
-            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
-        }
 
         state_after_stream_builder
     }

@@ -211,14 +211,14 @@ impl MEGaCiphertext {
         plaintext_curve: EccCurveType,
     ) -> CanisterThresholdResult<()> {
         if self.ephemeral_key().curve_type() != key_curve {
-            return Err(CanisterThresholdError::CurveMismatch);
+            return Err(CanisterThresholdError::MalformedCiphertext);
         }
 
         if self.pop_public_key().curve_type() != key_curve {
-            return Err(CanisterThresholdError::CurveMismatch);
+            return Err(CanisterThresholdError::MalformedCiphertext);
         }
         if self.pop_proof().curve_type()? != key_curve {
-            return Err(CanisterThresholdError::CurveMismatch);
+            return Err(CanisterThresholdError::MalformedCiphertext);
         }
 
         let curves_ok = match self {
@@ -229,11 +229,11 @@ impl MEGaCiphertext {
         };
 
         if !curves_ok {
-            return Err(CanisterThresholdError::CurveMismatch);
+            return Err(CanisterThresholdError::MalformedCiphertext);
         }
 
         if self.ctype() != ctype {
-            return Err(CanisterThresholdError::InconsistentCiphertext);
+            return Err(CanisterThresholdError::MalformedCiphertext);
         }
 
         Ok(())

@@ -488,6 +488,10 @@ impl CryptoError {
     pub fn is_invalid_argument(&self) -> bool {
         matches!(self, CryptoError::InvalidArgument { .. })
     }
+
+    pub fn is_internal_error(&self) -> bool {
+        matches!(self, CryptoError::InternalError { .. })
+    }
 }
 
 impl From<RegistryClientError> for CryptoError {

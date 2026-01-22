@@ -50,6 +50,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
+    "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:time",
     "@crate_index//:tokio",
@@ -69,7 +70,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "@crate_index//:pretty_assertions",
-    "@crate_index//:strum",
 ]
 
 MACRO_DEPENDENCIES = [

@@ -20,8 +20,8 @@ use futures::StreamExt;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
-    CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError, CspDkgLoadPrivateKeyError,
-    CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
+    CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
+    CspDkgLoadPrivateKeyError, CspDkgRetainThresholdKeysError, CspDkgUpdateFsEpochError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
@@ -200,17 +200,33 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
         threshold: NumberOfNodes,
         epoch: Epoch,
         receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
-        maybe_resharing_secret: Option<KeyId>,
+    ) -> Result<CspNiDkgDealing, CspDkgCreateDealingError> {
+        let vault = self.local_csp_vault;
+        let job = move || {
+            vault.create_dealing(algorithm_id, dealer_index, threshold, epoch, receiver_keys)
+        };
+        execute_on_thread_pool(&self.thread_pool, job).await
+    }
+
+    async fn create_resharing_dealing(
+        self,
+        _: context::Context,
+        algorithm_id: AlgorithmId,
+        dealer_index: NodeIndex,
+        threshold: NumberOfNodes,
+        epoch: Epoch,
+        receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey>,
+        resharing_secret: KeyId,
     ) -> Result<CspNiDkgDealing, CspDkgCreateReshareDealingError> {
         let vault = self.local_csp_vault;
         let job = move || {
-            vault.create_dealing(
+            vault.create_resharing_dealing(
                 algorithm_id,
                 dealer_index,
                 threshold,
                 epoch,
                 receiver_keys,
-                maybe_resharing_secret,
+                resharing_secret,
             )
         };
         execute_on_thread_pool(&self.thread_pool, job).await

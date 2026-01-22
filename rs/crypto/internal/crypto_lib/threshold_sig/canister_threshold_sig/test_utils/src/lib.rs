@@ -864,7 +864,7 @@ impl ProtocolRound {
         } else {
             assert_matches!(
                 top_level_dealing_verify_result.unwrap_err(),
-                IDkgVerifyDealingInternalError::InternalError(_)
+                IDkgVerifyDealingInternalError::InvalidCiphertext
             );
         }
     }

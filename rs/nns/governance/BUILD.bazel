@@ -78,6 +78,7 @@ DEPENDENCIES = [
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
     "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
     "//rs/node_rewards/canister/api",
@@ -130,6 +131,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
+    "//rs/nns/governance/derive_self_describing",
     "@crate_index//:async-trait",
     "@crate_index//:rust_decimal_macros",
     "@crate_index//:strum_macros",
@@ -385,6 +387,10 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    data = [
+        "//rs/nns/handlers/lifeline/impl:lifeline.did",
+        "//rs/nns/handlers/root/impl:canister/root.did",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -396,6 +402,10 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = test_with_tla(),
+    data = [
+        "//rs/nns/handlers/lifeline/impl:lifeline.did",
+        "//rs/nns/handlers/root/impl:canister/root.did",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
