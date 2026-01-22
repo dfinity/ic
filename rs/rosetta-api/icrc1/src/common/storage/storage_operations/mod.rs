@@ -1,11 +1,12 @@
 use crate::MetadataEntry;
 use crate::common::storage::types::{RosettaBlock, RosettaCounter};
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc107::schema::BTYPE_107;
 use num_bigint::BigUint;
 use rusqlite::Connection;
 use rusqlite::{CachedStatement, Params, named_params, params};
@@ -18,6 +19,8 @@ use tracing::{info, trace};
 mod tests;
 
 pub const METADATA_SCHEMA_VERSION: &str = "schema_version";
+pub const METADATA_FEE_COL: &str = "fee_collector_107";
+pub const METADATA_BLOCK_IDX: &str = "highest_processed_block_index";
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -109,6 +112,20 @@ pub fn initialize_counter_if_missing(
         }
     }
     Ok(())
+}
+
+pub fn get_107_fee_collector_or_legacy(
+    rosetta_block: &RosettaBlock,
+    connection: &Connection,
+    fee_collector_107: Option<Option<Account>>,
+) -> anyhow::Result<Option<Account>> {
+    // First check if we have a 107 fee collector
+    if let Some(fee_collector_107) = fee_collector_107 {
+        return Ok(fee_collector_107);
+    }
+
+    // There is no 107 fee collector, check legacy fee collector in the block
+    get_fee_collector_from_block(rosetta_block, connection)
 }
 
 // Helper function to resolve the fee collector account from a block
@@ -272,7 +289,7 @@ pub fn update_account_balances(
 
     // The next block to be updated is the highest block index in the account balance table + 1 if the table is not empty and 0 otherwise
     let next_block_to_be_updated =
-        get_highest_block_idx_in_account_balance_table(connection)?.map_or(0, |idx| idx + 1);
+        get_highest_processed_block_idx(connection)?.map_or(0, |idx| idx + 1);
     let highest_block_idx =
         get_block_with_highest_block_idx(connection)?.map_or(0, |block| block.index);
 
@@ -288,9 +305,22 @@ pub fn update_account_balances(
     // This also makes the inserting of the account balances batchable and therefore faster
     let mut account_balances_cache: HashMap<Account, BTreeMap<u64, Nat>> = HashMap::new();
 
+    let mut current_fee_collector_107 = get_rosetta_metadata(connection, METADATA_FEE_COL)?
+        .map(|value| candid::decode_one::<Option<Account>>(&value))
+        .transpose()?;
+    let collector_before = current_fee_collector_107;
+
     // As long as there are blocks to be fetched, keep on iterating over the blocks in the database with the given BATCH_SIZE interval
     while !rosetta_blocks.is_empty() {
+        let mut last_block_index = batch_start_idx;
         for rosetta_block in rosetta_blocks {
+            if rosetta_block.index < last_block_index {
+                bail!(format!(
+                    "Processing blocks not in order, previous processed block: {last_block_index}, current block {}",
+                    rosetta_block.index
+                ));
+            }
+            last_block_index = rosetta_block.index;
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn {
                     from,
@@ -312,9 +342,11 @@ pub fn update_account_balances(
                         connection,
                         &mut account_balances_cache,
                     )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -339,9 +371,11 @@ pub fn update_account_balances(
                         connection,
                         &mut account_balances_cache,
                     )?;
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -364,11 +398,21 @@ pub fn update_account_balances(
                         .unwrap_or(Nat(BigUint::zero()));
                     debit(
                         from,
-                        fee,
+                        fee.clone(),
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+
+                    if let Some(Some(collector)) = current_fee_collector_107 {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Transfer {
                     from,
@@ -400,9 +444,11 @@ pub fn update_account_balances(
                         &mut account_balances_cache,
                     )?;
 
-                    if let Some(collector) =
-                        get_fee_collector_from_block(&rosetta_block, connection)?
-                    {
+                    if let Some(collector) = get_107_fee_collector_or_legacy(
+                        &rosetta_block,
+                        connection,
+                        current_fee_collector_107,
+                    )? {
                         credit(
                             collector,
                             fee,
@@ -411,6 +457,13 @@ pub fn update_account_balances(
                             &mut account_balances_cache,
                         )?;
                     }
+                }
+                crate::common::storage::types::IcrcOperation::FeeCollector {
+                    fee_collector,
+                    caller: _,
+                    mthd: _,
+                } => {
+                    current_fee_collector_107 = Some(fee_collector);
                 }
             }
         }
@@ -429,6 +482,13 @@ pub fn update_account_balances(
                     })?;
             }
         }
+        if collector_before != current_fee_collector_107 {
+            let collector = current_fee_collector_107
+                .ok_or_else(|| anyhow!("Cannot switch from fee collector 107 to legacy"))?;
+            insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_FEE_COL, candid::encode_one(collector)?])?;
+        }
+        let last_block_index_bytes = last_block_index.to_le_bytes();
+        insert_tx.prepare_cached("INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2) ON CONFLICT (key) DO UPDATE SET value = excluded.value;")?.execute(params![METADATA_BLOCK_IDX, last_block_index_bytes])?;
         insert_tx.commit()?;
 
         if flush_cache_and_shrink_memory {
@@ -438,7 +498,7 @@ pub fn update_account_balances(
         }
 
         // Fetch the next batch of blocks
-        batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
+        batch_start_idx = get_highest_processed_block_idx(connection)?
             .context("No blocks in account balance table after inserting")?
             + 1;
         batch_end_idx = batch_start_idx + batch_size;
@@ -535,6 +595,23 @@ pub fn store_blocks(
                 expected_allowance,
                 fee,
                 expires_at,
+            ),
+            crate::common::storage::types::IcrcOperation::FeeCollector {
+                fee_collector: _,
+                caller: _,
+                mthd: _,
+            } => (
+                BTYPE_107,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0u64),
+                None,
+                None,
+                None,
             ),
         };
 
@@ -648,7 +725,8 @@ pub fn get_blocks_by_index_range(
     start_index: u64,
     end_index: u64,
 ) -> anyhow::Result<Vec<RosettaBlock>> {
-    let command = "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2";
+    let command =
+        "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2 ORDER BY idx ASC";
     let mut stmt = connection.prepare_cached(command)?;
     read_blocks(&mut stmt, params![start_index, end_index])
 }
@@ -688,16 +766,19 @@ pub fn get_blocks_by_transaction_hash(
     read_blocks(&mut stmt, params![hash.as_slice().to_vec()])
 }
 
-pub fn get_highest_block_idx_in_account_balance_table(
-    connection: &Connection,
-) -> anyhow::Result<Option<u64>> {
-    match connection
-        .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
-        .query_map(params![], |row| row.get(0))?
-        .next()
-    {
-        None => Ok(None),
-        Some(res) => Ok(res?),
+pub fn get_highest_processed_block_idx(connection: &Connection) -> anyhow::Result<Option<u64>> {
+    match get_rosetta_metadata(connection, METADATA_BLOCK_IDX)? {
+        Some(value) => Ok(Some(u64::from_le_bytes(value.as_slice().try_into()?))),
+        None => {
+            match connection
+                .prepare_cached("SELECT block_idx FROM account_balances WHERE block_idx = (SELECT MAX(block_idx) FROM account_balances)")?
+                .query_map(params![], |row| row.get(0))?
+                .next()
+            {
+                None => Ok(None),
+                Some(res) => Ok(res?),
+            }
+        }
     }
 }
 
@@ -887,6 +968,10 @@ pub fn repair_fee_collector_balances(
 
     info!("Starting balance reconciliation...");
     connection.execute("DELETE FROM account_balances", params![])?;
+    connection.execute(
+        &format!("DELETE FROM rosetta_metadata WHERE key = '{METADATA_BLOCK_IDX}' OR key = '{METADATA_FEE_COL}'"),
+        params![],
+    )?;
 
     if block_count > 0 {
         info!("Reprocessing all blocks...");

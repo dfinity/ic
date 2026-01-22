@@ -98,11 +98,11 @@ system_test(
 system_test(
     name = "launch_single_host",
     guestos = False,
+    setupos = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_setupos_img = True,
     deps = [
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
