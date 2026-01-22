@@ -22,6 +22,7 @@ ic-crypto-interfaces-sig-verification = { path = "../../crypto/interfaces/sig_ve
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
+ic-https-outcalls-pricing = { path = "../../https_outcalls/pricing" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
