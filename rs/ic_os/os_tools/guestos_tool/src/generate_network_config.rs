@@ -244,7 +244,9 @@ fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> St
 }
 
 /// Picks the best interface from the list
-fn pick_best_interface(interfaces: Vec<String>) -> Option<String> {
+fn pick_best_interface(mut interfaces: Vec<String>) -> Option<String> {
+    interfaces.sort();
+
     // Try to pick eth* interface first, then others.
     // On Azure both eth* and en* are created, but we should use eth* one.
     // In other environments we have only en* interfaces.
@@ -462,6 +464,12 @@ mod tests {
 
     #[test]
     fn test_pick_best_interface() {
+        let interfaces = vec!["lo", "ens0", "eth1", "ens1", "eth0"]
+            .into_iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(pick_best_interface(interfaces), Some("eth0".to_string()));
+
         let interfaces = vec!["lo", "eth0", "eth1", "ens0", "ens1"]
             .into_iter()
             .map(|x| x.to_string())
