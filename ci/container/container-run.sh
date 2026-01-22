@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-## Currently this script only supports podman as container runtime
-## Eventually we may want to add docker support as well
+## This script only supports podman as container runtime
 
 eprintln() {
     echo "$@" >&2
