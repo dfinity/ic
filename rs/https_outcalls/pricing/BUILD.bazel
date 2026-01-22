@@ -1,8 +1,6 @@
-#TODO(urgent): do we need all this
-load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
-#TODO(urgent): make this more private
-package(default_visibility = ["//visibility:public"])
+package(default_visibility = ["//rs/https_outcalls:__subpackages__"])
 
 rust_library(
     name = "pricing",
