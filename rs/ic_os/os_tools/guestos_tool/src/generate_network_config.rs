@@ -245,19 +245,13 @@ fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> St
 
 /// Picks the best interface from the list
 fn pick_best_interface(interfaces: Vec<String>) -> Option<String> {
-    // Pick only appropriate interfaces
-    let interfaces = interfaces
-        .into_iter()
-        .filter(|x| x.starts_with("en") || x.starts_with("eth"))
-        .collect::<Vec<_>>();
-
     // Try to pick eth* interface first, then others.
     // On Azure both eth* and en* are created, but we should use eth* one.
     // In other environments we have only en* interfaces.
     interfaces
         .iter()
         .find(|x| x.starts_with("eth"))
-        .or_else(|| interfaces.first())
+        .or_else(|| interfaces.iter().find(|x| x.starts_with("en")))
         .cloned()
 }
 
