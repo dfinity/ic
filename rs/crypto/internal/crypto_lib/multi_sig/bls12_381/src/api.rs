@@ -8,9 +8,6 @@ use ic_types::crypto::{AlgorithmId, CryptoError};
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
 /// Generates a keypair using the given `rng`.
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, PublicKeyBytes) {
     let (secret_key, public_key) = crypto::keypair_from_rng(rng);

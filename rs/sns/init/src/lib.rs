@@ -49,7 +49,15 @@ pub mod distributions;
 pub mod pb;
 
 /// The maximum count of dapp canisters that can be initially decentralized.
-pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
+///
+/// How this value was chosen: An SNS that has more than this many dapp
+/// canisters is "very likely" going to be difficult to review, but that's up to
+/// people who involve themselves with the SNS. Other than that, there is no
+/// (known) technical reason that this shouldn't be higher (e.g. 1000 would
+/// probably technically still be safe). This used to be 25, but later, there
+/// was a desire to create an SNS with 60 or so dapp canisters (onicai). Hence,
+/// this was increased to 100.
+pub const MAX_DAPP_CANISTERS_COUNT: usize = 100;
 
 /// The maximum number of characters allowed for confirmation text.
 pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
