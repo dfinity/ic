@@ -124,9 +124,14 @@ async fn test_get_doge_address(agent: &CkDogeMinterAgent) {
         .get_doge_address(None, None)
         .await
         .expect("Error while decoding response");
-    // Checking only proper format of address since ECDSA signature is non-deterministic.
-    assert_eq!(ADDRESS_LENGTH, res.len());
-    assert!(res.starts_with("bcrt"), "Expected Regtest address format.");
+
+    assert!(
+        DogecoinAddress::parse(
+            &address,
+            &ic_ckdoge_minter::lifecycle::init::Network::Regtest
+        )
+        .is_ok()
+    );
 }
 
 async fn test_retrieve_doge_with_approval(agent: &CkDogeMinterAgent) {

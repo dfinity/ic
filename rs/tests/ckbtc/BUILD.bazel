@@ -14,6 +14,8 @@ DEPENDENCIES = [
     "//rs/bitcoin/ckbtc/minter",
     "//rs/canister_client",
     "//rs/config",
+    "//rs/dogecoin/ckdoge/agent",
+    "//rs/dogecoin/ckdoge/minter",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nervous_system/common/test_keys",
