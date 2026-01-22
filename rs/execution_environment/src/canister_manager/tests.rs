@@ -110,6 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const KIB: u64 = 1 << 10;
 const MIB: u64 = 1 << 20;
 const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
@@ -5293,14 +5294,31 @@ fn upload_chunk_charges_canister_cycles() {
 
 #[test]
 fn upload_chunk_charges_if_failing() {
+    const ACTUAL_MAX_CHUNK_SIZE: u64 = 1024 * KIB;
+    const REDUCED_MAX_CHUNK_SIZE: u64 = ACTUAL_MAX_CHUNK_SIZE - 2 * KIB; // Needed to trigger subnet oversubscribed error.
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    let scheduler_cores = 2;
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_memory_reservation(0)
-        .with_subnet_execution_memory(10)
+        .with_scheduler_cores(scheduler_cores)
+        .with_subnet_execution_memory(
+            scheduler_cores as u64
+                * (EMPTY_CANISTER_MEMORY_USAGE.get() + REDUCED_MAX_CHUNK_SIZE as u64),
+        )
         .build();
+    // Assert enough available memory for the canister and the chunk.
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        EMPTY_CANISTER_MEMORY_USAGE.get() as i64 + REDUCED_MAX_CHUNK_SIZE as i64
+    );
     let canister_id = test.create_canister(CYCLES);
+    // Assert enough available memory for the chunk.
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        REDUCED_MAX_CHUNK_SIZE as i64
+    );
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     // Expected charge is the same as if the upload succeeds.
     let expected_charge = test.cycles_account_manager().execution_cost(
@@ -5315,8 +5333,16 @@ fn upload_chunk_charges_if_failing() {
         chunk: vec![42; 10],
     }
     .encode();
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        REDUCED_MAX_CHUNK_SIZE as i64
+    );
     // Upload will fail because subnet does not have space.
-    let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
+    let err = test.subnet_message("upload_chunk", payload).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    let msg = err.description();
+    assert!(msg.contains(&format!("{}", ACTUAL_MAX_CHUNK_SIZE / KIB)));
+    assert!(msg.contains(&format!("{}", REDUCED_MAX_CHUNK_SIZE / KIB)));
 
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
