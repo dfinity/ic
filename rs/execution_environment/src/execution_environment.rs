@@ -1000,40 +1000,26 @@ impl ExecutionEnvironment {
                 Ok(args) => self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state),
             },
 
-            Ok(Ic00Method::FlexibleHttpRequest) => {
-                match state.metadata.own_subnet_features.http_requests {
-                    true => match &msg {
-                        CanisterCall::Request(_) => {
-                            match FlexibleCanisterHttpRequestArgs::decode(payload) {
-                                Err(err) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(err),
-                                    refund: msg.take_cycles(),
-                                },
-                                Ok(_) => ExecuteSubnetMessageResult::Finished {
-                                    response: Err(UserError::new(
-                                        ErrorCode::CanisterRejectedMessage,
-                                        "FlexibleHttpRequest is not yet implemented".to_string(),
-                                    )),
-                                    refund: msg.take_cycles(),
-                                },
-                            }
-                        }
-                        CanisterCall::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
-                        }
-                    },
-                    false => {
-                        let err = Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string(),
-                        ));
-                        ExecuteSubnetMessageResult::Finished {
-                            response: err,
+            Ok(Ic00Method::FlexibleHttpRequest) => match &msg {
+                CanisterCall::Request(_) => {
+                    match FlexibleCanisterHttpRequestArgs::decode(payload) {
+                        Err(err) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(err),
                             refund: msg.take_cycles(),
-                        }
+                        },
+                        Ok(_) => ExecuteSubnetMessageResult::Finished {
+                            response: Err(UserError::new(
+                                ErrorCode::CanisterRejectedMessage,
+                                "FlexibleHttpRequest is not yet implemented".to_string(),
+                            )),
+                            refund: msg.take_cycles(),
+                        },
                     }
                 }
-            }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::FlexibleHttpRequest)
+                }
+            },
 
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
