@@ -112,6 +112,7 @@ mod tests {
     #[test]
     fn test_traverse_empty_state() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let height = 42;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -130,6 +131,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(height)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
@@ -156,7 +158,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -206,6 +208,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
@@ -321,6 +324,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
@@ -400,6 +404,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
@@ -649,6 +654,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
@@ -755,6 +761,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
+                    (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                     Some(vec![edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
                         deprecated_id_counter: None,
@@ -966,6 +973,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
+                    (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                     Some(vec![edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
                         deprecated_id_counter: None,
@@ -1141,6 +1149,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
