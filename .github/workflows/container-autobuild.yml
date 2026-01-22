@@ -67,8 +67,7 @@ jobs:
           - image: ic-dev
             target: dev
     outputs:
-      build_imageid: ${{ steps.set-imageid.outputs.imageid }}
-      dev_imageid: ${{ steps.set-imageid.outputs.imageid }}
+      imageid: ${{ steps.set-imageid.outputs.imageid }} # both images share the same imageid
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,6 +96,7 @@ jobs:
             CI_USER=1001
       - name: Set imageid output
         id: set-imageid
+        if: matrix.image == 'ic-build'
         run: echo "imageid=${{ steps.build.outputs.imageid }}" >> $GITHUB_OUTPUT
 
   update-image-references:
@@ -125,7 +125,7 @@ jobs:
           set -xeuo pipefail
 
           IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.build_imageid }}"
+          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ needs.ic-build-image.outputs.imageid }}"
 
           echo '${{ needs.build-image-prep.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
@@ -138,7 +138,7 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m 'Updating container image to ${{ needs.ic-build-image.outputs.build_imageid }}' -m 'Image tag: ${{ needs.build-image-prep.outputs.image_tag }}'
+          git commit -m 'Updating container image to ${{ needs.ic-build-image.outputs.imageid }}' -m 'Image tag: ${{ needs.build-image-prep.outputs.image_tag }}'
           git push
 
       - name: Add PR Comment
