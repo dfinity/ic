@@ -13,7 +13,7 @@ deterministic_ips = { path = "../../networking/deterministic_ips" }
 ic_device = { path = "../../device" }
 grub = { path = "../../boot/grub" }
 ic-metrics-tool = { path = "../../metrics/metrics_tool" }
-ic_sev = { path = "../../sev" }
+sev_host = { path = "../../sev/host" }
 
 anyhow = { workspace = true }
 askama = { workspace = true }
