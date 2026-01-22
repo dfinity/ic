@@ -1,29 +1,28 @@
 use std::time::Duration;
 
 use assert_matches::assert_matches;
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::TlsKeyPairAndCertGenerationError;
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::time::{GENESIS, Time};
 use ic_types::{NodeId, PrincipalId};
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 use time::OffsetDateTime;
 use time::macros::datetime;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::{X509Name, X509Version};
 
+fn seed() -> Seed {
+    Seed::from_rng(&mut reproducible_rng())
+}
+
 #[test]
 fn should_generate_x509_v3_certificate_in_der_encoding() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     assert_matches!(
         X509Certificate::from_der(&cert.bytes), Ok((remainder, x509))
@@ -33,13 +32,9 @@ fn should_generate_x509_v3_certificate_in_der_encoding() {
 
 #[test]
 fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
-    let (_cert, secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (_cert, secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     assert_matches!(
         ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key.bytes.expose_secret()),
@@ -49,29 +44,28 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
 
 #[test]
 fn should_have_stable_representation_of_private_key() {
-    let rng = &mut ChaCha20Rng::from_seed([0x42u8; 32]);
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
+    let seed = Seed::from_rng(&mut ChaCha20Rng::from_seed([0x42u8; 32]));
 
     let (_cert, secret_key) =
-        generate_tls_key_pair_der(rng, "common name", not_before(), not_after())
+        generate_tls_key_pair_der(seed, "common name", not_before(), not_after())
             .expect("failed to generate TLS keys");
 
     let serialized_sk = serde_cbor::to_vec(&secret_key).unwrap();
 
     assert_eq!(
         hex::encode(serialized_sk),
-        "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959"
+        "a16562797465735830302e020100300506032b65700422042068063121e45dac37b373bcf29480610ebcedef221604e87fb4c6181de77a6ed2"
     );
 }
 
 #[test]
 fn should_generate_self_signed_certificate() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
@@ -88,13 +82,9 @@ fn should_generate_self_signed_certificate() {
 
 #[test]
 fn should_set_correct_signature_algorithm() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert_eq!(
@@ -105,13 +95,9 @@ fn should_set_correct_signature_algorithm() {
 
 #[test]
 fn should_generate_valid_public_key_with_correct_algorithm() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
@@ -131,13 +117,9 @@ fn should_generate_valid_public_key_with_correct_algorithm() {
 #[test]
 fn should_generate_cert_with_equal_and_correct_subject_cn_and_issuer_cn() {
     let common_name = "a common name, I am";
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        common_name,
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), common_name, not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert_eq!(x509.subject(), x509.issuer());
@@ -154,10 +136,9 @@ fn should_have_serial_with_at_most_20_octets() {
     let max_serial_bytes: [u8; 19] = [255; 19];
     let max_serial_biguint = x509_parser::num_bigint::BigUint::from_bytes_be(&max_serial_bytes);
 
-    let rng = &mut reproducible_rng();
     for _ in 1..=10 {
         let (cert, _secret_key) =
-            generate_tls_key_pair_der(rng, "common name", not_before(), not_after())
+            generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
                 .expect("failed to generate TLS keys");
 
         let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
@@ -167,13 +148,9 @@ fn should_have_serial_with_at_most_20_octets() {
 
 #[test]
 fn should_not_set_subject_alt_name() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert_eq!(x509.subject_alternative_name(), Ok(None));
@@ -184,7 +161,7 @@ fn should_set_not_before_correctly() {
     let not_before = GENESIS;
     let not_after = GENESIS + Duration::from_secs(12345);
     let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         not_before.as_secs_since_unix_epoch(),
         not_after.as_secs_since_unix_epoch(),
@@ -203,7 +180,7 @@ fn should_set_not_after_correctly() {
     let not_before = GENESIS;
     let not_after = GENESIS + Duration::from_secs(12345);
     let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         not_before.as_secs_since_unix_epoch(),
         not_after.as_secs_since_unix_epoch(),
@@ -229,7 +206,7 @@ fn should_fail_if_notafter_date_is_not_after_notbefore_date() {
         .to_string();
 
     let result = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         not_before.as_secs_since_unix_epoch(),
         not_after.as_secs_since_unix_epoch(),
@@ -243,7 +220,7 @@ fn should_fail_if_notafter_date_is_not_after_notbefore_date() {
 #[test]
 fn should_fail_if_notbefore_date_is_too_large_for_i64() {
     let result = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         u64::MAX,
         GENESIS.as_secs_since_unix_epoch(),
@@ -258,12 +235,8 @@ fn should_fail_if_notbefore_date_is_too_large_for_i64() {
 fn should_fail_if_notbefore_date_is_invalid_offsetdatetime() {
     let max_possible_offsetdatetime = 253_402_300_799_u64; // unix timestamp for "99991231235959Z" == "9999-12-31 23:59:59.0 +00:00:00"
 
-    let result = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        max_possible_offsetdatetime + 1,
-        0,
-    );
+    let result =
+        generate_tls_key_pair_der(seed(), "common name", max_possible_offsetdatetime + 1, 0);
 
     assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
         if e.starts_with("invalid notBefore date: failed to convert to OffsetDateTime")
@@ -273,7 +246,7 @@ fn should_fail_if_notbefore_date_is_invalid_offsetdatetime() {
 #[test]
 fn should_fail_if_notafter_date_is_too_large_for_i64() {
     let result = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         GENESIS.as_secs_since_unix_epoch(),
         u64::MAX,
@@ -289,7 +262,7 @@ fn should_fail_if_notafter_date_is_invalid_offsetdatetime() {
     let max_possible_offsetdatetime = 253_402_300_799_u64; // unix timestamp for "99991231235959Z" == "9999-12-31 23:59:59.0 +00:00:00"
 
     let result = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         "common name",
         GENESIS.as_secs_since_unix_epoch(),
         max_possible_offsetdatetime + 1,
@@ -308,13 +281,9 @@ fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
 
 #[test]
 fn should_generate_non_ca_cert() {
-    let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
-        "common name",
-        not_before(),
-        not_after(),
-    )
-    .expect("failed to generate TLS keys");
+    let (cert, _secret_key) =
+        generate_tls_key_pair_der(seed(), "common name", not_before(), not_after())
+            .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert!(!x509.tbs_certificate.is_ca());
@@ -330,7 +299,7 @@ fn should_create_cert_that_passes_node_key_validation() {
     let current_time = GENESIS;
 
     let (cert, _secret_key) = generate_tls_key_pair_der(
-        &mut reproducible_rng(),
+        seed(),
         node_id.get().to_string().as_str(),
         not_before,
         not_after,
