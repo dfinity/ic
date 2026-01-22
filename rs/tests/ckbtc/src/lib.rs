@@ -65,6 +65,8 @@ pub const TRANSFER_FEE: u64 = 1_000;
 
 pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 10000;
+
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
@@ -248,6 +250,14 @@ pub fn ckbtc_setup(env: TestEnv) {
     install_nns_canisters_at_ids(&env);
 }
 
+pub fn ckdoge_setup(env: TestEnv) {
+    // Use the ckbtc integration setup.
+    ckbtc_config::<DogeNetwork>(env.clone());
+    check_nodes_health(&env);
+    check_ecdsa_works(&env);
+    install_nns_canisters_at_ids(&env);
+}
+
 pub fn adapter_test_setup<T: IcRpcClientType>(env: TestEnv) {
     // Use the adapter test integration setup.
     adapter_test_config::<T>(env.clone());
@@ -423,6 +433,40 @@ pub async fn install_minter(
         canister,
         get_dependency_path(
             env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
+        ),
+        Some(Encode!(&minter_arg).unwrap()),
+    )
+    .await;
+    canister.canister_id()
+}
+
+pub async fn install_ckdoge_minter(
+    canister: &mut Canister<'_>,
+    ledger_id: CanisterId,
+    logger: &Logger,
+    max_time_in_queue_nanos: u64,
+) -> CanisterId {
+    info!(&logger, "Installing minter ...");
+    #[allow(deprecated)]
+    let args = ic_ckdoge_minter::lifecycle::init::InitArgs {
+        doge_network: ic_ckdoge_minter::lifecycle::init::Network::Regtest,
+        ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
+        retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
+        ledger_id: ledger_id.into(),
+        max_time_in_queue_nanos,
+        min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
+        mode: Mode::GeneralAvailability,
+        get_utxos_cache_expiration_seconds: None,
+        utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
+    };
+
+    let minter_arg = ic_ckdoge_minter::lifecycle::MinterArg::Init(args);
+
+    install_rust_canister_from_path(
+        canister,
+        get_dependency_path(
+            env::var("IC_CKDOGE_MINTER_WASM_PATH").expect("IC_CKDOGE_MINTER_WASM_PATH not set"),
         ),
         Some(Encode!(&minter_arg).unwrap()),
     )
