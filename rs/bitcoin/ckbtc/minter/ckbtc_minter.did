@@ -205,6 +205,7 @@ type InitArgs = record {
     ecdsa_key_name : text;
 
     // The minimal amount of BTC that can be converted to ckBTC.
+    // UTXOs with lower values will be ignored.
     deposit_btc_min_amount : opt nat64;
 
     // The minimal amount of ckBTC that can be converted to BTC.
@@ -246,6 +247,7 @@ type InitArgs = record {
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
     // The minimal amount of BTC that can be converted to ckBTC.
+    // UTXOs with lower values will be ignored.
     deposit_btc_min_amount : opt nat64;
 
     // The minimal amount of ckBTC that the minter converts to BTC.

@@ -18,6 +18,7 @@ type InitArgs = record {
     ecdsa_key_name : text;
 
     // The minimal amount of DOGE that can be converted to ckDOGE.
+    // UTXOs with lower values will be ignored.
     deposit_doge_min_amount : opt nat64;
 
     // The minimal amount of ckDOGE that can be converted to DOGE.
@@ -47,6 +48,7 @@ type InitArgs = record {
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
     // The minimal amount of DOGE that can be converted to ckDOGE.
+    // UTXOs with lower values will be ignored.
     deposit_doge_min_amount : opt nat64;
 
     // The minimal amount of ckDOGE that can be converted to DOGE.
