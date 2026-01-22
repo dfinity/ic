@@ -147,7 +147,7 @@ jobs:
         with:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
-            message += 'New container image: `${{ needs.ic-build-image.outputs.build_imageid }}`\n'
+            message += 'New container image: `${{ needs.ic-build-image.outputs.imageid }}`\n'
             message += 'New container tag: `${{ needs.build-image-prep.outputs.image_tag }}`'
 
             github.rest.issues.createComment({
