@@ -5325,7 +5325,6 @@ fn upload_chunk_charges_if_failing() {
             SCHEDULER_CORES as u64 * (EMPTY_CANISTER_MEMORY_USAGE + restricted_capacity).get(),
         )
         .build();
-
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
     let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
