@@ -19,7 +19,8 @@ pub const ROOT_SUBNET_ID: SubnetId = SUBNET_1;
 fn should_correctly_parse_der_encoded_iccsa_pubkey() {
     let pubkey_bytes = hex::decode("0a000000000000002a010173656564").unwrap();
     let pubkey_der =
-        hex::decode("3020300c060a2b0601040183b84301020310000a000000000000002a010173656564").unwrap();
+        hex::decode("3020300c060a2b0601040183b84301020310000a000000000000002a010173656564")
+            .unwrap();
 
     let (parsed_pubkey, content_type) = user_public_key_from_bytes(&pubkey_der).unwrap();
 
