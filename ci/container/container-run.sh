@@ -111,7 +111,7 @@ IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
-    "$REPO_ROOT"/ci/container/build-image.sh
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
 elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
         "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
