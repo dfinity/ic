@@ -17,8 +17,8 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ADDRESS_LENGTH, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckdoge_setup, create_canister,
-    install_bitcoin_canister, install_ckdoge_minter, install_ledger, subnet_app, subnet_sys,
+    OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckdoge_setup, create_canister, install_bitcoin_canister,
+    install_ckdoge_minter, install_ledger, subnet_app, subnet_sys,
 };
 use slog::info;
 
@@ -120,7 +120,7 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
 }
 
 async fn test_get_doge_address(agent: &CkDogeMinterAgent) {
-    let res = agent
+    let address = agent
         .get_doge_address(None, None)
         .await
         .expect("Error while decoding response");
