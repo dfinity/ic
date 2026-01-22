@@ -18,6 +18,7 @@ use ic_config::{
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
 };
+use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces::crypto::{CheckKeysWithRegistryError, IDkgKeyRotationResult};
 use ic_interfaces_registry::RegistryClient;
@@ -48,11 +49,7 @@ use url::Url;
 const DELAY_COMPENSATION: f64 = 0.85;
 
 pub trait NodeRegistrationCrypto:
-    ic_interfaces::crypto::KeyManager
-    + ic_interfaces::crypto::BasicSigner<MessageId>
-    + ic_crypto_tls_interfaces::TlsConfig
-    + Send
-    + Sync
+    ic_interfaces::crypto::KeyManager + ic_interfaces::crypto::BasicSigner<MessageId> + Send + Sync
 {
 }
 
@@ -60,7 +57,6 @@ pub trait NodeRegistrationCrypto:
 impl<T> NodeRegistrationCrypto for T where
     T: ic_interfaces::crypto::KeyManager
         + ic_interfaces::crypto::BasicSigner<MessageId>
-        + ic_crypto_tls_interfaces::TlsConfig
         + Send
         + Sync
 {
@@ -74,6 +70,7 @@ pub(crate) struct NodeRegistration {
     metrics: Arc<OrchestratorMetrics>,
     node_id: NodeId,
     key_handler: Arc<dyn NodeRegistrationCrypto>,
+    crypto_tls_config: Arc<dyn TlsConfig>,
     local_store: Arc<dyn LocalStore>,
     signer: Box<dyn Signer>,
     display_qr_code: bool,
@@ -89,6 +86,7 @@ impl NodeRegistration {
         metrics: Arc<OrchestratorMetrics>,
         node_id: NodeId,
         key_handler: Arc<dyn NodeRegistrationCrypto>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
         // If we can open a PEM file under the path specified in the replica config,
@@ -125,6 +123,7 @@ impl NodeRegistration {
             metrics,
             node_id,
             key_handler,
+            crypto_tls_config,
             local_store,
             signer,
             // Eventually, this value will be deduced from the `registration` config.
@@ -626,7 +625,7 @@ impl NodeRegistration {
                             .ok()
                     })
                     .zip(
-                        self.key_handler
+                        self.crypto_tls_config
                             .client_config(*n_id, version)
                             .inspect_err(|e| warn!(self.log, "{}", e))
                             .ok(),
@@ -980,9 +979,10 @@ mod tests {
     }
 
     mod idkg_dealing_encryption_key_rotation {
+        use crate::catch_up_package_provider::tests::mock_tls_config;
+
         use super::*;
         use ic_crypto_temp_crypto::EcdsaSubnetConfig;
-        use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig, TlsConfigError};
         use ic_interfaces::crypto::{
             BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
             IDkgDealingEncryptionKeyRotationError, KeyManager, KeyRotationOutcome,
@@ -990,27 +990,29 @@ mod tests {
         };
         use ic_logger::replica_logger::no_op_logger;
         use ic_metrics::MetricsRegistry;
-        use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+        use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
         use ic_registry_client_fake::FakeRegistryClient;
+        use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
         use ic_registry_keys::{
-            make_crypto_node_key, make_subnet_list_record_key, make_subnet_record_key,
+            ROOT_SUBNET_ID_KEY, make_crypto_node_key, make_node_record_key,
+            make_subnet_list_record_key, make_subnet_record_key,
         };
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
         use ic_test_utilities_in_memory_logger::{
             InMemoryReplicaLogger, assertions::LogEntriesAssert,
         };
+        use ic_test_utilities_types::ids::{NODE_1, SUBNET_1};
         use ic_types::{
             PrincipalId,
             consensus::CatchUpContentProtobufBytes,
             crypto::{
-                AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
+                AlgorithmId, BasicSig, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
                 CurrentNodePublicKeys,
             },
             registry::RegistryClientError,
         };
         use mockall::{predicate::*, *};
-        use rustls::{ClientConfig, ServerConfig};
         use slog::Level;
         use std::time::UNIX_EPOCH;
         use tempfile::TempDir;
@@ -1043,25 +1045,6 @@ mod tests {
                 ) -> CryptoResult<BasicSigOf<MessageId>>;
             }
 
-            impl TlsConfig for KeyRotationCryptoComponent {
-                fn server_config(
-                    &self,
-                    allowed_clients: SomeOrAllNodes,
-                    registry_version: RegistryVersion,
-                ) -> Result<ServerConfig, TlsConfigError>;
-
-                fn server_config_without_client_auth(
-                    &self,
-                    registry_version: RegistryVersion,
-                ) -> Result<ServerConfig, TlsConfigError>;
-
-                fn client_config(
-                    &self,
-                    server: NodeId,
-                    registry_version: RegistryVersion,
-                ) -> Result<ClientConfig, TlsConfigError>;
-            }
-
             impl ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> for KeyRotationCryptoComponent {
                 fn verify_combined_threshold_sig_by_public_key(
                     &self,
@@ -1084,7 +1067,10 @@ mod tests {
                     check_keys_with_registry_result: None,
                     current_node_public_keys_result: None,
                     rotate_idkg_dealing_encryption_keys_result: None,
+                    sign_basic_result: None,
+                    expect_tls_config_call_times: 0,
                     logger: None,
+                    with_nns_subnet_config: false,
                     without_ecdsa_subnet_config: false,
                     idkg_dealing_encryption_public_key_in_registry: None,
                 }
@@ -1097,7 +1083,10 @@ mod tests {
                 Option<Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>>,
             rotate_idkg_dealing_encryption_keys_result:
                 Option<Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>>,
+            sign_basic_result: Option<CryptoResult<BasicSigOf<MessageId>>>,
+            expect_tls_config_call_times: usize,
             logger: Option<ReplicaLogger>,
+            with_nns_subnet_config: bool,
             without_ecdsa_subnet_config: bool,
             idkg_dealing_encryption_public_key_in_registry: Option<PublicKey>,
         }
@@ -1134,8 +1123,26 @@ mod tests {
                 self
             }
 
+            fn with_sign_basic_result(
+                mut self,
+                sign_basic_result: CryptoResult<BasicSigOf<MessageId>>,
+            ) -> Self {
+                self.sign_basic_result = Some(sign_basic_result);
+                self
+            }
+
+            fn expect_tls_config_call_times(mut self, times: usize) -> Self {
+                self.expect_tls_config_call_times = times;
+                self
+            }
+
             fn with_logger(mut self, in_memory_logger: &InMemoryReplicaLogger) -> Self {
                 self.logger = Some(ReplicaLogger::from(in_memory_logger));
+                self
+            }
+
+            fn with_nns_subnet_config(mut self) -> Self {
+                self.with_nns_subnet_config = true;
                 self
             }
 
@@ -1161,6 +1168,43 @@ mod tests {
                     Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
                 let subnet_id = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
+                let mut subnets = vec![];
+                if self.with_nns_subnet_config {
+                    let nns_subnet_id = SUBNET_1;
+                    let nns_node = NODE_1;
+
+                    registry_data
+                        .add(
+                            ROOT_SUBNET_ID_KEY,
+                            REGISTRY_VERSION_1,
+                            Some(ic_types::subnet_id_into_protobuf(nns_subnet_id)),
+                        )
+                        .expect("Failed to add root subnet id key.");
+                    registry_data
+                        .add(
+                            &make_node_record_key(nns_node),
+                            REGISTRY_VERSION_1,
+                            Some(NodeRecord {
+                                http: Some(ConnectionEndpoint {
+                                    ip_addr: "2001:db8::1".to_string(),
+                                    port: 8080,
+                                }),
+                                ..Default::default()
+                            }),
+                        )
+                        .expect("Failed to add node record.");
+                    registry_data
+                        .add(
+                            &make_subnet_record_key(nns_subnet_id),
+                            REGISTRY_VERSION_1,
+                            Some(SubnetRecord {
+                                membership: vec![nns_node.get().into_vec()],
+                                ..Default::default()
+                            }),
+                        )
+                        .expect("Failed to add subnet record.");
+                    subnets.push(nns_subnet_id);
+                }
                 if !self.without_ecdsa_subnet_config {
                     let ecdsa_subnet_config = EcdsaSubnetConfig::new(
                         subnet_id,
@@ -1174,15 +1218,16 @@ mod tests {
                             Some(ecdsa_subnet_config.subnet_record),
                         )
                         .expect("Failed to add subnet record.");
-                    let subnet_list_record = SubnetListRecord {
-                        subnets: vec![ecdsa_subnet_config.subnet_id.get().into_vec()],
-                    };
-                    // Set subnetwork list
+                    subnets.push(ecdsa_subnet_config.subnet_id);
+                }
+                if !subnets.is_empty() {
                     registry_data
                         .add(
                             make_subnet_list_record_key().as_str(),
                             REGISTRY_VERSION_1,
-                            Some(subnet_list_record),
+                            Some(SubnetListRecord {
+                                subnets: subnets.iter().map(|s| s.get().into_vec()).collect(),
+                            }),
                         )
                         .expect("Failed to add subnet list record key");
                 }
@@ -1225,9 +1270,16 @@ mod tests {
                         .times(1)
                         .return_const(rotate_idkg_dealing_encryption_keys_result);
                 }
+                if let Some(sign_basic_result) = self.sign_basic_result {
+                    key_handler
+                        .expect_sign_basic()
+                        .times(1)
+                        .return_const(sign_basic_result);
+                }
 
                 let local_store = Arc::new(LocalStoreImpl::new(temp_dir.as_ref()));
                 let node_config = Config::new(temp_dir.keep());
+                let tls_config = mock_tls_config();
 
                 let node_registration = NodeRegistration::new(
                     self.logger.unwrap_or_else(no_op_logger),
@@ -1236,6 +1288,7 @@ mod tests {
                     orchestrator_metrics,
                     node_id,
                     Arc::new(key_handler),
+                    Arc::new(tls_config),
                     local_store,
                 );
 
@@ -1243,6 +1296,16 @@ mod tests {
                     node_registration,
                     subnet_id,
                 }
+            }
+        }
+
+        fn valid_node_signing_public_key() -> PublicKey {
+            PublicKey {
+                version: 0,
+                algorithm: AlgorithmId::Ed25519 as i32,
+                key_value: [0; 32].to_vec(),
+                proof_data: None,
+                timestamp: None,
             }
         }
 
@@ -1438,16 +1501,19 @@ mod tests {
             );
         }
 
-        #[tokio::test]
+        #[tokio::test(flavor = "multi_thread")]
         async fn should_try_to_register_key_if_key_is_rotated() {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
+                .with_nns_subnet_config()
                 .with_check_keys_with_registry_result(Ok(()))
-                .with_current_node_public_keys_result(Err(
-                    CurrentNodePublicKeysError::TransientInternalError(
-                        "error getting current node public keys".to_string(),
-                    ),
-                ))
+                .with_current_node_public_keys_result(Ok(CurrentNodePublicKeys {
+                    node_signing_public_key: Some(valid_node_signing_public_key()),
+                    committee_signing_public_key: None,
+                    tls_certificate: None,
+                    dkg_dealing_encryption_public_key: None,
+                    idkg_dealing_encryption_public_key: None,
+                }))
                 .with_rotate_idkg_dealing_encryption_keys_result(Ok(
                     IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
                         KeyRotationOutcome::KeyRotated {
@@ -1455,6 +1521,10 @@ mod tests {
                         },
                     ),
                 ))
+                // The TLS config should be fetched
+                .expect_tls_config_call_times(1)
+                // The orchestrator should sign the registration request
+                .with_sign_basic_result(Ok(BasicSigOf::new(BasicSig(vec![0; 32]))))
                 .with_logger(&in_memory_logger)
                 .build();
 
@@ -1464,9 +1534,25 @@ mod tests {
                 .await;
 
             let logs = in_memory_logger.drain_logs();
-            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+            // Assert that we tried to register the new key.
+            LogEntriesAssert::assert_that(logs.clone()).has_only_one_message_containing(
                 &Level::Info,
                 "Trying to register rotated idkg key...",
+            );
+
+            // Assert that we fetched the NNS root key for the agent (which is not set, thus the
+            // error log).
+            LogEntriesAssert::assert_that(logs.clone()).has_only_one_message_containing(
+                &Level::Warning,
+                "NNS public key not set in the registry",
+            );
+            LogEntriesAssert::assert_that(logs.clone())
+                .has_only_one_message_containing(&Level::Warning, "Failed to get NNS public key");
+
+            // The NNS IPv6 endpoint is unreachable, so we expect one final error.
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Error when sending register additional key request",
             );
         }
 
