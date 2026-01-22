@@ -62,6 +62,8 @@ pub const UNIT_DELAY_APP_SUBNET: Duration = Duration::from_millis(1000);
 pub const UNIT_DELAY_NNS_SUBNET: Duration = Duration::from_millis(3000);
 pub const INITIAL_NOTARY_DELAY: Duration = Duration::from_millis(300);
 pub const MAX_INGRESS_MESSAGES_PER_BLOCK: u64 = 1000;
+/// Total number of bytes across all ingress messages that can fit in a block.
+pub const MAX_INGRESS_BYTES_PER_BLOCK: u64 = 4 * MEGABYTE;
 pub const MAX_BLOCK_PAYLOAD_SIZE: u64 = 4 * MEGABYTE;
 /// This sets the upper bound on how big a single ingress message can be, as
 /// allowing messages larger than around 3.5MB has various security and
