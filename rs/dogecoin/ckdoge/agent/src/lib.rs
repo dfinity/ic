@@ -9,7 +9,7 @@ use ic_ckdoge_minter::{
     event::CkDogeMinterEvent,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::Subaccount;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]

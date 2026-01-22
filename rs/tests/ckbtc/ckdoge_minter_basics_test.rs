@@ -4,6 +4,7 @@ use candid::{Decode, Encode, Principal};
 use ic_ckdoge_agent::CkDogeMinterAgent;
 use ic_ckdoge_minter::{
     UpdateBalanceArgs,
+    address::DogecoinAddress,
     candid_api::{GetDogeAddressArgs, RetrieveDogeWithApprovalArgs},
 };
 use ic_system_test_driver::{
@@ -19,7 +20,6 @@ use ic_tests_ckbtc::{
     ADDRESS_LENGTH, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckdoge_setup, create_canister,
     install_bitcoin_canister, install_ckdoge_minter, install_ledger, subnet_app, subnet_sys,
 };
-// use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
 
 pub fn test_ckdoge_addresses(env: TestEnv) {
@@ -59,10 +59,12 @@ pub fn test_ckdoge_addresses(env: TestEnv) {
         let address = Decode!(res.as_slice(), String).expect("Error while decoding response.");
 
         // Checking only proper format of address since ECDSA signature is non-deterministic.
-        assert_eq!(ADDRESS_LENGTH, address.len());
         assert!(
-            address.starts_with("bcrt"),
-            "Expected Regtest address format."
+            DogecoinAddress::parse(
+                &address,
+                &ic_ckdoge_minter::lifecycle::init::Network::Regtest
+            )
+            .is_ok()
         );
     });
 }
@@ -137,7 +139,6 @@ async fn test_retrieve_doge_with_approval(agent: &CkDogeMinterAgent) {
         .retrieve_doge_with_approval(args)
         .await
         .expect("Error while decoding response.");
-    // For now retrieve_doge is not implemented, finish test once available.
     assert!(res.is_err());
 }
 
