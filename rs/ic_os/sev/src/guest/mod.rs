@@ -1,6 +1,7 @@
 #[cfg(target_os = "linux")]
 use anyhow::{Context, Result, anyhow};
 
+pub mod custom_data;
 pub mod firmware;
 pub mod key_deriver;
 pub mod testing;

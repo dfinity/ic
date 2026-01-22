@@ -16,117 +16,208 @@ pub enum SevRootCertificateVerification {
     TestOnlySkipVerification,
 }
 
-/// Verify an SEV attestation package. The verification includes:
-/// - Checking the certificate chain and the attestation report signature.
-/// - Checking that the launch measurement is in the list of blessed measurements.
-/// - Checking that the custom data in the attestation report matches the expected custom data.
-/// - Checking that the chip ID matches one of the expected chip IDs (if provided).
-pub fn verify_attestation_package(
-    attestation_package: &SevAttestationPackage,
-    sev_root_certificate_verification: SevRootCertificateVerification,
-    blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-    expected_custom_data: &(impl EncodeSevCustomData + Debug),
-    expected_chip_ids: Option<&[[u8; 64]]>,
-) -> Result<(), VerificationError> {
-    let Some(ref attestation_report) = attestation_package.attestation_report else {
-        return Err(VerificationError::invalid_attestation_report(
-            "Attestation report is missing",
-        ));
-    };
-
-    let parsed_attestation_report =
-        AttestationReport::from_bytes(attestation_report).map_err(|e| {
-            VerificationError::invalid_attestation_report(format!(
-                "Failed to parse attestation report: {e}"
-            ))
-        })?;
-
-    if let Some(expected_chip_ids) = expected_chip_ids
-        && !expected_chip_ids.contains(&parsed_attestation_report.chip_id)
-    {
-        return Err(VerificationError::invalid_chip_id(format!(
-            "Expected one of chip IDs: {}, actual: {}",
-            expected_chip_ids
-                .iter()
-                .map(hex::encode)
-                .collect::<Vec<_>>()
-                .join(", "),
-            hex::encode(parsed_attestation_report.chip_id)
-        )));
+/// Extension trait for verifying attestation packages.
+pub trait AttestationVerifier: Sized {
+    /// Verify all attestation report fields.
+    fn verify_all<T: EncodeSevCustomData + Debug>(
+        self,
+        expected_custom_data: &T,
+        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+        expected_chip_ids: &[[u8; 64]],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        self.verify_custom_data(expected_custom_data)
+            .verify_measurement(blessed_guest_launch_measurements)
+            .verify_chip_id(expected_chip_ids)
     }
 
-    let certificate_chain = attestation_package
-        .certificate_chain
-        .as_ref()
-        .ok_or_else(|| {
-            VerificationError::invalid_certificate_chain("Certificate chain is missing")
-        })?;
-    verify_sev_attestation_report_signature(
-        &parsed_attestation_report,
-        certificate_chain,
-        sev_root_certificate_verification,
-    )?;
+    /// Verify that the attestation report chip ID matches one of the expected chip IDs.
+    fn verify_chip_id(
+        self,
+        expected_chip_ids: &[[u8; 64]],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
 
-    verify_measurement(
-        &parsed_attestation_report,
-        blessed_guest_launch_measurements,
-    )?;
+    /// Verify that the attestation report custom data matches the expected custom data.
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
+        self,
+        expected_custom_data: &T,
+    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
 
-    verify_custom_data(
-        &parsed_attestation_report,
-        attestation_package
-            .custom_data_debug_info
-            .as_deref()
-            .unwrap_or_default(),
-        expected_custom_data,
-    )?;
-
-    Ok(())
+    /// Verify that the attestation report launch measurement matches one of the blessed guest
+    /// launch measurements.
+    fn verify_measurement(
+        self,
+        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
 }
 
-fn verify_custom_data(
-    attestation_report: &AttestationReport,
-    actual_debug_info: &str,
-    expected_custom_data: &(impl EncodeSevCustomData + Debug),
-) -> Result<(), VerificationError> {
-    let actual_report_data = attestation_report.report_data.as_slice();
-    let expected_report_data = expected_custom_data.encode_for_sev().map_err(|e| {
-        VerificationError::internal(format!("Could not encode expected custom data: {e}"))
-    })?;
-    if actual_report_data != expected_report_data {
-        return Err(VerificationError::invalid_custom_data(format!(
+/// A parsed attestation package with the attestation report and certificate chain
+/// extracted and validated.
+///
+/// Example:
+/// ```
+///     ParsedAttestationPackage::parse(
+///         sev_attestation_package,
+///         SevRootCertificateVerification::Verify,
+///     )
+///     .verify_measurement(...)
+///     .verify_custom_data(...)
+///     .verify_chip_id(...)
+///     .expect("Failed to verify attestation package")
+///     .attestation_report();
+/// ```
+#[derive(Debug)]
+pub struct ParsedSevAttestationPackage {
+    // Invariant: attestation report signature is valid
+    attestation_report: AttestationReport,
+    custom_data_debug_info: String,
+}
+
+impl ParsedSevAttestationPackage {
+    /// Parse an SEV attestation package and verify the signatures.
+    ///
+    /// This method:
+    /// 1. Extracts and parses the attestation report and certificate chain
+    /// 2. Verifies the certificate chain (ARK -> ASK -> VCEK)
+    /// 3. Verifies the attestation report signature using the VCEK
+    /// 4. Verifies that the ARK matches the expected AMD root certificate (if enabled)
+    pub fn parse(
+        package: SevAttestationPackage,
+        sev_root_certificate_verification: SevRootCertificateVerification,
+    ) -> Result<Self, VerificationError> {
+        let Some(ref attestation_report_bytes) = package.attestation_report else {
+            return Err(VerificationError::invalid_attestation_report(
+                "Attestation report is missing",
+            ));
+        };
+
+        let attestation_report =
+            AttestationReport::from_bytes(attestation_report_bytes).map_err(|e| {
+                VerificationError::invalid_attestation_report(format!(
+                    "Failed to parse attestation report: {e}"
+                ))
+            })?;
+
+        let certificate_chain = package.certificate_chain.ok_or_else(|| {
+            VerificationError::invalid_certificate_chain("Certificate chain is missing")
+        })?;
+
+        verify_sev_attestation_report_signature(
+            &attestation_report,
+            &certificate_chain,
+            sev_root_certificate_verification,
+        )?;
+
+        Ok(Self {
+            attestation_report,
+            custom_data_debug_info: package.custom_data_debug_info.unwrap_or_default(),
+        })
+    }
+
+    pub fn attestation_report(&self) -> &AttestationReport {
+        &self.attestation_report
+    }
+}
+
+impl AttestationVerifier for ParsedSevAttestationPackage {
+    fn verify_chip_id(
+        self,
+        expected_chip_ids: &[[u8; 64]],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        if !expected_chip_ids.contains(&self.attestation_report.chip_id) {
+            return Err(VerificationError::invalid_chip_id(format!(
+                "Expected one of chip IDs: {}, actual: {}",
+                expected_chip_ids
+                    .iter()
+                    .map(hex::encode)
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                hex::encode(self.attestation_report.chip_id)
+            )));
+        }
+
+        Ok(self)
+    }
+
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
+        self,
+        expected_custom_data: &T,
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        let actual_report_data = &self.attestation_report.report_data;
+        let expected_report_data = expected_custom_data.encode_for_sev();
+        if let Ok(expected_report_data) = expected_report_data
+            && expected_report_data.verify(actual_report_data)
+        {
+            return Ok(self);
+        }
+
+        // TODO(NODE-1784): remove this once clients no longer send legacy custom data
+        let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy();
+        if T::needs_legacy_encoding()
+            && let Ok(expected_report_data_legacy) = expected_report_data_legacy
+            && &expected_report_data_legacy == actual_report_data
+        {
+            return Ok(self);
+        }
+
+        Err(VerificationError::invalid_custom_data(format!(
             "Expected attestation report custom data: {expected_report_data:?}, \
+             legacy: {expected_report_data_legacy:?}, \
              actual: {actual_report_data:?} \
              Debug info: \
              expected: {expected_custom_data:?} \
-             actual: {actual_debug_info}",
-        )));
+             actual: {}",
+            self.custom_data_debug_info
+        )))
     }
 
-    Ok(())
+    fn verify_measurement(
+        self,
+        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        let launch_measurement = self.attestation_report.measurement;
+        if !blessed_guest_launch_measurements
+            .iter()
+            .any(|blessed_measurement| {
+                blessed_measurement.as_ref() == launch_measurement.as_slice()
+            })
+        {
+            return Err(VerificationError::invalid_measurement(format!(
+                "Launch measurement {launch_measurement:?} is not in the list of \
+                 blessed guest launch measurements: {}",
+                blessed_guest_launch_measurements
+                    .iter()
+                    .map(|m| format!("{:?}", m.as_ref()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )));
+        }
+
+        Ok(self)
+    }
 }
 
-fn verify_measurement(
-    attestation_report: &AttestationReport,
-    blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-) -> Result<(), VerificationError> {
-    let launch_measurement = attestation_report.measurement;
-    if !blessed_guest_launch_measurements
-        .iter()
-        .any(|blessed_measurement| blessed_measurement.as_ref() == launch_measurement.as_slice())
-    {
-        return Err(VerificationError::invalid_measurement(format!(
-            "Launch measurement {launch_measurement:?} is not in the list of \
-             blessed guest launch measurements: {}",
-            blessed_guest_launch_measurements
-                .iter()
-                .map(|m| format!("{:?}", m.as_ref()))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )));
+/// Allows chaining verification methods
+impl AttestationVerifier for Result<ParsedSevAttestationPackage, VerificationError> {
+    fn verify_chip_id(
+        self,
+        expected_chip_ids: &[[u8; 64]],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        self?.verify_chip_id(expected_chip_ids)
     }
 
-    Ok(())
+    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
+        self,
+        expected_custom_data: &T,
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        self?.verify_custom_data(expected_custom_data)
+    }
+
+    fn verify_measurement(
+        self,
+        blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
+    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        self?.verify_measurement(blessed_guest_launch_measurements)
+    }
 }
 
 fn verify_sev_attestation_report_signature(
