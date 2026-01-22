@@ -614,7 +614,7 @@ impl NodeRegistration {
             }
         };
 
-        let mut urls_and_clients: Vec<(Url, rustls::ClientConfig)> = t_infos
+        let mut urls_and_configs: Vec<(Url, rustls::ClientConfig)> = t_infos
             .iter()
             .filter_map(|(n_id, n_record)| {
                 n_record
@@ -635,8 +635,8 @@ impl NodeRegistration {
             .collect();
 
         let mut rng = thread_rng();
-        urls_and_clients.shuffle(&mut rng);
-        urls_and_clients.pop()
+        urls_and_configs.shuffle(&mut rng);
+        urls_and_configs.pop()
     }
 
     fn get_nns_pub_key_der_from_config(&self) -> Option<Vec<u8>> {
