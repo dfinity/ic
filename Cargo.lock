@@ -16027,6 +16027,7 @@ dependencies = [
  "manual_guestos_recovery",
  "nested",
  "rand 0.8.5",
+ "serde_json",
  "slog",
  "tokio",
 ]
@@ -17773,8 +17774,10 @@ dependencies = [
  "libc",
  "memmap2",
  "nix 0.24.3",
+ "phantom_newtype",
  "proptest",
  "rayon",
+ "rstest",
  "slog",
  "tempfile",
 ]

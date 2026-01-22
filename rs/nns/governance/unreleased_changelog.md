@@ -13,6 +13,8 @@ on the process that this file is part of, see
   recover a subnet where a) orchestrator is not working for whatever reason, and
   b) SEV is enabled and/or there is no DFINITY node in the subnet.
 
+* Proposal types for taking and loading a snapshot of a canister controlled by the NNS Root canister.
+
 ## Changed
 
 * Allow creating a service nervous system with up to 100 dapp canisters, instead of just 25.

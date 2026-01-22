@@ -22,7 +22,7 @@ use ic_replicated_state::{
         },
     },
     page_map::PageMap,
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting},
 };
 use ic_test_utilities_types::{
     arbitrary,

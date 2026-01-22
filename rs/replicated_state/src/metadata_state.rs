@@ -1078,33 +1078,6 @@ impl Default for Stream {
 }
 
 impl Stream {
-    /// Creates a new `Stream` with the given `messages` and `signals_end`.
-    pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
-        Self::with_signals(messages, StreamIndex::new(0), signals_end, VecDeque::new())
-    }
-
-    /// Creates a new `Stream` with the given `messages` and signals.
-    pub fn with_signals(
-        messages: StreamIndexedQueue<StreamMessage>,
-        signals_begin: StreamIndex,
-        signals_end: StreamIndex,
-        reject_signals: VecDeque<RejectSignal>,
-    ) -> Self {
-        let messages_size_bytes = Self::calculate_size_bytes(&messages);
-        let refund_count = Self::calculate_refund_count(&messages);
-        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        Self {
-            messages,
-            signals_begin,
-            signals_end,
-            reject_signals,
-            messages_size_bytes,
-            refund_count,
-            reverse_stream_flags: Default::default(),
-            guaranteed_response_counts,
-        }
-    }
-
     /// Creates a slice starting from index `from` and containing at most
     /// `count` messages from this stream.
     pub fn slice(&self, from: StreamIndex, count: Option<usize>) -> StreamSlice {
@@ -1865,8 +1838,49 @@ impl UnflushedCheckpointOps {
     }
 }
 
-pub(crate) mod testing {
+pub mod testing {
     use super::*;
+
+    pub trait StreamTesting {
+        /// Creates a new `Stream` with the given `messages` and `signals_end`.
+        #[allow(clippy::new_ret_no_self)]
+        fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream;
+
+        /// Creates a new `Stream` with the given `messages` and signals.
+        fn with_signals(
+            messages: StreamIndexedQueue<StreamMessage>,
+            signals_begin: StreamIndex,
+            signals_end: StreamIndex,
+            reject_signals: VecDeque<RejectSignal>,
+        ) -> Stream;
+    }
+
+    impl StreamTesting for Stream {
+        fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Stream {
+            Stream::with_signals(messages, StreamIndex::new(0), signals_end, VecDeque::new())
+        }
+
+        fn with_signals(
+            messages: StreamIndexedQueue<StreamMessage>,
+            signals_begin: StreamIndex,
+            signals_end: StreamIndex,
+            reject_signals: VecDeque<RejectSignal>,
+        ) -> Self {
+            let messages_size_bytes = Self::calculate_size_bytes(&messages);
+            let refund_count = Self::calculate_refund_count(&messages);
+            let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
+            Self {
+                messages,
+                signals_begin,
+                signals_end,
+                reject_signals,
+                messages_size_bytes,
+                refund_count,
+                reverse_stream_flags: Default::default(),
+                guaranteed_response_counts,
+            }
+        }
+    }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
     /// or removing replicated state fields to think about and/or ask the Message
