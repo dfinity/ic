@@ -23,7 +23,7 @@ use ic_replicated_state::{
     replicated_state::ReplicatedStateMessageRouting,
 };
 use ic_types::{
-    CanisterId, NodeId, PrincipalId, SubnetId,
+    CanisterId, Height, NodeId, PrincipalId, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
@@ -417,7 +417,7 @@ fn split_inverted_routing_table(
 }
 
 /// Converts replicated state into a lazy tree.
-pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
+pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
         MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
@@ -464,6 +464,11 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
                     certification_version,
                 )
             })
+            .with_if(
+                certification_version >= CertificationVersion::V24,
+                "height",
+                move || num(height.get()),
+            )
             .with_tree(
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
