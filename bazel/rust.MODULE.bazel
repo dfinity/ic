@@ -903,11 +903,11 @@ crate.spec(
     version = "^0.7.8",
 )
 crate.spec(
-    package = "lzma-sys",
-    version = "^0.1.20",
     features = [
         "static",
     ],
+    package = "lzma-sys",
+    version = "^0.1.20",
 )
 crate.spec(
     package = "macaddr",
