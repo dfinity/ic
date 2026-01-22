@@ -245,7 +245,6 @@ impl HttpsOutcallsService for CanisterHttp {
         request: Request<HttpsOutcallRequest>,
     ) -> Result<Response<HttpsOutcallResult>, Status> {
 
-        //TODO(urgent): enforce max duration limit .
         self.metrics.requests.inc();
 
         // Mutable state to track metrics across the lifecycle

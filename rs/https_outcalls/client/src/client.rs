@@ -2,7 +2,7 @@ use crate::metrics::Metrics;
 use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
-use ic_https_outcalls_pricing::{AdapterLimits, PricingFactory};
+use ic_https_outcalls_pricing::{AdapterLimits, NetworkUsage, PricingError, PricingFactory};
 use ic_https_outcalls_service::{
     CanisterHttpErrorKind, HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
     HttpsOutcallResult, https_outcall_result,
@@ -14,11 +14,11 @@ use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    CanisterId,
+    CanisterId, NumBytes,
     canister_http::{
         CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
-        Transform, validate_http_headers_and_body,
+        CanisterHttpResponse, CanisterHttpResponseContent, Transform,
+        validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{Query, QuerySource, Request},
@@ -204,7 +204,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         socks_proxy_addrs,
                     }),
                 )
-                //TODO(urgent): revisit this error handling.
                 .await
                 .map_err(|_| tonic::Status::new(Code::DeadlineExceeded, "Deadline Exceeded"))?;
 
@@ -223,18 +222,18 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     result,
                 } = adapter_response.into_inner();
 
-                info!(
-                    log,
-                    "Received canister http response from adapter: request_size: {}, \
-                         response_time {}, downloaded_bytes {}, reply_callback_id {}, \
-                         sender {}, process_id: {}",
-                    request_size,
-                    elapsed.as_millis(),
-                    adapter_metrics.map_or(0, |m| m.downloaded_bytes),
-                    reply_callback_id,
-                    request_sender,
-                    std::process::id(),
-                );
+                let network_usage = NetworkUsage {
+                    response_size: NumBytes::from(
+                        adapter_metrics.map_or(0, |m| m.downloaded_bytes),
+                    ),
+                    response_duration: elapsed,
+                };
+
+                budget.subtract_network_usage(network_usage).map_err(
+                    |PricingError::InsufficientCycles| {
+                        (RejectCode::SysFatal, "Insufficient cycles".to_string())
+                    },
+                )?;
 
                 let response = match result {
                     Some(https_outcall_result::Result::Response(https_outcall_response)) => {
@@ -294,7 +293,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 let transform_timer = metrics.transform_execution_duration.start_timer();
                 let transform_response = match &request_transform {
                     Some(transform) => {
-                        let (transform_result, _instructions) = transform_adapter_response(
+                        let (transform_result, instruction_count) = transform_adapter_response(
                             query_handler,
                             canister_http_payload,
                             request_sender,
@@ -305,6 +304,23 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                             Ok(data) => data.len(),
                             Err((_, msg)) => msg.len(),
                         };
+
+                        info!(
+                            log,
+                            "Received canister http response: request_size: {}, \
+                            response_time {}, downloaded_bytes {}, reply_callback_id {}, \
+                            sender {}, process_id: {}, transformed_response_size: {}, \
+                            transform_instructions_used: {}, max_response_size: {}",
+                            request_size,
+                            elapsed.as_millis(),
+                            adapter_metrics.map_or(0, |m| m.downloaded_bytes),
+                            reply_callback_id,
+                            request_sender,
+                            std::process::id(),
+                            transform_result_size,
+                            instruction_count,
+                            max_response_size_bytes,
+                        );
 
                         if transform_result_size as u64 > max_response_size_bytes {
                             let err_msg = format!(
@@ -478,7 +494,9 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{PricingVersion, Replication, Transform};
+    use ic_types::canister_http::{
+        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, Replication, Transform,
+    };
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
