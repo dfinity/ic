@@ -34,6 +34,7 @@ DEV_DEPENDENCIES = [
     "//rs/state_machine_tests",
     "//rs/test_utilities/load_wasm",
     "@crate_index//:candid_parser",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -101,5 +102,18 @@ rust_ic_test(
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     tags = ["cpu:4"],
+    deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_test(
+    name = "retrieve_blocks_from_ledger_interval_test",
+    srcs = ["tests/retrieve_blocks_from_ledger_interval.rs"],
+    data = [
+        ":ic-icp-index-canister.wasm.gz",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/index",
+    },
     deps = [":ic-icp-index"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
