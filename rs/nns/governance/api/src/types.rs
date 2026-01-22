@@ -1,6 +1,6 @@
 #![allow(clippy::all)]
 use candid::{Int, Nat};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
 use std::collections::{BTreeMap, HashMap};
@@ -4633,6 +4633,12 @@ impl From<Vec<u8>> for SelfDescribingValue {
 
 impl From<PrincipalId> for SelfDescribingValue {
     fn from(value: PrincipalId) -> Self {
+        SelfDescribingValue::Text(value.to_string())
+    }
+}
+
+impl From<CanisterId> for SelfDescribingValue {
+    fn from(value: CanisterId) -> Self {
         SelfDescribingValue::Text(value.to_string())
     }
 }
