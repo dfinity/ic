@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_cdk::{init, post_upgrade, query, update};
+use ic_ckbtc_minter::dashboard::ckbtc_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::queries::{
@@ -250,6 +251,7 @@ fn get_minter_info() -> MinterInfo {
         check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
+        deposit_btc_min_amount: Some(s.effective_deposit_min_btc_amount()),
     })
 }
 
@@ -269,7 +271,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    ic_ckbtc_minter::queries::http_request(req)
+    ic_ckbtc_minter::queries::http_request(req, &ckbtc_dashboard(read_state(|s| s.btc_network)))
 }
 
 #[query]
