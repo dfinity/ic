@@ -3965,6 +3965,7 @@ dependencies = [
  "wycheproof",
  "x509-cert",
  "x509-parser 0.16.0",
+ "xz2",
  "yansi 0.5.1",
  "zeroize",
  "zstd 0.13.2",

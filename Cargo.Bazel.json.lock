@@ -1,5 +1,5 @@
 {
-  "checksum": "f7344364e01ce73f8f7758dce7b0db3bad92b3cc9f551b114db9241ea92f0456",
+  "checksum": "3ec2b760f22a2dd383ec4741733b3a7b9e943514ef831c76457bfe2f0a84f636",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22661,6 +22661,10 @@
             {
               "id": "x509-parser 0.16.0",
               "target": "x509_parser"
+            },
+            {
+              "id": "xz2 0.1.7",
+              "target": "xz2"
             },
             {
               "id": "yansi 0.5.1",
@@ -96782,6 +96786,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "static"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -98781,6 +98791,7 @@
     "wycheproof 0.6.0",
     "x509-cert 0.2.5",
     "x509-parser 0.16.0",
+    "xz2 0.1.7",
     "yansi 0.5.1",
     "zeroize 1.8.1",
     "zstd 0.13.2"
