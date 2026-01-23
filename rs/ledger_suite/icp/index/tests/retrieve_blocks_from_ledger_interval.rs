@@ -95,25 +95,6 @@ fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         .unwrap()
 }
 
-fn install_index_with_interval(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
-) -> Result<CanisterId, UserError> {
-    // TODO(DEFI-2617): once the InitArg takes interval, we no longer need to perform the upgrade here
-    let index_id = install_index(env, ledger_id);
-
-    // Configure the interval via upgrade if specified
-    if let Some(interval) = retrieve_blocks_from_ledger_interval_seconds {
-        let upgrade_arg = UpgradeArg {
-            retrieve_blocks_from_ledger_interval_seconds: Some(interval),
-        };
-        env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
-    }
-
-    Ok(index_id)
-}
-
 fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     let res = env
         .query(index_id, "status", Encode!(&()).unwrap())
