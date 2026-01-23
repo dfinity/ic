@@ -285,13 +285,9 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
         )
         .unwrap();
 
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
     let upgrade_arg = OldIndexArg::Upgrade(OldUpgradeArg { ledger_id: None });
     env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
         .unwrap();
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
 struct CyclesConsumptionParameters {
