@@ -1,12 +1,4 @@
 use ic_crypto_sha2::{Sha256, Sha512};
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
-pub enum XmdError {
-    InvalidOutputLength(String),
-}
-
-pub type XmdResult<T> = std::result::Result<T, XmdError>;
 
 pub trait XmdHashFunction {
     const BLOCK_BYTES: usize;
@@ -73,73 +65,23 @@ pub fn xmd<const N: usize, H: XmdHashFunction>(msg: &[u8], dst: &[u8]) -> [u8; N
     // Compile time assertion that XMD can output the requested bytes
     let _ = SizeCheck::<N>::XMD_CAN_PRODUCE_THIS_OUTPUT;
 
-    let mut output = [0u8; N];
-    inner_xmd::<H>(&mut output[..], msg, dst);
-    output
-}
-
-/// XMD function
-///
-/// See section 5.4.1 of RFC 9380
-/// <https://www.rfc-editor.org/rfc/rfc9380.html#name-expand_message_xmd>
-///
-/// Produces a uniformly random byte string of a given length using a hash
-/// from a message and domain separator.
-///
-/// This function errors if the desired output length exceeds the maximum
-/// allowable for XMD, which is 255 times the output length of the hash;
-/// 8160 bytes for SHA-256 or 16320 bytes for SHA-512.
-///
-pub fn varlen_xmd<H: XmdHashFunction>(msg: &[u8], dst: &[u8], len: usize) -> XmdResult<Vec<u8>> {
-    if len > 255 * H::OUTPUT_BYTES {
-        return Err(XmdError::InvalidOutputLength(format!(
-            "Requested XMD output length {} too large (max: {})",
-            len,
-            255 * H::OUTPUT_BYTES
-        )));
-    }
-
-    let mut output = vec![0u8; len];
-    inner_xmd::<H>(&mut output, msg, dst);
-    Ok(output)
-}
-
-/// XMD function
-///
-/// See section 5.4.1 of RFC 9380
-/// <https://www.rfc-editor.org/rfc/rfc9380.html#name-expand_message_xmd>
-///
-/// Produces a uniformly random byte string of a given length using a hash
-/// from a message and domain separator.
-///
-/// This function panics if the desired output length exceeds the maximum
-/// allowable for XMD, which is 255 times the output length of the hash;
-/// 8160 bytes for SHA-256 or 16320 bytes for SHA-512. It i
-///
-fn inner_xmd<H: XmdHashFunction>(out: &mut [u8], msg: &[u8], dst: &[u8]) {
-    let len = out.len();
-
-    if len > 255 * H::OUTPUT_BYTES {
-        // unreachable because we assume our callers checked this already
-        unreachable!("Invalid XMD output length");
-    }
+    let mut out = [0u8; N];
 
     if dst.len() >= 256 {
         let mut state = H::new();
         state.write(b"H2C-OVERSIZE-DST-");
         state.write(dst);
-        inner_xmd::<H>(out, msg, &state.finish());
-        return;
+        return xmd::<N, H>(msg, &state.finish());
     }
 
     // len ≤ 255*H::OUTPUT_BYTES ⭢ ell ≤ 255
     // thus values ≤ ell can be safely cast to u8
-    let ell = len.div_ceil(H::OUTPUT_BYTES);
+    let ell : usize = N.div_ceil(H::OUTPUT_BYTES);
 
     let mut state = H::new();
     state.write(&vec![0; H::BLOCK_BYTES]);
     state.write(msg);
-    state.write(&[(len / 256) as u8, (len % 256) as u8, 0]);
+    state.write(&[(N / 256) as u8, (N % 256) as u8, 0]);
     state.write(dst);
     state.write(&[dst.len() as u8]);
 
@@ -151,7 +93,7 @@ fn inner_xmd<H: XmdHashFunction>(out: &mut [u8], msg: &[u8], dst: &[u8]) {
     state.write(dst);
     state.write(&[dst.len() as u8]);
 
-    let first_block = std::cmp::min(H::OUTPUT_BYTES, len);
+    let first_block = std::cmp::min(H::OUTPUT_BYTES, N);
     out[0..first_block].copy_from_slice(&state.finish()[0..first_block]);
 
     // Has to be a Vec rather than an array due to const generics limitations
@@ -175,4 +117,6 @@ fn inner_xmd<H: XmdHashFunction>(out: &mut [u8], msg: &[u8], dst: &[u8]) {
 
         out[offset..offset + to_copy].copy_from_slice(&h[0..to_copy]);
     }
+
+    out
 }

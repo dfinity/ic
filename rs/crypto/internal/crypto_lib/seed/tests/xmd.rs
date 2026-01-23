@@ -1,13 +1,9 @@
-use ic_crypto_internal_seed::{varlen_xmd, xmd};
+use ic_crypto_internal_seed::xmd;
 use ic_crypto_sha2::Sha256;
 
 fn xmd_check<const N: usize>(msg: &str, dst: &str, want: &str) {
     assert_eq!(want.len() / 2, N);
     let x = xmd::<N, Sha256>(msg.as_bytes(), dst.as_bytes());
-    assert_eq!(hex::encode(x), want);
-
-    let x = varlen_xmd::<Sha256>(msg.as_bytes(), dst.as_bytes(), N)
-        .expect("XMD failed to produce output");
     assert_eq!(hex::encode(x), want);
 }
 
