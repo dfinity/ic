@@ -48,11 +48,10 @@ pub fn add_block(block: CandidBlock) -> AddBlockResult {
 pub fn add_raw_block(encoded_block: ByteBuf) -> AddBlockResult {
     let next_id = next_block_id();
     let encoded = EncodedBlock::from_vec(encoded_block.into_vec());
-    let result = BLOCKS.with(|blocks| {
+    BLOCKS.with(|blocks| {
         blocks.borrow_mut().insert(next_id, encoded);
         Ok(Nat::from(next_id))
-    });
-    result
+    })
 }
 
 /// Query blocks in decoded form
@@ -102,7 +101,6 @@ pub fn query_encoded_blocks(
     BLOCKS.with(|blocks| {
         let blocks = blocks.borrow();
 
-        let start = start;
         let length = length.min(usize::MAX as u64) as usize;
         let end = (start + length as u64).min(chain_length);
 
