@@ -2,8 +2,8 @@ use candid::Nat;
 use ic_icrc_rosetta::common::storage::types::RosettaBlock;
 use ic_icrc_rosetta_client::RosettaClient;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
-use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::blocks::{BlockWithId, GetBlocksRequest, GetBlocksResult};
+use num_traits::ToPrimitive;
 use prometheus_parse::{Scrape, Value};
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
@@ -14,36 +14,39 @@ pub async fn get_rosetta_blocks_from_icrc1_ledger(
     start: u64,
     length: usize,
 ) -> Vec<RosettaBlock> {
-    let GetBlocksResponse {
-        blocks: local_blocks,
+    let GetBlocksResult {
+        blocks: local_blocks_with_id,
         archived_blocks,
         ..
     } = icrc1_agent
-        .get_blocks(GetBlocksRequest {
+        .icrc3_get_blocks(vec![GetBlocksRequest {
             start: Nat::from(start),
             length: Nat::from(length),
-        })
+        }])
         .await
         .expect("Failed to get blocks");
-    let mut generic_blocks = vec![];
-    for archive_fn in archived_blocks.into_iter() {
-        generic_blocks.extend(
-            icrc1_agent
-                .get_blocks_from_archive(archive_fn)
-                .await
-                .unwrap()
-                .blocks,
-        )
+    let mut generic_blocks: Vec<BlockWithId> = vec![];
+    for archived_blocks_entry in archived_blocks {
+        let arch_blocks_result = icrc1_agent
+            .icrc3_get_blocks_from_archive(archived_blocks_entry)
+            .await
+            .expect("Failed to get blocks from archive");
+
+        generic_blocks.extend(arch_blocks_result.blocks);
     }
-    generic_blocks.extend(local_blocks);
+    generic_blocks.extend(local_blocks_with_id);
     generic_blocks
         .into_iter()
-        .enumerate()
-        .map(|(idx, generic_block)| {
-            RosettaBlock::from_generic_block(generic_block, start + idx as u64)
+        .map(|block_with_id| {
+            let block_index = block_with_id
+                .id
+                .0
+                .to_u64()
+                .expect("Could not convert Nat to u64");
+            RosettaBlock::from_icrc3_generic_block(block_with_id.block, block_index)
+                .expect("Failed to convert block")
         })
-        .collect::<Result<Vec<RosettaBlock>, _>>()
-        .unwrap()
+        .collect()
 }
 
 pub fn metrics_gauge_value(metrics: &Scrape, name: &str) -> Result<f64, String> {
