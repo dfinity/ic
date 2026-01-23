@@ -152,7 +152,6 @@ fn should_upgrade_with_valid_values() {
         Some(max_seconds_for_timer),
     ];
 
-    // Upgrading with valid values should succeed
     for upgrade_interval in &build_index_interval_values {
         assert_eq!(
             install_and_upgrade(*upgrade_interval),
@@ -233,7 +232,7 @@ fn should_sync_according_to_interval() {
                 // Install a ledger with an initial balance for a1
                 let ledger_id =
                     install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
-                
+
                 let index_id = install_index(env, ledger_id);
 
                 let upgrade_arg = UpgradeArg {
