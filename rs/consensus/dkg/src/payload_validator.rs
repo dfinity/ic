@@ -211,7 +211,7 @@ fn validate_dealings_payload(
             state_manager,
             validation_context,
             log.clone(),
-        );
+        )?;
 
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
             warn!(

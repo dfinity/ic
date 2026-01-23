@@ -132,7 +132,7 @@ fn create_data_payload(
         state_manager,
         validation_context,
         logger.clone(),
-    );
+    )?;
 
     if !remote_dkg_transcripts.is_empty() {
         info!(
@@ -159,18 +159,18 @@ pub(crate) fn create_early_remote_transcripts(
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
-) -> Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)> {
+) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, DkgPayloadCreationError> {
     // If we cannot access the state manager, we don't return an error.
     // This is because the early remote transcripts are an optimization.
     // If we don't return any transcripts here, the protocol will continue anyway
     // and return the transcripts (or their errors) in the summary block
-    let Ok(state) = state_manager.get_state_at(validation_context.certified_height) else {
-        return vec![];
-    };
+    let state = state_manager
+        .get_state_at(validation_context.certified_height)
+        .map_err(DkgPayloadCreationError::StateManagerError)?;
 
     //  Since this function is relatively expensive, we simply return if there are no outstanding DKG contexts
     if number_of_contexts(state.get_ref()) == 0 {
-        return vec![];
+        return Ok(vec![]);
     }
 
     // Get all dealings that have not been used in a transcript already
@@ -205,17 +205,29 @@ pub(crate) fn create_early_remote_transcripts(
         }
 
         // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
-        let mut transcripts: Vec<_> = configs
-            .iter()
-            .filter_map(|(dkg_id, config)| {
-                // Lookup the callback id
-                let callback_id = get_callback_id_from_id(state_ref, dkg_id)?;
-                // Generate the transcript. We just skip errors, they will
-                // be handled in the summary block, if we fail to create an early transcript
-                let transcript = create_transcript(crypto, config, &all_dealings, &logger).ok()?;
-                Some(((*dkg_id).clone(), callback_id, Ok::<_, String>(transcript)))
-            })
-            .collect();
+        let mut transcripts = vec![];
+        for (dkg_id, config) in configs.iter() {
+            // Lookup the callback id
+            let Some(callback_id) = get_callback_id_from_id(state_ref, dkg_id) else {
+                continue;
+            };
+            // Generate the transcript. We just skip reproducible errors, they will
+            // be handled in the summary block, if we fail to create an early transcript
+            let transcript = match create_transcript(crypto, config, &all_dealings, &logger) {
+                Ok(transcript) => transcript,
+                Err(err) if err.is_reproducible() => {
+                    warn!(
+                        logger,
+                        "Failed to create transcript for dkg id {:?}: {:?}", dkg_id, err
+                    );
+                    continue;
+                }
+                Err(err) => {
+                    return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
+                }
+            };
+            transcripts.push(((*dkg_id).clone(), callback_id, Ok::<_, String>(transcript)));
+        }
 
         // For initial DKG transcripts, we need a pair of values while for VetKD we need a single config
         // Here we do some matching, to check that we have the right number of configs
@@ -244,7 +256,7 @@ pub(crate) fn create_early_remote_transcripts(
         }
     }
 
-    selected_transcripts
+    Ok(selected_transcripts)
 }
 
 /// Creates a summary payload for the given parent and registry_version.
