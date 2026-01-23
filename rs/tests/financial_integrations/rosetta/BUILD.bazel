@@ -9,7 +9,7 @@ system_test_nns(
         "long_test",  # the P90 duration was over 7 minutes in the week starting on 2025-08-21
     ],
     runtime_deps = {
-        "ROSETTA_CLI_PATH": "//:rosetta-cli)",
+        "ROSETTA_CLI_PATH": "//:rosetta-cli",
         "IC_ROSETTA_API_PATH": "//rs/rosetta-api/icp:ic-rosetta-api",
         "ROSETTA_WORKSPACE_PATH": "//rs/tests:rosetta_workspace",
     },
@@ -40,7 +40,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = {
-        "ROSETTA_CLI_PATH": "//:rosetta-cli)",
+        "ROSETTA_CLI_PATH": "//:rosetta-cli",
         "IC_ROSETTA_API_PATH": "//rs/rosetta-api/icp:ic-rosetta-api",
         "ROSETTA_WORKSPACE_PATH": "//rs/tests:rosetta_workspace",
         "ROSETTA_IMAGE_PATH": "//rs/rosetta-api/icp:rosetta_image.tar",
