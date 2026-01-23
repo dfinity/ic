@@ -21,7 +21,7 @@ use ic_replicated_state::{
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
-    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
+    CryptoHashOfPartialState, Cycles, Funds, Height, NumBytes, Time,
     crypto::CryptoHash,
     messages::{
         CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
@@ -1295,7 +1295,7 @@ fn canonical_encoding_anonymous_refund() {
     }
 }
 
-/// Canonical CBOR encoding of:
+/// Canonical CBOR encoding of `Height::new(42)` and
 ///
 /// ```no_run
 /// SystemMetadata {
@@ -1308,12 +1308,12 @@ fn canonical_encoding_anonymous_refund() {
 /// Expected:
 ///
 /// ```text
-/// A2       # map(2)
-///    00    # field_index(SystemMetadata::id_counter)
-///    00    # unsigned(0)
-///    01    # field_index(SystemMetadata::prev_state_hash)
-///    81    # array(1)
-///       0F # unsigned(15)
+/// A2          # map(2)
+///    00       # field_index(SystemMetadata::height)
+///       18 2A # unsigned(42)
+///    01       # field_index(SystemMetadata::prev_state_hash)
+///    81       # array(1)
+///       0F    # unsigned(15)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -1321,10 +1321,17 @@ fn canonical_encoding_system_metadata() {
     for certification_version in all_supported_versions() {
         let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
         metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
+        let height = Height::new(42);
+
+        let blob = if certification_version >= CertificationVersion::V24 {
+            "A2 00 18 2A 01 81 0F"
+        } else {
+            "A1 01 81 0F"
+        };
 
         assert_eq!(
-            "A1 01 81 0F",
-            as_hex(&encode_metadata(&metadata, certification_version))
+            blob,
+            as_hex(&encode_metadata(height, &metadata, certification_version))
         );
     }
 }

@@ -131,11 +131,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(height)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(height))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -208,11 +211,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(0))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -324,11 +330,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(0))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -404,11 +413,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(0))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -654,11 +666,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(0))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -761,10 +776,9 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                     Some(vec![edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 { Some(Height::new(0)) } else { None },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -973,10 +987,9 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                     Some(vec![edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 { Some(Height::new(0)) } else { None },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),
@@ -1149,11 +1162,14 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                (certification_version >= V24).then_some(vec![edge("height"), leb_num(0)]),
                 Some(vec![
                     edge("metadata"),
                     E::VisitBlob(encode_metadata(SystemMetadata {
-                        deprecated_id_counter: None,
+                        height: if certification_version >= CertificationVersion::V24 {
+                            Some(Height::new(0))
+                        } else {
+                            None
+                        },
                         prev_state_hash: None,
                     })),
                     edge("request_status"),

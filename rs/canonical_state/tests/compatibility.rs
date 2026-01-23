@@ -15,7 +15,7 @@ use ic_replicated_state::{SystemMetadata, metadata_state::SubnetMetrics};
 use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    CryptoHashOfPartialState,
+    CryptoHashOfPartialState, Height,
     crypto::CryptoHash,
     messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
@@ -351,12 +351,12 @@ fn message_roundtrip_encoding(
 lazy_static! {
     /// Current and previous canonical `SystemMetadata` types and applicable
     /// certification versions.
-    static ref SYSTEM_METADATA_ENCODINGS: Vec<VersionedEncoding<SystemMetadata>> = vec![
+    static ref SYSTEM_METADATA_ENCODINGS: Vec<VersionedEncoding<(Height, SystemMetadata)>> = vec![
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
             MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "SystemMetadataV21",
-            |v| SystemMetadataV21::proxy_encode(v),
+            |((height, state), version)| SystemMetadataV21::proxy_encode((*height, state, version)),
             |_v| unimplemented!(),
         ),
     ];
@@ -378,20 +378,13 @@ prop_compose! {
 }
 
 /// Produces a `SystemMetadata` valid at all certification versions in the range.
-///
-/// Returns one of two disjoint version ranges, because the encoding of the same
-/// `SystemMetadata` is different between the two version ranges.
-///
 pub(crate) fn arb_valid_system_metadata()
--> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![
-        // `SystemMetadata` `V10` and later have an optional `id_counter` field for
-        // backwards compatibility, but it is no longer populated.
-        (
-            arb_system_metadata(),
-            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-        ),
-    ]
+-> impl Strategy<Value = (Height, SystemMetadata, RangeInclusive<CertificationVersion>)> {
+    prop_oneof![(
+        Just(Height::new(42)),
+        arb_system_metadata(),
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    ),]
 }
 
 /// Tests that given a `SystemMetadata` that is valid for a given certification
@@ -401,18 +394,19 @@ pub(crate) fn arb_valid_system_metadata()
 #[test_strategy::proptest]
 fn system_metadata_unique_encoding(
     #[strategy(arb_valid_system_metadata())] test_metadata: (
+        Height,
         SystemMetadata,
         RangeInclusive<CertificationVersion>,
     ),
 ) {
-    let (metadata, version_range) = test_metadata;
+    let (height, metadata, version_range) = test_metadata;
 
     let mut results = vec![];
     for version in iter(version_range) {
         let results_before = results.len();
         for encoding in &*SYSTEM_METADATA_ENCODINGS {
             if encoding.version_range.contains(&version) {
-                let bytes = (encoding.encode)((&metadata, version))
+                let bytes = (encoding.encode)((&(height, metadata.clone()), version))
                     .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
                 results.push((version, encoding.name, bytes));
             }

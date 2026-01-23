@@ -14,7 +14,7 @@ use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    Time,
+    Height, Time,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamIndex},
 };
@@ -194,9 +194,9 @@ pub struct RejectContext {
 /// Canonical representation of state metadata leaf.
 #[derive(Debug, Serialize)]
 pub struct SystemMetadata {
-    /// The counter used to allocate canister ids.
+    /// Height of the (partial) canonical state.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub deprecated_id_counter: Option<u64>,
+    pub height: Option<Height>,
     /// Hash bytes of the previous (partial) canonical state.
     pub prev_state_hash: Option<Vec<u8>>,
 }
@@ -707,18 +707,25 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
 
 impl
     From<(
+        Height,
         &ic_replicated_state::metadata_state::SystemMetadata,
         CertificationVersion,
     )> for SystemMetadata
 {
     fn from(
-        (metadata, _certification_version): (
+        (height, metadata, certification_version): (
+            Height,
             &ic_replicated_state::metadata_state::SystemMetadata,
             CertificationVersion,
         ),
     ) -> Self {
+        let height = if certification_version >= CertificationVersion::V24 {
+            Some(height)
+        } else {
+            None
+        };
         Self {
-            deprecated_id_counter: None,
+            height,
             prev_state_hash: metadata
                 .prev_state_hash
                 .as_ref()

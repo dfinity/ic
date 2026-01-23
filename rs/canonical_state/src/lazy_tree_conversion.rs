@@ -442,7 +442,7 @@ pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) ->
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(&state.metadata, certification_version)
+                system_metadata_as_tree(height, &state.metadata, certification_version)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
@@ -464,11 +464,6 @@ pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) ->
                     certification_version,
                 )
             })
-            .with_if(
-                certification_version >= CertificationVersion::V24,
-                "height",
-                move || num(height.get()),
-            )
             .with_tree(
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
@@ -556,10 +551,11 @@ fn streams_as_tree<'a>(
 }
 
 fn system_metadata_as_tree(
+    height: Height,
     m: &SystemMetadata,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
-    blob(move || encode_metadata(m, certification_version))
+    blob(move || encode_metadata(height, m, certification_version))
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);
