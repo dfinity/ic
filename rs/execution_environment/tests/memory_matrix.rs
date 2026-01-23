@@ -50,6 +50,7 @@ use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilde
 use ic_types::Cycles;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{MessageId, Payload};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
 
@@ -266,7 +267,10 @@ where
     let dummy_canister_initial_cycles: Cycles = DEFAULT_INITIAL_CYCLES.into();
     let memory_allocated_bytes_after_setup =
         test.canister_state(canister_id).memory_allocated_bytes();
-    assert!(memory_allocated_bytes_after_setup <= run_params.subnet_memory_usage);
+    assert_le!(
+        memory_allocated_bytes_after_setup,
+        run_params.subnet_memory_usage
+    );
     let dummy_canister_memory_allocation =
         run_params.subnet_memory_usage - memory_allocated_bytes_after_setup;
     let dummy_canister_settings = CanisterSettingsArgsBuilder::new()
@@ -298,38 +302,23 @@ where
     // (in particular, now before running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
     // Ensure that memory allocation is "crossed" if applicable.
     if let MemoryAllocation::CrossedDuringTest = run_params.memory_allocation {
         let current_memory_usage = test.canister_state(canister_id).memory_usage().get();
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(
-                current_memory_usage < memory_allocation,
-                "current_memory_usage: {}, memory_allocation: {}",
-                current_memory_usage,
-                memory_allocation
-            ),
+            MemoryUsageChange::Increase => assert_lt!(current_memory_usage, memory_allocation),
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(
-                        current_memory_usage > memory_allocation,
-                        "current_memory_usage: {}, memory_allocation: {}",
-                        current_memory_usage,
-                        memory_allocation
-                    )
+                    assert_gt!(current_memory_usage, memory_allocation)
                 }
                 Scenario::DecreaseMemoryAllocation => {
-                    assert!(
-                        current_memory_usage < memory_allocation,
-                        "current_memory_usage: {}, memory_allocation: {}",
-                        current_memory_usage,
-                        memory_allocation
-                    )
+                    assert_lt!(current_memory_usage, memory_allocation,)
                 }
                 _ => assert_eq!(current_memory_usage, memory_allocation),
             },
-            MemoryUsageChange::Decrease => assert!(current_memory_usage > memory_allocation),
+            MemoryUsageChange::Decrease => assert_gt!(current_memory_usage, memory_allocation),
         }
     }
 
@@ -410,25 +399,25 @@ where
         assert_eq!(newly_reserved_cycles, expected_reserved_cycles);
         // The memory usage changed as expected.
         match scenario_params.memory_usage_change {
-            MemoryUsageChange::Increase => assert!(initial_memory_usage < final_memory_usage),
+            MemoryUsageChange::Increase => assert_lt!(initial_memory_usage, final_memory_usage),
             MemoryUsageChange::None => assert_eq!(initial_memory_usage, final_memory_usage),
-            MemoryUsageChange::Decrease => assert!(initial_memory_usage > final_memory_usage),
+            MemoryUsageChange::Decrease => assert_gt!(initial_memory_usage, final_memory_usage),
         };
         if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
             match run_params.freezing_threshold {
                 FreezingThreshold::Long => {
-                    assert!(freezing_limit_cycles > newly_reserved_cycles);
+                    assert_gt!(freezing_limit_cycles, newly_reserved_cycles);
                 }
                 FreezingThreshold::Short => {
-                    assert!(newly_reserved_cycles > freezing_limit_cycles);
+                    assert_gt!(newly_reserved_cycles, freezing_limit_cycles);
                 }
             };
         }
         match scenario_params.memory_usage_change {
             MemoryUsageChange::Increase => {
-                assert!(initial_allocated_bytes <= final_allocated_bytes);
+                assert_le!(initial_allocated_bytes, final_allocated_bytes);
                 // New bytes are *allocated* if and only if the memory usage is not covered
                 // by memory allocation, i.e., if memory allocation is "large".
                 assert_eq!(
@@ -440,7 +429,7 @@ where
             // only change if memory allocation changes.
             MemoryUsageChange::None => match scenario_params.scenario {
                 Scenario::IncreaseMemoryAllocation => {
-                    assert!(initial_allocated_bytes < final_allocated_bytes)
+                    assert_lt!(initial_allocated_bytes, final_allocated_bytes)
                 }
                 Scenario::DecreaseMemoryAllocation => {
                     // If memory usage exceeds memory allocation, then
@@ -448,13 +437,13 @@ where
                     if initial_memory_usage.get() > memory_allocation {
                         assert_eq!(initial_allocated_bytes, final_allocated_bytes);
                     } else {
-                        assert!(initial_allocated_bytes > final_allocated_bytes);
+                        assert_gt!(initial_allocated_bytes, final_allocated_bytes);
                     }
                 }
                 _ => assert_eq!(initial_allocated_bytes, final_allocated_bytes),
             },
             MemoryUsageChange::Decrease => {
-                assert!(initial_allocated_bytes >= final_allocated_bytes)
+                assert_ge!(initial_allocated_bytes, final_allocated_bytes)
             }
         };
         // Ensure that memory allocation is "crossed" if applicable.
@@ -468,14 +457,14 @@ where
                 .get();
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
-                    assert!(current_memory_usage > current_memory_allocation)
+                    assert_gt!(current_memory_usage, current_memory_allocation)
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
                     Scenario::IncreaseMemoryAllocation => {
-                        assert!(current_memory_usage < current_memory_allocation)
+                        assert_lt!(current_memory_usage, current_memory_allocation)
                     }
                     Scenario::DecreaseMemoryAllocation => {
-                        assert!(current_memory_usage > current_memory_allocation)
+                        assert_gt!(current_memory_usage, current_memory_allocation)
                     }
                     _ => {
                         // Memory allocation is set to match the memory usage after setup,
@@ -490,7 +479,7 @@ where
                     }
                 },
                 MemoryUsageChange::Decrease => {
-                    assert!(current_memory_usage < current_memory_allocation)
+                    assert_lt!(current_memory_usage, current_memory_allocation)
                 }
             }
         }
@@ -504,7 +493,7 @@ where
     // (in particular, now after running the operation under test).
     if let MemoryAllocation::Large = run_params.memory_allocation {
         let memory_usage = test.canister_state(canister_id).memory_usage();
-        assert!(memory_usage.get() <= memory_allocation);
+        assert_le!(memory_usage.get(), memory_allocation);
     }
 
     // Check that subnet available memory has been updated properly
@@ -532,7 +521,10 @@ where
     // Check that the total amount of cycles did not increase.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
-    assert!(run_params.initial_cycles + refund_for_response_execution >= total_cycles_balance);
+    assert_ge!(
+        run_params.initial_cycles + refund_for_response_execution,
+        total_cycles_balance
+    );
 
     // Return result.
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
