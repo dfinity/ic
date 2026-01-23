@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use assert_matches::assert_matches;
+use more_asserts::assert_gt;
 
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
@@ -18,7 +19,6 @@ use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
-use more_asserts::assert_gt;
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
@@ -1034,11 +1034,11 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
             .system_state
             .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-        assert!(
+        assert_gt!(
             test.canister_state(a_id)
                 .system_state
-                .ingress_induction_cycles_debit()
-                > Cycles::zero()
+                .ingress_induction_cycles_debit(),
+            Cycles::zero()
         );
 
         test.abort_all_paused_executions();

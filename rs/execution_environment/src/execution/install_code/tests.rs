@@ -1420,8 +1420,9 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
     }
 
     // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
-    assert!(
-        subnet_call_context_manager.install_code_calls_len() == 0,
+    assert_eq!(
+        subnet_call_context_manager.install_code_calls_len(),
+        0,
         "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
         subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
     );
