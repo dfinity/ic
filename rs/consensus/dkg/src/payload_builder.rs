@@ -174,12 +174,15 @@ pub(crate) fn create_early_remote_transcripts(
     }
 
     // Get all dealings that have not been used in a transcript already
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
+    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent, true);
 
     // Collect map of remote target_ids to dkg configs
     let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<(&NiDkgId, &NiDkgConfig)>> =
         BTreeMap::new();
     for (dkg_id, config) in last_dkg_summary.configs.iter() {
+        if completed.contains(dkg_id) {
+            continue;
+        }
         if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
             remote_contexts
                 .entry(target_id)
@@ -282,13 +285,14 @@ pub(super) fn create_summary_payload(
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<DkgSummary, DkgPayloadCreationError> {
-    let all_dealings = utils::get_dkg_dealings(pool_reader, parent, true);
+    let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent, true);
     let mut transcripts_for_remote_subnets = BTreeMap::new();
     let mut next_transcripts = BTreeMap::new();
     // Try to create transcripts from the last round.
     for (dkg_id, config) in last_summary.configs.iter() {
-        // TODO: Filter out configs that no longer have a matching context
-
+        if completed.contains(dkg_id) {
+            continue;
+        }
         match create_transcript(crypto, config, &all_dealings, &logger) {
             Ok(transcript) => {
                 let previous_value_found = if dkg_id.target_subnet == NiDkgTargetSubnet::Local {
@@ -370,6 +374,7 @@ pub(super) fn create_summary_payload(
             transcripts_for_remote_subnets,
             &previous_transcripts,
             &reshared_transcripts,
+            &completed,
             &last_summary.initial_dkg_attempts,
             &logger,
         )?;
@@ -452,6 +457,7 @@ fn compute_remote_dkg_data(
     mut new_transcripts: BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     previous_transcripts: &BTreeMap<NiDkgId, Result<NiDkgTranscript, String>>,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    completed: &BTreeSet<NiDkgId>,
     previous_attempts: &BTreeMap<NiDkgTargetId, u32>,
     logger: &ReplicaLogger,
 ) -> Result<
@@ -472,6 +478,7 @@ fn compute_remote_dkg_data(
         state.get_ref(),
         validation_context,
         reshared_transcripts,
+        completed,
         logger,
     )?;
 
@@ -768,6 +775,7 @@ fn process_subnet_call_context(
     state: &ReplicatedState,
     validation_context: &ValidationContext,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    completed: &BTreeSet<NiDkgId>,
     logger: &ReplicaLogger,
 ) -> Result<
     (
@@ -784,6 +792,7 @@ fn process_subnet_call_context(
             registry_client,
             state,
             validation_context,
+            completed,
             logger,
         )?;
 
@@ -795,6 +804,7 @@ fn process_subnet_call_context(
             state,
             validation_context,
             reshared_transcripts,
+            completed,
         )?;
 
     let dkg_configs = init_dkg_configs
@@ -821,6 +831,7 @@ fn process_reshare_chain_key_contexts(
     state: &ReplicatedState,
     validation_context: &ValidationContext,
     reshared_transcripts: &BTreeMap<NiDkgTag, NiDkgTranscript>,
+    completed: &BTreeSet<NiDkgId>,
 ) -> Result<
     (
         Vec<Vec<NiDkgConfig>>,
@@ -840,6 +851,13 @@ fn process_reshare_chain_key_contexts(
     for (_callback_id, context) in contexts.iter() {
         // if we haven't reached the required registry version yet, skip this context
         if context.registry_version > validation_context.registry_version {
+            continue;
+        }
+
+        // If the DKG has already been completed, skip this context
+        if completed.iter().any(|completed_dkg_id| {
+            completed_dkg_id.target_subnet == NiDkgTargetSubnet::Remote(context.target_id)
+        }) {
             continue;
         }
 
@@ -878,6 +896,7 @@ fn process_setup_initial_dkg_contexts(
     registry_client: &dyn RegistryClient,
     state: &ReplicatedState,
     validation_context: &ValidationContext,
+    completed: &BTreeSet<NiDkgId>,
     logger: &ReplicaLogger,
 ) -> Result<
     (
@@ -897,6 +916,13 @@ fn process_setup_initial_dkg_contexts(
     for (_callback_id, context) in contexts.iter() {
         // if we haven't reached the required registry version yet, skip this context
         if context.registry_version > validation_context.registry_version {
+            continue;
+        }
+
+        // If the DKG has already been completed, skip this context
+        if completed.iter().any(|completed_dkg_id| {
+            completed_dkg_id.target_subnet == NiDkgTargetSubnet::Remote(context.target_id)
+        }) {
             continue;
         }
 
@@ -1368,6 +1394,7 @@ mod tests {
                     BTreeMap::new(),
                     &BTreeMap::new(),
                     &BTreeMap::new(),
+                    &BTreeSet::new(),
                     &BTreeMap::new(),
                     &logger,
                 )
@@ -1402,6 +1429,7 @@ mod tests {
                         BTreeMap::new(),
                         &BTreeMap::new(),
                         &BTreeMap::new(),
+                        &BTreeSet::new(),
                         &initial_dkg_attempts,
                         &logger,
                     )
@@ -1446,6 +1474,7 @@ mod tests {
                         BTreeMap::new(),
                         &BTreeMap::new(),
                         &BTreeMap::new(),
+                        &BTreeSet::new(),
                         &initial_dkg_attempts,
                         &logger,
                     )

@@ -12,13 +12,16 @@ use ic_types::{
     consensus::dkg::{DealingContent, DealingMessages},
     crypto::{
         BasicSig,
-        threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTranscript},
+        threshold_sig::ni_dkg::{
+            NiDkgDealing, NiDkgId, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+            config::NiDkgConfig,
+        },
     },
     messages::CallbackId,
     signature::{BasicSignature, BasicSigned},
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     sync::{Arc, Mutex},
 };
 
@@ -187,5 +190,36 @@ pub(super) fn extract_dealings_from_highest_block(pool: &TestConsensusPool) -> D
         vec![]
     } else {
         block.payload.as_ref().as_data().dkg.messages.clone()
+    }
+}
+
+/// Extract the remote dkg transcripts from the current highest validated block
+pub(super) fn extract_remote_dkg_ids_from_highest_block(
+    pool: &TestConsensusPool,
+    target_id: NiDkgTargetId,
+) -> Vec<NiDkgId> {
+    extract_dkg_configs_from_highest_block(pool)
+        .iter()
+        .filter(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
+        .map(|(id, _)| id)
+        .cloned()
+        .collect()
+}
+
+pub(super) fn extract_dkg_configs_from_highest_block(
+    pool: &TestConsensusPool,
+) -> BTreeMap<NiDkgId, NiDkgConfig> {
+    let block: ic_types::consensus::Block = pool
+        .validated()
+        .block_proposal()
+        .get_highest()
+        .unwrap()
+        .content
+        .into_inner();
+
+    if block.payload.as_ref().is_summary() {
+        block.payload.as_ref().as_summary().dkg.configs.clone()
+    } else {
+        BTreeMap::new()
     }
 }

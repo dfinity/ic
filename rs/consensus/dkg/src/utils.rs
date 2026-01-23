@@ -86,7 +86,8 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    get_dkg_dealings(pool_reader, block, false)
+    let (dkg_dealings, _) = get_dkg_dealings(pool_reader, block, false);
+    dkg_dealings
         .into_iter()
         .flat_map(|(dkg_id, dealings)| {
             dealings
@@ -105,7 +106,10 @@ pub(super) fn get_dkg_dealings(
     pool_reader: &PoolReader<'_>,
     block: &Block,
     exclude_used: bool,
-) -> BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> {
+) -> (
+    BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
+    BTreeSet<NiDkgId>,
+) {
     let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
     let mut excluded: BTreeSet<NiDkgId> = BTreeSet::new();
 
@@ -141,7 +145,7 @@ pub(super) fn get_dkg_dealings(
         }
     }
 
-    dealings
+    (dealings, excluded)
 }
 
 /// Fetch all key ids for which the subnet should hold a key

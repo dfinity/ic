@@ -396,6 +396,7 @@ mod tests {
         complement_state_manager_with_remote_dkg_requests,
         complement_state_manager_with_reshare_chain_key_request,
         complement_state_manager_with_setup_initial_dkg_request, create_dealing,
+        extract_dkg_configs_from_highest_block, extract_remote_dkg_ids_from_highest_block,
     };
     use core::panic;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
@@ -1642,34 +1643,10 @@ mod tests {
             // Verify that the next summary block contains the configs and no transcripts.
             // This also extracts the DKG ids
             pool.advance_round_normal_operation_n(dkg_interval_length + 1);
-            let block: Block = pool
-                .validated()
-                .block_proposal()
-                .get_highest()
-                .unwrap()
-                .content
-                .into_inner();
-            let remote_dkg_ids = if block.payload.as_ref().is_summary() {
-                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
-                assert!(dkg_summary.transcripts_for_remote_subnets.is_empty());
-                assert_eq!(dkg_summary.configs.len(), 4);
-
-                let remote_dkg_ids = dkg_summary
-                    .configs
-                    .iter()
-                    .filter(|(id, _)| id.target_subnet == NiDkgTargetSubnet::Remote(target_id))
-                    .map(|(id, _)| id)
-                    .cloned()
-                    .collect::<Vec<_>>();
-                assert_eq!(remote_dkg_ids.len(), 2);
-
-                remote_dkg_ids
-            } else {
-                panic!(
-                    "block at height {} is not a summary block",
-                    block.height.get()
-                );
-            };
+            let remote_dkg_ids = extract_remote_dkg_ids_from_highest_block(&pool, target_id);
+            assert_eq!(remote_dkg_ids.len(), 2);
+            assert_eq!(extract_dkg_configs_from_highest_block(&pool).len(), 4);
+            assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // Put a dealing in the pool and check that it gets included
             // Additionally check that there are no remote transcripts
@@ -1744,7 +1721,7 @@ mod tests {
             );
 
             // Simulate the delivery of the block, which removes to context from the state
-            target_id_mutex.lock().unwrap().take();
+            // target_id_mutex.lock().unwrap().take();
 
             // Advance the pool a until the next DKG, check that the early remote transcripts are not generated multiple times
             // including that they are not included in the summary
