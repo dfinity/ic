@@ -10,7 +10,6 @@ use ic_ledger_suite_state_machine_helpers::send_transfer;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
-use num_traits::ToPrimitive;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::time::Duration;
@@ -21,10 +20,6 @@ pub struct IndexTestConfig {
     pub genesis_nanos: u64,
     /// The default interval in seconds for retrieving blocks from the ledger.
     pub default_interval_secs: u64,
-    /// The time to advance when waiting for index sync.
-    pub index_sync_time_to_advance: Duration,
-    /// Maximum number of attempts when waiting for index sync.
-    pub max_attempts_for_index_sync_wait: u8,
 }
 
 impl IndexTestConfig {
@@ -32,13 +27,6 @@ impl IndexTestConfig {
     /// Values larger than this will cause timer overflow.
     pub fn max_value_for_interval(&self) -> u64 {
         (u64::MAX - self.genesis_nanos) / 1_000_000_000
-    }
-
-    /// Returns the maximum time needed to wait for index sync in seconds.
-    pub fn max_index_sync_time(&self) -> u64 {
-        (self.max_attempts_for_index_sync_wait as u64)
-            .checked_mul(self.index_sync_time_to_advance.as_secs())
-            .unwrap()
     }
 }
 
@@ -54,8 +42,7 @@ pub fn test_should_fail_to_install_and_upgrade_with_invalid_value<I, U>(
     encode_init_args: fn(CanisterId, Option<u64>) -> I,
     encode_upgrade_args: fn(Option<u64>) -> U,
     install_ledger: fn(&StateMachine, Vec<u8>, Vec<(Account, u64)>) -> CanisterId,
-    get_num_blocks_synced: fn(&StateMachine, CanisterId) -> u64,
-    get_ledger_chain_length: fn(&StateMachine, CanisterId) -> u64,
+    wait_until_sync_is_completed: fn(&StateMachine, CanisterId, CanisterId),
 ) where
     I: CandidType,
     U: CandidType,
@@ -68,14 +55,12 @@ pub fn test_should_fail_to_install_and_upgrade_with_invalid_value<I, U>(
 
     for (install_interval, upgrade_interval) in &invalid_install_and_upgrade_combinations {
         let err = install_and_upgrade(
-            config,
             ledger_wasm.clone(),
             index_wasm.clone(),
             encode_init_args,
             encode_upgrade_args,
             install_ledger,
-            get_num_blocks_synced,
-            get_ledger_chain_length,
+            wait_until_sync_is_completed,
             *install_interval,
             *upgrade_interval,
         )
@@ -97,18 +82,18 @@ pub fn test_should_fail_to_install_and_upgrade_with_invalid_value<I, U>(
 /// with various valid interval values including None, 0, 1, 10, and the maximum.
 pub fn test_should_install_and_upgrade_with_valid_values<I, U>(
     config: &IndexTestConfig,
+    max_index_sync_time: u64,
     ledger_wasm: Vec<u8>,
     index_wasm: Vec<u8>,
     encode_init_args: fn(CanisterId, Option<u64>) -> I,
     encode_upgrade_args: fn(Option<u64>) -> U,
     install_ledger: fn(&StateMachine, Vec<u8>, Vec<(Account, u64)>) -> CanisterId,
-    get_num_blocks_synced: fn(&StateMachine, CanisterId) -> u64,
-    get_ledger_chain_length: fn(&StateMachine, CanisterId) -> u64,
+    wait_until_sync_is_completed: fn(&StateMachine, CanisterId, CanisterId),
 ) where
     I: CandidType,
     U: CandidType,
 {
-    let max_seconds_for_timer = config.max_value_for_interval() - config.max_index_sync_time();
+    let max_seconds_for_timer = config.max_value_for_interval() - max_index_sync_time;
     let build_index_interval_values = [
         None,
         Some(0u64),
@@ -122,14 +107,12 @@ pub fn test_should_install_and_upgrade_with_valid_values<I, U>(
         for upgrade_interval in &build_index_interval_values {
             assert_eq!(
                 install_and_upgrade(
-                    config,
                     ledger_wasm.clone(),
                     index_wasm.clone(),
                     encode_init_args,
                     encode_upgrade_args,
                     install_ledger,
-                    get_num_blocks_synced,
-                    get_ledger_chain_length,
+                    wait_until_sync_is_completed,
                     *install_interval,
                     *upgrade_interval,
                 ),
@@ -237,14 +220,12 @@ pub fn test_should_sync_according_to_interval<I, U, S>(
 
 /// Helper function to install and upgrade an index canister with specified intervals.
 fn install_and_upgrade<I, U>(
-    config: &IndexTestConfig,
     ledger_wasm: Vec<u8>,
     index_wasm: Vec<u8>,
     encode_init_args: fn(CanisterId, Option<u64>) -> I,
     encode_upgrade_args: fn(Option<u64>) -> U,
     install_ledger: fn(&StateMachine, Vec<u8>, Vec<(Account, u64)>) -> CanisterId,
-    get_num_blocks_synced: fn(&StateMachine, CanisterId) -> u64,
-    get_ledger_chain_length: fn(&StateMachine, CanisterId) -> u64,
+    wait_until_sync_is_completed: fn(&StateMachine, CanisterId, CanisterId),
     install_interval: Option<u64>,
     upgrade_interval: Option<u64>,
 ) -> Result<(), UserError>
@@ -265,27 +246,13 @@ where
     let init_args = encode_init_args(ledger_id, install_interval);
     let index_id = env.install_canister(index_wasm.clone(), Encode!(&init_args).unwrap(), None)?;
 
-    wait_until_sync_is_completed(
-        env,
-        index_id,
-        ledger_id,
-        config,
-        get_num_blocks_synced,
-        get_ledger_chain_length,
-    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // Upgrade with new interval
     let upgrade_args = encode_upgrade_args(upgrade_interval);
     env.upgrade_canister(index_id, index_wasm, Encode!(&upgrade_args).unwrap())?;
 
-    wait_until_sync_is_completed(
-        env,
-        index_id,
-        ledger_id,
-        config,
-        get_num_blocks_synced,
-        get_ledger_chain_length,
-    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     Ok(())
 }
@@ -337,30 +304,6 @@ fn send_transaction_and_verify_index_sync(
     assert_eq!(ledger_chain_length, index_num_blocks_synced);
 }
 
-/// Wait until the index has synced all blocks from the ledger.
-fn wait_until_sync_is_completed(
-    env: &StateMachine,
-    index_id: CanisterId,
-    ledger_id: CanisterId,
-    config: &IndexTestConfig,
-    get_num_blocks_synced: fn(&StateMachine, CanisterId) -> u64,
-    get_ledger_chain_length: fn(&StateMachine, CanisterId) -> u64,
-) {
-    for _ in 0..config.max_attempts_for_index_sync_wait {
-        env.advance_time(config.index_sync_time_to_advance);
-        env.tick();
-        let num_blocks_synced = get_num_blocks_synced(env, index_id);
-        let chain_length = get_ledger_chain_length(env, ledger_id);
-        if num_blocks_synced == chain_length {
-            return;
-        }
-    }
-    panic!(
-        "Index canister was unable to sync all blocks within {} attempts",
-        config.max_attempts_for_index_sync_wait
-    );
-}
-
 /// Helper to create an account for testing.
 pub fn account(owner: u64, subaccount: u128) -> Account {
     let mut sub: [u8; 32] = [0; 32];
@@ -374,69 +317,4 @@ pub fn account(owner: u64, subaccount: u128) -> Account {
 /// Generate arbitrary accounts for property-based testing.
 pub fn arb_account() -> impl Strategy<Value = Account> + Clone {
     (1u64..1000, 0u128..1000).prop_map(|(owner, subaccount)| account(owner, subaccount))
-}
-
-/// Get number of blocks synced from an ICRC1 index-ng canister.
-pub fn icrc1_index_get_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
-    use candid::Decode;
-    use ic_icrc1_index_ng::Status;
-
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status)
-        .expect("Failed to decode status response")
-        .num_blocks_synced
-        .0
-        .to_u64()
-        .expect("num_blocks_synced should be a u64")
-}
-
-/// Get number of blocks synced from an ICP index canister.
-pub fn icp_index_get_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
-    use candid::Decode;
-    use ic_icp_index::Status;
-
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    Decode!(&res, Status)
-        .expect("Failed to decode status response")
-        .num_blocks_synced
-}
-
-/// Get chain length from an ICRC1 ledger using icrc3_get_blocks.
-pub fn icrc1_ledger_get_chain_length(env: &StateMachine, ledger_id: CanisterId) -> u64 {
-    use candid::Decode;
-    use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
-
-    let req = vec![GetBlocksRequest {
-        start: Nat::from(0u64),
-        length: Nat::from(0u64),
-    }];
-    let res = env
-        .query(ledger_id, "icrc3_get_blocks", Encode!(&req).unwrap())
-        .expect("Failed to send icrc3_get_blocks request")
-        .bytes();
-    Decode!(&res, GetBlocksResult)
-        .expect("Failed to decode GetBlocksResult")
-        .log_length
-        .0
-        .to_u64()
-        .expect("log_length should be a u64")
-}
-
-/// Get chain length from an ICP ledger.
-pub fn icp_ledger_get_chain_length(env: &StateMachine, ledger_id: CanisterId) -> u64 {
-    use candid::Decode;
-    use icp_ledger::TipOfChainRes;
-
-    let res = env
-        .query(ledger_id, "tip_of_chain", Encode!(&()).unwrap())
-        .expect("Failed to send tip_of_chain request")
-        .bytes();
-    let tip = Decode!(&res, TipOfChainRes).expect("Failed to decode TipOfChainRes");
-    tip.tip_index + 1 // tip_index is 0-based, chain_length is 1-based
 }

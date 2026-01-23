@@ -1,23 +1,23 @@
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icp_index::{InitArg, UpgradeArg};
+use ic_icp_index::{InitArg, Status, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_ledger_suite_state_machine_tests::index::{
-    self, IndexTestConfig, arb_account, icp_index_get_num_blocks_synced, icp_ledger_get_chain_length,
-};
+use ic_ledger_suite_state_machine_tests::index::{self, IndexTestConfig, arb_account};
+use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload};
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
 
 /// Corresponds to ic_icp_index::DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
 const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS: u64 = 1;
 const GENESIS_NANOS: u64 = 1_620_328_630_000_000_000;
-const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
-const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u8 = 100;
+
+// For max_index_sync_time calculation
+const INDEX_SYNC_TIME_TO_ADVANCE_SECS: u64 = 60;
+const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u64 = 100;
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -61,9 +61,11 @@ fn config() -> IndexTestConfig {
     IndexTestConfig {
         genesis_nanos: GENESIS_NANOS,
         default_interval_secs: DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS,
-        index_sync_time_to_advance: INDEX_SYNC_TIME_TO_ADVANCE,
-        max_attempts_for_index_sync_wait: MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT,
     }
+}
+
+fn max_index_sync_time() -> u64 {
+    MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT * INDEX_SYNC_TIME_TO_ADVANCE_SECS
 }
 
 fn encode_init_args(ledger_id: CanisterId, _interval: Option<u64>) -> InitArg {
@@ -101,6 +103,16 @@ fn install_ledger_for_test(
         .unwrap()
 }
 
+fn icp_index_get_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
+    let res = env
+        .query(index_id, "status", Encode!(&()).unwrap())
+        .expect("Failed to send status")
+        .bytes();
+    Decode!(&res, Status)
+        .expect("Failed to decode status response")
+        .num_blocks_synced
+}
+
 #[test]
 fn should_fail_to_install_and_upgrade_with_invalid_value() {
     index::test_should_fail_to_install_and_upgrade_with_invalid_value(
@@ -110,8 +122,7 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
         encode_init_args,
         encode_upgrade_args,
         install_ledger_for_test,
-        icp_index_get_num_blocks_synced,
-        icp_ledger_get_chain_length,
+        wait_until_sync_is_completed,
     );
 }
 
@@ -119,13 +130,13 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
 fn should_install_and_upgrade_with_valid_values() {
     index::test_should_install_and_upgrade_with_valid_values(
         &config(),
+        max_index_sync_time(),
         ledger_wasm(),
         index_wasm(),
         encode_init_args,
         encode_upgrade_args,
         install_ledger_for_test,
-        icp_index_get_num_blocks_synced,
-        icp_ledger_get_chain_length,
+        wait_until_sync_is_completed,
     );
 }
 

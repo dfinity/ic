@@ -1,16 +1,13 @@
 use crate::common::{
-    STARTING_CYCLES_PER_CANISTER, default_archive_options, index_ng_wasm, install_index_ng,
-    install_ledger, ledger_wasm, wait_until_sync_is_completed,
+    default_archive_options, index_ng_wasm, install_index_ng, install_ledger, ledger_wasm,
+    wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
 };
-use candid::{CandidType, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
 use ic_icrc1_test_utils::minter_identity;
-use ic_ledger_suite_state_machine_tests::index::{
-    self, IndexTestConfig, arb_account, icrc1_index_get_num_blocks_synced,
-    icrc1_ledger_get_chain_length,
-};
+use ic_ledger_suite_state_machine_tests::index::{self, IndexTestConfig, arb_account};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{Cycles, Time};
@@ -23,17 +20,18 @@ mod common;
 const DEFAULT_MAX_WAIT_TIME_IN_SECS: u64 = 1;
 const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 const IDLE_TIME_IN_SECS: u64 = 10;
-const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
-const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u8 = 100; // TODO(mducroux): why this?
+const INDEX_SYNC_TIME_TO_ADVANCE_SECS: u64 = 60;
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[3_u8; 29]);
 
 fn config() -> IndexTestConfig {
     IndexTestConfig {
         genesis_nanos: GENESIS.as_nanos_since_unix_epoch(),
         default_interval_secs: DEFAULT_MAX_WAIT_TIME_IN_SECS,
-        index_sync_time_to_advance: INDEX_SYNC_TIME_TO_ADVANCE,
-        max_attempts_for_index_sync_wait: MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT,
     }
+}
+
+fn max_index_sync_time() -> u64 {
+    (MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT as u64) * INDEX_SYNC_TIME_TO_ADVANCE_SECS
 }
 
 fn encode_init_args(ledger_id: CanisterId, interval: Option<u64>) -> IndexArg {
@@ -64,6 +62,22 @@ fn install_ledger_for_test(
     )
 }
 
+fn icrc1_index_get_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
+    let res = env
+        .query(index_id, "icrc3_get_tip_certificate", Encode!(&()).unwrap())
+        .expect("Failed to send icrc3_get_tip_certificate")
+        .bytes();
+    let certificate =
+        Decode!(&res, Option<ic_icrc1_index_ng::GetTipCertificateResponse>).unwrap();
+    certificate.map_or(0, |c| {
+        Nat::decode(&mut &c.tip_index[..])
+            .unwrap()
+            .0
+            .try_into()
+            .unwrap()
+    })
+}
+
 #[test]
 fn should_fail_to_install_and_upgrade_with_invalid_value() {
     index::test_should_fail_to_install_and_upgrade_with_invalid_value(
@@ -73,8 +87,7 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
         encode_init_args,
         encode_upgrade_args,
         install_ledger_for_test,
-        icrc1_index_get_num_blocks_synced,
-        icrc1_ledger_get_chain_length,
+        wait_until_sync_is_completed,
     );
 }
 
@@ -82,13 +95,13 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
 fn should_install_and_upgrade_with_valid_values() {
     index::test_should_install_and_upgrade_with_valid_values(
         &config(),
+        max_index_sync_time(),
         ledger_wasm(),
         index_ng_wasm(),
         encode_init_args,
         encode_upgrade_args,
         install_ledger_for_test,
-        icrc1_index_get_num_blocks_synced,
-        icrc1_ledger_get_chain_length,
+        wait_until_sync_is_completed,
     );
 }
 
