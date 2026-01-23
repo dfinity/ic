@@ -1,8 +1,8 @@
 use super::*;
 
 use crate::{
-    pb::v1::{Motion, Proposal, ProposalData, SelfDescribingProposalAction, proposal::Action},
-    proposals::self_describing::{LocallyDescribableProposalAction, ValueBuilder},
+    pb::v1::{Motion, Proposal, ProposalData, proposal::Action},
+    proposals::self_describing::LocallyDescribableProposalAction,
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
 
@@ -45,6 +45,10 @@ fn add_proposal_without_self_describing(proposal_id: u64, action: Action) {
 }
 
 fn add_proposal_with_self_describing(proposal_id: u64) {
+    let motion = Motion {
+        motion_text: "Already backfilled".to_string(),
+    };
+    let self_describing_action = motion.to_self_describing_action();
     TEST_GOVERNANCE.with_borrow_mut(|governance| {
         governance.heap_data.proposals.insert(
             proposal_id,
@@ -54,19 +58,8 @@ fn add_proposal_with_self_describing(proposal_id: u64) {
                     title: Some(format!("Proposal {}", proposal_id)),
                     summary: format!("Summary for proposal {}", proposal_id),
                     url: String::new(),
-                    action: Some(Action::Motion(Motion {
-                        motion_text: "Already backfilled".to_string(),
-                    })),
-                    self_describing_action: Some(SelfDescribingProposalAction {
-                        type_name: Motion::TYPE_NAME.to_string(),
-                        type_description: Motion::TYPE_DESCRIPTION.to_string(),
-                        value: Some(
-                            Motion {
-                                motion_text: "Already backfilled".to_string(),
-                            }
-                            .to_self_describing_value(),
-                        ),
-                    }),
+                    action: Some(Action::Motion(motion)),
+                    self_describing_action: Some(self_describing_action),
                 }),
                 ..Default::default()
             },
@@ -106,13 +99,12 @@ async fn test_all_proposals_already_backfilled_returns_24_hour_delay() {
 #[tokio::test]
 async fn test_finds_first_proposal_needing_backfill_from_beginning() {
     // Add proposals: 1 and 3 already backfilled, 2 needs backfilling
+    let motion = Motion {
+        motion_text: "Test motion".to_string(),
+    };
+    let self_describing_action = motion.to_self_describing_action();
     add_proposal_with_self_describing(1);
-    add_proposal_without_self_describing(
-        2,
-        Action::Motion(Motion {
-            motion_text: "Test motion".to_string(),
-        }),
-    );
+    add_proposal_without_self_describing(2, Action::Motion(motion));
     add_proposal_with_self_describing(3);
 
     let task = BackfillSelfDescribingActionTask::new(&TEST_GOVERNANCE);
@@ -125,15 +117,7 @@ async fn test_finds_first_proposal_needing_backfill_from_beginning() {
     // Verify proposal 2 was backfilled
     assert_eq!(
         get_proposal_self_describing_action(2).unwrap(),
-        SelfDescribingProposalAction {
-            type_name: Motion::TYPE_NAME.to_string(),
-            type_description: Motion::TYPE_DESCRIPTION.to_string(),
-            value: Some(
-                ValueBuilder::new()
-                    .add_field("motion_text", "Test motion")
-                    .build()
-            ),
-        }
+        self_describing_action
     );
 }
 
@@ -146,12 +130,11 @@ async fn test_finds_proposal_after_specified_id() {
             motion_text: "Motion 1".to_string(),
         }),
     );
-    add_proposal_without_self_describing(
-        2,
-        Action::Motion(Motion {
-            motion_text: "Motion 2".to_string(),
-        }),
-    );
+    let motion2 = Motion {
+        motion_text: "Motion 2".to_string(),
+    };
+    add_proposal_without_self_describing(2, Action::Motion(motion2.clone()));
+    let motion2_self_describing_action = motion2.to_self_describing_action();
     add_proposal_without_self_describing(
         3,
         Action::Motion(Motion {
@@ -172,15 +155,7 @@ async fn test_finds_proposal_after_specified_id() {
     // Verify proposal 2 was backfilled but proposal 1 and 3 were not
     assert_eq!(
         get_proposal_self_describing_action(2).unwrap(),
-        SelfDescribingProposalAction {
-            type_name: Motion::TYPE_NAME.to_string(),
-            type_description: Motion::TYPE_DESCRIPTION.to_string(),
-            value: Some(
-                ValueBuilder::new()
-                    .add_field("motion_text", "Motion 2")
-                    .build()
-            ),
-        }
+        motion2_self_describing_action
     );
     assert_eq!(get_proposal_self_describing_action(1), None);
     assert_eq!(get_proposal_self_describing_action(3), None);

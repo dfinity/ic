@@ -23,6 +23,7 @@ const NO_PROPOSALS_TO_BACKFILL_INTERVAL: Duration = Duration::from_secs(86_400);
 /// backfill one proposal, wait for 5s, and then backfill the next proposal.
 pub(super) struct BackfillSelfDescribingActionTask {
     governance: &'static LocalKey<RefCell<Governance>>,
+
     /// The start bound for searching proposals needing backfill.
     /// - `Bound::Unbounded` - start from the beginning
     /// - `Bound::Excluded(id)` - start after proposal with given ID
@@ -113,6 +114,7 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
 
         match result {
             Ok(self_describing_action) => {
+                // Update the proposal with the self-describing action
                 self.governance.with_borrow_mut(|governance| {
                     let proposal = governance
                         .heap_data
@@ -130,7 +132,8 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
             }
             Err(e) => {
                 // This is the main reason why we loop back to the beginning of the proposal list
-                // after all proposals have been tried.
+                // after all proposals have been tried - the failure can be transient and retrying
+                // later can succeed.
                 println!(
                     "{}Backfill self_describing_action: Failed for proposal {}: {:?}",
                     LOG_PREFIX, proposal_id, e
@@ -138,6 +141,7 @@ impl RecurringAsyncTask for BackfillSelfDescribingActionTask {
             }
         }
 
+        // Continue from this proposal on the next run (whether success or failure)
         (
             BACKFILL_INTERVAL,
             self.with_start_bound(Bound::Excluded(proposal_id)),
