@@ -44,7 +44,7 @@ pub fn traverse<V: Visitor>(height: Height, state: &ReplicatedState, mut v: V) -
 mod tests {
     use super::*;
     use crate::{
-        encoding::{CborProxyEncoder, encode_stream_header, types::SystemMetadata},
+        encoding::encode_stream_header,
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
@@ -57,7 +57,7 @@ mod tests {
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Memory,
+        Memory, SystemMetadata,
         canister_state::{
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
@@ -94,10 +94,6 @@ mod tests {
         E::VisitBlob(buf)
     }
 
-    fn encode_metadata(metadata: SystemMetadata) -> Vec<u8> {
-        SystemMetadata::proxy_encode(metadata).unwrap()
-    }
-
     /// Helper function for most tests where the /cansiter_ranges subtree should be missing before V21, and empty afterwards.
     fn expected_empty_canister_ranges(
         certification_version: CertificationVersion,
@@ -107,6 +103,32 @@ mod tests {
             E::StartSubtree,
             E::EndSubtree, // canister_ranges
         ])
+    }
+
+    fn expected_metadata(
+        height: u64,
+        metadata: &SystemMetadata,
+        certification_version: CertificationVersion,
+    ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
+        let height = if certification_version >= V24 {
+            vec![edge("height"), leb_num(height)]
+        } else {
+            vec![]
+        };
+        let prev_state_hash = if let Some(hash) = &metadata.prev_state_hash {
+            vec![edge("prev_state_hash"), E::VisitBlob(hash.clone().get().0)]
+        } else {
+            vec![]
+        };
+        Some(
+            [
+                vec![edge("metadata"), E::StartSubtree],
+                height,
+                prev_state_hash,
+                vec![E::EndSubtree],
+            ]
+            .concat(),
+        )
     }
 
     #[test]
@@ -131,16 +153,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(height))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -185,6 +199,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
+        let height = 0;
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
@@ -211,16 +227,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(0))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -241,7 +249,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -287,6 +295,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.put_canister_state(canister_state);
 
+        let height = 0;
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
@@ -330,16 +340,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(0))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -360,7 +362,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -395,6 +397,8 @@ mod tests {
             streams.insert(other_subnet_id, stream);
         });
 
+        let height = 0;
+
         // Test all certification versions.
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -413,16 +417,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(0))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -464,7 +460,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -648,6 +644,8 @@ mod tests {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
         state.metadata.batch_time += Duration::new(1, 123456789);
 
+        let height = 0;
+
         // Test all supported certification versions.
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -666,16 +664,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(0))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -696,7 +686,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -743,6 +733,8 @@ mod tests {
             node_test_id(2) => vec![9, 10, 11, 12],
         };
 
+        let height = 0;
+
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
             let visitor = TracingVisitor::new(NoopVisitor);
@@ -776,11 +768,8 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    Some(vec![edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 { Some(Height::new(0)) } else { None },
-                        prev_state_hash: None,
-                    })),
+                    expected_metadata(height, &state.metadata, certification_version),
+                    Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -869,7 +858,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -909,6 +898,8 @@ mod tests {
             })
             .unwrap(),
         );
+
+        let height = 0;
 
         for certification_version in all_supported_versions() {
             state.metadata.certification_version = certification_version;
@@ -987,11 +978,8 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    Some(vec![edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 { Some(Height::new(0)) } else { None },
-                        prev_state_hash: None,
-                    })),
+                    expected_metadata(height, &state.metadata, certification_version),
+                    Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -1096,7 +1084,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -1119,6 +1107,8 @@ mod tests {
                 pubkey: None,
             },
         };
+
+        let height = 0;
 
         // Test all supported certification versions.
         for certification_version in all_supported_versions() {
@@ -1162,16 +1152,8 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, &state.metadata, certification_version),
                 Some(vec![
-                    edge("metadata"),
-                    E::VisitBlob(encode_metadata(SystemMetadata {
-                        height: if certification_version >= CertificationVersion::V24 {
-                            Some(Height::new(0))
-                        } else {
-                            None
-                        },
-                        prev_state_hash: None,
-                    })),
                     edge("request_status"),
                     E::StartSubtree,
                     E::EndSubtree, // request_status
@@ -1192,7 +1174,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(Height::new(height), &state, visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }

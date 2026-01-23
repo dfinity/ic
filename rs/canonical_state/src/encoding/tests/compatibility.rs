@@ -14,15 +14,12 @@ use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
+    canister_state::system_state::CyclesUseCase, metadata_state::SubnetMetrics,
 };
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    CryptoHashOfPartialState, Cycles, Funds, Height, NumBytes, Time,
-    crypto::CryptoHash,
+    Cycles, Funds, NumBytes, Time,
     messages::{
         CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
         Response, StreamMessage,
@@ -1291,47 +1288,6 @@ fn canonical_encoding_anonymous_refund() {
         assert_eq!(
             "A1 02 A2 00 4A 00 00 00 00 00 00 00 07 01 01 01 A1 00 08",
             as_hex(&encode_message(&refund, certification_version))
-        );
-    }
-}
-
-/// Canonical CBOR encoding of `Height::new(42)` and
-///
-/// ```no_run
-/// SystemMetadata {
-///     own_subnet_id: new(subnet_test_id(13)),
-///     prev_state_hash: Some(CryptoHashOfPartialState::new(CryptoHash(vec![15]))),
-///     ..Default::default()
-/// }
-/// ```
-///
-/// Expected:
-///
-/// ```text
-/// A2          # map(2)
-///    00       # field_index(SystemMetadata::height)
-///       18 2A # unsigned(42)
-///    01       # field_index(SystemMetadata::prev_state_hash)
-///    81       # array(1)
-///       0F    # unsigned(15)
-/// ```
-/// Used http://cbor.me/ for printing the human friendly output.
-#[test]
-fn canonical_encoding_system_metadata() {
-    for certification_version in all_supported_versions() {
-        let mut metadata = SystemMetadata::new(subnet_test_id(13), SubnetType::Application);
-        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(vec![15])));
-        let height = Height::new(42);
-
-        let blob = if certification_version >= CertificationVersion::V24 {
-            "A2 00 18 2A 01 81 0F"
-        } else {
-            "A1 01 81 0F"
-        };
-
-        assert_eq!(
-            blob,
-            as_hex(&encode_metadata(height, &metadata, certification_version))
         );
     }
 }
