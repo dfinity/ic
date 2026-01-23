@@ -1,14 +1,14 @@
-use candid::{Decode, Encode};
+use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icp_index::{InitArg, Status, UpgradeArg};
+use ic_icp_index::{InitArg, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
-use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
-use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload, Memo, Subaccount};
+use ic_ledger_suite_state_machine_tests::index::{
+    self, IndexTestConfig, arb_account, icp_index_get_num_blocks_synced, icp_ledger_get_chain_length,
+};
+use ic_state_machine_tests::StateMachine;
+use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload};
 use icrc_ledger_types::icrc1::account::Account;
-use proptest::prelude::Strategy;
-use proptest::test_runner::TestRunner;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -57,19 +57,32 @@ fn default_archive_options() -> ArchiveOptions {
     }
 }
 
-fn account(owner: u64, subaccount: u128) -> Account {
-    let mut sub: [u8; 32] = [0; 32];
-    sub[..16].copy_from_slice(&subaccount.to_be_bytes());
-    Account {
-        owner: PrincipalId::new_user_test_id(owner).0,
-        subaccount: Some(sub),
+fn config() -> IndexTestConfig {
+    IndexTestConfig {
+        genesis_nanos: GENESIS_NANOS,
+        default_interval_secs: DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS,
+        index_sync_time_to_advance: INDEX_SYNC_TIME_TO_ADVANCE,
+        max_attempts_for_index_sync_wait: MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT,
     }
 }
 
-fn install_ledger(
+fn encode_init_args(ledger_id: CanisterId, _interval: Option<u64>) -> InitArg {
+    // Note: ICP InitArg doesn't support interval in init, only via upgrade
+    InitArg {
+        ledger_id: ledger_id.into(),
+    }
+}
+
+fn encode_upgrade_args(interval: Option<u64>) -> Option<UpgradeArg> {
+    Some(UpgradeArg {
+        retrieve_blocks_from_ledger_interval_seconds: interval,
+    })
+}
+
+fn install_ledger_for_test(
     env: &StateMachine,
+    _ledger_wasm: Vec<u8>,
     initial_balances: Vec<(Account, u64)>,
-    archive_options: ArchiveOptions,
 ) -> CanisterId {
     let mut initial_values = HashMap::new();
     for (account, amount) in initial_balances {
@@ -78,7 +91,7 @@ fn install_ledger(
     let init_args = LedgerCanisterInitPayload::builder()
         .minting_account(AccountIdentifier::new(MINTER_PRINCIPAL, None))
         .initial_values(initial_values)
-        .archive_options(archive_options)
+        .archive_options(default_archive_options())
         .transfer_fee(Tokens::from_e8s(FEE))
         .token_symbol_and_name("ICP", "Internet Computer")
         .feature_flags(FeatureFlags { icrc2: true })
@@ -88,230 +101,44 @@ fn install_ledger(
         .unwrap()
 }
 
-fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = InitArg {
-        ledger_id: ledger_id.into(),
-    };
-    env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
-}
-
-fn install_index_with_interval(
-    env: &StateMachine,
-    ledger_id: CanisterId,
-    retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
-) -> CanisterId {
-    let index_id = install_index(env, ledger_id);
-
-    // Configure the interval via upgrade if specified
-    if let Some(interval) = retrieve_blocks_from_ledger_interval_seconds {
-        let upgrade_arg = UpgradeArg {
-            retrieve_blocks_from_ledger_interval_seconds: Some(interval),
-        };
-        env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())
-            .unwrap();
-    }
-
-    index_id
-}
-
-fn status(env: &StateMachine, index_id: CanisterId) -> Status {
-    let res = env
-        .query(index_id, "status", Encode!(&()).unwrap())
-        .expect("Failed to send status")
-        .bytes();
-    candid::Decode!(&res, Status).expect("Failed to decode status response")
-}
-
-fn install_and_upgrade(
-    install_interval: Option<u64>,
-    upgrade_interval: Option<u64>,
-) -> Result<(), UserError> {
-    let env = &StateMachine::new();
-    // Ledger needs at least one block to function properly
-    let ledger_id = install_ledger(
-        env,
-        vec![(account(1, 0), 1_000_000_000)],
-        default_archive_options(),
-    );
-    let index_id = install_index_with_interval(env, ledger_id, install_interval);
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    let upgrade_arg = UpgradeArg {
-        retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
-    };
-    env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    Ok(())
-}
-
-fn max_value_for_interval() -> u64 {
-    (u64::MAX - GENESIS_NANOS) / 1_000_000_000
-}
-
-fn max_index_sync_time() -> u64 {
-    (MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT as u64)
-        .checked_mul(INDEX_SYNC_TIME_TO_ADVANCE.as_secs())
-        .unwrap()
-}
-
 #[test]
 fn should_fail_to_install_and_upgrade_with_invalid_value() {
-    let minimum_invalid_value_for_interval = max_value_for_interval() + 1;
-    let invalid_install_and_upgrade_combinations = [
-        (Some(minimum_invalid_value_for_interval), Some(1)),
-        (Some(1), Some(minimum_invalid_value_for_interval)),
-    ];
-    for (install_interval, upgrade_interval) in &invalid_install_and_upgrade_combinations {
-        let err = install_and_upgrade(*install_interval, *upgrade_interval)
-            .expect_err("should fail to install with invalid interval");
-        let code = err.code();
-        assert_eq!(code, ErrorCode::CanisterCalledTrap);
-        let description = err.description();
-        assert!(description.contains("delay out of bounds"));
-    }
+    index::test_should_fail_to_install_and_upgrade_with_invalid_value(
+        &config(),
+        ledger_wasm(),
+        index_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
+        install_ledger_for_test,
+        icp_index_get_num_blocks_synced,
+        icp_ledger_get_chain_length,
+    );
 }
 
 #[test]
 fn should_install_and_upgrade_with_valid_values() {
-    let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
-    let build_index_interval_values = [
-        None,
-        Some(0u64),
-        Some(1u64),
-        Some(10u64),
-        Some(max_seconds_for_timer),
-    ];
-
-    // Installing and upgrading with valid values should succeed
-    for install_interval in &build_index_interval_values {
-        for upgrade_interval in &build_index_interval_values {
-            assert_eq!(
-                install_and_upgrade(*install_interval, *upgrade_interval),
-                Ok(()),
-                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
-            );
-        }
-    }
+    index::test_should_install_and_upgrade_with_valid_values(
+        &config(),
+        ledger_wasm(),
+        index_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
+        install_ledger_for_test,
+        icp_index_get_num_blocks_synced,
+        icp_ledger_get_chain_length,
+    );
 }
 
 #[test]
 fn should_sync_according_to_interval() {
-    const INITIAL_BALANCE: u64 = 1_000_000_000;
-    const TRANSFER_AMOUNT: u64 = 1_000_000;
-
-    fn send_transaction_and_verify_index_sync(
-        env: &StateMachine,
-        ledger_id: CanisterId,
-        index_id: CanisterId,
-        a1: Account,
-        a2: Account,
-        install_interval: Option<u64>,
-        upgrade_interval: Option<u64>,
-    ) {
-        let transfer_args = icp_ledger::TransferArgs {
-            memo: Memo(0),
-            amount: Tokens::from_e8s(TRANSFER_AMOUNT),
-            fee: Tokens::from_e8s(FEE),
-            from_subaccount: a1.subaccount.map(Subaccount),
-            to: AccountIdentifier::from(a2).to_address(),
-            created_at_time: None,
-        };
-        let ledger_chain_length = Decode!(
-            &env.execute_ingress_as(
-                PrincipalId(a1.owner),
-                ledger_id,
-                "transfer",
-                Encode!(&transfer_args).unwrap(),
-            )
-            .expect("transfer failed")
-            .bytes(),
-            Result<u64, icp_ledger::TransferError>
-        )
-        .unwrap()
-        .unwrap()
-        .checked_add(1)
-        .expect("should be able to add 1 to block index");
-        let mut index_num_blocks_synced = status(env, index_id).num_blocks_synced;
-        if index_num_blocks_synced != ledger_chain_length {
-            let time_to_advance = upgrade_interval
-                .or(install_interval)
-                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
-            if time_to_advance > 0 {
-                env.advance_time(Duration::from_secs(time_to_advance));
-                env.tick();
-            }
-            index_num_blocks_synced = status(env, index_id).num_blocks_synced;
-        }
-        assert_eq!(ledger_chain_length, index_num_blocks_synced);
-    }
-
-    // Generate arbitrary accounts for testing
-    fn arb_account() -> impl Strategy<Value = Account> {
-        (1u64..1000, 0u128..1000).prop_map(|(owner, subaccount)| account(owner, subaccount))
-    }
-
-    let mut runner = TestRunner::new(proptest::test_runner::Config::with_cases(4));
-    runner
-        .run(
-            &(
-                proptest::option::of(0..(max_value_for_interval() / 2)),
-                proptest::option::of(0..(max_value_for_interval() / 2)),
-                arb_account(),
-                arb_account(),
-            )
-                .prop_filter("The accounts must be different", |(_, _, a1, a2)| a1 != a2)
-                .no_shrink(),
-            |(install_interval, upgrade_interval, a1, a2)| {
-                // Create a new environment
-                let env = &StateMachine::new();
-
-                // Install a ledger with an initial balance for a1
-                let ledger_id =
-                    install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
-
-                // Install an index with a specific interval
-                let index_id = install_index_with_interval(env, ledger_id, install_interval);
-
-                // Send a transaction and verify that the index is synced after the interval
-                // specified during the install, or the default value if the interval specified
-                // during the install was None.
-                send_transaction_and_verify_index_sync(
-                    env,
-                    ledger_id,
-                    index_id,
-                    a1, // from
-                    a2, // to
-                    install_interval,
-                    None,
-                );
-
-                // Upgrade the index with a specific interval
-                let upgrade_arg = UpgradeArg {
-                    retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
-                };
-                env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())
-                    .unwrap();
-
-                // Send a transaction and verify that the index is synced after the interval
-                // specified during the upgrade, or if it is None, the interval specified during
-                // the install, or the default value if the interval specified during the install
-                // was None.
-                send_transaction_and_verify_index_sync(
-                    env,
-                    ledger_id,
-                    index_id,
-                    a1, // from
-                    a2, // to
-                    install_interval,
-                    upgrade_interval,
-                );
-
-                Ok(())
-            },
-        )
-        .unwrap();
+    index::test_should_sync_according_to_interval(
+        &config(),
+        ledger_wasm(),
+        index_wasm(),
+        encode_init_args,
+        encode_upgrade_args,
+        install_ledger_for_test,
+        icp_index_get_num_blocks_synced,
+        arb_account(),
+    );
 }

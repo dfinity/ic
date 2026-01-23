@@ -77,6 +77,7 @@ use std::{
 mod allowances;
 pub mod fee_collector;
 pub mod icrc_106;
+pub mod index;
 pub mod metrics;
 
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
