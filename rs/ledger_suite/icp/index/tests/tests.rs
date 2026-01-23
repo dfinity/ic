@@ -1974,6 +1974,23 @@ fn test_index_sync_with_invalid_block() {
     let invalid_encoded = ic_ledger_core::block::EncodedBlock::from_vec(vec![0u8; 100]);
     add_raw_block_to_test_ledger(env, test_ledger_id, &invalid_encoded);
 
+    // Add a second mint block (block 2) after the invalid block
+    let second_mint_timestamp = TimeStamp::from_nanos_since_unix_epoch(1_000_100_000);
+    let second_mint_block = icp_ledger::Block {
+        parent_hash: None,
+        transaction: Transaction {
+            operation: Operation::Mint {
+                to: account1,
+                amount: Tokens::from_e8s(2_000_000_000_000),
+            },
+            memo: Memo(0),
+            icrc1_memo: None,
+            created_at_time: Some(second_mint_timestamp),
+        },
+        timestamp: second_mint_timestamp,
+    };
+    add_block_to_test_ledger(env, test_ledger_id, &second_mint_block);
+
     // Install index canister pointing to test ledger
     let index_id = install_index(env, test_ledger_id);
 
@@ -2016,6 +2033,10 @@ fn test_index_sync_with_invalid_block() {
 
     let block0 = index_get_block(0);
     assert_eq!(block0, mint_block);
+    // The second mint block at index 2 is retrievable, since the index timer was restarted by the
+    // failure guard and the index could sync past the invalid block.
+    let block2 = index_get_block(2);
+    assert_eq!(block2, second_mint_block);
     // This panics due to invalid block decoding, but the index shouldn't insert this encoded bad block in the first place.
     index_get_block(1);
 }
