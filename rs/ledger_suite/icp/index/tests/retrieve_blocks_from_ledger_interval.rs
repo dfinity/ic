@@ -100,6 +100,7 @@ fn install_index_with_interval(
     ledger_id: CanisterId,
     retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
 ) -> Result<CanisterId, UserError> {
+    // TODO(DEFI-2617): once the InitArg takes interval, we no longer need to perform the upgrade here
     let index_id = install_index(env, ledger_id);
 
     // Configure the interval via upgrade if specified
@@ -170,7 +171,7 @@ fn should_install_and_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
     let build_index_interval_values = [
         None,
-        Some(0u64),
+        // Some(0u64), // TODO(DEFI-2617): once the InitArg takes interval, we can test the case interval=0
         Some(1u64),
         Some(10u64),
         Some(max_seconds_for_timer),
