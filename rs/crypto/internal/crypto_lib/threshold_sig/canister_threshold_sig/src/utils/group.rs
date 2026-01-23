@@ -59,6 +59,15 @@ impl EccCurveType {
         }
     }
 
+    /// Length of XMD output needed for hash to scalar
+    pub fn scalar_uniform_bytes_len(&self) -> usize {
+        let s_bits = self.scalar_bits(); // assumes scalar and field bits are same len
+        let security_level = self.security_level();
+
+        // "L" in spec
+        (s_bits + security_level).div_ceil(8)
+    }
+
     /// Return the size of encoded points, in bytes
     pub const fn point_bytes(&self) -> usize {
         match self {
@@ -314,15 +323,12 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> CanisterThresholdResult<Self> {
-        let s_bits = curve.scalar_bits();
-        let security_level = curve.security_level();
-
-        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
+        let xmd_len = curve.scalar_uniform_bytes_len();
 
         let uniform_bytes = ic_crypto_internal_seed::varlen_xmd::<ic_crypto_sha2::Sha256>(
             input,
             domain_separator,
-            field_len,
+            xmd_len,
         )?;
 
         EccScalar::from_bytes_wide(curve, &uniform_bytes)
@@ -334,20 +340,16 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> CanisterThresholdResult<(Self, Self)> {
-        let s_bits = curve.scalar_bits();
-        let security_level = curve.security_level();
-
-        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
+        let xmd_len = curve.scalar_uniform_bytes_len();
 
         let uniform_bytes = ic_crypto_internal_seed::varlen_xmd::<ic_crypto_sha2::Sha256>(
             input,
             domain_separator,
-            2 * field_len,
+            2 * xmd_len,
         )?;
 
-        let s0 = EccScalar::from_bytes_wide(curve, &uniform_bytes[..field_len])?;
-
-        let s1 = EccScalar::from_bytes_wide(curve, &uniform_bytes[field_len..])?;
+        let s0 = EccScalar::from_bytes_wide(curve, &uniform_bytes[..xmd_len])?;
+        let s1 = EccScalar::from_bytes_wide(curve, &uniform_bytes[xmd_len..])?;
 
         Ok((s0, s1))
     }
