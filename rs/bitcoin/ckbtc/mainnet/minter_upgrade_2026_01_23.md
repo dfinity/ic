@@ -2,45 +2,51 @@
 
 Repository: `https://github.com/dfinity/ic.git`
 
-Git hash: `61d605fd75c61072bfeed9a61adf7eca2b8dca5f`
+Git hash: `b2d93fe83a8f878a331d73df1cffed72022860b2`
 
-New compressed Wasm hash: `0c225b61b9473d57355792cc7a5108e3df0dfb2d5d8dd1c22e31079ed747aecb`
+New compressed Wasm hash: `f3c1c42fa76e4fc57a54b915418803238b6da2cdb772dd63e9e2c0dc80fd56f3`
 
-Upgrade args hash: `0fee102bd16b053022b69f2c65fd5e2f41d150ce9c214ac8731cfaf496ebda4e`
+Upgrade args hash: `d84bd4703a47528b09efe3e5dedc6e6e4e3a56ae156099ffcde563055d42b414`
 
 Target canister: `mqygn-kiaaa-aaaar-qaadq-cai`
 
-Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/139664
+Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/139767
 
 ---
 
 ## Motivation
 
-Upgrade the ckBTC minter canister to start the periodic consolidation of the set of UTXOs:
- * Currently, the minter has too many UTXOS of small value: it has around 60k UTXOs for a total of around 385 BTC.
- * This is a problem for large withdrawal requests (ckBTC -> BTC) involving typically more than 10 BTC, since a transaction created by the minter to cover the total withdrawal amount may need such a large number of inputs that the transaction becomes non-standard. As a stop-gap solution, proposal [137930](https://dashboard.internetcomputer.org/proposal/137930) limited the number of inputs in a transaction to 1000.
- * On the other hand, the minter needs to have sufficiently many UTXOs to be able to serve multiple withdrawal requests in parallel.
- * Simulations have shown that the sweet spot for the minter is around 10k UTXOs.
-
-To reach that number, the minter will do successive rounds of (initially) daily consolidations, where one round involves:
-* Creating a transaction with 1000 inputs using 1000 UTXOs with the smallest value and 2 outputs with similar value back to the minter's address.
-* Paying the Bitcoin transaction fee from the ledger fee collector account.
-
+Besides upgrading the ckBTC minter to the latest version,
+the main motivation for this proposal is to reduce the number of confirmations required by the minter to process a deposit and mint ckBTC.
+Changing that number from 6 to 4 should only marginally impact the security of the ckBTC token, which consists of being backed 1:1 by BTC at all times,
+while improving the user experience for certain applications (e.g., being able to react to falling market prices more quickly for lending applications).
 
 ## Release Notes
 
 ```
-git log --format='%C(auto) %h %s' d13be5a27b3331c4dc8831593eed0e3ec08b260f..61d605fd75c61072bfeed9a61adf7eca2b8dca5f -- rs/bitcoin/ckbtc/minter
-61d605fd75 feat(ckbtc): consolidate small value UTXOs periodically (#7891)
-37e6df7dd3 perf(ckbtc): avoid cloning the UTXOs set in `estimate_withdrawal_fee` (#7974)
+git log --format='%C(auto) %h %s' 61d605fd75c61072bfeed9a61adf7eca2b8dca5f..b2d93fe83a8f878a331d73df1cffed72022860b2 -- rs/bitcoin/ckbtc/minter
+5031b9fe5a fix(ckdoge): reject deposits below minimum amount (#8428)
+3314a4b8dd feat(ckdoge): ckDOGE minter dashboard (#8341)
+5490d8bb30 fix(ckbtc/ckdoge): ensure that the fee rate of replacement transactions increases (#8345)
+8bbd825e1f feat(ckBTC_Minter): DEFI-2246: Add decode_ledger_memo query endpoint to ckBTC minter (#7862)
+cc56275206 chore: rust: 1.90.0 -> 1.92.0  (#8124)
+e0e6f70b6c fix(ckdoge): use legacy P2PKH transactions for withdrawals (#8187)
+bb5c405c6f feat(ckbtc): Use 25th percentile fee for UTXO consolidation (#8150)
+c711180b49 feat(ckbtc): remove the force_resubmit flag (#8069)
+c9da22f4be refactor(ckbtc): deprecate no longer produced minter events (#8080)
+68ae575316 refactor(ckdoge): Dedicated events (#8035)
+23265b3882 refactor(ckbtc): Generic events (#7991)
  ```
 
 ## Upgrade args
 
+* Change the number of confirmations required by the minter to process a deposit and mint ckBTC to 4.
+* Ensure that the deposit amount is at least 300 sats, which corresponds to the dust limit of the Bitcoin network for the type of addresses used for deposits (P2WPKH).
+
 ```
-git fetch/
-git checkout 61d605fd75c61072bfeed9a61adf7eca2b8dca5f
-didc encode '()' | xxd -r -p | sha256sum
+git fetch
+git checkout b2d93fe83a8f878a331d73df1cffed72022860b2
+didc encode -d rs/bitcoin/ckbtc/minter/ckbtc_minter.did -t '(MinterArg)' '(variant { Upgrade = opt record { deposit_btc_min_amount = opt (300 : nat64); min_confirmations = opt (4 : nat32); } })' | xxd -r -p | sha256sum
 ```
 
 ## Wasm Verification
@@ -49,7 +55,7 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 
 ```
 git fetch
-git checkout 61d605fd75c61072bfeed9a61adf7eca2b8dca5f
+git checkout b2d93fe83a8f878a331d73df1cffed72022860b2
 "./ci/container/build-ic.sh" "--canisters"
 sha256sum ./artifacts/canisters/ic-ckbtc-minter.wasm.gz
 ```
