@@ -51,7 +51,7 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     let byte_output = ro.output_32_bytes()?;
 
     assert_eq!(
-        hex::encode(&byte_output),
+        hex::encode(byte_output),
         "2ba794c0eb2e7d78f4deec97c38f28bff862b52a8c88d187d45e4fbcdc6219fe"
     );
 
