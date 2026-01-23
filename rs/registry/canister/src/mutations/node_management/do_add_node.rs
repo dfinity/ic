@@ -1,6 +1,5 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
 use attestation::{
-    SevAttestationPackage,
     attestation_package::{
         AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
     },
@@ -277,17 +276,12 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
 ///
 /// If `node_registration_attestation` is not provided, returns `None` (non-SEV node).
 fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u8>>, String> {
-    let Some(attestation_bytes) = &payload.node_registration_attestation else {
+    let Some(attestation_package) = &payload.node_registration_attestation else {
         return Ok(None);
     };
 
-    let attestation_package =
-        SevAttestationPackage::decode(attestation_bytes.as_slice()).map_err(|e| {
-            format!("{LOG_PREFIX}do_add_node: Failed to decode node_registration_attestation: {e}")
-        })?;
-
     let parsed = ParsedSevAttestationPackage::parse(
-        attestation_package,
+        attestation_package.clone(),
         SevRootCertificateVerification::Verify,
     )
     .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to verify attestation package: {e}"))?;

@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/sev/attestation",
     "//rs/nervous_system/chunks",
     "//rs/registry/transport",
     "//rs/types/base_types",

@@ -1,3 +1,4 @@
+use attestation::SevAttestationPackage;
 use candid::{CandidType, Deserialize};
 use ic_base_types::NodeId;
 use serde::Serialize;
@@ -168,7 +169,7 @@ pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
 }
 
 /// The payload of an update request to add a new node.
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct AddNodePayload {
     // Raw bytes of the protobuf, but these should be PublicKey
     pub node_signing_pk: Vec<u8>,
@@ -185,7 +186,7 @@ pub struct AddNodePayload {
     /// SEV-SNP attestation package for node registration. When provided, the registry canister
     /// will verify the attestation and extract the chip_id from the attestation report.
     #[serde(default)]
-    pub node_registration_attestation: Option<Vec<u8>>,
+    pub node_registration_attestation: Option<SevAttestationPackage>,
 
     pub public_ipv4_config: Option<IPv4Config>,
     pub domain: Option<String>,

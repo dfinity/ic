@@ -6,6 +6,7 @@ package(default_visibility = [
     "//rs:ic-os-pkg",
     "//rs/orchestrator:__pkg__",
     "//rs/registry/canister:__pkg__",
+    "//rs/registry/canister/api:__pkg__",
 ])
 
 cargo_build_script(

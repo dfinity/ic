@@ -12851,6 +12851,7 @@ dependencies = [
 name = "ic-registry-canister-api"
 version = "0.9.0"
 dependencies = [
+ "attestation",
  "candid",
  "ic-base-types",
  "ic-nervous-system-chunks",

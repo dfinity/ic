@@ -807,7 +807,7 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 fn generate_node_registration_attestation(
     log: &ReplicaLogger,
     node_signing_pk: &[u8],
-) -> Option<Vec<u8>> {
+) -> Option<SevAttestationPackage> {
     use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
     use config_types::GuestOSConfig;
     use der::asn1::OctetStringRef;
@@ -917,18 +917,15 @@ fn generate_node_registration_attestation(
         }
     };
 
-    // Convert ParsedSevAttestationPackage to SevAttestationPackage and encode it
-    use prost::Message;
+    // Convert ParsedSevAttestationPackage to SevAttestationPackage
     let sev_attestation_package: SevAttestationPackage = attestation_package.into();
-    let encoded = sev_attestation_package.encode_to_vec();
 
     info!(
         log,
-        "Successfully generated node registration attestation package ({} bytes)",
-        encoded.len()
+        "Successfully generated node registration attestation package"
     );
 
-    Some(encoded)
+    Some(sev_attestation_package)
 }
 
 /// Non-Linux stub that always returns None.
@@ -936,7 +933,7 @@ fn generate_node_registration_attestation(
 fn generate_node_registration_attestation(
     _log: &ReplicaLogger,
     _node_signing_pk: &[u8],
-) -> Option<Vec<u8>> {
+) -> Option<SevAttestationPackage> {
     None
 }
 
