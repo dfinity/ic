@@ -217,16 +217,18 @@ pub struct CanisterHttpRequestContext {
     #[prost(message, optional, tag = "12")]
     pub pricing_version: ::core::option::Option<PricingVersion>,
     #[prost(message, optional, tag = "13")]
-    pub payment_info: ::core::option::Option<PaymentInfo>,
+    pub refund_status: ::core::option::Option<RefundStatus>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct PaymentInfo {
+pub struct RefundStatus {
     #[prost(message, optional, tag = "1")]
-    pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    pub refundable_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
     #[prost(message, optional, tag = "2")]
-    pub already_refunded: ::core::option::Option<super::super::queues::v1::Cycles>,
-    #[prost(message, repeated, tag = "3")]
-    pub refunded_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
+    pub per_replica_allowance: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, optional, tag = "3")]
+    pub refunded_cycles: ::core::option::Option<super::super::queues::v1::Cycles>,
+    #[prost(message, repeated, tag = "4")]
+    pub refunding_nodes: ::prost::alloc::vec::Vec<super::super::super::types::v1::NodeId>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct PricingVersion {
