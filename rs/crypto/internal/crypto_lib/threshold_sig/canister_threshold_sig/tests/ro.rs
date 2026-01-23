@@ -19,21 +19,21 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     ro.add_scalar("s1", &s1)?;
     ro.add_u64("round", 1)?;
 
-    let c1 = ro.output_scalars(curve_type, 2)?;
+    let (c0, c1) = ro.output_two_scalars(curve_type)?;
 
     assert_eq!(
-        hex::encode(c1[0].serialize()),
+        hex::encode(c0.serialize()),
         "e1cc3546518665d7321cd5b5aa7cbae2ae9d8bad3a2f28b495ac3d3af139b460"
     );
     assert_eq!(
-        hex::encode(c1[1].serialize()),
+        hex::encode(c1.serialize()),
         "d46b5ef6fafdaf2a1e50f7b979f1fd31e058e9c2ab69115c4f2c15077ae94969"
     );
 
     // Test random oracle chaining:
     let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep-2");
 
-    ro.add_scalar("c1", &c1[1])?;
+    ro.add_scalar("c1", &c1)?;
     ro.add_u64("round", 2)?;
 
     let c2 = ro.output_scalar(curve_type)?;
@@ -66,33 +66,6 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
         hex::encode(pt.serialize()),
         "030b9c4cb298281f22ec595aae038002d30040d3550cbab47add0cc421f9ab8556"
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_random_oracle_max_outputs() -> CanisterThresholdResult<()> {
-    for curve_type in EccCurveType::all() {
-        /*
-        Our XMD hash_to_scalar construction consumes 256+128 bits per
-        scalar. XMD with SHA-256 can produce at most 255*32 = 8160 bytes.
-        Thus we can produce at most exactly 170 challenges (which ought to
-        be enough for anyone!) - verify that we Err appropriately for
-        larger requests.
-         */
-
-        for i in 1..170 {
-            let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep");
-            ro.add_usize("input", i)?;
-            assert_eq!(ro.output_scalars(curve_type, i).unwrap().len(), i);
-        }
-
-        for i in 171..256 {
-            let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep");
-            ro.add_usize("input", i)?;
-            assert!(ro.output_scalars(curve_type, i).is_err());
-        }
-    }
 
     Ok(())
 }

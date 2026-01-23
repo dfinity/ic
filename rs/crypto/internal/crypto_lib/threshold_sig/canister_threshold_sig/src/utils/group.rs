@@ -314,40 +314,42 @@ impl EccScalar {
         input: &[u8],
         domain_separator: &[u8],
     ) -> CanisterThresholdResult<Self> {
-        let h = Self::hash_to_several_scalars(curve, 1, input, domain_separator)?;
-        Ok(h[0].clone())
-    }
-
-    /// Hash an input into multiple Scalar values
-    pub fn hash_to_several_scalars(
-        curve: EccCurveType,
-        count: usize,
-        input: &[u8],
-        domain_separator: &[u8],
-    ) -> CanisterThresholdResult<Vec<Self>> {
         let s_bits = curve.scalar_bits();
         let security_level = curve.security_level();
 
         let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
-        let len_in_bytes = count * field_len;
 
         let uniform_bytes = ic_crypto_internal_seed::varlen_xmd::<ic_crypto_sha2::Sha256>(
             input,
             domain_separator,
-            len_in_bytes,
+            field_len,
         )?;
 
-        let mut out = Vec::with_capacity(count);
+        EccScalar::from_bytes_wide(curve, &uniform_bytes)
+    }
 
-        for i in 0..count {
-            let s = EccScalar::from_bytes_wide(
-                curve,
-                &uniform_bytes[i * field_len..(i + 1) * field_len],
-            )?;
-            out.push(s);
-        }
+    /// Hash an input into multiple Scalar values
+    pub fn hash_to_two_scalars(
+        curve: EccCurveType,
+        input: &[u8],
+        domain_separator: &[u8],
+    ) -> CanisterThresholdResult<(Self, Self)> {
+        let s_bits = curve.scalar_bits();
+        let security_level = curve.security_level();
 
-        Ok(out)
+        let field_len = (s_bits + security_level).div_ceil(8); // "L" in spec
+
+        let uniform_bytes = ic_crypto_internal_seed::varlen_xmd::<ic_crypto_sha2::Sha256>(
+            input,
+            domain_separator,
+            2 * field_len,
+        )?;
+
+        let s0 = EccScalar::from_bytes_wide(curve, &uniform_bytes[..field_len])?;
+
+        let s1 = EccScalar::from_bytes_wide(curve, &uniform_bytes[field_len..])?;
+
+        Ok((s0, s1))
     }
 
     /// Deserialize a scalar value (with tag)
