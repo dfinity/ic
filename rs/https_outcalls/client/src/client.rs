@@ -453,7 +453,7 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{PaymentInfo, PricingVersion, Replication, Transform};
+    use ic_types::canister_http::{PricingVersion, RefundStatus, Replication, Transform};
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
@@ -546,7 +546,7 @@ mod tests {
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
                 pricing_version: PricingVersion::Legacy,
-                payment_info: PaymentInfo::default(),
+                refund_status: RefundStatus::default(),
             },
             socks_proxy_addrs: vec![],
         }

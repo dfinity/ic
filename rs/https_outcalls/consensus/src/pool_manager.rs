@@ -747,7 +747,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -855,7 +855,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
@@ -970,7 +970,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1104,7 +1104,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1244,7 +1244,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -1349,7 +1349,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1463,7 +1463,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1646,7 +1646,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -1759,7 +1759,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -1884,7 +1884,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -2017,7 +2017,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -2141,7 +2141,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -2259,7 +2259,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 state_manager
@@ -2409,7 +2409,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
                 state_manager
                     .get_mut()
@@ -2509,7 +2509,7 @@ pub mod test {
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
                     pricing_version: PricingVersion::Legacy,
-                    payment_info: PaymentInfo::default(),
+                    refund_status: RefundStatus::default(),
                 };
 
                 // Expect times to be called exactly once to check that already
