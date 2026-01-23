@@ -693,7 +693,7 @@ impl SystemTestGroup {
             false,
         );
 
-        let assert_no_critical_errors_fn: Option<(&str, Box<dyn PotSetupFn>)> =
+        let assert_no_critical_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
             if self.assert_no_critical_errors {
                 let teardown_fn = |env: TestEnv| {
                     let nodes: Vec<IcNodeSnapshot> = env
@@ -706,7 +706,7 @@ impl SystemTestGroup {
                     }
                 };
                 Some((
-                    "{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn",
+                    format!("{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn"),
                     Box::new(teardown_fn),
                 ))
             } else {
@@ -716,13 +716,13 @@ impl SystemTestGroup {
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
             .into_iter()
-            .map(|teardown| ("{TEARDOWN_TASK_NAME}_fn", teardown))
+            .map(|teardown| (format!("{TEARDOWN_TASK_NAME}_fn"), teardown))
             .chain(assert_no_critical_errors_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
                 let group_ctx = group_ctx.clone();
                 let teardown_task = subproc(
-                    TaskId::Test(teardown_name.to_string()),
+                    TaskId::Test(teardown_name.clone()),
                     move || {
                         debug!(logger, ">>> {teardown_name}");
                         let env = ensure_setup_env(group_ctx);
