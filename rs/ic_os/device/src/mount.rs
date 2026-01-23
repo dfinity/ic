@@ -1,6 +1,7 @@
+#[cfg(target_os = "linux")]
 use crate::device_mapping::LoopDeviceWrapper;
 use crate::io::retry_if_io_error;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -8,6 +9,12 @@ use std::path::{Path, PathBuf};
 use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PartitionSelector {
+    ByUuid(Uuid),
+    ByLabel(String),
+}
 
 // There are two traits here:
 // 1. PartitionProvider (high level): provides access to partitions by UUID
@@ -22,12 +29,12 @@ use uuid::Uuid;
 // Mounter (to minimize the use of mocks) while a unit-test may want to use MockPartitionProvider
 // (to allow for more fine-grained control).
 
-/// Trait for accessing partitions by UUID from a device
+/// Trait for accessing partitions from a device
 pub trait PartitionProvider: Send + Sync {
-    /// Mounts a partition by its UUID with specified mount options.
+    /// Mounts a partition by its selector with specified mount options.
     ///
     /// # Arguments
-    /// * `partition_uuid` - UUID of the partition to mount
+    /// * `selector` - Selector for the partition
     /// * `options` - Mount options like read-only flag
     ///
     /// # Returns
@@ -35,7 +42,7 @@ pub trait PartitionProvider: Send + Sync {
     /// The mount is automatically cleaned up when the returned object is dropped.
     fn mount_partition(
         &self,
-        partition_uuid: Uuid,
+        selector: PartitionSelector,
         options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>>;
 }
@@ -132,9 +139,17 @@ impl Drop for GptPartitionProvider {
 impl PartitionProvider for GptPartitionProvider {
     fn mount_partition(
         &self,
-        partition_uuid: Uuid,
+        selector: PartitionSelector,
         options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>> {
+        let partition_uuid = match selector {
+            PartitionSelector::ByUuid(uuid) => uuid,
+            PartitionSelector::ByLabel(_) => {
+                // Maybe we could implement it with libblkid
+                anyhow::bail!("GptPartitionProvider does not support ByLabel selector")
+            }
+        };
+
         let partition = self
             .gpt
             .partitions()
@@ -151,6 +166,35 @@ impl PartitionProvider for GptPartitionProvider {
     }
 }
 
+/// Partition provider that uses system device paths directly under `/dev/disk/`.
+#[cfg(target_os = "linux")]
+pub struct UdevPartitionProvider;
+
+#[cfg(target_os = "linux")]
+impl PartitionProvider for UdevPartitionProvider {
+    fn mount_partition(
+        &self,
+        selector: PartitionSelector,
+        _options: MountOptions,
+    ) -> Result<Box<dyn MountedPartition>> {
+        let device_path = match selector {
+            PartitionSelector::ByUuid(uuid) => format!("/dev/disk/by-partuuid/{uuid}"),
+            PartitionSelector::ByLabel(label) => format!("/dev/disk/by-label/{label}"),
+        };
+        ensure!(
+            Path::new(&device_path).exists(),
+            "Path {device_path} does not exist"
+        );
+
+        let tempdir = TempDir::new()?;
+        Ok(Box::new(LoopDeviceMount {
+            mount: Mount::new(device_path, &tempdir)?,
+            _loop_device: None,
+            _tempdir: tempdir,
+        }))
+    }
+}
+
 /// Real filesystem mount using system mount with loop device
 #[cfg(target_os = "linux")]
 struct LoopDeviceMount {
@@ -160,10 +204,11 @@ struct LoopDeviceMount {
     // drop order as well. According to the spec, fields are dropped in the
     // order of declaration.
     mount: Mount,
-    _loop_device: LoopDeviceWrapper,
+    _loop_device: Option<LoopDeviceWrapper>,
     _tempdir: TempDir,
 }
 
+#[cfg(target_os = "linux")]
 impl Drop for LoopDeviceMount {
     fn drop(&mut self) {
         if let Err(e) = retry_if_io_error(nix::Error::EBUSY, || {
@@ -217,7 +262,7 @@ impl Mounter for LoopDeviceMounter {
 
         Ok(Box::new(LoopDeviceMount {
             mount,
-            _loop_device: loop_device,
+            _loop_device: Some(loop_device),
             _tempdir: tempdir,
         }))
     }
@@ -236,25 +281,29 @@ pub mod testing {
 
     /// Test partition provider that uses pre-populated directories
     pub struct MockPartitionProvider {
-        pub partitions: HashMap<Uuid, Arc<TempDir>>,
+        partitions: HashMap<PartitionSelector, Arc<TempDir>>,
     }
 
     impl MockPartitionProvider {
-        pub fn new(partitions: HashMap<Uuid, Arc<TempDir>>) -> Self {
+        pub fn new(partitions: HashMap<PartitionSelector, Arc<TempDir>>) -> Self {
             Self { partitions }
+        }
+
+        pub fn get_partition(&self, selector: PartitionSelector) -> Option<&Path> {
+            self.partitions.get(&selector).map(|dir| dir.path())
         }
     }
 
     impl PartitionProvider for MockPartitionProvider {
         fn mount_partition(
             &self,
-            partition_uuid: Uuid,
+            selector: PartitionSelector,
             _options: MountOptions,
         ) -> Result<Box<dyn MountedPartition>> {
             let partition_dir = self
                 .partitions
-                .get(&partition_uuid)
-                .with_context(|| format!("Could not find partition {partition_uuid}"))?;
+                .get(&selector)
+                .with_context(|| format!("Could not find partition {selector:?}"))?;
 
             Ok(Box::new(MockMount {
                 mount_point: partition_dir.clone(),
