@@ -43,6 +43,7 @@ use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
+use icrc_ledger_types::icrc::metadata_key::MetadataKey;
 use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
@@ -368,10 +369,10 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
         token_symbol: TOKEN_SYMBOL.to_string(),
         decimals: Some(DECIMAL_PLACES),
         metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            (NAT_META_KEY.to_string(), NAT_META_VALUE.into()),
+            (INT_META_KEY.to_string(), INT_META_VALUE.into()),
+            (TEXT_META_KEY.to_string(), TEXT_META_VALUE.into()),
+            (BLOB_META_KEY.to_string(), BLOB_META_VALUE.into()),
         ],
         archive_options: ArchiveOptions {
             trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
@@ -464,9 +465,10 @@ pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(In
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -495,13 +497,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
 
@@ -516,9 +521,10 @@ pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> 
 where
     T: CandidType,
 {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
+    fn lookup<'a>(metadata: &'a BTreeMap<MetadataKey, Value>, key: &str) -> &'a Value {
+        let key = MetadataKey::parse(key).unwrap();
         metadata
-            .get(key)
+            .get(&key)
             .unwrap_or_else(|| panic!("no metadata key {key} in map {metadata:?}"))
     }
 
@@ -547,13 +553,16 @@ where
     );
 
     let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
     assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
+        lookup(&metadata, MetadataKey::ICRC1_NAME),
+        &Value::from(TOKEN_NAME)
+    );
+    assert_eq!(
+        lookup(&metadata, MetadataKey::ICRC1_SYMBOL),
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(
-        lookup(&metadata, "icrc1:decimals"),
+        lookup(&metadata, MetadataKey::ICRC1_DECIMALS),
         &Value::from(DECIMAL_PLACES as u64)
     );
     // Not all ICRC-1 implementations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementations.
@@ -1845,7 +1854,8 @@ where
     let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
 
     let metadata_res = metadata(&env, canister_id);
-    let metadata_value = metadata_res.get(TEXT_META_KEY).unwrap();
+    let text_meta_key = MetadataKey::parse(TEXT_META_KEY).unwrap();
+    let metadata_value = metadata_res.get(&text_meta_key).unwrap();
     assert_eq!(*metadata_value, Value::Text(TEXT_META_VALUE.to_string()));
 
     const OTHER_TOKEN_SYMBOL: &str = "NEWSYMBOL";
@@ -1868,7 +1878,7 @@ where
 
     let metadata_res_after_upgrade = metadata(&env, canister_id);
     assert_eq!(
-        *metadata_res_after_upgrade.get(TEXT_META_KEY).unwrap(),
+        *metadata_res_after_upgrade.get(&text_meta_key).unwrap(),
         Value::Text(TEXT_META_VALUE_2.to_string())
     );
 
@@ -5627,11 +5637,11 @@ pub fn test_fee_collector_107_upgrade_legacy_some_to_set<T>(
 pub mod metadata {
     use super::*;
 
-    const METADATA_DECIMALS: &str = "icrc1:decimals";
-    const METADATA_NAME: &str = "icrc1:name";
-    const METADATA_SYMBOL: &str = "icrc1:symbol";
-    const METADATA_FEE: &str = "icrc1:fee";
-    const METADATA_MAX_MEMO_LENGTH: &str = "icrc1:max_memo_length";
+    const METADATA_DECIMALS: &str = MetadataKey::ICRC1_DECIMALS;
+    const METADATA_NAME: &str = MetadataKey::ICRC1_NAME;
+    const METADATA_SYMBOL: &str = MetadataKey::ICRC1_SYMBOL;
+    const METADATA_FEE: &str = MetadataKey::ICRC1_FEE;
+    const METADATA_MAX_MEMO_LENGTH: &str = MetadataKey::ICRC1_MAX_MEMO_LENGTH;
     const FORBIDDEN_METADATA: [&str; 5] = [
         METADATA_DECIMALS,
         METADATA_NAME,
@@ -5648,12 +5658,12 @@ pub mod metadata {
     {
         let env = StateMachine::new();
 
-        let forbidden_metadata = vec![
-            Value::entry(METADATA_DECIMALS, 8u64),
-            Value::entry(METADATA_NAME, "BogusName"),
-            Value::entry(METADATA_SYMBOL, "BN"),
-            Value::entry(METADATA_FEE, Nat::from(10_000u64)),
-            Value::entry(METADATA_MAX_MEMO_LENGTH, 8u64),
+        let forbidden_metadata: Vec<(String, Value)> = vec![
+            (METADATA_DECIMALS.to_string(), 8u64.into()),
+            (METADATA_NAME.to_string(), "BogusName".into()),
+            (METADATA_SYMBOL.to_string(), "BN".into()),
+            (METADATA_FEE.to_string(), Nat::from(10_000u64).into()),
+            (METADATA_MAX_MEMO_LENGTH.to_string(), 8u64.into()),
         ];
 
         let args = encode_init_args(InitArgs {
@@ -5717,7 +5727,7 @@ pub mod metadata {
         // Verify that specifying any of the forbidden metadata in the init args is not possible.
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let args = encode_init_args(InitArgs {
-                metadata: vec![Value::entry(*forbidden_metadata, 8u64)],
+                metadata: vec![(forbidden_metadata.to_string(), 8u64.into())],
                 ..init_args(vec![])
             });
             let args = Encode!(&args).unwrap();
@@ -5743,7 +5753,7 @@ pub mod metadata {
         // Verify that also upgrading does not accept the forbidden metadata
         for forbidden_metadata in FORBIDDEN_METADATA.iter() {
             let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
-                metadata: Some(vec![Value::entry(*forbidden_metadata, 8u64)]),
+                metadata: Some(vec![(forbidden_metadata.to_string(), 8u64.into())]),
                 ..UpgradeArgs::default()
             }));
             match env.upgrade_canister(
@@ -5770,6 +5780,86 @@ pub mod metadata {
             Encode!(&ledger_upgrade_arg).unwrap(),
         )
         .expect("should successfully upgrade the ledger");
+    }
+
+    /// Invalid metadata keys (not following namespace:key format) are rejected during init.
+    pub fn test_init_with_invalid_metadata_keys_fails<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        const INVALID_KEYS: [&str; 3] = [
+            "invalid_no_colon",  // missing colon separator
+            ":key_no_namespace", // empty namespace
+            "namespace:",        // empty key
+        ];
+
+        for invalid_key in INVALID_KEYS.iter() {
+            let args = encode_init_args(InitArgs {
+                metadata: vec![(invalid_key.to_string(), "value".into())],
+                ..init_args(vec![])
+            });
+            let args = Encode!(&args).unwrap();
+            match env.install_canister(ledger_wasm.clone(), args, None) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to install ledger with invalid metadata key '{}'",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
+    }
+
+    /// Invalid metadata keys are rejected during upgrade when existing metadata is all valid.
+    pub fn test_upgrade_with_invalid_metadata_keys_fails_when_existing_valid<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        let env = StateMachine::new();
+
+        // Install ledger with valid metadata
+        let args = encode_init_args(InitArgs {
+            metadata: vec![("custom:valid_key".to_string(), "value".into())],
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm.clone(), args, None)
+            .expect("should successfully install ledger with valid metadata");
+
+        const INVALID_KEYS: [&str; 3] = ["invalid_no_colon", ":key_no_namespace", "namespace:"];
+
+        // Upgrading with invalid keys should fail when existing metadata is valid
+        for invalid_key in INVALID_KEYS.iter() {
+            let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                metadata: Some(vec![(invalid_key.to_string(), "new_value".into())]),
+                ..UpgradeArgs::default()
+            }));
+            match env.upgrade_canister(
+                canister_id,
+                ledger_wasm.clone(),
+                Encode!(&ledger_upgrade_arg).unwrap(),
+            ) {
+                Ok(_) => {
+                    panic!(
+                        "should not be able to upgrade ledger with invalid metadata key '{}' when existing metadata is valid",
+                        invalid_key
+                    )
+                }
+                Err(err) => {
+                    err.assert_contains(ErrorCode::CanisterCalledTrap, "invalid metadata key");
+                }
+            }
+        }
     }
 }
 

@@ -170,7 +170,7 @@ DEV_DATA = [
     "//rs/sns/swap:sns-swap-canister",
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
     "@cycles-ledger.wasm.gz//file",
-    "@subnet_rental_canister//file",
+    "@mainnet_canisters//:subnet_rental.wasm.gz",
 ]
 
 DEV_ENV = {
@@ -201,7 +201,7 @@ DEV_ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rust_canisters/xrc_mock:xrc_mock_canister)",
-    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
+    "SUBNET_RENTAL_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:subnet_rental.wasm.gz)",
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
 }
@@ -353,27 +353,6 @@ rust_ic_test(
     ],
     aliases = ALIASES,
     crate_root = "src/upgrade_canisters_with_golden_nns_state.rs",
-    data = DEV_DATA,
-    env = DEV_ENV,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = [
-        "nns_tests_nightly",  # Run this test in the nns-tests-nightly GitHub Action job.
-        "no-sandbox",  # such that the test can access the file $SSH_AUTH_SOCK.
-        "requires-network",  # Because mainnet state is downloaded (and used).
-    ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-rust_ic_test(
-    name = "node_provider_remuneration_with_golden_nns_state",
-    # This uses on the order of 10 GB of disk space.
-    # Therefore, size = "large" is not large enough.
-    size = "enormous",
-    srcs = [
-        "src/node_provider_remuneration_with_golden_nns_state.rs",
-    ],
-    aliases = ALIASES,
-    crate_root = "src/node_provider_remuneration_with_golden_nns_state.rs",
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

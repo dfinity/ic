@@ -4,7 +4,7 @@ use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, IcNodeContainer, get_dependency_path},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer, get_dependency_path_from_env},
 };
 use ic_system_test_driver::systest;
 use sdk_system_tests::{config::configure_local_network, dfx::DfxCommandContext};
@@ -56,11 +56,9 @@ fn test(env: TestEnv) {
 
     dfx.version();
 
-    let path = std::env::var("WALLET_CANISTER_0_7_2_WASM")
-        .expect("Environment variable 'WALLET_CANISTER_0_7_2_WASM' should be set");
-
     let wallet_wasm_path: PathBuf =
-        fs::canonicalize(get_dependency_path(path)).expect("Could not read wallet canister");
+        fs::canonicalize(get_dependency_path_from_env("WALLET_CANISTER_0_7_2_WASM"))
+            .expect("Could not read wallet canister");
 
     info!(
         log,

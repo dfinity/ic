@@ -1,11 +1,7 @@
-load("//rs/tests:common.bzl", "IC_GATEWAY_DATA", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS", "MAINNET_ENV", "NNS_CANISTER_RUNTIME_DEPS", "SNS_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
-
-IC_GATEWAY_UVM_IMAGE = [
-    "//rs/tests:ic_gateway_uvm_config_image",
-]
 
 # the "_test" postfixes in names are dropped on purpose since this target is meant for interactive use.
 
@@ -73,12 +69,12 @@ system_test(
 
 system_test_nns(
     name = "small",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -90,12 +86,12 @@ system_test_nns(
 
 system_test_nns(
     name = "small_bitcoin",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -108,12 +104,12 @@ system_test_nns(
 
 system_test_nns(
     name = "small_high_perf",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -141,17 +137,16 @@ system_test(
 
 system_test_nns(
     name = "small_nns",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -165,17 +160,16 @@ system_test_nns(
 
 system_test_nns(
     name = "small_with_query_stats",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -188,17 +182,16 @@ system_test_nns(
 
 system_test_nns(
     name = "sns_testing",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | SNS_CANISTER_RUNTIME_DEPS | {
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -213,12 +206,12 @@ system_test_nns(
 
 system_test_nns(
     name = "medium",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -239,7 +232,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -253,13 +246,13 @@ system_test_nns(
 
 system_test_nns(
     name = "io_perf_benchmark",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
     tags = [
         "dynamic_testnet",
         "manual",
     ],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/registry/subnet_type",
@@ -273,18 +266,17 @@ system_test_nns(
 
 system_test_nns(
     name = "src_testing",
-    data = IC_GATEWAY_UVM_IMAGE,
     enable_metrics = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = SNS_CANISTER_RUNTIME_DEPS | {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | SNS_CANISTER_RUNTIME_DEPS | {
         "XRC_WASM_PATH": "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -303,14 +295,14 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
-    data = IC_GATEWAY_DATA,
     enable_metrics = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_setupos_img = True,
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         "//rs/limits",
@@ -325,7 +317,6 @@ system_test_nns(
 
 system_test_nns(
     name = "mainnet_nns",
-    data = IC_GATEWAY_DATA + ["//rs/tests:recovery/binaries"],
     enable_metrics = True,
     env = MAINNET_ENV,
     env_inherit = ["SSH_AUTH_SOCK"],
@@ -340,7 +331,7 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
-    runtime_deps = {
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
         # TODO (CON-1624): Remove those dependencies once #8170 reached mainnet NNS
         "IC_RECOVERY_PATH": "//rs/recovery:ic-recovery",
         "IC_REPLAY_PATH": "//rs/replay:ic-replay",
