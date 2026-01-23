@@ -20,13 +20,11 @@ ic-ledger-core = { path = "../common/ledger_core" }
 ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
-lazy_static = { workspace = true }
 on_wire = { path = "../../rust_canisters/on_wire" }
 prost = { workspace = true }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
-strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]

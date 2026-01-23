@@ -8,7 +8,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &[manifest.join("proto/api.proto")],
             &[
                 manifest.join("proto"),
-                manifest.join("../../attestation/proto"),
+                manifest.join("../../sev/attestation/proto"),
             ],
         )?;
 

@@ -77,7 +77,7 @@ mod tests {
         },
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PAGE_SIZE, PageIndex},
-        testing::ReplicatedStateTesting,
+        testing::{ReplicatedStateTesting, StreamTesting},
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
