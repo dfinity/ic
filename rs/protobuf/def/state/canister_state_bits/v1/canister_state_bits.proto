@@ -409,7 +409,7 @@ message TaskQueue {
   repeated ExecutionTask queue = 3;
 }
 
-// Next ID: 57
+// Next ID: 63
 message CanisterStateBits {
   reserved 1;
   reserved "controller";
@@ -438,6 +438,12 @@ message CanisterStateBits {
   uint64 skipped_round_due_to_no_messages = 17;
   // In how many rounds a canister is executed.
   uint64 executed = 18;
+  uint64 instructions_executed = 57;
+  uint64 ingress_messages_executed = 58;
+  uint64 remote_subnet_messages_executed = 59;
+  uint64 local_subnet_messages_executed = 60;
+  uint64 http_outcalls_executed = 61;
+  uint64 heartbeats_and_global_timers_executed = 62;
   reserved 19;
   reserved "executed_and_exhausted_its_messages";
   bytes certified_data = 20;

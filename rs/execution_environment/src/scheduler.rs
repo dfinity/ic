@@ -1924,7 +1924,9 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        let canister_metrics = &mut canister.system_state.canister_metrics;
+        canister_metrics.executed += 1;
+        canister_metrics.instructions_executed += total_instructions_used;
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {

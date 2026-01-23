@@ -114,6 +114,18 @@ enum ConsumingCycles {
     No,
 }
 
+/// Keeps track of the types of messages executed by the canister.
+/// This will be useful for load balancing purposes (e.g. subnet splitting) to determine which
+/// canisters contribute to heavy subnet load.
+#[derive(Clone, Eq, PartialEq, Debug, Default)]
+pub struct LoadMetrics {
+    pub ingress_messages_executed: u64,
+    pub remote_subnet_messages_executed: u64,
+    pub local_subnet_messages_executed: u64,
+    pub http_outcalls_executed: u64,
+    pub heartbeats_and_global_timers_executed: u64,
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
@@ -123,6 +135,8 @@ pub struct CanisterMetrics {
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
     pub executed: u64,
+    pub instructions_executed: NumInstructions,
+    pub load_metrics: LoadMetrics,
     pub interrupted_during_execution: u64,
     pub consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
@@ -136,6 +150,8 @@ impl CanisterMetrics {
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+        instructions_executed: NumInstructions,
+        load_metrics: LoadMetrics,
     ) -> Self {
         Self {
             scheduled_as_first,
@@ -144,6 +160,8 @@ impl CanisterMetrics {
             interrupted_during_execution,
             consumed_cycles,
             consumed_cycles_by_use_cases,
+            instructions_executed,
+            load_metrics,
         }
     }
 
