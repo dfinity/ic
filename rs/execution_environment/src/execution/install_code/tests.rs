@@ -1175,7 +1175,7 @@ fn subnet_split_cleans_in_progress_install_code_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
     Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)

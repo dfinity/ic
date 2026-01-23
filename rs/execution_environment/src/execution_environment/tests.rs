@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
-use more_asserts::assert_gt;
 use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
@@ -42,6 +41,7 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
+use more_asserts::assert_gt;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
 use std::sync::Arc;
@@ -1632,7 +1632,7 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
     Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)

@@ -244,7 +244,8 @@ fn composite_query_callgraph_depth_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx != 0 && canister_idx < canisters.len());
+        assert_ne!(canister_idx, 0);
+        assert_lt!(canister_idx, canisters.len());
         wasm().stable_grow(10).composite_query(
             canisters[canister_idx],
             call_args()
@@ -363,7 +364,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
         canisters: &[ic_types::CanisterId],
         canister_idx: usize,
     ) -> ic_universal_canister::PayloadBuilder {
-        assert!(canister_idx < canisters.len());
+        assert_lt!(canister_idx, canisters.len());
 
         let reply = if canister_idx <= 1 {
             wasm().stable_size().reply_int()
@@ -1094,7 +1095,10 @@ fn query_stats_are_collected() {
         // Depending on whether we are looking at the root canister, or one of the child canisters,
         // instructions and payload sizes differ. All child canisters have the same cost though.
         if idx == 0 {
-            assert!(canister_query_stats.num_instructions > child_canister_num_instructions);
+            assert_gt!(
+                canister_query_stats.num_instructions,
+                child_canister_num_instructions
+            );
             assert_eq!(canister_query_stats.ingress_payload_size, 284);
             assert_eq!(canister_query_stats.egress_payload_size, 0);
         } else {
@@ -1221,9 +1225,9 @@ fn test_call_context_performance_counter_correctly_reported_on_composite_query()
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]

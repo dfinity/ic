@@ -67,6 +67,7 @@ use ic_types::{
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
+use more_asserts::{debug_assert_ge, debug_assert_le};
 use num_traits::{SaturatingAdd, SaturatingSub};
 use prometheus::IntCounter;
 use std::iter::zip;
@@ -1699,7 +1700,7 @@ impl CanisterManager {
 
         let memory_usage = canister.memory_usage();
         let wasm_chunk_store_size = canister.wasm_chunk_store_memory_usage();
-        debug_assert!(memory_usage >= wasm_chunk_store_size);
+        debug_assert_ge!(memory_usage, wasm_chunk_store_size);
         let new_memory_usage = memory_usage.saturating_sub(&wasm_chunk_store_size);
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
@@ -2541,7 +2542,7 @@ impl CanisterManager {
 
         let memory_usage = canister.memory_usage();
         let old_snapshot_size = snapshot.size();
-        debug_assert!(memory_usage >= old_snapshot_size);
+        debug_assert_ge!(memory_usage, old_snapshot_size);
         let new_memory_usage = memory_usage.saturating_sub(&old_snapshot_size);
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
@@ -3224,7 +3225,7 @@ pub fn uninstall_canister(
     canister.system_state.canister_version += 1;
 
     let new_allocated_bytes = canister.memory_allocated_bytes();
-    debug_assert!(new_allocated_bytes <= old_allocated_bytes);
+    debug_assert_le!(new_allocated_bytes, old_allocated_bytes);
 
     if let Some(round_limits) = round_limits {
         let deallocated_bytes = old_allocated_bytes.saturating_sub(&new_allocated_bytes);

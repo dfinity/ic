@@ -5134,7 +5134,7 @@ fn respect_max_paused_executions(
             .filter(|canister| canister.has_paused_execution())
             .count();
         // Make sure the `max_paused_executions` is respected after each round
-        assert!(paused_executions <= max_paused_executions);
+        assert_le!(paused_executions, max_paused_executions);
     });
 
     // Make sure all the messages are complete
@@ -6348,7 +6348,7 @@ fn subnet_split_cleans_in_progress_raw_rand_requests() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
     Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
@@ -6770,8 +6770,8 @@ fn charge_idle_canisters_for_full_execution_round() {
             }
             // Assert there is no divergency in accumulated priorities.
             let priority = scheduler_state.accumulated_priority - scheduler_state.priority_credit;
-            assert!(priority.get() <= 100 * multiplier as i64);
-            assert!(priority.get() >= -100 * multiplier as i64);
+            assert_le!(priority.get(), 100 * multiplier as i64);
+            assert_ge!(priority.get(), -100 * multiplier as i64);
 
             total_accumulated_priority += scheduler_state.accumulated_priority.get();
             total_priority_credit += scheduler_state.priority_credit.get();
