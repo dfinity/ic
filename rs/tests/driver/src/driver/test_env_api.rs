@@ -1131,17 +1131,45 @@ impl IcNodeSnapshot {
 
     pub fn assert_no_critical_errors(&self) {
         block_on(async {
-            let metric_name = "orchestrator_replica_process_start_attempts_total";
-            let metrics = MetricsFetcher::new_with_port(
+            // Check critical error counters in replica metrics.
+            let replica_metric_name_prefix = "critical_errors";
+            let replica_metrics_fetcher = MetricsFetcher::new(
                 std::iter::once(self.clone()),
-                vec![metric_name.to_string()],
+                vec![replica_metric_name_prefix.to_string()],
+            );
+            let replica_metrics = replica_metrics_fetcher
+                .fetch::<u64>()
+                .await
+                .expect("Failed to fetch replica metrics");
+            assert!(
+                !replica_metrics.is_empty(),
+                "No critical error counters were found for node {}",
+                self.node_id
+            );
+            for (name, value) in replica_metrics {
+                assert_eq!(
+                    value[0], 1,
+                    "Critical error {} raised by node {}",
+                    name, self.node_id
+                );
+            }
+
+            // Check if the replica crashed using orchestrator metrics.
+            let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
+            let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                vec![orchestrator_metric_name.to_string()],
                 9091,
             );
-            let vals = metrics
+            let orchestrator_metrics = orchestrator_metrics_fetcher
                 .fetch::<u64>()
                 .await
                 .expect("Failed to fetch orchestrator metrics");
-            assert_eq!(vals[metric_name][0], 1);
+            assert_eq!(
+                orchestrator_metrics[orchestrator_metric_name][0], 1,
+                "Node {} crashed during test",
+                self.node_id
+            );
         });
     }
 }
