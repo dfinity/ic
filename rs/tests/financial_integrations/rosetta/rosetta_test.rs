@@ -34,8 +34,7 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path,
-            get_dependency_path_from_env,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path_from_env,
         },
     },
     util::block_on,
@@ -426,14 +425,14 @@ fn rosetta_cli_data_check(conf_file: &str) {
 }
 
 fn rosetta_workspace_path() -> String {
-    get_dependency_path("rs/tests/rosetta_workspace")
+    get_dependency_path_from_env("ROSETTA_WORKSPACE_PATH")
         .into_os_string()
         .into_string()
         .unwrap()
 }
 
 fn rosetta_api_bin_path() -> PathBuf {
-    get_dependency_path("rs/rosetta-api/icp/ic-rosetta-api")
+    get_dependency_path_from_env("IC_ROSETTA_API_PATH")
 }
 
 fn rosetta_cli_bin_path() -> String {
