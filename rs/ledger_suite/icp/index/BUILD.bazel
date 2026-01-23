@@ -107,6 +107,7 @@ rust_ic_test(
 
 rust_ic_test(
     name = "retrieve_blocks_from_ledger_interval_test",
+    timeout = "long",
     srcs = ["tests/retrieve_blocks_from_ledger_interval.rs"],
     data = [
         ":ic-icp-index-canister.wasm.gz",
