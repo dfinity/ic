@@ -233,8 +233,7 @@ fn should_sync_according_to_interval() {
                 // Install a ledger with an initial balance for a1
                 let ledger_id =
                     install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
-
-                // Install an index with a specific interval
+                
                 let index_id = install_index(env, ledger_id);
 
                 let upgrade_arg = UpgradeArg {
