@@ -47,9 +47,7 @@ fn add_block(env: &StateMachine, canister_id: CanisterId, block: &Block) -> Resu
         .execute_ingress(canister_id, "add_block", req)
         .expect("Failed to call add_block")
         .bytes();
-    Decode!(&res, AddBlockResult)
-        .expect("Failed to decode AddBlockResult")
-        .map_err(|e| e)
+    Decode!(&res, AddBlockResult).expect("Failed to decode AddBlockResult")
 }
 
 fn add_raw_block(
@@ -63,9 +61,7 @@ fn add_raw_block(
         .execute_ingress(canister_id, "add_raw_block", req)
         .expect("Failed to call add_raw_block")
         .bytes();
-    Decode!(&res, AddBlockResult)
-        .expect("Failed to decode AddBlockResult")
-        .map_err(|e| e)
+    Decode!(&res, AddBlockResult).expect("Failed to decode AddBlockResult")
 }
 
 fn query_blocks(
@@ -122,9 +118,7 @@ fn create_transfer_block(
     timestamp: TimeStamp,
     parent_encoded: Option<EncodedBlock>,
 ) -> Block {
-    let parent_hash = parent_encoded
-        .as_ref()
-        .map(|encoded| Block::block_hash(encoded));
+    let parent_hash = parent_encoded.as_ref().map(Block::block_hash);
     Block {
         parent_hash,
         transaction: Transaction {
