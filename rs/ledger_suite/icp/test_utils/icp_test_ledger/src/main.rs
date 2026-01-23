@@ -35,11 +35,10 @@ pub fn add_block(block: CandidBlock) -> AddBlockResult {
         .try_into()
         .map_err(|e| format!("Failed to convert CandidBlock to Block: {}", e))?;
     let encoded_block = block.encode();
-    let result = BLOCKS.with(|blocks| {
+    BLOCKS.with(|blocks| {
         blocks.borrow_mut().insert(next_id, encoded_block);
         Ok(Nat::from(next_id))
-    });
-    result
+    })
 }
 
 /// Add a raw encoded block to the ledger storage
@@ -62,7 +61,6 @@ pub fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBloc
     BLOCKS.with(|blocks| {
         let blocks = blocks.borrow();
 
-        let start = start;
         let length = length.min(usize::MAX as u64) as usize;
         let end = (start + length as u64).min(chain_length);
 
@@ -75,10 +73,9 @@ pub fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBloc
             }
         }
 
-        let first_block_index = if result_blocks.is_empty() {
-            chain_length
-        } else {
-            start
+        let first_block_index = match result_blocks.is_empty() {
+            true => chain_length,
+            false => start,
         };
 
         QueryBlocksResponse {
