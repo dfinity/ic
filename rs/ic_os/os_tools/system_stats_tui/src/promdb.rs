@@ -45,74 +45,49 @@ impl IndexedScrapeLabelValueQuery {
             Some(s) => s,
             None => &HashMap::new(),
         };
+
         Self {
             indexes: match &value {
-                ValueQuery::Equals(val) => match indexes_for_label_name.get(val) {
-                    Some(ss) => ss.clone(),
-                    None => HashSet::new(),
-                },
+                ValueQuery::Equals(val) => {
+                    indexes_for_label_name.get(val).cloned().unwrap_or_default()
+                }
                 ValueQuery::DoesNotEqual(val) => {
-                    let hashset: HashSet<usize> = HashSet::from_iter(
-                        label_query
-                            .scrape
-                            .index
-                            .values()
-                            .flat_map(|x| x.values())
-                            .flat_map(|x| x.iter())
-                            .copied(),
-                    );
+                    let hashset: HashSet<_> = label_query
+                        .scrape
+                        .index
+                        .values()
+                        .flat_map(|x| x.values())
+                        .flatten()
+                        .copied()
+                        .collect();
                     match indexes_for_label_name.get(val) {
                         // Both label name and label value were found in the map.
                         Some(ss) => hashset.difference(ss).copied().collect(),
                         None => hashset,
                     }
                 }
-                ValueQuery::Matches(rex) => {
-                    let hashsets: Vec<&HashSet<usize>> = indexes_for_label_name
-                        .iter()
-                        .filter_map(|(v, n)| match rex.is_match(v) {
-                            true => Some(n),
-                            false => None,
-                        })
-                        .collect();
-                    if hashsets.is_empty() {
-                        HashSet::new()
-                    } else {
-                        hashsets[1..].iter().fold(hashsets[0].clone(), |acc, set| {
-                            acc.union(set).copied().collect()
-                        })
-                    }
-                }
+                ValueQuery::Matches(rex) => indexes_for_label_name
+                    .iter()
+                    .filter_map(|(v, n)| rex.is_match(v).then_some(n))
+                    .flatten()
+                    .copied()
+                    .collect(),
                 ValueQuery::DoesNotMatch(rex) => {
-                    let hashsets: Vec<&HashSet<usize>> = label_query
+                    let hashset: HashSet<_> = label_query
                         .scrape
                         .index
                         .values()
                         .flat_map(|x| x.values())
+                        .flatten()
+                        .copied()
                         .collect();
-                    let hashset = if hashsets.is_empty() {
-                        HashSet::new()
-                    } else {
-                        hashsets[1..].iter().fold(hashsets[0].clone(), |acc, set| {
-                            acc.union(set).copied().collect()
-                        })
-                    };
-                    let exclude_these: Vec<&HashSet<usize>> = indexes_for_label_name
+                    let exclude_these_indexes = indexes_for_label_name
                         .iter()
-                        .filter_map(|(v, n)| match rex.is_match(v) {
-                            true => Some(n),
-                            false => None,
-                        })
+                        .filter_map(|(v, n)| rex.is_match(v).then_some(n))
+                        .flatten()
+                        .copied()
                         .collect();
-                    let exclude_these_indexes = if exclude_these.is_empty() {
-                        HashSet::new()
-                    } else {
-                        exclude_these[1..]
-                            .iter()
-                            .fold(exclude_these[0].clone(), |acc, set| {
-                                acc.union(set).copied().collect()
-                            })
-                    };
+
                     hashset
                         .difference(&exclude_these_indexes)
                         .copied()
