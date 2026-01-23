@@ -257,6 +257,9 @@ pub mod local {
 
     // Remote path where SSH keys will be uploaded
     const ADMIN_HOME: &str = "/var/lib/admin";
+    // Remote path where guest launch measurements will be uploaded
+    const GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH: &str =
+        "/var/lib/ic/data/recovery/guest_launch_measurements.json";
     // Remote path where recovery output will be stored in case of a NNS recovery on same nodes
     pub const NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
@@ -443,6 +446,7 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             replacement_nodes,
             replay_until_height,
             readonly_pub_key,
@@ -462,6 +466,22 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let readonly_pub_key_cli = opt_cli_arg!(readonly_pub_key);
@@ -491,6 +511,7 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {replacement_nodes_cli} \
             {replay_until_height_cli} \
             {readonly_pub_key_cli} \
@@ -533,6 +554,7 @@ pub mod local {
             upgrade_version,
             upgrade_image_url,
             upgrade_image_hash,
+            upgrade_image_launch_measurements_path,
             add_and_bless_upgrade_version,
             replay_until_height,
             download_pool_node,
@@ -550,6 +572,22 @@ pub mod local {
         let upgrade_version_cli = opt_cli_arg!(upgrade_version);
         let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
         let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let upgrade_image_launch_measurements_path =
+            if let Some(measurements_path) = &upgrade_image_launch_measurements_path {
+                scp_send_to(
+                    logger.clone(),
+                    session,
+                    measurements_path.as_ref(),
+                    &PathBuf::from(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH),
+                    0o400,
+                );
+
+                Some(GUEST_LAUNCH_MEASUREMENTS_REMOTE_PATH)
+            } else {
+                None
+            };
+        let upgrade_image_launch_measurements_path_cli =
+            opt_cli_arg!(upgrade_image_launch_measurements_path);
         let add_and_bless_upgrade_version_cli = opt_cli_arg!(add_and_bless_upgrade_version);
         let replay_until_height_cli = opt_cli_arg!(replay_until_height);
         let download_pool_node_cli = opt_cli_arg!(download_pool_node);
@@ -577,6 +615,7 @@ pub mod local {
             {upgrade_version_cli} \
             {upgrade_image_url_cli} \
             {upgrade_image_hash_cli} \
+            {upgrade_image_launch_measurements_path_cli} \
             {add_and_bless_upgrade_version_cli} \
             {replay_until_height_cli} \
             {download_pool_node_cli} \

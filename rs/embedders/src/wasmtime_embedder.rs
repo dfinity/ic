@@ -29,7 +29,9 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, MemoryLimits, SigsegvMemoryTracker};
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, SigsegvMemoryTracker,
+};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -556,7 +558,12 @@ impl WasmtimeEmbedder {
             }
         }
 
-        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
+        let memory_trackers = sigsegv_memory_tracker(
+            memories,
+            &mut store,
+            self.log.clone(),
+            self.config.feature_flags.deterministic_memory_tracker,
+        );
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
@@ -717,7 +724,12 @@ fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
+    deterministic_memory_tracker: FlagStatus,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
+        FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
+        FlagStatus::Disabled => None,
+    };
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -755,6 +767,7 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    maybe_missing_page_handler_kind,
                     memory_limits,
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),

@@ -27,7 +27,7 @@ use ic_replicated_state::{
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
-    testing::ReplicatedStateTesting,
+    testing::{ReplicatedStateTesting, StreamTesting},
 };
 use ic_state_layout::{
     CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
