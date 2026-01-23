@@ -127,12 +127,7 @@ fn install_and_upgrade(
     upgrade_interval: Option<u64>,
 ) -> Result<(), UserError> {
     let env = &StateMachine::new();
-    // Ledger needs at least one block to function properly
-    let ledger_id = install_ledger(
-        env,
-        vec![(account(1, 0), 1_000_000_000)],
-        default_archive_options(),
-    );
+    let ledger_id = install_ledger(env, vec![], default_archive_options());
 
     let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
 
