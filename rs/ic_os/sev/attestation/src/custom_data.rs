@@ -79,10 +79,10 @@ impl PartialEq<[u8; 64]> for SevCustomData {
 /// Custom data for node registration attestation.
 ///
 /// This struct binds the SEV attestation report to a specific node by including
-/// the SHA-256 hash of the node's signing public key.
+/// the node's signing public key.
 #[derive(der::Sequence, Debug, Eq, PartialEq, Clone)]
 pub struct NodeRegistrationAttestationCustomData<'a> {
-    pub node_signing_pk_hash: OctetStringRef<'a>,
+    pub node_signing_pk: OctetStringRef<'a>,
 }
 
 impl DerEncodedCustomData for NodeRegistrationAttestationCustomData<'_> {
@@ -215,10 +215,8 @@ mod test {
 
     #[test]
     fn test_node_registration_attestation_custom_data_is_stable() {
-        let node_signing_pk_hash = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
-        let custom_data = NodeRegistrationAttestationCustomData {
-            node_signing_pk_hash,
-        };
+        let node_signing_pk = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
+        let custom_data = NodeRegistrationAttestationCustomData { node_signing_pk };
 
         assert_eq!(
             &custom_data.encode_for_sev().unwrap().to_bytes(),

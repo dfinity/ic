@@ -10,7 +10,6 @@ use der::asn1::OctetStringRef;
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -280,11 +279,11 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
         return Ok(None);
     };
 
-    // Compute the expected custom data using the hash of the node signing public key
+    // Compute the expected custom data using the node signing public key
     // This ensures the attestation was generated specifically for this node
-    let pk_hash: [u8; 32] = Sha256::hash(&payload.node_signing_pk);
     let expected_custom_data = NodeRegistrationAttestationCustomData {
-        node_signing_pk_hash: OctetStringRef::new(&pk_hash).expect("hash is valid"),
+        node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
+            .expect("node_signing_pk is valid"),
     };
 
     let parsed = ParsedSevAttestationPackage::parse(

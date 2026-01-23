@@ -814,7 +814,6 @@ fn generate_node_registration_attestation(
     use sev::firmware::guest::Firmware;
     use sev_guest::attestation_package::generate_attestation_package;
     use sev_guest::is_sev_active;
-    use sha2::{Digest, Sha256};
 
     // Check if SEV is active
     let is_sev_active = match is_sev_active() {
@@ -880,22 +879,19 @@ fn generate_node_registration_attestation(
         }
     };
 
-    let pk_hash: [u8; 32] = Sha256::digest(node_signing_pk).into();
-    let node_signing_pk_hash = match OctetStringRef::new(&pk_hash) {
-        Ok(hash) => hash,
+    let node_signing_pk = match OctetStringRef::new(node_signing_pk) {
+        Ok(pk) => pk,
         Err(e) => {
-            error!(log, "Failed to create OctetStringRef from hash: {:?}", e);
+            error!(log, "Failed to create OctetStringRef from public key: {:?}", e);
             UtilityCommand::notify_host(
-                &format!("Failed to create OctetStringRef from hash: {e:?}"),
+                &format!("Failed to create OctetStringRef from public key: {e:?}"),
                 1,
             );
             return None;
         }
     };
 
-    let custom_data = NodeRegistrationAttestationCustomData {
-        node_signing_pk_hash,
-    };
+    let custom_data = NodeRegistrationAttestationCustomData { node_signing_pk };
 
     // Generate the attestation package with NodeRegistration custom data
     let attestation_package = match generate_attestation_package(
