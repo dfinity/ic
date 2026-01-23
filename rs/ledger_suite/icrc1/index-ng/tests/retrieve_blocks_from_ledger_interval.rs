@@ -1,8 +1,8 @@
 use crate::common::{
-    default_archive_options, index_ng_wasm, install_index_ng, install_ledger, ledger_wasm,
+    default_archive_options, index_ng_wasm, install_index_ng, install_ledger, ledger_wasm, status,
     wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
 };
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal};
 use ic_agent::Identity;
 use ic_base_types::CanisterId;
 use ic_icrc1_index_ng::{IndexArg, InitArg, UpgradeArg};
@@ -12,6 +12,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{Cycles, Time};
 use icrc_ledger_types::icrc1::account::Account;
+use num_traits::ToPrimitive;
 use std::time::{Duration, SystemTime};
 
 mod common;
@@ -62,20 +63,12 @@ fn install_ledger_for_test(
     )
 }
 
-fn icrc1_index_get_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
-    let res = env
-        .query(index_id, "icrc3_get_tip_certificate", Encode!(&()).unwrap())
-        .expect("Failed to send icrc3_get_tip_certificate")
-        .bytes();
-    let certificate =
-        Decode!(&res, Option<ic_icrc1_index_ng::GetTipCertificateResponse>).unwrap();
-    certificate.map_or(0, |c| {
-        Nat::decode(&mut &c.tip_index[..])
-            .unwrap()
-            .0
-            .try_into()
-            .unwrap()
-    })
+fn index_num_blocks_synced(env: &StateMachine, index_id: CanisterId) -> u64 {
+    status(env, index_id)
+        .num_blocks_synced
+        .0
+        .to_u64()
+        .expect("should retrieve num_blocks_synced from index")
 }
 
 #[test]
@@ -114,7 +107,7 @@ fn should_sync_according_to_interval() {
         encode_init_args,
         encode_upgrade_args,
         install_ledger_for_test,
-        icrc1_index_get_num_blocks_synced,
+        index_num_blocks_synced,
         arb_account(),
     );
 }
