@@ -319,7 +319,7 @@ impl EccScalar {
             EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
                 const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
                 let ub = ic_crypto_internal_seed::xmd::<XMD_LEN, Sha256>(input, dst);
-                Ok(EccScalar::from_bytes_wide(curve, &ub).unwrap())
+                EccScalar::from_bytes_wide(curve, &ub)
             }
         }
     }
@@ -334,8 +334,8 @@ impl EccScalar {
             EccCurveType::Ed25519 | EccCurveType::K256 | EccCurveType::P256 => {
                 const XMD_LEN: usize = 48; // "L" in RFC 9380 for this curve
                 let ub = ic_crypto_internal_seed::xmd::<{ 2 * XMD_LEN }, Sha256>(input, dst);
-                let s0 = EccScalar::from_bytes_wide(curve, &ub[..XMD_LEN]).unwrap();
-                let s1 = EccScalar::from_bytes_wide(curve, &ub[XMD_LEN..]).unwrap();
+                let s0 = EccScalar::from_bytes_wide(curve, &ub[..XMD_LEN])?;
+                let s1 = EccScalar::from_bytes_wide(curve, &ub[XMD_LEN..])?;
                 Ok((s0, s1))
             }
         }
