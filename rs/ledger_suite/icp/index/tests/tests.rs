@@ -1947,6 +1947,7 @@ fn test_index_sync_with_timestamp_violation() {
 }
 
 #[test]
+#[should_panic(expected = "invalid tag value")]
 fn test_index_sync_with_invalid_block() {
     let env = &StateMachine::new();
     let test_ledger_id = install_test_ledger(env);
@@ -1992,32 +1993,31 @@ fn test_index_sync_with_invalid_block() {
         env.tick();
     }
 
-    // Check what the index has synced
-    // The index_get_blocks function may panic if the index trapped, so we use a try-catch approach
-    let index_blocks_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        index_get_blocks(env, index_id)
-    }));
+    let index_get_block = |block_index: u64| {
+        let req = Encode!(&GetBlocksRequest {
+            start: block_index.into(),
+            length: 1u64.into(),
+        })
+        .expect("Failed to encode GetBlocksRequest");
+        let res = env
+            .query(index_id, "get_blocks", req)
+            .expect("Failed to send get_blocks request")
+            .bytes();
+        let blocks = Decode!(&res, ic_icp_index::GetBlocksResponse)
+            .expect("Failed to decode ic_icp_index::GetBlocksResponse")
+            .blocks
+            .into_iter()
+            .map(icp_ledger::Block::decode)
+            .collect::<Result<Vec<icp_ledger::Block>, String>>()
+            .unwrap();
+        assert_eq!(blocks.len(), 1);
+        blocks[0].to_owned()
+    };
 
-    match index_blocks_result {
-        Ok(index_blocks) => {
-            // The index should have synced at least the first valid block (the mint block)
-            // If it synced more, it means it either skipped the invalid block or the invalid block
-            // was somehow processed (which would be a bug, but we test for it)
-            if index_blocks.len() >= 1 {
-                assert_eq!(index_blocks[0].timestamp, mint_timestamp);
-                // The index should ideally not have synced past the invalid block
-                // But if it did, that's also useful information
-            }
-            // If empty, the index might have failed to sync due to the invalid block
-        }
-        Err(_) => {
-            // If the index trapped, that's also a valid outcome for an invalid block test
-            // The important thing is that we can test invalid blocks with the test ledger
-        }
-    }
-
-    // The key point of this test is that we can add invalid blocks to the test ledger
-    // and observe how the index handles them. The exact behavior may vary.
+    let block0 = index_get_block(0);
+    assert_eq!(block0, mint_block);
+    // This panics due to invalid block decoding, but the index shouldn't insert this encoded bad block in the first place.
+    index_get_block(1);
 }
 
 mod metrics {
