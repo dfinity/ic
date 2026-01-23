@@ -3,8 +3,8 @@
 use crate::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
-        encode_controllers, encode_message, encode_stream_header, encode_subnet_canister_ranges,
-        encode_subnet_metrics,
+        encode_controllers, encode_message, encode_metadata, encode_stream_header,
+        encode_subnet_canister_ranges, encode_subnet_metrics,
     },
 };
 use LazyTree::Blob;
@@ -606,11 +606,15 @@ fn system_metadata_as_tree(
     metadata: &SystemMetadata,
     version: CertificationVersion,
 ) -> LazyTree<'_> {
-    fork(MetadataFork {
-        height,
-        metadata,
-        version,
-    })
+    if version >= CertificationVersion::V24 {
+        fork(MetadataFork {
+            height,
+            metadata,
+            version,
+        })
+    } else {
+        blob(move || encode_metadata(height, metadata, version))
+    }
 }
 
 struct IngressHistoryFork<'a>(&'a IngressHistoryState);

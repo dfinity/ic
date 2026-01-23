@@ -1,3 +1,4 @@
+use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
@@ -5,15 +6,17 @@ use ic_canonical_state::{
         old_types::{RequestOrResponseV21, StreamHeaderV19, StreamMessageV22},
         types::{
             StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV23,
-            SubnetMetrics as SubnetMetricsV21,
+            SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
     },
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::metadata_state::SubnetMetrics;
+use ic_replicated_state::{SystemMetadata, metadata_state::SubnetMetrics};
 use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
+    CryptoHashOfPartialState, Height,
+    crypto::CryptoHash,
     messages::StreamMessage,
     xnet::{RejectReason, StreamHeader},
 };
@@ -338,6 +341,93 @@ fn message_roundtrip_encoding(
                     &result,
                     "Roundtrip encoding {}@{:?} failed",
                     encoding.name,
+                    version
+                );
+            }
+        }
+    }
+}
+
+lazy_static! {
+    /// Current and previous canonical `SystemMetadata` types and applicable
+    /// certification versions.
+    static ref SYSTEM_METADATA_ENCODINGS: Vec<VersionedEncoding<(Height, SystemMetadata)>> = vec![
+        #[allow(clippy::redundant_closure)]
+        VersionedEncoding::new(
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            "SystemMetadataV21",
+            |((height, state), version)| SystemMetadataV21::proxy_encode((*height, state, version)),
+            |_v| unimplemented!(),
+        ),
+    ];
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`SystemMetadata`] (with only the fields relevant to
+    /// its canonical representation filled).
+    pub fn arb_system_metadata()(
+        prev_state_hash in prop::collection::vec(any::<u8>(), 32)
+    ) -> SystemMetadata {
+        let mut metadata = SystemMetadata::new(
+            PrincipalId::new_subnet_test_id(1).into(),
+            ic_registry_subnet_type::SubnetType::Application
+        );
+        metadata.prev_state_hash = Some(CryptoHashOfPartialState::new(CryptoHash(prev_state_hash)));
+        metadata
+    }
+}
+
+/// Produces a `SystemMetadata` valid at all certification versions in the range.
+pub(crate) fn arb_valid_system_metadata()
+-> impl Strategy<Value = (Height, SystemMetadata, RangeInclusive<CertificationVersion>)> {
+    prop_oneof![(
+        Just(Height::new(42)),
+        arb_system_metadata(),
+        Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+    ),]
+}
+
+/// Tests that given a `SystemMetadata` that is valid for a given certification
+/// version range, all supported canonical type (e.g. `SystemMetadataV9` or
+/// `SystemMetadataV10`) and certification version combinations produce the
+/// exact same encoding.
+#[test_strategy::proptest]
+fn system_metadata_unique_encoding(
+    #[strategy(arb_valid_system_metadata())] test_metadata: (
+        Height,
+        SystemMetadata,
+        RangeInclusive<CertificationVersion>,
+    ),
+) {
+    let (height, metadata, version_range) = test_metadata;
+
+    let mut results = vec![];
+    for version in iter(version_range) {
+        let results_before = results.len();
+        for encoding in &*SYSTEM_METADATA_ENCODINGS {
+            if encoding.version_range.contains(&version) {
+                let bytes = (encoding.encode)((&(height, metadata.clone()), version))
+                    .unwrap_or_else(|_| panic!("Failed to encode {}@{:?}", encoding.name, version));
+                results.push((version, encoding.name, bytes));
+            }
+        }
+        prop_assert!(
+            results.len() > results_before,
+            "No supported encodings for certification version {version:?}"
+        );
+    }
+
+    if results.len() > 1 {
+        let (current_version, current_name, current_bytes) = results.pop().unwrap();
+        for (version, name, bytes) in &results {
+            if version == &current_version {
+                prop_assert_eq!(
+                    &current_bytes,
+                    bytes,
+                    "Different encodings: {}@{:?} and {}@{:?}",
+                    current_name,
+                    current_version,
+                    name,
                     version
                 );
             }

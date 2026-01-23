@@ -14,7 +14,7 @@ use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
-    Time,
+    Height, Time,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamIndex},
 };
@@ -189,6 +189,16 @@ pub struct Payload {
 pub struct RejectContext {
     pub code: u8,
     pub message: String,
+}
+
+/// Canonical representation of state metadata leaf.
+#[derive(Debug, Serialize)]
+pub struct SystemMetadata {
+    /// Height of the (partial) canonical state.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<Height>,
+    /// Hash bytes of the previous (partial) canonical state.
+    pub prev_state_hash: Option<Vec<u8>>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
@@ -692,6 +702,35 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
             })?,
             context.message,
         ))
+    }
+}
+
+impl
+    From<(
+        Height,
+        &ic_replicated_state::metadata_state::SystemMetadata,
+        CertificationVersion,
+    )> for SystemMetadata
+{
+    fn from(
+        (height, metadata, certification_version): (
+            Height,
+            &ic_replicated_state::metadata_state::SystemMetadata,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        let height = if certification_version >= CertificationVersion::V24 {
+            Some(height)
+        } else {
+            None
+        };
+        Self {
+            height,
+            prev_state_hash: metadata
+                .prev_state_hash
+                .as_ref()
+                .map(|h| h.get_ref().0.clone()),
+        }
     }
 }
 

@@ -44,7 +44,9 @@ pub fn traverse<V: Visitor>(height: Height, state: &ReplicatedState, mut v: V) -
 mod tests {
     use super::*;
     use crate::{
-        encoding::encode_stream_header,
+        encoding::{
+            CborProxyEncoder, encode_stream_header, types::SystemMetadata as SystemMetadataV23,
+        },
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
@@ -94,6 +96,10 @@ mod tests {
         E::VisitBlob(buf)
     }
 
+    fn encode_metadata(metadata: SystemMetadataV23) -> Vec<u8> {
+        SystemMetadataV23::proxy_encode(metadata).unwrap()
+    }
+
     /// Helper function for most tests where the /cansiter_ranges subtree should be missing before V21, and empty afterwards.
     fn expected_empty_canister_ranges(
         certification_version: CertificationVersion,
@@ -110,25 +116,34 @@ mod tests {
         metadata: &SystemMetadata,
         certification_version: CertificationVersion,
     ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
-        let height = if certification_version >= V24 {
-            vec![edge("height"), leb_num(height)]
+        if certification_version >= V24 {
+            let height = vec![edge("height"), leb_num(height)];
+            let prev_state_hash = if let Some(hash) = &metadata.prev_state_hash {
+                vec![edge("prev_state_hash"), E::VisitBlob(hash.clone().get().0)]
+            } else {
+                vec![]
+            };
+            Some(
+                [
+                    vec![edge("metadata"), E::StartSubtree],
+                    height,
+                    prev_state_hash,
+                    vec![E::EndSubtree],
+                ]
+                .concat(),
+            )
         } else {
-            vec![]
-        };
-        let prev_state_hash = if let Some(hash) = &metadata.prev_state_hash {
-            vec![edge("prev_state_hash"), E::VisitBlob(hash.clone().get().0)]
-        } else {
-            vec![]
-        };
-        Some(
-            [
-                vec![edge("metadata"), E::StartSubtree],
-                height,
-                prev_state_hash,
-                vec![E::EndSubtree],
-            ]
-            .concat(),
-        )
+            Some(vec![
+                edge("metadata"),
+                E::VisitBlob(encode_metadata(SystemMetadataV23 {
+                    prev_state_hash: metadata
+                        .prev_state_hash
+                        .as_ref()
+                        .map(|hash| hash.clone().get().0),
+                    height: None,
+                })),
+            ])
+        }
     }
 
     #[test]
