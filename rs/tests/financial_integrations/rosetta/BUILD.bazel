@@ -10,8 +10,9 @@ system_test_nns(
     ],
     runtime_deps = {
         "ROSETTA_CLI_PATH": "//:rosetta-cli",
+        "ROSETTA_CLI_JSON_PATH": ":rosetta_cli.json",
+        "ROSETTA_WORKFLOWS_ROS_PATH": ":rosetta_workflows.ros",
         "IC_ROSETTA_API_PATH": "//rs/rosetta-api/icp:ic-rosetta-api",
-        "ROSETTA_WORKSPACE_PATH": "//rs/tests:rosetta_workspace",
     },
     deps = [
         "//rs/canister_client",
@@ -42,7 +43,6 @@ system_test_nns(
     runtime_deps = {
         "ROSETTA_CLI_PATH": "//:rosetta-cli",
         "IC_ROSETTA_API_PATH": "//rs/rosetta-api/icp:ic-rosetta-api",
-        "ROSETTA_WORKSPACE_PATH": "//rs/tests:rosetta_workspace",
         "ROSETTA_IMAGE_PATH": "//rs/rosetta-api/icp:rosetta_image.tar",
     },
     deps = [
