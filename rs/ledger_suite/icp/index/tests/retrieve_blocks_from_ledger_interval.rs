@@ -123,13 +123,12 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
 }
 
 fn install_and_upgrade(
-    install_interval: Option<u64>,
     upgrade_interval: Option<u64>,
 ) -> Result<(), UserError> {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, vec![], default_archive_options());
 
-    let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
+    let index_id = install_index(env, ledger_id);
 
     let upgrade_arg = UpgradeArg {
         retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
@@ -150,42 +149,35 @@ fn max_index_sync_time() -> u64 {
 }
 
 #[test]
-fn should_fail_to_install_and_upgrade_with_invalid_value() {
-    let minimum_invalid_value_for_interval = max_value_for_interval() + 1;
-    let invalid_install_and_upgrade_combinations = [
-        (Some(minimum_invalid_value_for_interval), Some(1)),
-        (Some(1), Some(minimum_invalid_value_for_interval)),
-    ];
-    for (install_interval, upgrade_interval) in &invalid_install_and_upgrade_combinations {
-        let err = install_and_upgrade(*install_interval, *upgrade_interval)
-            .expect_err("should fail to install with invalid interval");
-        let code = err.code();
-        assert_eq!(code, ErrorCode::CanisterCalledTrap);
-        let description = err.description();
-        assert!(description.contains("delay out of bounds"));
-    }
+fn should_fail_to_upgrade_with_invalid_value() {
+    let minimum_invalid_value_for_interval = Some(max_value_for_interval() + 1);
+
+    let err = install_and_upgrade(minimum_invalid_value_for_interval)
+        .expect_err("should fail to install with invalid interval");
+    let code = err.code();
+    assert_eq!(code, ErrorCode::CanisterCalledTrap);
+    let description = err.description();
+    assert!(description.contains("delay out of bounds"));
 }
 
 #[test]
-fn should_install_and_upgrade_with_valid_values() {
+fn should_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
     let build_index_interval_values = [
         None,
-        // Some(0u64), // TODO(DEFI-2617): once the InitArg takes interval, we can test the case interval=0
+        Some(0u64),
         Some(1u64),
         Some(10u64),
         Some(max_seconds_for_timer),
     ];
 
-    // Installing and upgrading with valid values should succeed
-    for install_interval in &build_index_interval_values {
-        for upgrade_interval in &build_index_interval_values {
-            assert_eq!(
-                install_and_upgrade(*install_interval, *upgrade_interval),
-                Ok(()),
-                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
-            );
-        }
+    // Upgrading with valid values should succeed
+    for upgrade_interval in &build_index_interval_values {
+        assert_eq!(
+            install_and_upgrade(*upgrade_interval),
+            Ok(()),
+            "upgrade_interval: {upgrade_interval:?}"
+        );
     }
 }
 
@@ -200,7 +192,6 @@ fn should_sync_according_to_interval() {
         index_id: CanisterId,
         a1: Account,
         a2: Account,
-        install_interval: Option<u64>,
         upgrade_interval: Option<u64>,
     ) {
         let transfer_args = icp_ledger::TransferArgs {
@@ -229,7 +220,6 @@ fn should_sync_according_to_interval() {
         let mut index_num_blocks_synced = status(env, index_id).num_blocks_synced;
         if index_num_blocks_synced != ledger_chain_length {
             let time_to_advance = upgrade_interval
-                .or(install_interval)
                 .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
             if time_to_advance > 0 {
                 env.advance_time(Duration::from_secs(time_to_advance));
@@ -250,13 +240,12 @@ fn should_sync_according_to_interval() {
         .run(
             &(
                 proptest::option::of(0..(max_value_for_interval() / 2)),
-                proptest::option::of(0..(max_value_for_interval() / 2)),
                 arb_account(),
                 arb_account(),
             )
-                .prop_filter("The accounts must be different", |(_, _, a1, a2)| a1 != a2)
+                .prop_filter("The accounts must be different", |(_, a1, a2)| a1 != a2)
                 .no_shrink(),
-            |(install_interval, upgrade_interval, a1, a2)| {
+            |(upgrade_interval, a1, a2)| {
                 // Create a new environment
                 let env = &StateMachine::new();
 
@@ -265,39 +254,22 @@ fn should_sync_according_to_interval() {
                     install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
 
                 // Install an index with a specific interval
-                let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
+                let index_id = install_index(env, ledger_id);
 
-                // Send a transaction and verify that the index is synced after the interval
-                // specified during the install, or the default value if the interval specified
-                // during the install was None.
-                send_transaction_and_verify_index_sync(
-                    env,
-                    ledger_id,
-                    index_id,
-                    a1, // from
-                    a2, // to
-                    install_interval,
-                    None,
-                );
-
-                // Upgrade the index with a specific interval
                 let upgrade_arg = UpgradeArg {
                     retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
                 };
-                env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())
-                    .unwrap();
+                env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
 
                 // Send a transaction and verify that the index is synced after the interval
-                // specified during the upgrade, or if it is None, the interval specified during
-                // the install, or the default value if the interval specified during the install
-                // was None.
+                // specified during the upgrade, or the default value if the interval specified
+                // during the upgrade was None.
                 send_transaction_and_verify_index_sync(
                     env,
                     ledger_id,
                     index_id,
                     a1, // from
                     a2, // to
-                    install_interval,
                     upgrade_interval,
                 );
 
