@@ -446,30 +446,47 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
                 base_rewards_type3
                     .entry(region_key.clone())
-                    .and_modify(
-                        |(rates, coeffs): &mut (Vec<Decimal>, Vec<RewardsCoefficientPercent>)| {
-                            rates.push(base_rewards_daily);
-                            coeffs.push(coefficient);
-                        },
-                    )
-                    .or_insert((vec![base_rewards_daily], vec![coefficient]));
+                    .and_modify(|entries: &mut Vec<(Decimal, RewardsCoefficientPercent)>| {
+                        entries.push((base_rewards_daily, coefficient));
+                    })
+                    .or_insert(vec![(base_rewards_daily, coefficient)]);
             }
         }
 
         let base_rewards_type3 = base_rewards_type3
             .into_iter()
-            .map(|(region, (rates, coeff))| {
-                let nodes_count = rates.len();
-                let avg_rate = avg(rates.as_slice()).unwrap_or_default();
-                let avg_coeff = avg(coeff.as_slice()).unwrap_or_default();
+            .map(|(region, mut entries)| {
+                let nodes_count = entries.len();
 
-                let mut running_coefficient = dec!(1);
-                let mut region_rewards = Vec::new();
-                for _ in 0..nodes_count {
-                    region_rewards.push(avg_rate * running_coefficient);
-                    running_coefficient *= avg_coeff;
+                // Sort entries to process high-value nodes first (Greedy approach).
+                // Primary key: Base Reward (Desc)
+                // Secondary key: Coefficient (Desc) - assuming higher coeff is "better" to process earlier for the group total?
+                // Actually, for maximizing total sum = r1 + r2*c1 + r3*c1*c2...
+                // Ideally we want large R early.
+                // If R is equal, having a larger C early means the penalty grows slower, preserving more value for later nodes.
+                // So (Rate Desc, Coeff Desc) is correct.
+                entries.sort_by(|(r1, c1), (r2, c2)| r2.cmp(r1).then_with(|| c2.cmp(c1)));
+
+                let mut total_rewards = Decimal::ZERO;
+                let mut current_penalty = dec!(1);
+
+                // We also need averages for the reporting/Result struct later.
+                let mut total_rate_sum = Decimal::ZERO;
+                let mut total_coeff_sum = Decimal::ZERO;
+
+                for (rate, coeff) in &entries {
+                    total_rewards += rate * current_penalty;
+                    current_penalty *= coeff;
+
+                    total_rate_sum += rate;
+                    total_coeff_sum += coeff;
                 }
-                let region_rewards_avg = avg(&region_rewards).unwrap_or_default();
+
+                let avg_rate = total_rate_sum / Decimal::from(nodes_count);
+                let avg_coeff = total_coeff_sum / Decimal::from(nodes_count);
+
+                // The final reward per node is the total pool divided equally.
+                let region_rewards_avg = total_rewards / Decimal::from(nodes_count);
 
                 (
                     region,
@@ -643,5 +660,127 @@ fn avg(values: &[Decimal]) -> Option<Decimal> {
         None
     } else {
         Some(values.iter().sum::<Decimal>() / Decimal::from(values.len()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::performance_based_algorithm::test_utils::test_node_id;
+    use crate::types::RewardableNode;
+    use ic_protobuf::registry::node::v1::NodeRewardType;
+    use ic_protobuf::registry::node_rewards::v2::{
+        NodeRewardRate, NodeRewardRates, NodeRewardsTable,
+    };
+    use maplit::btreemap;
+    use rust_decimal_macros::dec;
+
+    struct TestAlgo;
+    impl AlgorithmVersion for TestAlgo {
+        const VERSION: u32 = 99;
+    }
+    impl PerformanceBasedAlgorithm for TestAlgo {
+        const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.0;
+        const MIN_FAILURE_RATE: Decimal = dec!(0.0);
+        const MAX_FAILURE_RATE: Decimal = dec!(1.0);
+        const MIN_REWARDS_REDUCTION: Decimal = dec!(0.0);
+        const MAX_REWARDS_REDUCTION: Decimal = dec!(0.0);
+    }
+
+    #[test]
+    fn test_type3_sorted_simulation() {
+        // Defined rates
+        // Type 3: Monthly 6000 (~200/day), Coeff 90%
+        // Type 3.1: Monthly 3000 (~100/day), Coeff 50%
+        // Note: REWARDS_TABLE_DAYS is usually 30.4375, but we can check the constant usage.
+        // The code uses: base_rewards_monthly / REWARDS_TABLE_DAYS.
+        // Let's rely on the relative ordering rather than exact days.
+
+        let type3_daily = dec!(200);
+        let type3_monthly = type3_daily * Decimal::from_f64(30.4375).unwrap();
+
+        let type3dot1_daily = dec!(100);
+        let type3dot1_monthly = type3dot1_daily * Decimal::from_f64(30.4375).unwrap();
+
+        let mut table = BTreeMap::new();
+        table.insert(
+            "Europe,Test".to_string(),
+            NodeRewardRates {
+                rates: btreemap! {
+                    NodeRewardType::Type3.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: type3_monthly.to_u64().unwrap(),
+                        reward_coefficient_percent: Some(90),
+                    },
+                    NodeRewardType::Type3dot1.to_string() => NodeRewardRate {
+                        xdr_permyriad_per_node_per_month: type3dot1_monthly.to_u64().unwrap(),
+                        reward_coefficient_percent: Some(50),
+                    },
+                },
+            },
+        );
+        let rewards_table = NodeRewardsTable { table };
+
+        let node1 = RewardableNode {
+            node_id: test_node_id(1),
+            node_reward_type: NodeRewardType::Type3,
+            region: "Europe,Test,City1".into(),
+            dc_id: "dc1".into(),
+        };
+
+        let node2 = RewardableNode {
+            node_id: test_node_id(2),
+            node_reward_type: NodeRewardType::Type3dot1,
+            region: "Europe,Test,City2".into(),
+            dc_id: "dc2".into(),
+        };
+
+        // Expected Calculation:
+        // We have 2 nodes in "Europe:Test" group.
+        // Sorted Order: Type 3 (200, 0.9), Type 3.1 (100, 0.5)
+        // 1. Node 1: 200 * 1.0 = 200
+        // 2. Node 2: 100 * 0.9 = 90
+        // Total = 290
+        // Avg = 145
+
+        // If sorting failed (e.g. Type 3.1 first):
+        // 1. Node 2: 100 * 1.0 = 100
+        // 2. Node 1: 200 * 0.5 = 100
+        // Total = 200
+        // Avg = 100
+
+        // If using old average method:
+        // Avg Rate = 150, Avg Coeff = 0.7
+        // 1. 150 * 1.0 = 150
+        // 2. 150 * 0.7 = 105
+        // Total = 255
+        // Avg = 127.5
+
+        let rewardable_nodes = vec![node1.clone(), node2.clone()];
+
+        let result =
+            TestAlgo::calculate_base_rewards_by_region_and_type(&rewards_table, &rewardable_nodes);
+
+        let reward1 = result.base_rewards_per_node.get(&node1.node_id).unwrap();
+        let reward2 = result.base_rewards_per_node.get(&node2.node_id).unwrap();
+
+        // Due to Decimal precision/conversions with REWARDS_TABLE_DAYS, we allow small epsilon.
+        // We generated monthly from 200/100 daily * 30.4375.
+        // 200 * 30.4375 = 6087.5 => truncated to 6087 or 6088 in u64? .to_u64() truncates.
+        // So back conversion: 6087 / 30.4375 = 199.98...
+
+        let expected_approx = dec!(145);
+        let actual = *reward1;
+
+        println!("Actual Reward: {}", actual);
+
+        // Check if closer to 145 than 127.5 or 100.
+        // 145 vs 127.5 is big difference.
+
+        let diff = (actual - expected_approx).abs();
+        assert!(diff < dec!(1.0), "Expected approx 145, got {}", actual);
+        assert_eq!(
+            reward1, reward2,
+            "Both nodes should get same average reward"
+        );
     }
 }
