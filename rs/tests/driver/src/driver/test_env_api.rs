@@ -1148,7 +1148,7 @@ impl IcNodeSnapshot {
             );
             for (name, value) in replica_metrics {
                 assert_eq!(
-                    value[0], 1,
+                    value[0], 0,
                     "Critical error {} raised by node {}",
                     name, self.node_id
                 );
