@@ -19639,7 +19639,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic"
-version = "11.0.0"
+version = "12.0.0"
 dependencies = [
  "backoff",
  "base64 0.13.1",
@@ -19692,7 +19692,7 @@ dependencies = [
 
 [[package]]
 name = "pocket-ic-server"
-version = "11.0.0"
+version = "12.0.0"
 dependencies = [
  "aide",
  "askama",
