@@ -2315,7 +2315,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
     assert_le!(
-        charged_cycles.abs_diff(expected_cost),
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
         Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
@@ -2398,7 +2398,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
     assert_le!(
-        charged_cycles.abs_diff(expected_cost),
+        charged_cycles.max(expected_cost) - charged_cycles.min(expected_cost),
         Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
