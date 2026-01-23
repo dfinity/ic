@@ -14,10 +14,11 @@ write_metric "tainted_var" \
     "Var is tainted on startup" \
     "gauge"
 
-sleep 2
+# Metrics are scraped every 10s. Include a little bit of leeway.
+sleep 12
 
 systemctl reboot
 
-sleep 15
+sleep 13
 
 systemctl reboot --force
