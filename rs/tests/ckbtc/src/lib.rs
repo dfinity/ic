@@ -403,6 +403,7 @@ pub async fn install_minter(
     let args = CkbtcMinterInitArgs {
         btc_network: ic_ckbtc_minter::Network::Regtest,
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
+        deposit_btc_min_amount: None,
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
         max_time_in_queue_nanos,

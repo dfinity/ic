@@ -32,7 +32,10 @@ use ic_sns_swap::{
         NeuronBasketConstructionParameters, NeuronsFundParticipationConstraints,
     },
 };
-use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue, icrc::metadata_key::MetadataKey,
+    icrc1::account::Account,
+};
 use isocountry::CountryCode;
 use maplit::btreemap;
 use pb::v1::DappCanisters;
@@ -85,7 +88,7 @@ pub const MIN_SNS_NEURONS_PER_BASKET: u64 = 2;
 /// Maximum allowed number of SNS neurons per neuron basket.
 pub const MAX_SNS_NEURONS_PER_BASKET: u64 = 10;
 
-pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
+pub const ICRC1_TOKEN_LOGO_KEY: &str = MetadataKey::ICRC1_LOGO;
 
 enum MinDirectParticipationThresholdValidationError {
     // This value must be specified.
@@ -611,7 +614,7 @@ impl SnsInitPayload {
 
         if let Some(token_logo) = &self.token_logo {
             payload_builder = payload_builder.with_metadata_entry(
-                ICRC1_TOKEN_LOGO_KEY.to_string(),
+                ICRC1_TOKEN_LOGO_KEY,
                 MetadataValue::Text(token_logo.clone()),
             );
         }
