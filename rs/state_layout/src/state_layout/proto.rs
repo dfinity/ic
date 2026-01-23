@@ -6,8 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_replicated_state::ExecutionTask;
-use ic_types::messages::{CanisterMessage, CanisterMessageOrTask};
+use ic_replicated_state::CallContextManager;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -129,39 +128,18 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let mut status: CanisterStatus =
             try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
-        let mut task_queue = TaskQueue::try_from(tasks)?;
-
-        // Forward compatibility: convert any `NewResponse` aborted execution into a
-        // `Response`, moving its callback into the call context manager.
-        if let Some(ExecutionTask::AbortedExecution { input, .. }) =
-            task_queue.mut_paused_or_aborted_task()
-            && let CanisterMessageOrTask::Message(CanisterMessage::NewResponse {
-                response,
-                callback,
-            }) = input
-        {
-            match &mut status {
-                CanisterStatus::Running {
-                    call_context_manager,
-                }
-                | CanisterStatus::Stopping {
-                    call_context_manager,
-                    ..
-                } => {
-                    call_context_manager.insert_callback(
-                        response.originator_reply_callback,
-                        callback.as_ref().clone(),
-                    );
-                }
-                CanisterStatus::Stopped => {
-                    return Err(ProxyDecodeError::ValueOutOfRange {
-                        typ: "CanisterStatus",
-                        err: "Aborted execution in Stopped canister".to_string(),
-                    });
-                }
+        let call_context_manager = match &mut status {
+            CanisterStatus::Running {
+                call_context_manager,
+                ..
             }
-            *input = CanisterMessageOrTask::Message(CanisterMessage::Response(response.clone()));
-        }
+            | CanisterStatus::Stopping {
+                call_context_manager,
+                ..
+            } => call_context_manager,
+            CanisterStatus::Stopped => &mut CallContextManager::default(),
+        };
+        let task_queue = TaskQueue::try_from((tasks, call_context_manager))?;
 
         Ok(Self {
             controllers,
