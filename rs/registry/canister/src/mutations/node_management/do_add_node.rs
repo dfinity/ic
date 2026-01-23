@@ -280,12 +280,6 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
         return Ok(None);
     };
 
-    let parsed = ParsedSevAttestationPackage::parse(
-        attestation_package.clone(),
-        SevRootCertificateVerification::Verify,
-    )
-    .map_err(|e| format!("{LOG_PREFIX}do_add_node: Failed to verify attestation package: {e}"))?;
-
     // Compute the expected custom data using the hash of the node signing public key
     // This ensures the attestation was generated specifically for this node
     let pk_hash: [u8; 32] = Sha256::hash(&payload.node_signing_pk);
@@ -293,14 +287,12 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
         node_signing_pk_hash: OctetStringRef::new(&pk_hash).expect("hash is valid"),
     };
 
-    let parsed = parsed
-        .verify_custom_data(&expected_custom_data)
-        .map_err(|e| {
-            format!(
-                "{LOG_PREFIX}do_add_node: Attestation custom data verification failed. \
-                 The attestation report may have been generated for a different node. Error: {e}"
-            )
-        })?;
+    let parsed = ParsedSevAttestationPackage::parse(
+        attestation_package.clone(),
+        SevRootCertificateVerification::Verify,
+    )
+    .and_then(|p| p.verify_custom_data(&expected_custom_data))
+    .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
 
     let chip_id = parsed.attestation_report().chip_id.to_vec();
 
