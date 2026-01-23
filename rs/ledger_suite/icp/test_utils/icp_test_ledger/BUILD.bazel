@@ -69,10 +69,10 @@ rust_ic_test_suite(
     deps = [
         # Keep sorted.
         ":icp_test_ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/common/ledger_core",
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icp/index:ic-icp-index",
-        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
         "//rs/state_machine_tests",
