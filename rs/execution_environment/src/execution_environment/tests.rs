@@ -41,7 +41,6 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_gt;
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
 use std::sync::Arc;

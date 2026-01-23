@@ -48,7 +48,7 @@ use ic_types::{
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]

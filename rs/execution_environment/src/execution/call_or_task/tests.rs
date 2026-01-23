@@ -18,7 +18,7 @@ use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
-use more_asserts::{assert_gt, assert_le};
+use more_asserts::assert_gt;
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
