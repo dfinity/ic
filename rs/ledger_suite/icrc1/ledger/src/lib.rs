@@ -731,52 +731,6 @@ impl Ledger {
 
         ledger
     }
-
-    pub fn migrate_one_allowance(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_allowance() {
-            Some((account_spender, allowance)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .set_allowance(account_spender, allowance);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_expiration(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_expiry() {
-            Some((timestamp, account_spender)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .insert_expiry(timestamp, account_spender);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_balance(&mut self) -> bool {
-        match self.balances.store.pop_first() {
-            Some((account, tokens)) => {
-                self.stable_balances.credit(&account, tokens);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_block(&mut self) -> bool {
-        self.blockchain.migrate_one_block()
-    }
-
-    pub fn clear_arrivals(&mut self) {
-        self.approvals.allowances_data.clear_arrivals();
-    }
-
-    pub fn copy_token_pool(&mut self) {
-        self.stable_balances.token_pool = self.balances.token_pool;
-    }
 }
 
 impl LedgerContext for Ledger {
@@ -786,22 +740,18 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -1191,45 +1141,6 @@ impl Ledger {
     }
 }
 
-pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
-}
-
-pub fn panic_if_not_ready() {
-    if !is_ready() {
-        ic_cdk::trap("The Ledger is not ready");
-    }
-}
-
-pub fn ledger_state() -> LedgerState {
-    LEDGER_STATE.with(|s| *s.borrow())
-}
-
-pub fn set_ledger_state(ledger_state: LedgerState) {
-    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
-}
-
-pub fn clear_stable_allowance_data() {
-    ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
-        allowances.clear_new();
-    });
-    ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-        expirations.clear_new();
-    });
-}
-
-pub fn clear_stable_balances_data() {
-    BALANCES_MEMORY.with_borrow_mut(|balances| {
-        balances.clear_new();
-    });
-}
-
-pub fn clear_stable_blocks_data() {
-    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-        blocks.clear_new();
-    });
-}
-
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
 }
@@ -1361,12 +1272,6 @@ impl AllowancesData for StableAllowancesData {
         let result = ALLOWANCES_EXPIRATIONS_MEMORY
             .with_borrow_mut(|expirations| expirations.pop_first().map(|kv| kv.0));
         result.map(|e| (e.timestamp, e.account_spender.into()))
-    }
-
-    fn pop_first_allowance(
-        &mut self,
-    ) -> Option<((Self::AccountId, Self::AccountId), Allowance<Self::Tokens>)> {
-        panic!("The method `pop_first_allowance` should not be called for StableAllowancesData")
     }
 
     fn len_allowances(&self) -> usize {
