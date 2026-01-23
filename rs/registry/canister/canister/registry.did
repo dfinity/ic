@@ -44,7 +44,19 @@ type AddNodePayload = record {
   ni_dkg_dealing_encryption_pk : blob;
   p2p_flow_endpoints : vec text;
   node_reward_type : opt text;
-  node_registration_attestation : opt blob;
+  node_registration_attestation : opt SevAttestationPackage;
+};
+
+type SevAttestationPackage = record {
+  attestation_report : opt blob;
+  certificate_chain : opt SevCertificateChain;
+  custom_data_debug_info : opt text;
+};
+
+type SevCertificateChain = record {
+  ark_pem : opt text;
+  ask_pem : opt text;
+  vcek_pem : opt text;
 };
 
 type AddNodesToSubnetPayload = record {
