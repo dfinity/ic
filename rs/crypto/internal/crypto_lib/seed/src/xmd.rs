@@ -76,7 +76,7 @@ pub fn xmd<const N: usize, H: XmdHashFunction>(msg: &[u8], dst: &[u8]) -> [u8; N
 
     // len ≤ 255*H::OUTPUT_BYTES ⭢ ell ≤ 255
     // thus values ≤ ell can be safely cast to u8
-    let ell : usize = N.div_ceil(H::OUTPUT_BYTES);
+    let ell: usize = N.div_ceil(H::OUTPUT_BYTES);
 
     let mut state = H::new();
     state.write(&vec![0; H::BLOCK_BYTES]);
