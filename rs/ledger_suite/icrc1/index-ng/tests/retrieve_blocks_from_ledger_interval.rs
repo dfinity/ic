@@ -1,6 +1,6 @@
 use crate::common::{
     MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger,
+    index_ng_wasm, install_index_ng, install_ledger, wait_until_sync_is_completed,
 };
 use candid::{CandidType, Deserialize, Encode, Nat, Principal};
 use ic_agent::Identity;
@@ -55,11 +55,15 @@ fn install_and_upgrade(
         Cycles::new(STARTING_CYCLES_PER_CANISTER),
     )?;
 
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
     let upgrade_arg = IndexArg::Upgrade(UpgradeArg {
         ledger_id: None,
         retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
     });
     env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())?;
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     Ok(())
 }
@@ -286,9 +290,13 @@ fn should_install_and_upgrade_without_build_index_interval_field_set() {
         )
         .unwrap();
 
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
     let upgrade_arg = OldIndexArg::Upgrade(OldUpgradeArg { ledger_id: None });
     env.upgrade_canister(index_id, index_ng_wasm(), Encode!(&upgrade_arg).unwrap())
         .unwrap();
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
 
 struct CyclesConsumptionParameters {
