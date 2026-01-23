@@ -141,7 +141,7 @@ pub(crate) fn execute_install(
         );
     }
     helper.clear_certified_data();
-    helper.clear_log();
+    helper.clear_log_obsolete();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
     helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());

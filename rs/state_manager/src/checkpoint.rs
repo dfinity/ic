@@ -5,7 +5,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
     CanisterSnapshot, CanisterSnapshots, ExecutionStateSnapshot, PageMemory,
 };
-use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
+use ic_replicated_state::canister_state::system_state::{
+    log_memory_store::LogMemoryStore, wasm_chunk_store::WasmChunkStore,
+};
 use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
     CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
@@ -183,6 +185,7 @@ pub fn load_checkpoint_and_validate_parallel(
 pub(crate) enum PageMapType {
     WasmMemory(CanisterId),
     StableMemory(CanisterId),
+    LogMemoryStore(CanisterId),
     WasmChunkStore(CanisterId),
     SnapshotWasmMemory(SnapshotId),
     SnapshotStableMemory(SnapshotId),
@@ -198,6 +201,7 @@ impl PageMapType {
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
                 result.push(Self::StableMemory(id.to_owned()));
+                result.push(Self::LogMemoryStore(id.to_owned()));
             }
         }
 
@@ -227,6 +231,7 @@ impl PageMapType {
         match &self {
             PageMapType::WasmMemory(id) => Ok(layout.canister(id)?.vmemory_0()),
             PageMapType::StableMemory(id) => Ok(layout.canister(id)?.stable_memory()),
+            PageMapType::LogMemoryStore(id) => Ok(layout.canister(id)?.log_memory_store()),
             PageMapType::WasmChunkStore(id) => Ok(layout.canister(id)?.wasm_chunk_store()),
             PageMapType::SnapshotWasmMemory(id) => Ok(layout.snapshot(id)?.vmemory_0()),
             PageMapType::SnapshotStableMemory(id) => Ok(layout.snapshot(id)?.stable_memory()),
@@ -246,6 +251,11 @@ impl PageMapType {
                 can.execution_state
                     .as_ref()
                     .map(|ex| &ex.stable_memory.page_map)
+            }),
+            PageMapType::LogMemoryStore(id) => state.canister_state(id).and_then(|can| {
+                can.execution_state
+                    .as_ref()
+                    .map(|ex| ex.log_memory_store.page_map())
             }),
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
@@ -288,6 +298,10 @@ fn strip_page_map_deltas(
             execution_state
                 .stable_memory
                 .page_map
+                .strip_all_deltas(Arc::clone(&fd_factory));
+            execution_state
+                .log_memory_store
+                .page_map_mut()
                 .strip_all_deltas(Arc::clone(&fd_factory));
         }
     }
@@ -369,6 +383,10 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
             add_to_pagemaps_and_strip(
                 PageMapType::StableMemory(id.to_owned()),
                 &mut execution_state.stable_memory.page_map,
+            );
+            add_to_pagemaps_and_strip(
+                PageMapType::LogMemoryStore(id.to_owned()),
+                execution_state.log_memory_store.page_map_mut(),
             );
         }
     }
@@ -806,6 +824,15 @@ pub fn load_canister_state(
             durations.insert("stable_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
+            let log_memory_store_layout = canister_layout.log_memory_store();
+            let log_memory_store = LogMemoryStore::from_checkpoint(PageMap::open(
+                Box::new(log_memory_store_layout),
+                height,
+                Arc::clone(&fd_factory),
+            )?);
+            durations.insert("log_memory_store", starting_time.elapsed());
+
+            let starting_time = Instant::now();
             let wasm_binary = WasmBinary::new(
                 canister_layout
                     .wasm()
@@ -823,6 +850,7 @@ pub fn load_canister_state(
                 exports: execution_state_bits.exports,
                 wasm_memory,
                 stable_memory,
+                log_memory_store,
                 exported_globals: execution_state_bits.exported_globals,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
