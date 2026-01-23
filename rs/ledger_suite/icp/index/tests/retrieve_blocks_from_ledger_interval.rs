@@ -103,9 +103,7 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     candid::Decode!(&res, Status).expect("Failed to decode status response")
 }
 
-fn install_and_upgrade(
-    upgrade_interval: Option<u64>,
-) -> Result<(), UserError> {
+fn install_and_upgrade(upgrade_interval: Option<u64>) -> Result<(), UserError> {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, vec![], default_archive_options());
 
@@ -199,8 +197,8 @@ fn should_sync_according_to_interval() {
         .expect("should be able to add 1 to block index");
         let mut index_num_blocks_synced = status(env, index_id).num_blocks_synced;
         if index_num_blocks_synced != ledger_chain_length {
-            let time_to_advance = upgrade_interval
-                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
+            let time_to_advance =
+                upgrade_interval.unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
             if time_to_advance > 0 {
                 env.advance_time(Duration::from_secs(time_to_advance));
                 env.tick();
