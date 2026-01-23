@@ -187,8 +187,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     let mut pre_upgrade_instructions_consumed = 0;
 
     if !memory_manager_found {
-        let msg =
-            "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+        let msg = "Cannot upgrade from scratch stable memory, please perform the following upgrades first:\n1. Git revision e54d3fa34ded227c885d04e64505fa4b5d564743 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2024-10-17\n2. Git revision e446c64d99a97e38166be23ff2bfade997d15ff7 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-10-27";
         log_message(msg);
         panic!("{msg}");
     }
@@ -252,7 +251,7 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     initialize_total_volume();
 
     if upgrade_from_version < 3 {
-        let msg = "Migration to stable structures not supported.";
+        let msg = "Migration to stable structures not supported, please upgrade first to git revision e446c64d99a97e38166be23ff2bfade997d15ff7 https://github.com/dfinity/ic/releases/tag/ledger-suite-icrc-2025-10-27";
         log_message(msg);
         panic!("{msg}");
     }
