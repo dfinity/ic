@@ -50,14 +50,14 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
-export RUNFILES="$TEST_TMPDIR/runfiles"
+RUNFILES="$TEST_TMPDIR/runfiles"
 mkdir "$RUNFILES"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep="${!env_var}"
     new_dep="$(sed 's|/|-|g' <<<"$old_dep")"
     ln -sf "$PWD/$old_dep" "$RUNFILES/$new_dep"
-    export "$env_var=$new_dep"
+    export "$env_var=runfiles/$new_dep"
 done
 
 if [ -n "${COLOCATE_UVM_CONFIG_IMAGE_PATH:-}" ]; then

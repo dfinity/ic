@@ -84,8 +84,6 @@ fn setup(env: TestEnv) {
 
     // Create a tarball of the runfiles (runtime dependencies) such that they can be copied to the UVM.
     let runfiles_tar_path = env.get_path(RUNFILES_TAR_ZST);
-    let runfiles = std::env::var("RUNFILES")
-        .expect("Expected the environment variable RUNFILES to be defined!");
     info!(log, "Creating {runfiles_tar_path:?} ...");
     let output = Command::new("tar")
         .arg("--create")
@@ -93,7 +91,7 @@ fn setup(env: TestEnv) {
         .arg(&runfiles_tar_path)
         .arg("--auto-compress")
         .arg("--directory")
-        .arg(runfiles)
+        .arg("runfiles")
         .arg("--dereference")
         .arg(".")
         .output()
@@ -254,7 +252,7 @@ set -e
 
 # Unpack uploaded tarballs under /home/admin/test which will become the test's working directory:
 mkdir -p /home/admin/test
-tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/runfiles"
+tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/test/runfiles"
 tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level="/home/admin/test/root_env"
 chmod 700 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
 chmod 600 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
@@ -280,13 +278,12 @@ docker run \
   --name {COLOCATE_CONTAINER_NAME} \
   --network host \
   -v /home/admin/test:/home/root/test \
-  -v /home/admin/runfiles:/home/root/runfiles \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
+  --workdir /home/root/test \
   --env-file /home/admin/env_vars \
-  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
   ubuntu_test_runtime:image \
-  /home/root/runfiles/{colocated_test_bin} \
+  /home/root/test/{colocated_test_bin} \
     --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
