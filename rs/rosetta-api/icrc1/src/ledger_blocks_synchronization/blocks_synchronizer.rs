@@ -575,12 +575,13 @@ async fn fetch_blocks_interval(
                 fetched_blocks_result.insert(
                     block_index,
                     Some(
-                        RosettaBlock::from_icrc3_generic_block(block_with_id.block, block_index).map_err(|e| {
-                            let old_context = e.to_string();
-                            e.context(format!(
-                                "Failed to parse block at index {block_index}: {old_context}"
-                            ))
-                        })?,
+                        RosettaBlock::from_icrc3_generic_block(block_with_id.block, block_index)
+                            .map_err(|e| {
+                                let old_context = e.to_string();
+                                e.context(format!(
+                                    "Failed to parse block at index {block_index}: {old_context}"
+                                ))
+                            })?,
                     ),
                 );
             }
@@ -630,14 +631,16 @@ async fn fetch_blocks_interval(
 
                 // Process blocks from archive result
                 for block_with_id in arch_blocks_result.blocks.into_iter() {
-                    let block_index = block_with_id
-                        .id
-                        .0
-                        .to_u64()
-                        .with_context(|| anyhow::Error::msg("Nat could not be converted to u64"))?;
+                    let block_index =
+                        block_with_id.id.0.to_u64().with_context(|| {
+                            anyhow::Error::msg("Nat could not be converted to u64")
+                        })?;
                     fetched_blocks_result.insert(
                         block_index,
-                        Some(RosettaBlock::from_icrc3_generic_block(block_with_id.block, block_index)?),
+                        Some(RosettaBlock::from_icrc3_generic_block(
+                            block_with_id.block,
+                            block_index,
+                        )?),
                     );
                 }
             }

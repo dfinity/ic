@@ -16,7 +16,9 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse, GetBlocksResult, ArchivedBlocks};
+use icrc_ledger_types::icrc3::blocks::{
+    ArchivedBlocks, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::BlockRange,
 };
