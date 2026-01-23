@@ -3,7 +3,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{InitArg, Status, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload, Memo, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
@@ -131,14 +130,10 @@ fn install_and_upgrade(
 
     let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
 
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
     let upgrade_arg = UpgradeArg {
         retrieve_blocks_from_ledger_interval_seconds: upgrade_interval,
     };
     env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     Ok(())
 }
