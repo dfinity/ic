@@ -34,7 +34,7 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
-use crate::util::{MetricsFetcher, block_on};
+use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -54,6 +54,7 @@ pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
+const ASSERT_NO_CRITICAL_ERRORS_TASK_NAME: &str = "assert_no_critical_errors";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -423,8 +424,8 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    teardown: Vec<Box<dyn PotSetupFn>>,
-    check_nodes_in_teardown: bool,
+    teardown: Option<Box<dyn PotSetupFn>>,
+    assert_no_critical_errors: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -463,7 +464,7 @@ impl SystemTestGroup {
         Self {
             setup: Default::default(),
             teardown: Default::default(),
-            check_nodes_in_teardown: true,
+            assert_no_critical_errors: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -491,12 +492,12 @@ impl SystemTestGroup {
     }
 
     pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
-        self.teardown.push(Box::new(teardown));
+        self.teardown = Some(Box::new(teardown));
         self
     }
 
-    pub fn with_check_nodes_in_teardown(mut self) -> Self {
-        self.check_nodes_in_teardown = true;
+    pub fn without_assert_no_critical_errors(mut self) -> Self {
+        self.assert_no_critical_errors = false;
         self
     }
 
@@ -692,8 +693,8 @@ impl SystemTestGroup {
             false,
         );
 
-        let check_nodes_in_teardown_fn: Option<Box<dyn PotSetupFn>> =
-            if self.check_nodes_in_teardown {
+        let assert_no_critical_errors_fn: Option<(&str, Box<dyn PotSetupFn>)> =
+            if self.assert_no_critical_errors {
                 let teardown_fn = |env: TestEnv| {
                     let nodes: Vec<IcNodeSnapshot> = env
                         .topology_snapshot()
@@ -701,22 +702,13 @@ impl SystemTestGroup {
                         .flat_map(|subnet| subnet.nodes())
                         .collect();
                     for node in nodes {
-                        block_on(async {
-                            let metric_name = "orchestrator_replica_process_start_attempts_total";
-                            let metrics = MetricsFetcher::new_with_port(
-                                std::iter::once(node),
-                                vec![metric_name.to_string()],
-                                9091,
-                            );
-                            let vals = metrics
-                                .fetch::<u64>()
-                                .await
-                                .expect("Failed to fetch orchestrator metrics");
-                            assert_eq!(vals[metric_name][0], 1);
-                        });
+                        node.assert_no_critical_errors();
                     }
                 };
-                Some(Box::new(teardown_fn))
+                Some((
+                    "{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn",
+                    Box::new(teardown_fn),
+                ))
             } else {
                 None
             };
@@ -724,15 +716,15 @@ impl SystemTestGroup {
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
             .into_iter()
-            .chain(check_nodes_in_teardown_fn)
-            .enumerate()
-            .map(|(i, teardown_fn)| {
+            .map(|teardown| ("{TEARDOWN_TASK_NAME}_fn", teardown))
+            .chain(assert_no_critical_errors_fn)
+            .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
                 let group_ctx = group_ctx.clone();
                 let teardown_task = subproc(
-                    TaskId::Test(format!("{TEARDOWN_TASK_NAME}_{i}")),
+                    TaskId::Test(teardown_name.to_string()),
                     move || {
-                        debug!(logger, ">>> teardown_fn {i}");
+                        debug!(logger, ">>> {teardown_name}");
                         let env = ensure_setup_env(group_ctx);
                         teardown_fn(env);
                     },

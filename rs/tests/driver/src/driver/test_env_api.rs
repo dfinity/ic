@@ -145,7 +145,7 @@ use crate::{
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
-    util::{block_on, create_agent},
+    util::{MetricsFetcher, block_on, create_agent},
 };
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
@@ -1127,6 +1127,22 @@ impl IcNodeSnapshot {
         self.block_on_bash_script(&script).context(format!(
             "Failed to insert egress {action} rule on node {node_id} for target {target}"
         ))
+    }
+
+    pub fn assert_no_critical_errors(&self) {
+        block_on(async {
+            let metric_name = "orchestrator_replica_process_start_attempts_total";
+            let metrics = MetricsFetcher::new_with_port(
+                std::iter::once(self.clone()),
+                vec![metric_name.to_string()],
+                9091,
+            );
+            let vals = metrics
+                .fetch::<u64>()
+                .await
+                .expect("Failed to fetch orchestrator metrics");
+            assert_eq!(vals[metric_name][0], 1);
+        });
     }
 }
 
