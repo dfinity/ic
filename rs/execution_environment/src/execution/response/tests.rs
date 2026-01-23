@@ -3055,7 +3055,6 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
 
     assert_lt!(counters[0], counters[1]);
     assert_lt!(counters[1], counters[2]);
-    // assert_lt!(counters[2], counters[3]); - Removed because it was asserting < on likely [2]<[3] but line 3058 context is confusing, checking grep it says counters[2] < counters[3]
     assert_lt!(counters[2], counters[3]);
 }
 
