@@ -210,9 +210,12 @@ where
             // Things to consider when chosing offset:
             // - chunk store changes memory usage by 1 MiB at most
             // - canister logging changes memory by 1 OS-page of 4 KiB
-            let memory_allocation_crossed_offset = 2 * KIB;
             match scenario_params.memory_usage_change {
                 MemoryUsageChange::Increase => {
+                    // Increasing memory is often done on already installed
+                    // canister, which does not increase canister log, so
+                    // we don't have to account for that.
+                    let memory_allocation_crossed_offset = 512 * KIB;
                     // What increases memory usage: chunk upload, installing code (canister logs).
                     memory_usage_after_setup.get() + memory_allocation_crossed_offset
                 }
@@ -225,6 +228,9 @@ where
                     _ => memory_usage_after_setup.get(),
                 },
                 MemoryUsageChange::Decrease => {
+                    // Decreasing memory is often done by uninstalling canister
+                    // which also clears canister logs, so we need to account for that.
+                    let memory_allocation_crossed_offset = 2 * KIB;
                     // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
                     assert!(memory_usage_after_setup.get() >= memory_allocation_crossed_offset);
                     memory_usage_after_setup.get() - memory_allocation_crossed_offset
