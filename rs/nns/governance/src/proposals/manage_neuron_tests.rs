@@ -332,7 +332,7 @@ fn test_command_configure_change_auto_stake_maturity_to_self_describing() {
         }),
         SelfDescribingValue::Map(hashmap! {
             "ChangeAutoStakeMaturity".to_string() => SelfDescribingValue::Map(hashmap! {
-                "requested_setting_for_auto_stake_maturity".to_string() => SelfDescribingValue::from(1_u64),
+                "requested_setting_for_auto_stake_maturity".to_string() => SelfDescribingValue::from(true),
             }),
         }),
     );
@@ -389,7 +389,7 @@ fn test_command_disburse_to_neuron_to_self_describing() {
                 "new_controller".to_string() => SelfDescribingValue::from(principal),
                 "amount_e8s".to_string() => SelfDescribingValue::from(200_000_000_u64),
                 "dissolve_delay_seconds".to_string() => SelfDescribingValue::from(31_536_000_u64),
-                "kyc_verified".to_string() => SelfDescribingValue::from(1_u64),
+                "kyc_verified".to_string() => SelfDescribingValue::from(true),
                 "nonce".to_string() => SelfDescribingValue::from(7_777_u64),
             }),
         }),
