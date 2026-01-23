@@ -165,7 +165,7 @@ async fn ic_admin_swap_nodes(
     let logger = env.logger();
     let ic_admin_bin_path = get_dependency_path_from_env("IC_ADMIN_PATH");
 
-    info!(logger, "IC admin path: {ic_admin_bin_path}");
+    info!(logger, "IC admin path: {ic_admin_bin_path:?}");
 
     let key_path = env.get_path("test_operator_key.pem");
     info!(logger, "Storing key contents to: {}", key_path.display());
@@ -189,7 +189,7 @@ async fn ic_admin_swap_nodes(
 
     info!(
         logger,
-        "Running the following command with ic-admin: {ic_admin_bin_path} {}",
+        "Running the following command with ic-admin: {ic_admin_bin_path:?} {}",
         args.join(" ")
     );
 
