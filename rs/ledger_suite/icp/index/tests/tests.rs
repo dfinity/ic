@@ -2,7 +2,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, InitArg, SettledTransaction, SettledTransactionWithId,
+    GetAccountIdentifierTransactionsResult, SettledTransaction, SettledTransactionWithId,
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -131,7 +131,7 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = InitArg {
+    let args = ic_icp_index::InitArg {
         ledger_id: ledger_id.into(),
     };
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
