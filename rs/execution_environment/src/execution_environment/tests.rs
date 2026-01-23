@@ -1,5 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
+use more_asserts::assert_gt;
 use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
@@ -41,7 +42,7 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_gt;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -1218,8 +1219,8 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         result
     );
     let controller_balance = test.canister_state(controller).system_state.balance().get();
-    assert!(controller_balance <= 1_u128 << 62);
-    assert!(controller_balance >= (1_u128 << 62) - 100_000_000_000);
+    assert_le!(controller_balance, 1_u128 << 62);
+    assert_ge!(controller_balance, (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -2412,7 +2413,10 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
-    assert!(execution_cost_after - execution_cost_before > Cycles::new(1_000));
+    assert_gt!(
+        execution_cost_after - execution_cost_before,
+        Cycles::new(1_000)
+    );
 }
 
 #[test]
@@ -3891,8 +3895,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
-    assert!(transmission_consumption_before_response.get() > 0);
-    assert!(instruction_consumption_before_response.get() > 0);
+    assert_gt!(transmission_consumption_before_response.get(), 0);
+    assert_gt!(instruction_consumption_before_response.get(), 0);
 
     // Check that canister A's balance is decremented for consumed cycles
     // plus transferred cycles to canister B.
@@ -3966,8 +3970,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     // Consumed cycles after the response should be smaller than before
     // the response because we expect a refund for prepaid cycles.
-    assert!(transmission_consumption_after_response < transmission_consumption_before_response);
-    assert!(instruction_consumption_after_response < instruction_consumption_before_response);
+    assert_lt!(
+        transmission_consumption_after_response,
+        transmission_consumption_before_response
+    );
+    assert_lt!(
+        instruction_consumption_after_response,
+        instruction_consumption_before_response
+    );
 
     // Check that canister B's balance is updated correctly.
     assert_eq!(

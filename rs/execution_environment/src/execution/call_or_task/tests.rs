@@ -18,6 +18,7 @@ use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
+use more_asserts::{assert_gt, assert_le};
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
@@ -1215,7 +1216,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 }
 
 #[test]

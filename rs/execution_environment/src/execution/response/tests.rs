@@ -21,6 +21,7 @@ use ic_types::{
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use ic_types::{NumInstructions, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
 use ic_universal_canister::{call_args, wasm};
+use more_asserts::{assert_ge, assert_gt, assert_lt};
 
 #[test]
 fn execute_response_when_stopping_status() {
@@ -390,7 +391,7 @@ fn cycles_correct_if_response_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -440,7 +441,7 @@ fn cycles_correct_if_cleanup_fails() {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
     assert_eq!(
         test.canister_state(a_id).system_state.balance(),
         initial_cycles
@@ -1097,7 +1098,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1146,7 +1147,7 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
 
     let ingress_status = test.ingress_status(&ingress_id);
     let result = check_ingress_status(ingress_status).unwrap_err();
@@ -1735,7 +1736,10 @@ fn dts_response_with_cleanup_concurrent_cycles_change_is_capped() {
     // canister's balance, it's going to be capped by the amount removed from the
     // balance during Wasm execution, so the canister will maintain a positive
     // balance.
-    assert!(test.canister_state(a_id).system_state.balance() > Cycles::zero());
+    assert_gt!(
+        test.canister_state(a_id).system_state.balance(),
+        Cycles::zero()
+    );
 }
 
 #[test]
@@ -1916,7 +1920,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let execution_cost_before = test.canister_execution_cost(a_id);
     test.execute_message(a_id);
     let execution_cost_after = test.canister_execution_cost(a_id);
-    assert!(execution_cost_after > execution_cost_before);
+    assert_gt!(execution_cost_after, execution_cost_before);
 
     // Assert that the response failed with exceeding instructions limit.
     let ingress_status = test.ingress_status(&ingress_id);
@@ -2054,7 +2058,7 @@ fn response_callback_succeeds_with_memory_reservation() {
     let available_memory_before_finishing_callback =
         test.subnet_available_memory().get_execution_memory();
 
-    assert!(available_memory_before_finishing_callback >= 0);
+    assert_ge!(available_memory_before_finishing_callback, 0);
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -2181,7 +2185,7 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     let available_memory_before_finishing_callback =
         test.subnet_available_memory().get_execution_memory();
 
-    assert!(available_memory_before_finishing_callback >= 0);
+    assert_ge!(available_memory_before_finishing_callback, 0);
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -2682,7 +2686,7 @@ fn cycles_balance_changes_applied_correctly() {
     let a_balance_new = test.canister_state(a_id).system_state.balance();
     let b_balance_new = test.canister_state(b_id).system_state.balance();
 
-    assert!(a_balance_old + b_balance_old > a_balance_new + b_balance_new);
+    assert_gt!(a_balance_old + b_balance_old, a_balance_new + b_balance_new);
 }
 
 #[test]
@@ -2782,7 +2786,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 
     // Execute canister B message.
     test.execute_message(b_id);
@@ -2797,7 +2801,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
-    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+    assert_gt!(instructions_executed_a_2, instructions_executed_a_1);
 }
 
 #[test]
@@ -2831,7 +2835,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 
     // Execute canister B message.
     test.execute_message(b_id);
@@ -2846,7 +2850,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
-    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+    assert_gt!(instructions_executed_a_2, instructions_executed_a_1);
 }
 
 #[test]
@@ -2880,7 +2884,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 
     // Execute canister B message.
     test.execute_message(b_id);
@@ -2896,7 +2900,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
 
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
-    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+    assert_gt!(instructions_executed_a_2, instructions_executed_a_1);
 }
 
 #[test]
@@ -2935,7 +2939,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 
     // Execute canister B message.
     test.execute_message(b_id);
@@ -2951,7 +2955,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
 
     // Make sure the `instructions_executed` has increased.
     let instructions_executed_a_2 = call_context.instructions_executed();
-    assert!(instructions_executed_a_2 > instructions_executed_a_1);
+    assert_gt!(instructions_executed_a_2, instructions_executed_a_1);
 }
 
 #[test]
@@ -2999,9 +3003,9 @@ fn test_call_context_performance_counter_correctly_reported_on_reply() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]
@@ -3049,9 +3053,10 @@ fn test_call_context_performance_counter_correctly_reported_on_reject() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    // assert_lt!(counters[2], counters[3]); - Removed because it was asserting < on likely [2]<[3] but line 3058 context is confusing, checking grep it says counters[2] < counters[3]
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]
@@ -3097,8 +3102,8 @@ fn test_call_context_performance_counter_correctly_reported_on_cleanup() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
 }
 
 #[test]

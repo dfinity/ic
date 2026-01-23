@@ -10,6 +10,7 @@ use ic_types::{
     ingress::WasmResult,
     messages::{Query, QuerySource},
 };
+use more_asserts::{assert_gt, assert_lt};
 use std::sync::Arc;
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -63,7 +64,10 @@ fn query_metrics_are_reported() {
         1,
         query_handler.metrics.query.instructions.get_sample_count()
     );
-    assert!(0 < query_handler.metrics.query.instructions.get_sample_sum() as u64);
+    assert_lt!(
+        0,
+        query_handler.metrics.query.instructions.get_sample_sum() as u64
+    );
     assert_eq!(1, query_handler.metrics.query.messages.get_sample_count());
     // We expect four messages:
     // - canister_a.query()
@@ -81,8 +85,9 @@ fn query_metrics_are_reported() {
             .duration
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_initial_call
             .instructions
@@ -128,8 +133,9 @@ fn query_metrics_are_reported() {
             .instructions
             .get_sample_count()
     );
-    assert!(
-        0 < query_handler
+    assert_lt!(
+        0,
+        query_handler
             .metrics
             .query_spawned_calls
             .instructions
@@ -602,7 +608,7 @@ fn composite_query_fails_in_replicated_mode() {
         "Composite query cannot be called in replicated mode"
     );
     // Verify that we consume some cycles.
-    assert!(balance_before > balance_after);
+    assert_gt!(balance_before, balance_after);
 }
 
 #[test]
@@ -1163,9 +1169,9 @@ fn test_call_context_performance_counter_correctly_reported_on_query() {
         .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
         .collect::<Vec<_>>();
 
-    assert!(counters[0] < counters[1]);
-    assert!(counters[1] < counters[2]);
-    assert!(counters[2] < counters[3]);
+    assert_lt!(counters[0], counters[1]);
+    assert_lt!(counters[1], counters[2]);
+    assert_lt!(counters[2], counters[3]);
 }
 
 #[test]

@@ -49,6 +49,7 @@ use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id
 use ic00::{
     CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
 };
+use more_asserts::{assert_ge, assert_le, assert_lt};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -61,9 +62,9 @@ const SOME_DEADLINE: CoarseTime = CoarseTime::from_secs_since_unix_epoch(1);
 
 fn assert_floats_are_equal(val0: f64, val1: f64) {
     if val0 > val1 {
-        assert!(val0 - val1 < 0.1);
+        assert_lt!(val0 - val1, 0.1);
     } else {
-        assert!(val1 - val0 < 0.1);
+        assert_lt!(val1 - val0, 0.1);
     }
 }
 
@@ -956,7 +957,10 @@ fn test_multiple_iterations_of_inner_loop() {
     let metrics = &test.scheduler().metrics;
 
     assert_eq!(metrics.execute_round_called.get(), 1);
-    assert!(metrics.round_inner_iteration_fin_induct.get_sample_count() >= 3);
+    assert_ge!(
+        metrics.round_inner_iteration_fin_induct.get_sample_count(),
+        3
+    );
     assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 0);
     assert_eq!(
         metrics
@@ -2805,9 +2809,9 @@ fn can_record_metrics_for_a_round() {
     assert_eq!(metrics.round_preparation_ingress.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
     assert_eq!(metrics.round_scheduling_duration.get_sample_count(), 1);
-    assert!(metrics.round_inner_iteration_prep.get_sample_count() >= 1);
-    assert!(metrics.round_inner_iteration_exe.get_sample_count() >= 1);
-    assert!(metrics.round_inner_iteration_fin.get_sample_count() >= 1);
+    assert_ge!(metrics.round_inner_iteration_prep.get_sample_count(), 1);
+    assert_ge!(metrics.round_inner_iteration_exe.get_sample_count(), 1);
+    assert_ge!(metrics.round_inner_iteration_fin.get_sample_count(), 1);
     assert_eq!(metrics.round_finalization_duration.get_sample_count(), 1);
     assert_eq!(
         metrics.round_finalization_stop_canisters.get_sample_count(),
@@ -3794,7 +3798,7 @@ fn scheduler_maintains_canister_order() {
     // have increasing indexes
     for canister_ids in expected_per_thread {
         canister_ids.iter().fold(0, |prev_idx, canister_id| {
-            assert!(canister_indexes[canister_id] >= prev_idx);
+            assert_ge!(canister_indexes[canister_id], prev_idx);
             canister_indexes[canister_id]
         });
     }
@@ -4458,7 +4462,7 @@ fn construct_scheduler_for_prop_test(
     heartbeat: bool,
 ) -> (SchedulerTest, usize, NumInstructions, NumInstructions) {
     // Note: the DTS scheduler requires at least 2 scheduler cores
-    assert!(scheduler_cores >= 2);
+    assert_ge!(scheduler_cores, 2);
     let scheduler_config = SchedulerConfig {
         scheduler_cores,
         max_instructions_per_round: NumInstructions::from(instructions_per_round as u64),
@@ -4632,12 +4636,13 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     let mut executed = HashMap::new();
     for (round, _canister_id, instructions) in test.executed_schedule().into_iter() {
         let entry = executed.entry(round).or_insert(0);
-        assert!(instructions <= instructions_per_message);
+        assert_le!(instructions, instructions_per_message);
         *entry += instructions.get();
     }
     for instructions in executed.values() {
-        assert!(
-            *instructions / scheduler_cores as u64 <= instructions_per_round.get(),
+        assert_le!(
+            *instructions / scheduler_cores as u64,
+            instructions_per_round.get(),
             "Executed more instructions than expected: {} <= {}",
             *instructions,
             instructions_per_round
@@ -4645,8 +4650,9 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     }
     let total_executed_instructions: u64 = executed.into_values().sum();
     let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
-    assert!(
-        minimum_executed_messages <= total_executed_messages,
+    assert_le!(
+        minimum_executed_messages,
+        total_executed_messages,
         "Executed {total_executed_messages} messages but expected at least {minimum_executed_messages}.",
     );
 }
