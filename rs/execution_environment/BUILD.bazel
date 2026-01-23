@@ -332,6 +332,7 @@ rust_ic_bench(
         "//rs/state_machine_tests",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:more-asserts",
     ],
 )
 

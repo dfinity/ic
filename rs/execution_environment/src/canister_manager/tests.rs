@@ -1416,8 +1416,8 @@ fn get_canister_status_of_self() {
     assert!(!status.controllers().contains(&canister_id.get()));
 
     assert_eq!(status.status(), CanisterStatusType::Running);
-    assert!(status.cycles() <= INITIAL_CYCLES.get());
-    assert!(status.cycles() >= INITIAL_CYCLES.get() - 100_000_000_000);
+    assert_le!(status.cycles(), INITIAL_CYCLES.get());
+    assert_ge!(status.cycles(), INITIAL_CYCLES.get() - 100_000_000_000);
     assert!(!status.ready_for_migration());
 }
 
@@ -1926,8 +1926,8 @@ fn delete_canister_updates_subnet_available_memory_for_memory_allocation(memory_
 
     // The canister memory usage should be ~2 GiB.
     let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
-    assert!(2 * GIB <= canister_memory_usage);
-    assert!(canister_memory_usage <= 2 * GIB + 10 * MIB);
+    assert_le!(2 * GIB, canister_memory_usage);
+    assert_le!(canister_memory_usage, 2 * GIB + 10 * MIB);
 
     let subnet_available_memory_before_deletion =
         test.subnet_available_memory().get_execution_memory() as u64;
@@ -1940,7 +1940,10 @@ fn delete_canister_updates_subnet_available_memory_for_memory_allocation(memory_
 
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
     assert_eq!(subnet_available_memory, initial_subnet_available_memory);
-    assert!(subnet_available_memory > subnet_available_memory_before_deletion);
+    assert_gt!(
+        subnet_available_memory,
+        subnet_available_memory_before_deletion
+    );
     let freed_subnet_memory_usage =
         subnet_available_memory - subnet_available_memory_before_deletion;
     assert_eq!(freed_subnet_memory_usage, canister_memory_allocated_bytes);
@@ -2077,8 +2080,8 @@ fn delete_canister_via_inter_canister_call() {
 
     // cycles attached to mgmt canister call are refunded, but cycles from the deleted canister are not refunded
     let canister_1_balance = test.canister_state(canister_1).system_state.balance().get();
-    assert!(canister_1_balance <= 1_u128 << 62);
-    assert!(canister_1_balance >= (1_u128 << 62) - 100_000_000_000);
+    assert_le!(canister_1_balance, 1_u128 << 62);
+    assert_ge!(canister_1_balance, (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -2147,8 +2150,8 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         .system_state
         .balance()
         .get();
-    assert!(depositer_balance <= 1_u128 << 61);
-    assert!(depositer_balance >= (1_u128 << 61) - 100_000_000_000);
+    assert_le!(depositer_balance, 1_u128 << 61);
+    assert_ge!(depositer_balance, (1_u128 << 61) - 100_000_000_000);
 }
 
 #[test]
@@ -4789,15 +4792,21 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     let initial_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
-    assert!(initial_canister_history_memory_usage > 0);
+    assert_gt!(initial_canister_history_memory_usage, 0);
 
     test.uninstall_code(canister_id).unwrap();
 
     let final_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
-    assert!(final_subnet_available_memory < initial_subnet_available_memory);
+    assert_lt!(
+        final_subnet_available_memory,
+        initial_subnet_available_memory
+    );
     let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
-    assert!(final_canister_history_memory_usage > initial_canister_history_memory_usage);
+    assert_gt!(
+        final_canister_history_memory_usage,
+        initial_canister_history_memory_usage
+    );
 
     let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
     let extra_canister_history_memory_usage =
@@ -5402,7 +5411,7 @@ fn empty_canister_memory_usage() {
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
     // Initialize subnet with enough memory for one chunk but not two.
-    assert!(EMPTY_CANISTER_MEMORY_USAGE < wasm_chunk_store::chunk_size());
+    assert_lt!(EMPTY_CANISTER_MEMORY_USAGE, wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
         subnet_memory_capacity: (wasm_chunk_store::chunk_size() + EMPTY_CANISTER_MEMORY_USAGE)
             * subnet_config.scheduler_config.scheduler_cores as u64,
@@ -5723,7 +5732,10 @@ fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
 
     let initial_wasm_memory_threshold = 150;
 
-    assert!(wasm_memory_limit - used_wasm_memory < initial_wasm_memory_threshold);
+    assert_lt!(
+        wasm_memory_limit - used_wasm_memory,
+        initial_wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let initial_memory_state = MemoryState {
@@ -5735,7 +5747,10 @@ fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
 
     let updated_wasm_memory_threshold = 50;
 
-    assert!(wasm_memory_limit - used_wasm_memory >= updated_wasm_memory_threshold);
+    assert_ge!(
+        wasm_memory_limit - used_wasm_memory,
+        updated_wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let updated_memory_state = MemoryState {
@@ -5760,7 +5775,10 @@ fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
 
     let initial_wasm_memory_threshold = 50;
 
-    assert!(wasm_memory_limit - used_wasm_memory >= initial_wasm_memory_threshold);
+    assert_ge!(
+        wasm_memory_limit - used_wasm_memory,
+        initial_wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let initial_memory_state = MemoryState {
@@ -5772,7 +5790,10 @@ fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
 
     let updated_wasm_memory_threshold = 150;
 
-    assert!(wasm_memory_limit - used_wasm_memory < updated_wasm_memory_threshold);
+    assert_lt!(
+        wasm_memory_limit - used_wasm_memory,
+        updated_wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let updated_memory_state = MemoryState {
@@ -5797,7 +5818,10 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() 
 
     let initial_wasm_memory_threshold = 150;
 
-    assert!(wasm_memory_limit - used_wasm_memory < initial_wasm_memory_threshold);
+    assert_lt!(
+        wasm_memory_limit - used_wasm_memory,
+        initial_wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
 
     let initial_memory_state = MemoryState {
@@ -5809,7 +5833,10 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() 
 
     let updated_wasm_memory_threshold = 50;
 
-    assert!(wasm_memory_limit - used_wasm_memory >= updated_wasm_memory_threshold);
+    assert_ge!(
+        wasm_memory_limit - used_wasm_memory,
+        updated_wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let updated_memory_state = MemoryState {
@@ -5834,7 +5861,10 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
 
     let initial_wasm_memory_threshold = 150;
 
-    assert!(wasm_memory_limit - used_wasm_memory < initial_wasm_memory_threshold);
+    assert_lt!(
+        wasm_memory_limit - used_wasm_memory,
+        initial_wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::Executed;
 
     let initial_memory_state = MemoryState {
@@ -5846,7 +5876,10 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
 
     let updated_wasm_memory_threshold = 149;
 
-    assert!(wasm_memory_limit - used_wasm_memory < updated_wasm_memory_threshold);
+    assert_lt!(
+        wasm_memory_limit - used_wasm_memory,
+        updated_wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::Executed;
 
     let updated_memory_state = MemoryState {
@@ -5871,7 +5904,10 @@ fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
 
     let initial_wasm_memory_limit = used_wasm_memory + 150;
 
-    assert!(initial_wasm_memory_limit - used_wasm_memory >= wasm_memory_threshold);
+    assert_ge!(
+        initial_wasm_memory_limit - used_wasm_memory,
+        wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let initial_memory_state = MemoryState {
@@ -5883,7 +5919,10 @@ fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
 
     let updated_wasm_memory_limit = used_wasm_memory + 50;
 
-    assert!(updated_wasm_memory_limit - used_wasm_memory < wasm_memory_threshold);
+    assert_lt!(
+        updated_wasm_memory_limit - used_wasm_memory,
+        wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let updated_memory_state = MemoryState {
@@ -5908,7 +5947,10 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 
     let initial_wasm_memory_limit = used_wasm_memory + 50;
 
-    assert!(initial_wasm_memory_limit - used_wasm_memory < wasm_memory_threshold);
+    assert_lt!(
+        initial_wasm_memory_limit - used_wasm_memory,
+        wasm_memory_threshold
+    );
     let initial_hook_status = OnLowWasmMemoryHookStatus::Ready;
 
     let initial_memory_state = MemoryState {
@@ -5920,7 +5962,10 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 
     let updated_wasm_memory_limit = used_wasm_memory + 150;
 
-    assert!(updated_wasm_memory_limit - used_wasm_memory >= wasm_memory_threshold);
+    assert_ge!(
+        updated_wasm_memory_limit - used_wasm_memory,
+        wasm_memory_threshold
+    );
     let updated_hook_status = OnLowWasmMemoryHookStatus::ConditionNotSatisfied;
 
     let updated_memory_state = MemoryState {
@@ -7475,13 +7520,13 @@ fn create_canister_updates_subnet_available_memory() {
     );
 
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
-    assert!(subnet_available_memory < initial_subnet_available_memory);
+    assert_lt!(subnet_available_memory, initial_subnet_available_memory);
     let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
     let canister_history_memory_usage = test
         .canister_state(canister_id)
         .canister_history_memory_usage()
         .get();
-    assert!(canister_history_memory_usage > 0);
+    assert_gt!(canister_history_memory_usage, 0);
     assert_eq!(subnet_memory_usage, canister_history_memory_usage);
 }
 
@@ -7512,7 +7557,7 @@ fn create_canister_updates_subnet_available_memory_for_memory_allocation() {
     );
 
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
-    assert!(subnet_available_memory < initial_subnet_available_memory);
+    assert_lt!(subnet_available_memory, initial_subnet_available_memory);
     let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
     assert_eq!(subnet_memory_usage, MEMORY_ALLOCATION);
 }
