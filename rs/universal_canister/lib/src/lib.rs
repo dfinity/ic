@@ -8,6 +8,7 @@
 pub mod management;
 
 use lazy_static::lazy_static;
+use std::path::{Path, PathBuf};
 use universal_canister::Ops;
 
 lazy_static! {
@@ -18,16 +19,26 @@ lazy_static! {
     pub static ref UNIVERSAL_CANISTER_SERIALIZED_MODULE: Vec<u8> = get_universal_canister_serialized_module();
 }
 
+/// Return the (actual) path of the (RUNFILES-relative) artifact in environment variable `v`.
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
+    let path_from_env =
+        std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {v} not set"));
+    // System-tests run in a different directory than $RUNFILES, so we need to make the path relative to $RUNFILES.
+    match std::env::var("RUNFILES") {
+        Ok(runfiles) => Path::new(&runfiles).join(path_from_env),
+        Err(_) => PathBuf::from(path_from_env),
+    }
+}
+
 pub fn get_universal_canister_wasm() -> Vec<u8> {
-    let uc_wasm_path = std::env::var("UNIVERSAL_CANISTER_WASM_PATH")
-        .expect("UNIVERSAL_CANISTER_WASM_PATH not set");
+    let uc_wasm_path = get_dependency_path_from_env("UNIVERSAL_CANISTER_WASM_PATH");
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
 
 pub fn get_universal_canister_no_heartbeat_wasm() -> Vec<u8> {
-    let uc_no_heartbeat_wasm_path = std::env::var("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH")
-        .expect("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH not set");
+    let uc_no_heartbeat_wasm_path =
+        get_dependency_path_from_env("UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM_PATH");
     std::fs::read(&uc_no_heartbeat_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {uc_no_heartbeat_wasm_path:?}: {e:?}"))
 }
@@ -38,8 +49,8 @@ pub fn get_universal_canister_wasm_sha256() -> [u8; 32] {
 }
 
 pub fn get_universal_canister_serialized_module() -> Vec<u8> {
-    let serialized_module_path = std::env::var("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH")
-        .expect("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH not set");
+    let serialized_module_path =
+        get_dependency_path_from_env("UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH");
     std::fs::read(&serialized_module_path).unwrap_or_else(|e| {
         panic!("Could not read serialized module from from {serialized_module_path:?}: {e:?}")
     })
