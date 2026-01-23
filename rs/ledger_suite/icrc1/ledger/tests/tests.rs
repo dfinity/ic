@@ -208,10 +208,10 @@ fn encode_init_args(args: ic_ledger_suite_state_machine_tests::InitArgs) -> Ledg
         decimals: Some(DECIMAL_PLACES),
         token_symbol: TOKEN_SYMBOL.to_string(),
         metadata: vec![
-            MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
-            MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
-            MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
+            (NAT_META_KEY.to_string(), NAT_META_VALUE.into()),
+            (INT_META_KEY.to_string(), INT_META_VALUE.into()),
+            (TEXT_META_KEY.to_string(), TEXT_META_VALUE.into()),
+            (BLOB_META_KEY.to_string(), BLOB_META_VALUE.into()),
         ],
         archive_options: args.archive_options,
         max_memo_length: None,
@@ -946,6 +946,22 @@ fn test_setting_forbidden_metadata_in_init_works_in_v3_ledger() {
 #[test]
 fn test_setting_forbidden_metadata_not_possible() {
     ic_ledger_suite_state_machine_tests::metadata::test_setting_forbidden_metadata_not_possible(
+        ledger_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_init_with_invalid_metadata_keys_fails() {
+    ic_ledger_suite_state_machine_tests::metadata::test_init_with_invalid_metadata_keys_fails(
+        ledger_wasm(),
+        encode_init_args_with_provided_metadata,
+    );
+}
+
+#[test]
+fn test_upgrade_with_invalid_metadata_keys_fails_when_existing_valid() {
+    ic_ledger_suite_state_machine_tests::metadata::test_upgrade_with_invalid_metadata_keys_fails_when_existing_valid(
         ledger_wasm(),
         encode_init_args_with_provided_metadata,
     );
@@ -2170,10 +2186,10 @@ mod verify_written_blocks {
                 decimals: Some(DECIMAL_PLACES),
                 token_symbol: TOKEN_SYMBOL.to_string(),
                 metadata: vec![
-                    MetadataValue::entry(NAT_META_KEY, NAT_META_VALUE),
-                    MetadataValue::entry(INT_META_KEY, INT_META_VALUE),
-                    MetadataValue::entry(TEXT_META_KEY, TEXT_META_VALUE),
-                    MetadataValue::entry(BLOB_META_KEY, BLOB_META_VALUE),
+                    (NAT_META_KEY.to_string(), NAT_META_VALUE.into()),
+                    (INT_META_KEY.to_string(), INT_META_VALUE.into()),
+                    (TEXT_META_KEY.to_string(), TEXT_META_VALUE.into()),
+                    (BLOB_META_KEY.to_string(), BLOB_META_VALUE.into()),
                 ],
                 archive_options: ArchiveOptions {
                     trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
