@@ -37,7 +37,6 @@ type AddNodePayload = record {
   domain : opt text;
   public_ipv4_config : opt IPv4Config;
   xnet_endpoint : text;
-  chip_id : opt blob;
   committee_signing_pk : blob;
   node_signing_pk : blob;
   transport_tls_cert : blob;

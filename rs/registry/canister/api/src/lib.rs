@@ -194,7 +194,6 @@ pub struct AddNodePayload {
     // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
-    pub chip_id: Option<Vec<u8>>,
 
     // String representation of the node reward type.  Must be a valid type.
     // See registry/canister/src/mutations/do_add_node.rs, fn `validate_str_as_node_reward_type` for currently

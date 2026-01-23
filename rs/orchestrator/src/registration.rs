@@ -282,7 +282,6 @@ impl NodeRegistration {
             .expect("Invalid endpoints in message routing config."),
             http_endpoint: http_config_to_endpoint(&self.log, &self.node_config.http_handler)
                 .expect("Invalid endpoints in http handler config."),
-            chip_id: None,
             node_registration_attestation,
             public_ipv4_config: process_ipv4_config(
                 &self.log,
@@ -882,7 +881,10 @@ fn generate_node_registration_attestation(
     let node_signing_pk = match OctetStringRef::new(node_signing_pk) {
         Ok(pk) => pk,
         Err(e) => {
-            error!(log, "Failed to create OctetStringRef from public key: {:?}", e);
+            error!(
+                log,
+                "Failed to create OctetStringRef from public key: {:?}", e
+            );
             UtilityCommand::notify_host(
                 &format!("Failed to create OctetStringRef from public key: {e:?}"),
                 1,
