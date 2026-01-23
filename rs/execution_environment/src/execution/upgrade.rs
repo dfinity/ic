@@ -221,8 +221,13 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let (instructions_consumed, result) =
-        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) = helper.handle_wasm_execution(
+        canister_state_changes,
+        output,
+        &original,
+        &round,
+        round_limits,
+    );
 
     info!(
         round.log,
@@ -426,8 +431,13 @@ fn upgrade_stage_3b_process_start_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let (instructions_consumed, result) =
-        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) = helper.handle_wasm_execution(
+        canister_state_changes,
+        output,
+        &original,
+        &round,
+        round_limits,
+    );
 
     info!(
         round.log,
@@ -543,8 +553,13 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let (instructions_consumed, result) =
-        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) = helper.handle_wasm_execution(
+        canister_state_changes,
+        output,
+        &original,
+        &round,
+        round_limits,
+    );
     info!(
         round.log,
         "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
@@ -594,6 +609,7 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -698,6 +714,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
+            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -801,6 +818,7 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
+            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

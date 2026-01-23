@@ -4,7 +4,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 
 /// Magic prefix that marks a properly initialized canister log buffer.
-pub(crate) const MAGIC: &[u8; 3] = b"CLB";
+const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
@@ -48,6 +48,10 @@ impl Header {
             next_idx: 0,
             max_timestamp: 0,
         }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.magic == *MAGIC && self.version == 1
     }
 
     pub fn advance_position(

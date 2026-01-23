@@ -55,6 +55,7 @@ mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
 const ONE_GIB: u64 = 1 << 30;
+const LOG_MEMORY_USAGE: i64 = 3 * 4096;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -285,10 +286,12 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
+    let log_memory_usage = 3 * 4096;
     let canister_memory: u64 = 1 << 30;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
-        .with_subnet_execution_memory(canister_memory)
+        // subnet memory capacity is exactly equal to canister memory allocation + log memory usage
+        .with_subnet_execution_memory(canister_memory + log_memory_usage)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
         .with_resource_saturation_scaling(1)
@@ -339,6 +342,10 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     assert_eq!(
         available_memory_after_create,
         test.subnet_available_memory().get_execution_memory()
+            + test
+                .canister_state(canister_id)
+                .log_memory_store_memory_usage()
+                .get() as i64,
     );
     assert_eq!(
         13,
@@ -378,8 +385,11 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
             .queues()
             .guaranteed_response_memory_reservations()
     );
-    // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
-    assert_eq!(available_memory_after_create, subnet_total_memory);
+    // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES` and by default log memory usage.
+    assert_eq!(
+        available_memory_after_create - LOG_MEMORY_USAGE,
+        subnet_total_memory
+    );
     assert_eq!(
         (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
@@ -397,13 +407,17 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
-    let initia_available_memory = test.subnet_available_memory().get_execution_memory();
+    let initial_available_memory = test.subnet_available_memory().get_execution_memory();
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
     let subnet_total_memory = test.subnet_available_memory().get_execution_memory();
     let subnet_message_memory = test
         .subnet_available_memory()
         .get_guaranteed_response_message_memory();
+    let log_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get() as i64;
     let system_state = &mut test.canister_state_mut(canister_id).system_state;
     // There should be no response memory reservation in the queues.
     assert_eq!(
@@ -414,8 +428,12 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
     );
     // But there should be one response slot reservation.
     assert_eq!(1, system_state.queues().input_queues_reserved_slots());
-    // Subnet available memory and message memory should be unchanged.
-    assert_eq!(initia_available_memory, subnet_total_memory);
+    // Subnet available memory only changes due to log memory usage.
+    assert_eq!(
+        initial_available_memory,
+        subnet_total_memory + log_memory_usage
+    );
+    // Message memory should be unchanged.
     assert_eq!(ONE_GIB as i64, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
@@ -767,20 +785,20 @@ fn get_running_canister_status_from_another_canister() {
     let result = test.ingress(controller, "update", get_canister_status);
     let reply = get_reply(result);
     let csr = CanisterStatusResultV2::decode(&reply).unwrap();
+    let canister_state = test.canister_state(canister);
     assert_eq!(csr.status(), CanisterStatusType::Running);
     assert_eq!(csr.controllers(), vec![controller.get()]);
     assert_eq!(
         Cycles::new(csr.cycles()),
-        test.canister_state(canister).system_state.balance()
+        canister_state.system_state.balance()
     );
     assert_eq!(csr.freezing_threshold(), 2_592_000);
     assert_eq!(csr.memory_allocation(), 0);
     assert_eq!(
         csr.memory_size(),
         test.execution_state(canister).memory_usage()
-            + test
-                .canister_state(canister)
-                .canister_history_memory_usage()
+            + canister_state.canister_history_memory_usage()
+            + canister_state.log_memory_store_memory_usage()
     );
     assert_eq!(
         Cycles::new(csr.idle_cycles_burned_per_day()),
@@ -900,9 +918,11 @@ fn get_canister_status_memory_metrics() {
 
     let canister_history_size = csr.canister_history_size();
     let wasm_chunk_store_size = csr.wasm_chunk_store_size();
+    let log_memory_store_size = csr.log_memory_store_size();
     let snapshots_size = csr.snapshots_size();
 
-    let system_memory_size = canister_history_size + wasm_chunk_store_size + snapshots_size;
+    let system_memory_size =
+        canister_history_size + wasm_chunk_store_size + snapshots_size + log_memory_store_size;
 
     let memory_size = csr.memory_size();
     assert_eq!(memory_size, execution_memory_size + system_memory_size);
@@ -2868,7 +2888,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
     assert_eq!(
-        memory.get_execution_memory() + memory_after_create,
+        memory.get_execution_memory() + memory_after_create + LOG_MEMORY_USAGE,
         ONE_GIB as i64
     );
     assert_eq!(
@@ -2894,7 +2914,8 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
-    let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
+    // In addition, the `log_memory_store` allocates some memory.
+    let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64 + LOG_MEMORY_USAGE;
     let memory = test.subnet_available_memory();
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,

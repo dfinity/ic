@@ -583,6 +583,7 @@ impl CallOrTaskHelper {
                     .apply_changes(
                         round.time,
                         &mut self.canister.system_state,
+                        &mut round_limits.subnet_available_memory,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
                         is_composite_query,

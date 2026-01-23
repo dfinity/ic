@@ -1,15 +1,15 @@
 mod call_context_manager;
+pub mod log_memory_store;
 pub mod proto;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-// TODO(DSM-11): remove testing cofiguration when log memory store is used in production.
-#[cfg(test)]
-pub mod log_memory_store;
-
 pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
-use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
+use self::{
+    log_memory_store::LogMemoryStore,
+    wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata},
+};
 use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
 pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
@@ -343,6 +343,10 @@ pub struct SystemState {
     #[validate_eq(CompareWithValidateEq)]
     pub canister_log: CanisterLog,
 
+    /// The memory used for storing log entries.
+    #[validate_eq(CompareWithValidateEq)]
+    pub log_memory_store: LogMemoryStore,
+
     /// The Wasm memory limit. This is a field in developer-visible canister
     /// settings that allows the developer to limit the usage of the Wasm memory
     /// by the canister to leave some room in 4GiB for upgrade calls.
@@ -487,7 +491,8 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             CanisterStatus::new_running(),
-            WasmChunkStore::new(fd_factory),
+            WasmChunkStore::new(fd_factory.clone()),
+            LogMemoryStore::new(fd_factory),
         )
     }
 
@@ -498,6 +503,7 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
+        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -525,6 +531,7 @@ impl SystemState {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
+            log_memory_store,
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
@@ -555,6 +562,7 @@ impl SystemState {
         log_visibility: LogVisibilityV2,
         log_memory_limit: NumBytes,
         canister_log: CanisterLog,
+        log_memory_store_data: PageMap,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
         snapshots_memory_usage: NumBytes,
@@ -586,6 +594,10 @@ impl SystemState {
             log_visibility,
             log_memory_limit,
             canister_log,
+            log_memory_store: LogMemoryStore::from_checkpoint(
+                log_memory_store_data,
+                log_memory_limit.get() as usize,
+            ),
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
@@ -659,6 +671,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
         )
     }
 
@@ -2246,6 +2259,7 @@ pub mod testing {
             // therefore it should not scale to memory limit from above.
             // Remove this field after migration is done.
             canister_log: CanisterLog::default_aggregate(),
+            log_memory_store: LogMemoryStore::new_for_testing(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),

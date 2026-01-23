@@ -18,7 +18,9 @@ use ic_logger::{error, fatal, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2,
 };
-use ic_replicated_state::canister_state::system_state::ReservationError;
+use ic_replicated_state::canister_state::system_state::{
+    ReservationError, log_memory_store::LogMemoryStore,
+};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState, num_bytes_try_from};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
@@ -149,9 +151,9 @@ impl InstallCodeHelper {
         self.canister.system_state.certified_data = Vec::new();
     }
 
-    pub fn clear_log(&mut self) {
+    pub fn clear_log_obsolete(&mut self) {
         self.steps.push(InstallCodeStep::ClearLog);
-        self.canister.clear_log();
+        self.canister.clear_log_obsolete();
     }
 
     pub fn deactivate_global_timer(&mut self) {
@@ -241,12 +243,20 @@ impl InstallCodeHelper {
         paused: PausedInstallCodeHelper,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<Self, (CanisterManagerError, NumInstructions, CanisterLog)> {
+        round_limits: &mut RoundLimits,
+    ) -> Result<
+        Self,
+        (
+            CanisterManagerError,
+            NumInstructions,
+            (CanisterLog, LogMemoryStore),
+        ),
+    > {
         let mut helper = Self::new(clean_canister, original);
         let paused_instructions_left = paused.instructions_left;
         for state_change in paused.steps.into_iter() {
             helper
-                .replay_step(state_change, original, round)
+                .replay_step(state_change, original, round, round_limits)
                 .map_err(|err| (err, paused_instructions_left, helper.take_canister_log()))?;
         }
         assert_eq!(paused_instructions_left, helper.instructions_left());
@@ -594,8 +604,12 @@ impl InstallCodeHelper {
     }
 
     /// Takes the canister log.
-    pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
-        self.canister.system_state.canister_log.take()
+    pub(crate) fn take_canister_log(&mut self) -> (CanisterLog, LogMemoryStore) {
+        // TODO: Remove duplication when the migration is fully done.
+        (
+            self.canister.system_state.canister_log.take(),
+            self.canister.system_state.log_memory_store.clone(),
+        )
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -608,6 +622,7 @@ impl InstallCodeHelper {
         output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> (NumInstructions, Result<(), CanisterManagerError>) {
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
@@ -645,6 +660,7 @@ impl InstallCodeHelper {
             .apply_changes(
                 original.time,
                 &mut self.canister.system_state,
+                &mut round_limits.subnet_available_memory,
                 round.network_topology,
                 round.hypervisor.subnet_id(),
                 false, // Install cannot happen in composite_query.
@@ -739,6 +755,7 @@ impl InstallCodeHelper {
         step: InstallCodeStep,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         match step {
             InstallCodeStep::ValidateInput => self.validate_input(original),
@@ -756,7 +773,7 @@ impl InstallCodeHelper {
                 Ok(())
             }
             InstallCodeStep::ClearLog => {
-                self.clear_log();
+                self.clear_log_obsolete();
                 Ok(())
             }
             InstallCodeStep::DeactivateGlobalTimer => {
@@ -780,8 +797,13 @@ impl InstallCodeHelper {
                 canister_state_changes,
                 output,
             } => {
-                let (_, result) =
-                    self.handle_wasm_execution(canister_state_changes, output, original, round);
+                let (_, result) = self.handle_wasm_execution(
+                    canister_state_changes,
+                    output,
+                    original,
+                    round,
+                    round_limits,
+                );
                 result
             }
             InstallCodeStep::ChargeForLargeWasmAssembly { instructions } => {
@@ -856,7 +878,7 @@ pub(crate) fn finish_err(
     original: OriginalContext,
     round: RoundContext,
     err: CanisterManagerError,
-    new_canister_log: CanisterLog,
+    new_canister_log: (CanisterLog, LogMemoryStore),
 ) -> DtsInstallCodeResult {
     let mut new_canister = clean_canister;
 

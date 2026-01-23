@@ -34,7 +34,7 @@ use ic_state_layout::{
     CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
     ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile, error::LayoutError,
 };
-use ic_types::{CanisterId, Height, SnapshotId, malicious_flags::MaliciousFlags};
+use ic_types::{CanisterId, Height, NumBytes, SnapshotId, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};
@@ -589,6 +589,18 @@ fn switch_to_checkpoint(
                 )
                 .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
             );
+        tip_canister
+            .system_state
+            .log_memory_store
+            .page_map_mut()
+            .switch_to_checkpoint(
+                &PageMap::open(
+                    Box::new(canister_layout.log_memory_store()),
+                    layout.height(),
+                    Arc::clone(fd_factory),
+                )
+                .map_err(|err| Box::new(err) as Box<dyn std::error::Error + Send>)?,
+            );
 
         if let Some(tip_execution) = tip_canister.execution_state.as_mut() {
             tip_execution.wasm_memory.page_map.switch_to_checkpoint(
@@ -770,6 +782,7 @@ fn backup<T>(
         &canister_layout.wasm_chunk_store(),
         &snapshot_layout.wasm_chunk_store(),
     )?;
+    // no need to copy log_memory_store as it is not in snapshot.
 
     WasmFile::hardlink_file(&canister_layout.wasm(), &snapshot_layout.wasm())?;
 
@@ -1220,6 +1233,16 @@ fn serialize_canister_wasm_binary_and_pagemaps(
             lsmt_config,
             metrics,
         )?;
+    canister_state
+        .system_state
+        .log_memory_store
+        .page_map()
+        .persist_delta(
+            &canister_layout.log_memory_store(),
+            tip.height(),
+            lsmt_config,
+            metrics,
+        )?;
     Ok(())
 }
 
@@ -1341,7 +1364,12 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .clone(),
             total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
-            log_memory_limit: canister_state.system_state.log_memory_limit,
+            log_memory_limit: NumBytes::from(
+                canister_state
+                    .system_state
+                    .log_memory_store
+                    .log_memory_limit() as u64,
+            ),
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
             next_snapshot_id: canister_state.system_state.next_snapshot_id,

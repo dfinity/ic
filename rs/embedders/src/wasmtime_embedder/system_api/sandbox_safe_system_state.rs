@@ -9,6 +9,7 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, MessageMemoryUsage};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{ReplicaLogger, info};
@@ -328,6 +329,7 @@ impl SystemStateModifications {
         mut self,
         time: Time,
         system_state: &mut SystemState,
+        subnet_available_memory: &mut SubnetAvailableMemory,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
         is_composite_query: bool,
@@ -513,10 +515,39 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
+        // TODO(DSM-11): cleanup population logic after migration is done.
+        // We need to copy existing canister_log to log_memory_store in order
+        // not to loose any log records until the migration is complete.
+        if system_state.log_memory_store.is_empty() && !system_state.canister_log.is_empty() {
+            system_state
+                .log_memory_store
+                .append_delta_log(&mut system_state.canister_log.clone());
+        }
+
         // Append delta log to the total canister log.
+        let mut canister_log_copy = self.canister_log.clone();
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
+
+        let memory_usage_before = system_state.log_memory_store.total_allocated_bytes() as i64;
+        system_state
+            .log_memory_store
+            .append_delta_log(&mut canister_log_copy);
+        let memory_usage_after = system_state.log_memory_store.total_allocated_bytes() as i64;
+
+        let delta = (memory_usage_after - memory_usage_before).unsigned_abs();
+        if memory_usage_before < memory_usage_after {
+            subnet_available_memory
+                .try_decrement(NumBytes::from(delta), NumBytes::from(0), NumBytes::from(0))
+                .map_err(|_| HypervisorError::OutOfMemory)?;
+        } else if memory_usage_before != memory_usage_after {
+            subnet_available_memory.increment(
+                NumBytes::from(delta),
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
+        }
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {

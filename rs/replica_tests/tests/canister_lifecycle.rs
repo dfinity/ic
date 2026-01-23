@@ -718,6 +718,7 @@ fn can_get_canister_information() {
                 canister_history_size,
                 NumBytes::from(0),
                 NumBytes::from(0),
+                NumBytes::from(0),
                 num_cycles.get(),
                 ComputeAllocation::default().as_percent(),
                 None,
@@ -778,6 +779,7 @@ fn can_get_canister_information() {
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's
                     // size changes between updates.
+                    NumBytes::from(0),
                     NumBytes::from(0),
                     NumBytes::from(0),
                     NumBytes::from(0),
