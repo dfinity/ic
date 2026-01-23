@@ -18,7 +18,6 @@ use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::time::{Duration, SystemTime};
 
-#[allow(dead_code)]
 mod common;
 
 /// Corresponds to ic_icrc1_index_ng::DEFAULT_MAX_WAIT_TIME_IN_SECS
