@@ -442,7 +442,7 @@ pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) ->
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(&state.metadata, certification_version)
+                system_metadata_as_tree(height, &state.metadata, certification_version)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
@@ -464,11 +464,6 @@ pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) ->
                     certification_version,
                 )
             })
-            .with_if(
-                certification_version >= CertificationVersion::V24,
-                "height",
-                move || num(height.get()),
-            )
             .with_tree(
                 "time",
                 num(state.metadata.batch_time.as_nanos_since_unix_epoch()),
@@ -564,15 +559,12 @@ const METADATA_LABELS: [&[u8]; 2] = [HEIGHT_LABEL, PREV_STATE_HASH_LABEL];
 struct MetadataFork<'a> {
     height: Height,
     metadata: &'a SystemMetadata,
-    version: CertificationVersion,
 }
 
 impl<'a> LazyFork<'a> for MetadataFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         match label.as_bytes() {
-            HEIGHT_LABEL if self.version >= CertificationVersion::V24 => {
-                Some(num(self.height.get()))
-            }
+            HEIGHT_LABEL => Some(num(self.height.get())),
             PREV_STATE_HASH_LABEL => self
                 .metadata
                 .prev_state_hash
@@ -612,13 +604,9 @@ fn system_metadata_as_tree(
     version: CertificationVersion,
 ) -> LazyTree<'_> {
     if version >= CertificationVersion::V24 {
-        fork(MetadataFork {
-            height,
-            metadata,
-            version,
-        })
+        fork(MetadataFork { height, metadata })
     } else {
-        blob(move || encode_metadata(height, metadata, version))
+        blob(move || encode_metadata(metadata, version))
     }
 }
 

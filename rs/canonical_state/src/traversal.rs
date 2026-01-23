@@ -136,11 +136,11 @@ mod tests {
             Some(vec![
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadataV23 {
+                    deprecated_id_counter: None,
                     prev_state_hash: metadata
                         .prev_state_hash
                         .as_ref()
                         .map(|hash| hash.clone().get().0),
-                    height: None,
                 })),
             ])
         }
