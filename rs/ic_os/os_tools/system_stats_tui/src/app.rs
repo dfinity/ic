@@ -277,7 +277,7 @@ impl App {
                 match &self.guestos_replica_latest_sample {
                     Ok(sn) => Cell::from(
                         sn.block_height
-                            .map(|v| format!("{}", v))
+                            .map(|v| v.to_string())
                             .unwrap_or("(unknown)".into()),
                     ),
                     Err(e) => Cell::from(e.to_string()).style(Style::default().fg(Color::Red)),

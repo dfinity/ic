@@ -23,13 +23,13 @@ impl ValueQuery {
     }
 
     pub fn matches(regex: &Regex) -> Self {
-        let anchored = "^".to_owned() + regex.as_str() + "$";
+        let anchored = format!("^{regex}$");
         let proper_re = Regex::new(&anchored).unwrap();
         Self::Matches(proper_re)
     }
 
     pub fn does_not_match(regex: &Regex) -> Self {
-        let anchored = "^".to_owned() + regex.as_str() + "$";
+        let anchored = format!("^{regex}$");
         let proper_re = Regex::new(&anchored).unwrap();
         Self::DoesNotMatch(proper_re)
     }
@@ -46,55 +46,53 @@ impl IndexedScrapeLabelValueQuery {
             None => &HashMap::new(),
         };
 
-        Self {
-            indexes: match &value {
-                ValueQuery::Equals(val) => {
-                    indexes_for_label_name.get(val).cloned().unwrap_or_default()
+        let indexes = match &value {
+            ValueQuery::Equals(val) => indexes_for_label_name.get(val).cloned().unwrap_or_default(),
+            ValueQuery::DoesNotEqual(val) => {
+                let hashset: HashSet<_> = label_query
+                    .scrape
+                    .index
+                    .values()
+                    .flat_map(|x| x.values())
+                    .flatten()
+                    .copied()
+                    .collect();
+                match indexes_for_label_name.get(val) {
+                    // Both label name and label value were found in the map.
+                    Some(ss) => hashset.difference(ss).copied().collect(),
+                    None => hashset,
                 }
-                ValueQuery::DoesNotEqual(val) => {
-                    let hashset: HashSet<_> = label_query
-                        .scrape
-                        .index
-                        .values()
-                        .flat_map(|x| x.values())
-                        .flatten()
-                        .copied()
-                        .collect();
-                    match indexes_for_label_name.get(val) {
-                        // Both label name and label value were found in the map.
-                        Some(ss) => hashset.difference(ss).copied().collect(),
-                        None => hashset,
-                    }
-                }
-                ValueQuery::Matches(rex) => indexes_for_label_name
+            }
+            ValueQuery::Matches(rex) => indexes_for_label_name
+                .iter()
+                .filter_map(|(v, n)| rex.is_match(v).then_some(n))
+                .flatten()
+                .copied()
+                .collect(),
+            ValueQuery::DoesNotMatch(rex) => {
+                let hashset: HashSet<_> = label_query
+                    .scrape
+                    .index
+                    .values()
+                    .flat_map(|x| x.values())
+                    .flatten()
+                    .copied()
+                    .collect();
+                let exclude_these_indexes = indexes_for_label_name
                     .iter()
                     .filter_map(|(v, n)| rex.is_match(v).then_some(n))
                     .flatten()
                     .copied()
-                    .collect(),
-                ValueQuery::DoesNotMatch(rex) => {
-                    let hashset: HashSet<_> = label_query
-                        .scrape
-                        .index
-                        .values()
-                        .flat_map(|x| x.values())
-                        .flatten()
-                        .copied()
-                        .collect();
-                    let exclude_these_indexes = indexes_for_label_name
-                        .iter()
-                        .filter_map(|(v, n)| rex.is_match(v).then_some(n))
-                        .flatten()
-                        .copied()
-                        .collect();
+                    .collect();
 
-                    hashset
-                        .difference(&exclude_these_indexes)
-                        .copied()
-                        .collect()
-                }
-            },
-        }
+                hashset
+                    .difference(&exclude_these_indexes)
+                    .copied()
+                    .collect()
+            }
+        };
+
+        Self { indexes }
     }
 
     fn equals(label_query: IndexedScrapeLabelQuery<'_>, value: &str) -> Self {

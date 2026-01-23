@@ -1,4 +1,5 @@
 use std::io::stdout;
+use std::str::FromStr;
 use std::time::Duration;
 
 use clap::Parser;
@@ -7,14 +8,12 @@ use ratatui::crossterm::terminal::{Clear, ClearType};
 use system_stats_tui::app::App;
 
 fn parse_duration(arg: &str) -> Result<Duration, String> {
-    Ok(
-        match duration_string::DurationString::try_from(String::from(arg)) {
-            Ok(val) => val.into(),
-            Err(duration_string::Error::Format) => return Err("invalid format".to_string()),
-            Err(duration_string::Error::Overflow) => return Err("duration too large".to_string()),
-            Err(duration_string::Error::ParseInt(e)) => return Err(format!("invalid number: {e}")),
-        },
-    )
+    match duration_string::DurationString::from_str(arg) {
+        Ok(val) => Ok(val.into()),
+        Err(duration_string::Error::Format) => Err("invalid format".to_string()),
+        Err(duration_string::Error::Overflow) => Err("duration too large".to_string()),
+        Err(duration_string::Error::ParseInt(e)) => Err(format!("invalid number: {e}")),
+    }
 }
 
 /// System stats TUI for monitoring nodes.
