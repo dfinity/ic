@@ -6,6 +6,7 @@ use std::sync::Arc;
 use ic_base_types::CanisterId;
 use ic_limits::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use more_asserts::debug_assert_le;
 
 use ic_embedders::{
     wasm_executor::{
@@ -142,7 +143,7 @@ impl ResponseHelper {
         //
         // Therefore, the cycles in the response must not exceed the cycles in
         // the request. Otherwise, there might be potentially malicious faults.
-        debug_assert!(response.refund <= original.callback.cycles_sent);
+        debug_assert_le!(response.refund, original.callback.cycles_sent);
         let refund_for_sent_cycles = if response.refund > original.callback.cycles_sent {
             round.counters.response_cycles_refund_error.inc();
             error!(

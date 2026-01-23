@@ -245,20 +245,33 @@ pub async fn update_balance<R: CanisterRuntime>(
         _ => "ckTESTBTC",
     };
 
-    let check_fee = read_state(|s| s.check_fee);
+    let (deposit_btc_min_amount, check_fee) =
+        read_state(|s| (s.deposit_btc_min_amount, s.check_fee));
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
+
     for utxo in processable_utxos {
-        if utxo.value <= check_fee {
+        let ignored_reason = if utxo.value < deposit_btc_min_amount {
+            Some(format!(
+                "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the minimum deposit amount {}",
+                DisplayOutpoint(&utxo.outpoint),
+                DisplayAmount(utxo.value),
+                DisplayAmount(deposit_btc_min_amount)
+            ))
+        } else if utxo.value <= check_fee {
+            Some(format!(
+                "Ignored UTXO {} for account {caller_account} because UTXO value {} is not higher than the check fee {}",
+                DisplayOutpoint(&utxo.outpoint),
+                DisplayAmount(utxo.value),
+                DisplayAmount(check_fee)
+            ))
+        } else {
+            None
+        };
+        if let Some(ignored_reason) = ignored_reason {
             mutate_state(|s| {
                 state::audit::ignore_utxo(s, utxo.clone(), caller_account, now, runtime)
             });
-            log!(
-                Priority::Debug,
-                "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the check fee {}",
-                DisplayOutpoint(&utxo.outpoint),
-                DisplayAmount(utxo.value),
-                DisplayAmount(check_fee),
-            );
+            log!(Priority::Debug, "{ignored_reason}");
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }

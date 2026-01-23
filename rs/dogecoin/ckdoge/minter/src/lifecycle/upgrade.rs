@@ -5,6 +5,10 @@ use serde::Serialize;
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct UpgradeArgs {
+    /// Minimum amount of doge that can be deposited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_doge_min_amount: Option<u64>,
+
     /// Minimum amount of doge that can be retrieved.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retrieve_doge_min_amount: Option<u64>,
@@ -40,6 +44,7 @@ pub struct UpgradeArgs {
 impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
     fn from(
         UpgradeArgs {
+            deposit_doge_min_amount,
             retrieve_doge_min_amount,
             min_confirmations,
             max_time_in_queue_nanos,
@@ -50,6 +55,7 @@ impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
         }: UpgradeArgs,
     ) -> Self {
         CkbtcMinterUpgradeArgs {
+            deposit_btc_min_amount: deposit_doge_min_amount,
             retrieve_btc_min_amount: retrieve_doge_min_amount,
             min_confirmations,
             max_time_in_queue_nanos,
@@ -66,6 +72,7 @@ impl From<UpgradeArgs> for CkbtcMinterUpgradeArgs {
 impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
     fn from(
         CkbtcMinterUpgradeArgs {
+            deposit_btc_min_amount,
             retrieve_btc_min_amount,
             min_confirmations,
             max_time_in_queue_nanos,
@@ -80,6 +87,7 @@ impl From<CkbtcMinterUpgradeArgs> for UpgradeArgs {
         }: CkbtcMinterUpgradeArgs,
     ) -> Self {
         UpgradeArgs {
+            deposit_doge_min_amount: deposit_btc_min_amount,
             retrieve_doge_min_amount: retrieve_btc_min_amount,
             min_confirmations,
             max_time_in_queue_nanos,

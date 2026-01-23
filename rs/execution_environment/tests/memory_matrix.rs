@@ -222,7 +222,7 @@ where
                 }
                 MemoryUsageChange::None => match scenario_params.scenario {
                     Scenario::IncreaseMemoryAllocation => {
-                        assert!(memory_usage_after_setup.get() >= GIB);
+                        assert_ge!(memory_usage_after_setup.get(), GIB);
                         memory_usage_after_setup.get() - GIB
                     }
                     Scenario::DecreaseMemoryAllocation => memory_usage_after_setup.get() + GIB,
@@ -233,7 +233,10 @@ where
                     // which also clears canister logs, so we need to account for that.
                     let memory_allocation_crossed_offset = 2 * KIB;
                     // What decreases memory usage: clearning chunk store, uninstalling/deleting canister (canister logs).
-                    assert!(memory_usage_after_setup.get() >= memory_allocation_crossed_offset);
+                    assert_ge!(
+                        memory_usage_after_setup.get(),
+                        memory_allocation_crossed_offset
+                    );
                     memory_usage_after_setup.get() - memory_allocation_crossed_offset
                 }
             }
@@ -254,7 +257,7 @@ where
         }
         _ => Cycles::zero(),
     };
-    assert!(run_params.initial_cycles >= refund_for_response_transmission);
+    assert_ge!(run_params.initial_cycles, refund_for_response_transmission);
     let initial_cycles = run_params.initial_cycles - refund_for_response_transmission;
     let consume_cycles = test.canister_state(canister_id).system_state.balance() - initial_cycles;
     test.consume_cycles(canister_id, consume_cycles);
@@ -314,7 +317,7 @@ where
                     assert_gt!(current_memory_usage, memory_allocation)
                 }
                 Scenario::DecreaseMemoryAllocation => {
-                    assert_lt!(current_memory_usage, memory_allocation,)
+                    assert_lt!(current_memory_usage, memory_allocation)
                 }
                 _ => assert_eq!(current_memory_usage, memory_allocation),
             },

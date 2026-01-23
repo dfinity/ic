@@ -10,7 +10,6 @@ documentation.workspace = true
 askama = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
-byte-unit = "4.0.14"
 bytes = { workspace = true }
 cfg-if = "1.0.0"
 crossbeam = "0.8.4"
@@ -48,7 +47,6 @@ ic-validator = { path = "../../validator" }
 inferno = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

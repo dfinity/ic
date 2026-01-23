@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &[manifest_dir.join("proto/remote_attestation.proto")],
             &[
                 manifest_dir.join("proto"),
-                manifest_dir.join("../../attestation/proto"),
+                manifest_dir.join("../../sev/attestation/proto"),
             ],
         )?;
 

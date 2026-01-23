@@ -4,6 +4,24 @@ use crate::crypto::*;
 use proptest::prelude::*;
 mod tests;
 
+// Once upon a time we had placed the `seed` values directly into the output
+// `FrRepr` value, but this places a large burden on the caller, who must
+// guarantee `seed` represents a number strictly less than the group order, or
+// risk generating from a non-uniform distribution. Now, we use `seed` to seed a
+// RNG, then use this to generate a uniform random element.
+fn keypair_from_seed(seed: [u64; 4]) -> (SecretKey, PublicKey) {
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+    let mut seed_as_u8: [u8; 32] = [0; 32];
+    for i in 0..4 {
+        let bs = seed[i].to_be_bytes();
+        for j in 0..8 {
+            seed_as_u8[i * 8 + j] = bs[j];
+        }
+    }
+    keypair_from_rng(&mut ChaCha20Rng::from_seed(seed_as_u8))
+}
+
 //////////////////////
 // Proptest strategies
 // These are for generating data types

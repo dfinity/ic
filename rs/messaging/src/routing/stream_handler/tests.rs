@@ -12,7 +12,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
-use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
+use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
 use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{

@@ -1,6 +1,12 @@
 use crate::{
-    pb::v1::{GovernanceError, LoadCanisterSnapshot, Topic, governance_error::ErrorType},
-    proposals::{call_canister::CallCanister, topic_to_manage_canister},
+    pb::v1::{
+        GovernanceError, LoadCanisterSnapshot, SelfDescribingValue, Topic,
+        governance_error::ErrorType,
+    },
+    proposals::{
+        call_canister::CallCanister, self_describing::LocallyDescribableProposalAction,
+        topic_to_manage_canister,
+    },
 };
 use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -90,3 +96,18 @@ fn validate_canister_id(
 fn defects_to_governance_error(defects: Vec<String>) -> GovernanceError {
     crate::proposals::invalid_proposal_error(&defects.join("; "))
 }
+
+impl LocallyDescribableProposalAction for LoadCanisterSnapshot {
+    const TYPE_NAME: &'static str = "Load Canister Snapshot";
+    const TYPE_DESCRIPTION: &'static str = "A proposal to load a previously taken snapshot of \
+        an NNS-controlled canister's state. The canister's state will be restored to the state \
+        captured in the snapshot.";
+
+    fn to_self_describing_value(&self) -> SelfDescribingValue {
+        SelfDescribingValue::from(self.clone())
+    }
+}
+
+#[cfg(test)]
+#[path = "load_canister_snapshot_tests.rs"]
+mod tests;

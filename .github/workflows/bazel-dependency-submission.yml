@@ -3,7 +3,7 @@ name: Bazel Dependency Submission
 on:
   push:
     branches:
-      - 'master'
+      - ${{ github.repository == 'dfinity/ic-private' && 'master-private' || 'master' }}
 
 permissions:
   contents: write

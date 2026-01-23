@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use assert_matches::assert_matches;
+use more_asserts::assert_gt;
 
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
@@ -1033,11 +1034,11 @@ fn dts_ingress_induction_cycles_debit_is_applied_on_replicated_execution_aborts(
             .system_state
             .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-        assert!(
+        assert_gt!(
             test.canister_state(a_id)
                 .system_state
-                .ingress_induction_cycles_debit()
-                > Cycles::zero()
+                .ingress_induction_cycles_debit(),
+            Cycles::zero()
         );
 
         test.abort_all_paused_executions();
@@ -1215,7 +1216,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_update() {
 
     // Make sure the `instructions_executed` is updated.
     let instructions_executed_a_1 = call_context.instructions_executed();
-    assert!(instructions_executed_a_1 > 0.into());
+    assert_gt!(instructions_executed_a_1, 0.into());
 }
 
 #[test]

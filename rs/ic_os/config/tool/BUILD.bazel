@@ -12,7 +12,7 @@ DEPENDENCIES = [
     "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/networking/deterministic_ips",
     "//rs/ic_os/networking/network",
-    "//rs/ic_os/sev",
+    "//rs/ic_os/sev/guest",
     "//rs/ic_os/utils",
     "@crate_index//:anyhow",
     "@crate_index//:askama",

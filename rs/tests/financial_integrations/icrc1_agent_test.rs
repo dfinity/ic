@@ -7,19 +7,8 @@ use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1_ledger::{ArchiveOptions, FeatureFlags, InitArgsBuilder, LedgerArgument, UpgradeArgs};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use ic_system_test_driver::util::{agent_with_identity, random_ed25519_identity};
-use icrc_ledger_agent::{CallMode, Icrc1Agent};
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
-use icrc_ledger_types::icrc2::approve::ApproveArgs;
-use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
-use icrc_ledger_types::{
-    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
-};
-use on_wire::IntoWire;
-use std::env;
-
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -30,7 +19,16 @@ use ic_system_test_driver::{
     systest,
     util::{assert_create_agent, block_on, runtime_from_url},
 };
-
+use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value, icrc::metadata_key::MetadataKey,
+    icrc3::blocks::GetBlocksRequest,
+};
+use on_wire::IntoWire;
 use std::convert::TryFrom;
 
 pub fn setup(env: TestEnv) {
@@ -221,15 +219,16 @@ pub fn test(env: TestEnv) {
         // metadata
         let expected_metadata = vec![
             Value::entry(
-                "icrc1:decimals",
+                MetadataKey::ICRC1_DECIMALS,
                 ic_ledger_core::tokens::DECIMAL_PLACES as u64,
-            ),
-            Value::entry("icrc1:name", init_args.token_name),
-            Value::entry("icrc1:symbol", init_args.token_symbol),
-            Value::entry("icrc1:fee", init_args.transfer_fee.clone()),
-            Value::entry("icrc1:max_memo_length", 32u64),
-            Value::entry("icrc103:public_allowances", "true"),
-            Value::entry("icrc103:max_take_value", 500u64),
+            )
+            .unwrap(),
+            Value::entry(MetadataKey::ICRC1_NAME, init_args.token_name).unwrap(),
+            Value::entry(MetadataKey::ICRC1_SYMBOL, init_args.token_symbol).unwrap(),
+            Value::entry(MetadataKey::ICRC1_FEE, init_args.transfer_fee.clone()).unwrap(),
+            Value::entry(MetadataKey::ICRC1_MAX_MEMO_LENGTH, 32u64).unwrap(),
+            Value::entry(MetadataKey::ICRC103_PUBLIC_ALLOWANCES, "true").unwrap(),
+            Value::entry(MetadataKey::ICRC103_MAX_TAKE_VALUE, 500u64).unwrap(),
         ];
         assert_eq!(
             expected_metadata,
@@ -411,7 +410,7 @@ fn mleaf<B: AsRef<[u8]>>(blob: B) -> MixedHashTree {
 pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
-        get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
+        get_dependency_path_from_env("LEDGER_WASM_PATH"),
         Some(Encode!(&args).unwrap()),
     )
     .await

@@ -21,7 +21,6 @@ ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-dkg = { path = "../consensus/dkg" }
 ic-consensus-utils = { path = "../consensus/utils" }
 ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }
@@ -49,7 +48,6 @@ ic-types = { path = "../types/types" }
 icp-ledger = { path = "../ledger_suite/icp" }
 mockall = { workspace = true }
 prost = { workspace = true }
-rand = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -60,7 +58,6 @@ tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
-url = { workspace = true }
 
 [dev-dependencies]
 async-trait = { workspace = true }

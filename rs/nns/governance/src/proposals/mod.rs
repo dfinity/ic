@@ -259,6 +259,12 @@ impl ValidProposalAction {
             ValidProposalAction::BlessAlternativeGuestOsVersion(
                 bless_alternative_guest_os_version,
             ) => Ok(bless_alternative_guest_os_version.to_self_describing_action()),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                Ok(take_canister_snapshot.to_self_describing_action())
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                Ok(load_canister_snapshot.to_self_describing_action())
+            }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 "Self describing proposal actions are not supported for this proposal action yet.",

@@ -9,7 +9,7 @@ rust_library(
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
-    version = "11.0.0",
+    version = "12.0.0",
     deps = [
         # Keep sorted.
         "@crate_index//:backoff",
@@ -24,7 +24,6 @@ rust_library(
         "@crate_index//:schemars",
         "@crate_index//:semver",
         "@crate_index//:serde",
-        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:serde_json",
         "@crate_index//:sha2",

@@ -5,7 +5,7 @@ use super::subnet_call_context_manager::{
 };
 use super::*;
 use crate::InputQueueType;
-use crate::testing::CanisterQueuesTesting;
+use crate::testing::{CanisterQueuesTesting, StreamTesting};
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,

@@ -1,0 +1,17 @@
+[package]
+name = "sev_host"
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+der = { workspace = true }
+mockall = { workspace = true }
+reqwest = { workspace = true }
+sev = { workspace = true }
+tempfile = { workspace = true }
+
+[dev-dependencies]
+pem = { workspace = true }
+rcgen = { workspace = true }
+tokio = { workspace = true }
+

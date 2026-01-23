@@ -1,7 +1,7 @@
 {
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus-prs",
-    "defi-team": "eng-defi-prs",
+    "defi": "eng-defi-prs",
     "DRE": "eng-release-bots",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",

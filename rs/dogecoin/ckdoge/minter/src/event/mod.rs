@@ -78,6 +78,13 @@ pub enum CkDogeMinterEventType {
     #[serde(rename = "checked_utxo")]
     CheckedUtxo { utxo: Utxo, account: Account },
 
+    #[serde(rename = "suspended_utxo")]
+    SuspendedUtxo {
+        utxo: Utxo,
+        account: Account,
+        reason: SuspendedReason,
+    },
+
     /// Indicates that the minter accepted a new retrieve_doge request.
     /// The minter emits this event _after_ it burnt ckDOGE.
     #[serde(rename = "accepted_retrieve_doge_request")]
@@ -415,18 +422,15 @@ impl TryFrom<CkBtcMinterEventType> for CkDogeMinterEventType {
                 mint_block_index,
             }),
 
-            CkBtcMinterEventType::SuspendedUtxo { reason, .. } => {
-                let explanation = match reason {
-                    SuspendedReason::ValueTooSmall => {
-                        // TODO DEFI-2572: handle event when setting a minimum deposit amount.
-                        "Unexpected ignored UTXO event since `check_fee` is null for ckDOGE"
-                    }
-                    SuspendedReason::Quarantined => {
-                        "Unexpected quarantined UTXO event since ckDOGE does not check whether UTXOs are tainted"
-                    }
-                };
-                Err(format!("{explanation}: {event:?}"))
-            }
+            CkBtcMinterEventType::SuspendedUtxo {
+                utxo,
+                account,
+                reason,
+            } => Ok(CkDogeMinterEventType::SuspendedUtxo {
+                utxo,
+                account,
+                reason,
+            }),
             CkBtcMinterEventType::CreatedConsolidateUtxosRequest(
                 ic_ckbtc_minter::state::ConsolidateUtxosRequest {
                     amount,
@@ -473,6 +477,15 @@ impl From<CkDogeMinterEventType> for CkBtcMinterEventType {
             CkDogeMinterEventType::CheckedUtxo { utxo, account } => {
                 CkBtcMinterEventType::CheckedUtxoV2 { utxo, account }
             }
+            CkDogeMinterEventType::SuspendedUtxo {
+                utxo,
+                account,
+                reason,
+            } => CkBtcMinterEventType::SuspendedUtxo {
+                utxo,
+                account,
+                reason,
+            },
             CkDogeMinterEventType::AcceptedRetrieveDogeRequest(RetrieveDogeRequest {
                 amount,
                 address,

@@ -8,6 +8,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCustomizations,
+    get_dependency_path_from_env,
 };
 use ic_system_test_driver::retry_with_msg_async;
 use ic_system_test_driver::util::block_on;
@@ -29,8 +30,6 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    let _just_making_sure_if_exists = fetch_ic_admin_path();
-
     let caller = *TEST_USER1_PRINCIPAL;
     let mut ic = InternetComputer::new()
         .add_subnet(Subnet::new(ic_registry_subnet_type::SubnetType::System).add_nodes(3))
@@ -54,20 +53,6 @@ fn setup(env: TestEnv) {
     };
 
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
-}
-
-#[must_use]
-fn fetch_ic_admin_path() -> String {
-    let ic_admin_path = std::env::var("IC_ADMIN_PATH").expect(
-        "IC admin isn't present in the environment variables and is required for this test to run",
-    );
-
-    if !std::fs::exists(&ic_admin_path).unwrap_or_default() {
-        panic!(
-            "Provided IC_ADMIN_PATH {ic_admin_path} does not point to a file accessible by this test"
-        );
-    }
-    ic_admin_path
 }
 
 fn test(env: TestEnv) {
@@ -178,9 +163,9 @@ async fn ic_admin_swap_nodes(
     env: &TestEnv,
 ) -> Result<()> {
     let logger = env.logger();
-    let ic_admin_bin_path = fetch_ic_admin_path();
+    let ic_admin_bin_path = get_dependency_path_from_env("IC_ADMIN_PATH");
 
-    info!(logger, "IC admin path: {ic_admin_bin_path}");
+    info!(logger, "IC admin path: {ic_admin_bin_path:?}");
 
     let key_path = env.get_path("test_operator_key.pem");
     info!(logger, "Storing key contents to: {}", key_path.display());
@@ -204,7 +189,7 @@ async fn ic_admin_swap_nodes(
 
     info!(
         logger,
-        "Running the following command with ic-admin: {ic_admin_bin_path} {}",
+        "Running the following command with ic-admin: {ic_admin_bin_path:?} {}",
         args.join(" ")
     );
 

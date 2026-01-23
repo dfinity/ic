@@ -47,6 +47,7 @@ use icrc_ledger_types::icrc103::get_allowances::{
 use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc3::{
         archive::ArchiveInfo,
         blocks::GetBlocksRequest,
@@ -644,7 +645,7 @@ fn icrc1_fee() -> Nat {
 }
 
 #[query]
-fn icrc1_metadata() -> Vec<(String, Value)> {
+fn icrc1_metadata() -> Vec<(MetadataKey, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 

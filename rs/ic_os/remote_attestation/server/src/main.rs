@@ -1,17 +1,17 @@
 use anyhow::Context;
-use attestation::attestation_package::generate_attestation_package;
+use attestation::custom_data::{SevCustomData, SevCustomDataNamespace};
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use config_types::TrustedExecutionEnvironmentConfig;
-use ic_sev::guest::custom_data::{SevCustomData, SevCustomDataNamespace};
-use ic_sev::guest::firmware::SevGuestFirmware;
-use ic_sev::guest::is_sev_active;
 use remote_attestation_shared::DEFAULT_PORT;
 use remote_attestation_shared::proto::remote_attestation_service_server::{
     RemoteAttestationService, RemoteAttestationServiceServer,
 };
 use remote_attestation_shared::proto::{AttestRequest, AttestResponse};
 use sev::firmware::guest::Firmware;
+use sev_guest::attestation_package::generate_attestation_package;
+use sev_guest::firmware::SevGuestFirmware;
+use sev_guest::is_sev_active;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tonic::transport::Server;
@@ -122,12 +122,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use attestation::verification::{
-        AttestationVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
+    use attestation::attestation_package::{
+        AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
     };
-    use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
     use rand::SeedableRng;
     use rand::rngs::SmallRng;
+    use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
     use tokio::test;
 
     async fn attest_and_get_report(

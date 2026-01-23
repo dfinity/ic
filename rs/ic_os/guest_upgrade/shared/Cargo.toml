@@ -4,7 +4,7 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-attestation = { path = "../../attestation" }
+attestation = { path = "../../sev/attestation" }
 der = { workspace = true }
 prost = { workspace = true }
 tonic = { workspace = true }

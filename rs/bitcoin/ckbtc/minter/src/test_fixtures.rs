@@ -25,6 +25,7 @@ pub fn init_args() -> InitArgs {
     InitArgs {
         btc_network: Network::Mainnet,
         ecdsa_key_name: "key_1".to_string(),
+        deposit_btc_min_amount: None,
         retrieve_btc_min_amount: 10_000,
         ledger_id: CanisterId::unchecked_from_principal(
             Principal::from_text("mxzaz-hqaaa-aaaar-qaada-cai")
@@ -34,7 +35,9 @@ pub fn init_args() -> InitArgs {
         max_time_in_queue_nanos: 600_000_000_000,
         min_confirmations: Some(6),
         mode: crate::state::Mode::GeneralAvailability,
-        btc_checker_principal: Some(CanisterId::from(0)),
+        btc_checker_principal: Some(CanisterId::unchecked_from_principal(
+            BTC_CHECKER_CANISTER_ID.into(),
+        )),
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
@@ -587,6 +590,7 @@ pub mod arbitrary {
                 btc_network(),
                 canister_id(),
                 ".*",
+                option::of(0..u64::MAX),
                 0..u64::MAX,
                 0..u64::MAX,
                 mode(),
@@ -597,6 +601,7 @@ pub mod arbitrary {
                         btc_network,
                         ledger_id,
                         ecdsa_key_name,
+                        deposit_btc_min_amount,
                         retrieve_btc_min_amount,
                         max_time_in_queue_nanos,
                         mode,
@@ -605,6 +610,7 @@ pub mod arbitrary {
                         btc_network,
                         ledger_id,
                         ecdsa_key_name,
+                        deposit_btc_min_amount,
                         retrieve_btc_min_amount,
                         max_time_in_queue_nanos,
                         mode,
@@ -622,6 +628,7 @@ pub mod arbitrary {
 
         fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
             prop_struct!(UpgradeArgs {
+                deposit_btc_min_amount: option::of(any::<u64>()),
                 retrieve_btc_min_amount: option::of(any::<u64>()),
                 min_confirmations: option::of(any::<u32>()),
                 max_time_in_queue_nanos: option::of(any::<u64>()),

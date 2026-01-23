@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-async-trait = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
 hex = { workspace = true }

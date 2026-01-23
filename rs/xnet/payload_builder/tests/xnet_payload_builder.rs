@@ -14,6 +14,7 @@ use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_s
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::metadata_state::Stream;
+use ic_replicated_state::testing::StreamTesting;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{

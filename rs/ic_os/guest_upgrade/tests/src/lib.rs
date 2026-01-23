@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use anyhow::bail;
-use attestation::verification::SevRootCertificateVerification;
+use attestation::attestation_package::SevRootCertificateVerification;
 use attestation_testing::registry::setup_mock_registry_client_with_blessed_versions;
 use config_types::{
     GuestOSConfig, GuestOSUpgradeConfig, GuestVMType, ICOSSettings,
@@ -15,8 +15,8 @@ use guest_upgrade_shared::{DEFAULT_SERVER_PORT, STORE_DEVICE};
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurements, ReplicaVersionRecord,
 };
-use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
-use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
+use sev_guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use sev_guest_testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use std::future::Future;
 use std::net::Ipv6Addr;
 use std::path::Path;

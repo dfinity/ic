@@ -948,7 +948,7 @@ fn canister_state_callback_round_trip() {
 
     for callback in [minimal_callback, maximal_callback, u64_callback] {
         let pb_callback = pb::Callback::from(&callback);
-        let round_trip = Callback::try_from(pb_callback).unwrap();
+        let round_trip = Callback::try_from((pb_callback, CANISTER_ID)).unwrap();
 
         assert_eq!(callback, round_trip);
     }

@@ -126,7 +126,7 @@ fn test_decode_candid_args_to_self_describing_value_opt_some() {
         schema,
         "set_value",
         &encoded,
-        SelfDescribingValue::Array(vec![SelfDescribingValue::from(42_u64)]),
+        SelfDescribingValue::from(42_u64),
     );
 }
 
@@ -141,12 +141,7 @@ fn test_decode_candid_args_to_self_describing_value_opt_none() {
     let arg: Option<Nat> = None;
     let encoded = Encode!(&arg).unwrap();
 
-    assert_candid_converts_to(
-        schema,
-        "set_value",
-        &encoded,
-        SelfDescribingValue::Array(vec![]),
-    );
+    assert_candid_converts_to(schema, "set_value", &encoded, SelfDescribingValue::Null);
 }
 
 #[test]
@@ -250,12 +245,7 @@ fn test_decode_candid_args_to_self_describing_value_empty_args() {
 
     let encoded = Encode!().unwrap();
 
-    assert_candid_converts_to(
-        schema,
-        "no_args",
-        &encoded,
-        SelfDescribingValue::Array(vec![]),
-    );
+    assert_candid_converts_to(schema, "no_args", &encoded, SelfDescribingValue::Null);
 }
 
 #[test]
@@ -288,7 +278,7 @@ fn test_decode_candid_args_to_self_describing_value_reserved() {
         &encoded,
         SelfDescribingValue::Map(hashmap! {
             "first".to_string() => SelfDescribingValue::from("John"),
-            "last".to_string() => SelfDescribingValue::Array(vec![]),
+            "last".to_string() => SelfDescribingValue::Null,
         }),
     );
 }

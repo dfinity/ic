@@ -7,7 +7,7 @@ use url::Url;
 
 use std::{
     fmt::Display,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -116,7 +116,8 @@ impl AdminHelper {
         &self,
         upgrade_version: &ReplicaVersion,
         upgrade_url: &Url,
-        sha256: String,
+        sha256: &str,
+        guest_launch_measurements_path: &Path,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base();
 
@@ -125,6 +126,10 @@ impl AdminHelper {
             .add_argument("replica-version-to-elect", quote(upgrade_version))
             .add_argument("release-package-urls", quote(upgrade_url))
             .add_argument("release-package-sha256-hex", quote(sha256))
+            .add_argument(
+                "guest-launch-measurements-path",
+                quote(guest_launch_measurements_path.display()),
+            )
             .add_argument(
                 SUMMARY_ARG,
                 quote(format!(
@@ -414,7 +419,8 @@ mod tests {
             .get_propose_to_update_elected_replica_versions_command(
                 &ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
                 &Url::try_from("https://fake_upgrade_url.com").unwrap(),
-                "fake_sha_256".to_string(),
+                "fake_sha_256",
+                &PathBuf::from("/fake/guest/launch/measurements/path with spaces"),
             )
             .join(" ");
 
@@ -426,6 +432,7 @@ mod tests {
             --replica-version-to-elect \"fake_replica_version\" \
             --release-package-urls \"https://fake_upgrade_url.com/\" \
             --release-package-sha256-hex \"fake_sha_256\" \
+            --guest-launch-measurements-path \"/fake/guest/launch/measurements/path with spaces\" \
             --summary \"Elect new replica binary revision (commit fake_replica_version)\" \
             --test-neuron-proposer"
         );

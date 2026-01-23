@@ -349,10 +349,13 @@ impl From<&Callback> for pb::Callback {
     }
 }
 
-impl TryFrom<pb::Callback> for Callback {
+// `own_canister_id` is used for forward compatibility: `originator` will be
+// dropped in a future replica version, but we still need to populate it if
+// rolling back.
+impl TryFrom<(pb::Callback, CanisterId)> for Callback {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb::Callback) -> Result<Self, Self::Error> {
+    fn try_from((value, own_canister_id): (pb::Callback, CanisterId)) -> Result<Self, Self::Error> {
         let on_reply: pb::WasmClosure =
             try_from_option_field(value.on_reply, "Callback::on_reply")?;
         let on_reject: pb::WasmClosure =
@@ -371,7 +374,8 @@ impl TryFrom<pb::Callback> for Callback {
 
         Ok(Self {
             call_context_id: CallContextId::from(value.call_context_id),
-            originator: try_from_option_field(value.originator, "Callback::originator")?,
+            originator: try_from_option_field(value.originator, "Callback::originator")
+                .unwrap_or(own_canister_id),
             respondent: try_from_option_field(value.respondent, "Callback::respondent")?,
             cycles_sent: Cycles::from(cycles_sent),
             prepayment_for_response_execution,

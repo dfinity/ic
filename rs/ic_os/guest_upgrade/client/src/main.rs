@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use attestation::verification::SevRootCertificateVerification;
+use attestation::attestation_package::SevRootCertificateVerification;
 use config_tool::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
 use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;

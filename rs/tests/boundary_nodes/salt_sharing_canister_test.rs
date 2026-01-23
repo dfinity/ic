@@ -16,20 +16,19 @@ use ic_base_types::PrincipalId;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use salt_sharing_api::InitArg;
 use slog::info;
-use std::{env, net::SocketAddr, str::FromStr, time::Duration};
+use std::{net::SocketAddr, str::FromStr, time::Duration};
 use tokio::runtime::Runtime;
 
 use ic_agent::export::reqwest::Client;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::test_env_api::NnsInstallationBuilder,
     driver::{
         group::SystemTestGroup,
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            get_dependency_path,
+            NnsInstallationBuilder, get_dependency_path_from_env,
         },
     },
     retry_with_msg_async, systest,
@@ -86,10 +85,7 @@ async fn test_async(env: TestEnv) {
         .await
         .unwrap();
 
-    let path_to_wasm = get_dependency_path(
-        env::var("SALT_SHARING_CANISTER_WASM_PATH")
-            .expect("SALT_SHARING_CANISTER_WASM_PATH not set"),
-    );
+    let path_to_wasm = get_dependency_path_from_env("SALT_SHARING_CANISTER_WASM_PATH");
 
     let args = Encode!(&InitArg {
         regenerate_now: true,

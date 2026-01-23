@@ -11,6 +11,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/monitoring/logger",
+        "//rs/phantom_newtype",
         "//rs/replicated_state",
         "//rs/sys",
         "//rs/types/types",
@@ -19,6 +20,12 @@ rust_library(
         "@crate_index//:nix",
         "@crate_index//:slog",
     ],
+    # In order to check the determinism of the signal handler, enable this
+    # feature and export an environment variable CHECKSUM_FILE to the file where
+    # the checksum will be written.  Then run some tests sequentially and
+    # compare the files produced by various runs. Any differences show there was
+    # some non-determinism.
+    # crate_features = ["sigsegv_handler_checksum"],
 )
 
 rust_test(
@@ -27,6 +34,7 @@ rust_test(
     deps = [
         # Keep sorted.
         "@crate_index//:proptest",
+        "@crate_index//:rstest",
         "@crate_index//:tempfile",
     ],
 )

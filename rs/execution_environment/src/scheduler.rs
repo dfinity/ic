@@ -44,7 +44,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
-use more_asserts::{debug_assert_ge, debug_assert_le};
+use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
@@ -1432,7 +1432,7 @@ impl Scheduler for SchedulerImpl {
                 .raw_rand_contexts
                 .pop_front()
             {
-                debug_assert!(raw_rand_context.execution_round_id < current_round);
+                debug_assert_lt!(raw_rand_context.execution_round_id, current_round);
                 let (new_state, _) = self.execute_subnet_message(
                     CanisterMessage::Request(raw_rand_context.request.into()),
                     state,

@@ -77,14 +77,13 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance/api",
     "//rs/nns/governance/init",
-    "//rs/nns/gtc_accounts",
+    "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/handlers/root/interface",
     "//rs/nns/sns-wasm",
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/subnet_type",
-    "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",
     "//rs/sns/swap",
@@ -93,7 +92,6 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
     "@crate_index//:chrono_canisters",
@@ -116,7 +114,6 @@ DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "@crate_index//:serde_json",
     "@crate_index//:strum",
 ] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
@@ -386,6 +383,10 @@ rust_test(
     name = "governance_test",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    data = [
+        "//rs/nns/handlers/lifeline/impl:lifeline.did",
+        "//rs/nns/handlers/root/impl:canister/root.did",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
@@ -397,6 +398,10 @@ rust_test(
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_features = test_with_tla(),
+    data = [
+        "//rs/nns/handlers/lifeline/impl:lifeline.did",
+        "//rs/nns/handlers/root/impl:canister/root.did",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",

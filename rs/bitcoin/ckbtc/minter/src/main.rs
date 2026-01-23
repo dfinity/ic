@@ -251,6 +251,7 @@ fn get_minter_info() -> MinterInfo {
         check_fee: s.check_fee,
         min_confirmations: s.min_confirmations,
         retrieve_btc_min_amount: s.fee_based_retrieve_btc_min_amount,
+        deposit_btc_min_amount: Some(s.effective_deposit_min_btc_amount()),
     })
 }
 
