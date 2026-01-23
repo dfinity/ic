@@ -1181,8 +1181,9 @@ fn dts_and_nondts_cycles_match_after_response() {
     };
     assert_eq!(time_a, time_b);
     assert_eq!(start_time, time_a);
-    assert!(
-        test_a.state().time() < test_b.state().time(),
+    assert_lt!(
+        test_a.state().time(),
+        test_b.state().time(),
         "Time should have progressed further in DTS"
     );
     assert_eq!(
@@ -1207,8 +1208,9 @@ fn dts_and_nondts_cycles_match_if_response_fails() {
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
-    assert!(
-        test_a.state().time() < test_b.state().time(),
+    assert_lt!(
+        test_a.state().time(),
+        test_b.state().time(),
         "Time should have progressed further in DTS"
     );
     assert_eq!(
@@ -1233,8 +1235,9 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
     let status_a = test_a.ingress_status(&amsg_id);
     let status_b = test_b.ingress_status(&bmsg_id);
     assert_eq!(status_a, status_b);
-    assert!(
-        test_a.state().time() < test_b.state().time(),
+    assert_lt!(
+        test_a.state().time(),
+        test_b.state().time(),
         "Time should have progressed further in DTS"
     );
 
@@ -2086,9 +2089,9 @@ fn response_callback_succeeds_with_memory_reservation() {
     check_ingress_status(ingress_status).unwrap();
 
     // Verify that the response callback allocated at least 80MB.
-    assert!(
-        available_memory_before_finishing_callback
-            >= test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+    assert_ge!(
+        available_memory_before_finishing_callback,
+        test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
     );
 }
 
@@ -2216,10 +2219,10 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
 
     // Verify that the cleanup callback allocated at least 80MB.
-    assert!(
-        available_memory_before_finishing_callback
-            >= test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
-    )
+    assert_ge!(
+        available_memory_before_finishing_callback,
+        test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+    );
 }
 
 #[test]

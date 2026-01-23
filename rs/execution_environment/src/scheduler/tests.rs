@@ -472,8 +472,9 @@ fn no_heap_delta_rate_limiting_for_system_subnet() {
     );
 
     // Assert that we reached the subnet heap delta capacity (140 GiB) in 70 rounds.
-    assert!(
-        test.scheduler().metrics.current_heap_delta.get() as usize >= SUBNET_HEAP_DELTA_CAPACITY
+    assert_ge!(
+        test.scheduler().metrics.current_heap_delta.get() as usize,
+        SUBNET_HEAP_DELTA_CAPACITY
     );
 
     // After a checkpoint round, the message should be executed.
@@ -1948,8 +1949,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     // Assert penalized canister accumulated priority is lower.
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
     let other = test.state().canister_state(&other_long_id).unwrap();
-    assert!(
-        penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
+    assert_lt!(
+        penalized.scheduler_state.accumulated_priority,
+        other.scheduler_state.accumulated_priority
     );
 
     // Start another long execution on the penalized canister.
@@ -1980,8 +1982,9 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     // Assert penalized canister accumulated priority is still lower.
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
     let other = test.state().canister_state(&other_long_id).unwrap();
-    assert!(
-        penalized.scheduler_state.accumulated_priority < other.scheduler_state.accumulated_priority
+    assert_lt!(
+        penalized.scheduler_state.accumulated_priority,
+        other.scheduler_state.accumulated_priority
     );
     let penalized_executed_before = penalized.system_state.canister_metrics.executed;
 

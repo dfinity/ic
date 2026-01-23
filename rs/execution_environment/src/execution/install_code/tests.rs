@@ -25,6 +25,7 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
+use more_asserts::assert_le;
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -2313,9 +2314,9 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.abs_diff(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
@@ -2396,9 +2397,9 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let final_cycles = test.canister_state(canister_id).system_state.balance();
     let charged_cycles = initial_cycles - final_cycles;
     // There seems to be a rounding difference from prepay and refund.
-    assert!(
-        charged_cycles - expected_cost <= Cycles::from(1_u64)
-            && expected_cost - charged_cycles <= Cycles::from(1_u64),
+    assert_le!(
+        charged_cycles.abs_diff(expected_cost),
+        Cycles::from(1_u64),
         "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }

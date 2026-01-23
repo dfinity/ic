@@ -48,7 +48,7 @@ use ic_types::{
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
-use more_asserts::{assert_ge, assert_gt, assert_lt};
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
@@ -3706,9 +3706,9 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
-    assert!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_execution_memory()
+    assert_gt!(
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_guaranteed_response_message_memory(),
@@ -3735,9 +3735,9 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         )"#;
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
-    assert!(
-        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_execution_memory()
+    assert_gt!(
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_guaranteed_response_message_memory(),
@@ -9633,15 +9633,17 @@ fn aborting_call_resets_balance() {
 
 fn balance_is_roughly(actual_balance: u128, expected_balance: u128) {
     const EPS: u128 = 100_000_000_000;
-    assert!(
-        actual_balance >= expected_balance.saturating_sub(EPS),
+    assert_ge!(
+        actual_balance,
+        expected_balance.saturating_sub(EPS),
         "actual: {}; expected: {}; diff: {}B",
         actual_balance,
         expected_balance,
         (expected_balance - actual_balance) / 1_000_000_000
     );
-    assert!(
-        actual_balance <= expected_balance.saturating_add(EPS),
+    assert_le!(
+        actual_balance,
+        expected_balance.saturating_add(EPS),
         "actual: {}; expected: {}: diff: {}B",
         actual_balance,
         expected_balance,

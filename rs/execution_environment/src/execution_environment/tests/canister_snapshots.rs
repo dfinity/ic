@@ -38,7 +38,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use more_asserts::assert_gt;
+use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
@@ -1778,8 +1778,9 @@ fn load_canister_snapshot_charges_canister_cycles() {
         LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     let result = test.subnet_message("load_canister_snapshot", args.encode());
     assert!(result.is_ok());
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
+    assert_lt!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge
     );
 }
 
