@@ -56,7 +56,7 @@ IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep="${!env_var}"
     new_dep="$(sed 's|/|-|g' <<<"$old_dep")"
-    ln -s "$PWD/$old_dep" "$RUNFILES/$new_dep"
+    ln -sf "$PWD/$old_dep" "$RUNFILES/$new_dep"
     export "$env_var=$new_dep"
 done
 
