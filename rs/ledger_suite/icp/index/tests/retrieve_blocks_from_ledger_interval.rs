@@ -100,7 +100,7 @@ fn install_index_with_interval(
     env: &StateMachine,
     ledger_id: CanisterId,
     retrieve_blocks_from_ledger_interval_seconds: Option<u64>,
-) -> CanisterId {
+) -> Result<CanisterId, UserError> {
     let index_id = install_index(env, ledger_id);
 
     // Configure the interval via upgrade if specified
@@ -108,11 +108,10 @@ fn install_index_with_interval(
         let upgrade_arg = UpgradeArg {
             retrieve_blocks_from_ledger_interval_seconds: Some(interval),
         };
-        env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())
-            .unwrap();
+        env.upgrade_canister(index_id, index_wasm(), Encode!(&Some(upgrade_arg)).unwrap())?;
     }
 
-    index_id
+    Ok(index_id)
 }
 
 fn status(env: &StateMachine, index_id: CanisterId) -> Status {
@@ -134,7 +133,8 @@ fn install_and_upgrade(
         vec![(account(1, 0), 1_000_000_000)],
         default_archive_options(),
     );
-    let index_id = install_index_with_interval(env, ledger_id, install_interval);
+
+    let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -274,7 +274,7 @@ fn should_sync_according_to_interval() {
                     install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
 
                 // Install an index with a specific interval
-                let index_id = install_index_with_interval(env, ledger_id, install_interval);
+                let index_id = install_index_with_interval(env, ledger_id, install_interval)?;
 
                 // Send a transaction and verify that the index is synced after the interval
                 // specified during the install, or the default value if the interval specified
