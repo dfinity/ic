@@ -18,8 +18,7 @@ Previous ckBTC minter proposal: https://dashboard.internetcomputer.org/proposal/
 
 Besides upgrading the ckBTC minter to the latest version,
 the main motivation for this proposal is to reduce the number of confirmations required by the minter to process a deposit and mint ckBTC.
-Changing that number from 6 to 4 should only marginally impact the security of the ckBTC token, which consists of being backed 1:1 by BTC at all times,
-while improving the user experience for certain applications (e.g., being able to react to falling market prices more quickly for lending applications).
+Changing that number from 6 to 4 should only marginally impact the security of the ckBTC token while improving the user experience for certain applications (e.g., being able to react to falling market prices more quickly for lending applications).
 
 ## Release Notes
 
