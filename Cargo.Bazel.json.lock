@@ -1,5 +1,5 @@
 {
-  "checksum": "efb93eedcbe53a11db7ad939fbcc7ca0809e0d4c1f5f6a46d3e8490d48a98345",
+  "checksum": "563013d51f5770c5766304848f4307e9e33d6c3d14be00f9fcf5a6b4ca1ec3b6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5930,95 +5930,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "axum-otel-metrics 0.8.0": {
-      "name": "axum-otel-metrics",
-      "version": "0.8.0",
-      "package_url": "https://github.com/ttys3/axum-otel-metrics/",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/ttys3/axum-otel-metrics.git",
-          "commitish": {
-            "Rev": "8f58e36e44cfbea4221dfc215c8e84c810d7d563"
-          }
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "axum_otel_metrics",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "axum_otel_metrics",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "axum 0.7.9",
-              "target": "axum"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "opentelemetry 0.21.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry-prometheus 0.14.1",
-              "target": "opentelemetry_prometheus"
-            },
-            {
-              "id": "opentelemetry-semantic-conventions 0.13.0",
-              "target": "opentelemetry_semantic_conventions"
-            },
-            {
-              "id": "opentelemetry_sdk 0.21.2",
-              "target": "opentelemetry_sdk"
-            },
-            {
-              "id": "pin-project-lite 0.2.16",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "prometheus"
-            },
-            {
-              "id": "tower 0.4.13",
-              "target": "tower"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.8.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": null
     },
     "axum-otel-metrics 0.9.1": {
       "name": "axum-otel-metrics",
@@ -48682,16 +48593,10 @@
       "package_url": null,
       "repository": {
         "Git": {
-          "remote": "https://github.com/dfinity/metrics-proxy.git",
+          "remote": "https://github.com/maksymar/metrics-proxy.git",
           "commitish": {
-            "Rev": "5856ecc04ba41e6ccc6b758574a90e601d0b4108"
-          },
-          "patch_args": [
-            "-p1"
-          ],
-          "patches": [
-            "@@//bazel:metrics_proxy.patch"
-          ]
+            "Rev": "08da4604f6d0129590cfb7ba22b928b03253a0b5"
+          }
         }
       },
       "targets": [
@@ -48738,7 +48643,7 @@
               "target": "axum"
             },
             {
-              "id": "axum-otel-metrics 0.8.0",
+              "id": "axum-otel-metrics 0.9.1",
               "target": "axum_otel_metrics"
             },
             {
@@ -48786,10 +48691,6 @@
               "target": "itertools"
             },
             {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
               "id": "log 0.4.28",
               "target": "log"
             },
@@ -48806,7 +48707,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "prometheus 0.13.4",
+              "id": "prometheus 0.14.0",
               "target": "prometheus"
             },
             {
@@ -54383,75 +54284,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-prometheus 0.14.1": {
-      "name": "opentelemetry-prometheus",
-      "version": "0.14.1",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-prometheus/0.14.1/download",
-          "sha256": "6f8f082da115b0dcb250829e3ed0b8792b8f963a1ad42466e48422fbe6a079bd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_prometheus",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_prometheus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "prometheus-encoding"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry 0.21.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry_sdk 0.21.2",
-              "target": "opentelemetry_sdk"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "prometheus"
-            },
-            {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.14.1"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry-prometheus 0.31.0": {
       "name": "opentelemetry-prometheus",
       "version": "0.31.0",
@@ -54587,53 +54419,6 @@
         },
         "edition": "2021",
         "version": "0.27.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry-semantic-conventions 0.13.0": {
-      "name": "opentelemetry-semantic-conventions",
-      "version": "0.13.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-semantic-conventions",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-semantic-conventions/0.13.0/download",
-          "sha256": "f5774f1ef1f982ef2a447f6ee04ec383981a3ab99c8e77a1a7b30182e65bbc84"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_semantic_conventions",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_semantic_conventions",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry 0.21.0",
-              "target": "opentelemetry"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.13.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54860,126 +54645,6 @@
           "selects": {}
         },
         "version": "0.18.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "opentelemetry_sdk 0.21.2": {
-      "name": "opentelemetry_sdk",
-      "version": "0.21.2",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.21.2/download",
-          "sha256": "2f16aec8a98a457a52664d69e0091bac3a0abd18ead9b641cb00202ba4e0efe4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_sdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_sdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "async-trait",
-            "crossbeam-channel",
-            "default",
-            "glob",
-            "metrics",
-            "percent-encoding",
-            "rand",
-            "rt-tokio",
-            "tokio",
-            "tokio-stream",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "crossbeam-channel 0.5.15",
-              "target": "crossbeam_channel"
-            },
-            {
-              "id": "futures-channel 0.3.31",
-              "target": "futures_channel"
-            },
-            {
-              "id": "futures-executor 0.3.31",
-              "target": "futures_executor"
-            },
-            {
-              "id": "futures-util 0.3.31",
-              "target": "futures_util"
-            },
-            {
-              "id": "glob 0.3.1",
-              "target": "glob"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "opentelemetry 0.21.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "ordered-float 4.2.0",
-              "target": "ordered_float"
-            },
-            {
-              "id": "percent-encoding 2.3.1",
-              "target": "percent_encoding"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "tokio 1.48.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tokio-stream 0.1.17",
-              "target": "tokio_stream"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.21.2"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -55243,13 +54908,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -60719,97 +60377,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "procfs 0.16.0": {
-      "name": "procfs",
-      "version": "0.16.0",
-      "package_url": "https://github.com/eminence/procfs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/procfs/0.16.0/download",
-          "sha256": "731e0d9356b0c25f16f33b5be79b1c57b562f141ebfcdb0ad8ac2c13a24293b4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "procfs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "procfs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "procfs 0.16.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "procfs-core 0.16.0",
-              "target": "procfs_core"
-            },
-            {
-              "id": "rustix 0.38.44",
-              "target": "rustix"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.16.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
-    },
     "procfs 0.17.0": {
       "name": "procfs",
       "version": "0.17.0",
@@ -60896,58 +60463,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "procfs-core 0.16.0": {
-      "name": "procfs-core",
-      "version": "0.16.0",
-      "package_url": "https://github.com/eminence/procfs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/procfs-core/0.16.0/download",
-          "sha256": "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "procfs_core",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "procfs_core",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.16.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": null
     },
     "procfs-core 0.17.0": {
       "name": "procfs-core",
@@ -61045,9 +60560,6 @@
         "crate_features": {
           "common": [
             "default",
-            "libc",
-            "process",
-            "procfs",
             "protobuf"
           ],
           "selects": {}
@@ -61065,10 +60577,6 @@
             {
               "id": "lazy_static 1.5.0",
               "target": "lazy_static"
-            },
-            {
-              "id": "libc 0.2.177",
-              "target": "libc"
             },
             {
               "id": "memchr 2.7.4",
@@ -61091,20 +60599,7 @@
               "target": "thiserror"
             }
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "procfs 0.16.0",
-                "target": "procfs"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "procfs 0.16.0",
-                "target": "procfs"
-              }
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.13.4"

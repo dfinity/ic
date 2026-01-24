@@ -944,9 +944,9 @@ crate.spec(
     features = [
         "rustls-tls-webpki-roots",
     ],
-    git = "https://github.com/dfinity/metrics-proxy.git",
+    git = "https://github.com/maksymar/metrics-proxy.git",
     package = "metrics-proxy",
-    rev = "5856ecc04ba41e6ccc6b758574a90e601d0b4108",
+    rev = "08da4604f6d0129590cfb7ba22b928b03253a0b5",
 )
 crate.spec(
     features = [
@@ -2143,8 +2143,6 @@ crate.annotation(
 crate.annotation(
     crate = "metrics-proxy",
     gen_binaries = ["metrics-proxy"],
-    patch_args = ["-p1"],
-    patches = ["//bazel:metrics_proxy.patch"],
 )
 crate.splicing_config(
     resolver_version = "2",
