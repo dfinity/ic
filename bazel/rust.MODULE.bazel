@@ -325,7 +325,7 @@ crate.spec(
     ],
     git = "https://github.com/cloudflare/cloudflare-rs.git",
     package = "cloudflare",
-    rev = "5f196e4707a48196833fad0479103a23ae88f23d",
+    tag = "v0.14.0",
 )
 crate.spec(
     package = "colored",
