@@ -21951,8 +21951,7 @@
             },
             {
               "id": "metrics-proxy 0.1.0",
-              "target": "metrics_proxy",
-              "local_path": "/home/maksym/dfinity/canister-logs/ic2/metrics-proxy"
+              "target": "metrics_proxy"
             },
             {
               "id": "minicbor 0.19.1",
@@ -48518,8 +48517,11 @@
       "version": "0.1.0",
       "package_url": null,
       "repository": {
-        "Path": {
-          "path": "/home/maksym/dfinity/canister-logs/ic2/metrics-proxy"
+        "Git": {
+          "remote": "https://github.com/maksymar/metrics-proxy.git",
+          "commitish": {
+            "Rev": "f792f037ce5bcf0ea95a1db5038844185562ce6f"
+          }
         }
       },
       "targets": [
