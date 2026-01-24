@@ -119,7 +119,7 @@ crate.spec(
 )
 crate.spec(
     package = "axum-otel-metrics",
-    version = "^0.9.1",
+    version = "^0.10.0",
 )
 crate.spec(
     features = [
@@ -940,13 +940,9 @@ crate.spec(
     # due to technical idiosyncrasies of the OpenTelemetry
     # crate.  When these do not match, custom metrics are
     # not exported.
-    default_features = False,
-    features = [
-        "rustls-tls-webpki-roots",
-    ],
     git = "https://github.com/maksymar/metrics-proxy.git",
     package = "metrics-proxy",
-    rev = "08da4604f6d0129590cfb7ba22b928b03253a0b5",
+    rev = "f792f037ce5bcf0ea95a1db5038844185562ce6f",
 )
 crate.spec(
     features = [

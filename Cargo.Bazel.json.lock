@@ -1,5 +1,5 @@
 {
-  "checksum": "563013d51f5770c5766304848f4307e9e33d6c3d14be00f9fcf5a6b4ca1ec3b6",
+  "checksum": "2fa485d3ff6cc2cf6c0713ef3d907384d78bef4fe5615e0c59c0ec2a532b1d4c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -5157,22 +5157,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "form",
-            "http1",
-            "json",
-            "macros",
-            "matched-path",
-            "original-uri",
-            "query",
-            "tokio",
-            "tower-log",
-            "tracing"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -5198,14 +5182,6 @@
             {
               "id": "http-body-util 0.1.3",
               "target": "http_body_util"
-            },
-            {
-              "id": "hyper 1.8.1",
-              "target": "hyper"
-            },
-            {
-              "id": "hyper-util 0.1.12",
-              "target": "hyper_util"
             },
             {
               "id": "itoa 1.0.17",
@@ -5236,24 +5212,8 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.145",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_path_to_error 0.1.14",
-              "target": "serde_path_to_error"
-            },
-            {
-              "id": "serde_urlencoded 0.7.1",
-              "target": "serde_urlencoded"
-            },
-            {
               "id": "sync_wrapper 1.0.2",
               "target": "sync_wrapper"
-            },
-            {
-              "id": "tokio 1.48.0",
-              "target": "tokio"
             },
             {
               "id": "tower 0.5.2",
@@ -5266,10 +5226,6 @@
             {
               "id": "tower-service 0.3.3",
               "target": "tower_service"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
             }
           ],
           "selects": {}
@@ -5280,10 +5236,6 @@
             {
               "id": "async-trait 0.1.89",
               "target": "async_trait"
-            },
-            {
-              "id": "axum-macros 0.4.2",
-              "target": "axum_macros"
             },
             {
               "id": "rustversion 1.0.14",
@@ -5514,12 +5466,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "tracing"
-          ],
-          "selects": {}
-        },
         "deps": {
           "common": [
             {
@@ -5561,10 +5507,6 @@
             {
               "id": "tower-service 0.3.3",
               "target": "tower_service"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
             }
           ],
           "selects": {}
@@ -5749,7 +5691,7 @@
               "target": "futures_util"
             },
             {
-              "id": "headers 0.4.0",
+              "id": "headers 0.4.1",
               "target": "headers"
             },
             {
@@ -5802,67 +5744,6 @@
           "selects": {}
         },
         "version": "0.10.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "axum-macros 0.4.2": {
-      "name": "axum-macros",
-      "version": "0.4.2",
-      "package_url": "https://github.com/tokio-rs/axum",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/axum-macros/0.4.2/download",
-          "sha256": "57d123550fa8d071b7255cb0cc04dc302baa6c8c4a79f55701552684d8399bce"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "axum_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "axum_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.103",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.42",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -5931,14 +5812,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "axum-otel-metrics 0.9.1": {
+    "axum-otel-metrics 0.10.0": {
       "name": "axum-otel-metrics",
-      "version": "0.9.1",
+      "version": "0.10.0",
       "package_url": "https://github.com/ttys3/axum-otel-metrics/",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/axum-otel-metrics/0.9.1/download",
-          "sha256": "a7c510ed6ef3dfd93f8b42af4545104db8cd5a006cd1f7cfdbb31873bb97ebc8"
+          "url": "https://static.crates.io/crates/axum-otel-metrics/0.10.0/download",
+          "sha256": "0e5c40e35dba9c7ce25a6ca0baf5e66bed2612fc92f7b7acfee7611121d9219a"
         }
       },
       "targets": [
@@ -5963,7 +5844,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.9",
+              "id": "axum 0.8.4",
               "target": "axum"
             },
             {
@@ -5979,32 +5860,20 @@
               "target": "http_body"
             },
             {
-              "id": "opentelemetry 0.27.0",
+              "id": "opentelemetry 0.28.0",
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-http 0.27.0",
-              "target": "opentelemetry_http"
-            },
-            {
-              "id": "opentelemetry-otlp 0.27.0",
-              "target": "opentelemetry_otlp"
-            },
-            {
-              "id": "opentelemetry-semantic-conventions 0.27.0",
+              "id": "opentelemetry-semantic-conventions 0.28.0",
               "target": "opentelemetry_semantic_conventions"
             },
             {
-              "id": "opentelemetry_sdk 0.27.1",
+              "id": "opentelemetry_sdk 0.28.0",
               "target": "opentelemetry_sdk"
             },
             {
               "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "prometheus"
             },
             {
               "id": "tower 0.5.2",
@@ -6014,7 +5883,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.9.1"
+        "version": "0.10.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -21280,7 +21149,7 @@
               "target": "axum_extra"
             },
             {
-              "id": "axum-otel-metrics 0.9.1",
+              "id": "axum-otel-metrics 0.10.0",
               "target": "axum_otel_metrics"
             },
             {
@@ -21936,7 +21805,8 @@
             },
             {
               "id": "metrics-proxy 0.1.0",
-              "target": "metrics_proxy"
+              "target": "metrics_proxy",
+              "local_path": "/home/maksym/dfinity/canister-logs/ic2/metrics-proxy"
             },
             {
               "id": "minicbor 0.19.1",
@@ -23548,14 +23418,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "duration-string 0.3.0": {
+    "duration-string 0.4.0": {
       "name": "duration-string",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/Ronniskansing/duration-string",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/duration-string/0.3.0/download",
-          "sha256": "6fcc1d9ae294a15ed05aeae8e11ee5f2b3fe971c077d45a42fb20825fba6ee13"
+          "url": "https://static.crates.io/crates/duration-string/0.4.0/download",
+          "sha256": "2334658684d7c213e18602aa72ce37e94d1c9b535882ef6e30bc444b7514a1ee"
         }
       },
       "targets": [
@@ -23593,7 +23463,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": null,
       "license_ids": [],
@@ -31558,14 +31428,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "headers 0.4.0": {
+    "headers 0.4.1": {
       "name": "headers",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "package_url": "https://github.com/hyperium/headers",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/headers/0.4.0/download",
-          "sha256": "322106e6bd0cba2d5ead589ddb8150a13d7c4217cf80d7c4f682ca994ccc6aa9"
+          "url": "https://static.crates.io/crates/headers/0.4.1/download",
+          "sha256": "b3314d5adb5d94bcdf56771f2e50dbbc80bb4bdf88967526706205ac9eff24eb"
         }
       },
       "targets": [
@@ -31590,7 +31460,7 @@
         "deps": {
           "common": [
             {
-              "id": "base64 0.21.6",
+              "id": "base64 0.22.1",
               "target": "base64"
             },
             {
@@ -31620,8 +31490,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "0.4.0"
+        "edition": "2018",
+        "version": "0.4.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -48592,11 +48462,8 @@
       "version": "0.1.0",
       "package_url": null,
       "repository": {
-        "Git": {
-          "remote": "https://github.com/maksymar/metrics-proxy.git",
-          "commitish": {
-            "Rev": "08da4604f6d0129590cfb7ba22b928b03253a0b5"
-          }
+        "Path": {
+          "path": "/home/maksym/dfinity/canister-logs/ic2/metrics-proxy"
         }
       },
       "targets": [
@@ -48632,6 +48499,7 @@
         ],
         "crate_features": {
           "common": [
+            "default",
             "rustls-tls-webpki-roots"
           ],
           "selects": {}
@@ -48639,11 +48507,11 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.7.9",
+              "id": "axum 0.8.4",
               "target": "axum"
             },
             {
-              "id": "axum-otel-metrics 0.9.1",
+              "id": "axum-otel-metrics 0.10.0",
               "target": "axum_otel_metrics"
             },
             {
@@ -48651,7 +48519,7 @@
               "target": "clap"
             },
             {
-              "id": "duration-string 0.3.0",
+              "id": "duration-string 0.4.0",
               "target": "duration_string"
             },
             {
@@ -48695,7 +48563,7 @@
               "target": "log"
             },
             {
-              "id": "opentelemetry 0.21.0",
+              "id": "opentelemetry 0.28.0",
               "target": "opentelemetry"
             },
             {
@@ -48755,11 +48623,11 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tower 0.4.13",
+              "id": "tower 0.5.2",
               "target": "tower"
             },
             {
-              "id": "tower-http 0.5.2",
+              "id": "tower-http 0.6.6",
               "target": "tower_http"
             },
             {
@@ -53861,93 +53729,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry 0.21.0": {
-      "name": "opentelemetry",
-      "version": "0.21.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry/0.21.0/download",
-          "sha256": "1e32339a5dc40459130b3bd269e9892439f55b33e772d2a9d402a789baaf4e8a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "metrics",
-            "pin-project-lite",
-            "trace"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "futures-core 0.3.31",
-              "target": "futures_core"
-            },
-            {
-              "id": "futures-sink 0.3.31",
-              "target": "futures_sink"
-            },
-            {
-              "id": "indexmap 2.12.1",
-              "target": "indexmap"
-            },
-            {
-              "id": "once_cell 1.21.3",
-              "target": "once_cell"
-            },
-            {
-              "id": "pin-project-lite 0.2.16",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            },
-            {
-              "id": "urlencoding 2.1.3",
-              "target": "urlencoding"
-            }
-          ],
-          "selects": {
-            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
-              {
-                "id": "js-sys 0.3.77",
-                "target": "js_sys"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "version": "0.21.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry 0.27.0": {
       "name": "opentelemetry",
       "version": "0.27.0",
@@ -54028,6 +53809,91 @@
       ],
       "license_file": "LICENSE"
     },
+    "opentelemetry 0.28.0": {
+      "name": "opentelemetry",
+      "version": "0.28.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry/0.28.0/download",
+          "sha256": "236e667b670a5cdf90c258f5a55794ec5ac5027e960c224bff8367a59e1e6426"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "futures-core",
+            "futures-sink",
+            "internal-logs",
+            "logs",
+            "metrics",
+            "pin-project-lite",
+            "thiserror",
+            "trace",
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-sink 0.3.31",
+              "target": "futures_sink"
+            },
+            {
+              "id": "pin-project-lite 0.2.16",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.77",
+                "target": "js_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.28.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
     "opentelemetry 0.31.0": {
       "name": "opentelemetry",
       "version": "0.31.0",
@@ -54090,80 +53956,6 @@
       ],
       "license_file": null
     },
-    "opentelemetry-http 0.27.0": {
-      "name": "opentelemetry-http",
-      "version": "0.27.0",
-      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-http/0.27.0/download",
-          "sha256": "10a8a7f5f6ba7c1b286c2fbca0454eaba116f63bbe69ed250b642d36fbb04d80"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_http",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_http",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "reqwest"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bytes 1.10.1",
-              "target": "bytes"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "opentelemetry 0.27.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "reqwest 0.12.24",
-              "target": "reqwest"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "async-trait 0.1.89",
-              "target": "async_trait"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.27.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "opentelemetry-otlp 0.27.0": {
       "name": "opentelemetry-otlp",
       "version": "0.27.0",
@@ -54198,14 +53990,10 @@
             "default",
             "grpc-tonic",
             "http",
-            "http-proto",
             "internal-logs",
             "logs",
             "metrics",
-            "opentelemetry-http",
             "prost",
-            "reqwest",
-            "reqwest-client",
             "tokio",
             "tonic",
             "trace",
@@ -54228,10 +54016,6 @@
               "target": "opentelemetry"
             },
             {
-              "id": "opentelemetry-http 0.27.0",
-              "target": "opentelemetry_http"
-            },
-            {
               "id": "opentelemetry-proto 0.27.0",
               "target": "opentelemetry_proto"
             },
@@ -54242,10 +54026,6 @@
             {
               "id": "prost 0.13.3",
               "target": "prost"
-            },
-            {
-              "id": "reqwest 0.12.24",
-              "target": "reqwest"
             },
             {
               "id": "thiserror 1.0.68",
@@ -54426,14 +54206,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "opentelemetry-semantic-conventions 0.27.0": {
+    "opentelemetry-semantic-conventions 0.28.0": {
       "name": "opentelemetry-semantic-conventions",
-      "version": "0.27.0",
+      "version": "0.28.0",
       "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-semantic-conventions",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/opentelemetry-semantic-conventions/0.27.0/download",
-          "sha256": "bc1b6902ff63b32ef6c489e8048c5e253e2e4a803ea3ea7e783914536eb15c52"
+          "url": "https://static.crates.io/crates/opentelemetry-semantic-conventions/0.28.0/download",
+          "sha256": "2fb3a2f78c2d55362cd6c313b8abedfbc0142ab3c2676822068fd2ab7d51f9b7"
         }
       },
       "targets": [
@@ -54463,7 +54243,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.27.0"
+        "version": "0.28.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -54764,6 +54544,114 @@
           "selects": {}
         },
         "version": "0.27.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "opentelemetry_sdk 0.28.0": {
+      "name": "opentelemetry_sdk",
+      "version": "0.28.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.28.0/download",
+          "sha256": "84dfad6042089c7fc1f6118b7040dc2eb4ab520abbf410b79dc481032af39570"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_sdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_sdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "async-trait",
+            "default",
+            "glob",
+            "internal-logs",
+            "logs",
+            "metrics",
+            "percent-encoding",
+            "rand",
+            "serde_json",
+            "trace",
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-channel 0.3.31",
+              "target": "futures_channel"
+            },
+            {
+              "id": "futures-executor 0.3.31",
+              "target": "futures_executor"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "glob 0.3.1",
+              "target": "glob"
+            },
+            {
+              "id": "opentelemetry 0.28.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "percent-encoding 2.3.1",
+              "target": "percent_encoding"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "serde_json 1.0.145",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.28.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -60516,111 +60404,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "prometheus 0.13.4": {
-      "name": "prometheus",
-      "version": "0.13.4",
-      "package_url": "https://github.com/tikv/rust-prometheus",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/prometheus/0.13.4/download",
-          "sha256": "3d33c28a30771f7f96db69893f78b857f7450d7e0237e9c8fc6427a81bae7ed1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "prometheus",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "prometheus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "protobuf"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
-            {
-              "id": "lazy_static 1.5.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
-              "id": "parking_lot 0.12.5",
-              "target": "parking_lot"
-            },
-            {
-              "id": "prometheus 0.13.4",
-              "target": "build_script_build"
-            },
-            {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            },
-            {
-              "id": "thiserror 1.0.68",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "prometheus 0.14.0": {
       "name": "prometheus",
       "version": "0.14.0",
@@ -61713,76 +61496,6 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
-    },
-    "protobuf 2.28.0": {
-      "name": "protobuf",
-      "version": "2.28.0",
-      "package_url": "https://github.com/stepancheg/rust-protobuf/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/protobuf/2.28.0/download",
-          "sha256": "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "protobuf",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "protobuf",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "protobuf 2.28.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.28.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.txt"
     },
     "protobuf 3.7.2": {
       "name": "protobuf",
@@ -83526,7 +83239,6 @@
             "rand",
             "ready-cache",
             "slab",
-            "timeout",
             "tokio",
             "tokio-util",
             "tracing",
@@ -83721,99 +83433,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "tower-http 0.5.2": {
-      "name": "tower-http",
-      "version": "0.5.2",
-      "package_url": "https://github.com/tower-rs/tower-http",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/tower-http/0.5.2/download",
-          "sha256": "1e9cd434a998747dd2c4276bc96ee2e0c7a2eadf3cae88e52be55a05fa9053f5"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "tower_http",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "tower_http",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "timeout",
-            "tokio",
-            "trace",
-            "tracing"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.10.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "bytes 1.10.1",
-              "target": "bytes"
-            },
-            {
-              "id": "http 1.3.1",
-              "target": "http"
-            },
-            {
-              "id": "http-body 1.0.1",
-              "target": "http_body"
-            },
-            {
-              "id": "http-body-util 0.1.3",
-              "target": "http_body_util"
-            },
-            {
-              "id": "pin-project-lite 0.2.16",
-              "target": "pin_project_lite"
-            },
-            {
-              "id": "tokio 1.48.0",
-              "target": "tokio"
-            },
-            {
-              "id": "tower-layer 0.3.3",
-              "target": "tower_layer"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
-            },
-            {
-              "id": "tracing 0.1.41",
-              "target": "tracing"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.5.2"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "tower-http 0.6.6": {
       "name": "tower-http",
       "version": "0.6.6",
@@ -83857,6 +83476,7 @@
             "futures-core",
             "limit",
             "request-id",
+            "timeout",
             "tokio",
             "tokio-util",
             "tower",
@@ -98093,7 +97713,7 @@
     "async-trait 0.1.89",
     "axum 0.8.4",
     "axum-extra 0.10.1",
-    "axum-otel-metrics 0.9.1",
+    "axum-otel-metrics 0.10.0",
     "axum-server 0.7.3",
     "backoff 0.4.0",
     "backon 0.4.1",
