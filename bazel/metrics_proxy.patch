@@ -1,0 +1,7 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index a1b2c3d..e4f5g6h 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -37,1 +37,1 @@ lazy_static = "1.4.0"
+-axum-otel-metrics = { git = "https://github.com/ttys3/axum-otel-metrics.git", rev = "8f58e36e44cfbea4221dfc215c8e84c810d7d563" }
++axum-otel-metrics = "0.9.1"

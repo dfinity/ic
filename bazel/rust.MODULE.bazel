@@ -119,7 +119,7 @@ crate.spec(
 )
 crate.spec(
     package = "axum-otel-metrics",
-    version = "^0.12.0",
+    version = "^0.9.1",
 )
 crate.spec(
     features = [
@@ -2143,6 +2143,8 @@ crate.annotation(
 crate.annotation(
     crate = "metrics-proxy",
     gen_binaries = ["metrics-proxy"],
+    patch_args = ["-p1"],
+    patches = ["//bazel:metrics_proxy.patch"],
 )
 crate.splicing_config(
     resolver_version = "2",
