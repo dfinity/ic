@@ -693,25 +693,35 @@ impl SystemTestGroup {
             false,
         );
 
-        let assert_no_critical_errors_fn: Option<(String, Box<dyn PotSetupFn>)> =
-            if self.assert_no_critical_errors {
-                let teardown_fn = |env: TestEnv| {
-                    let nodes: Vec<IcNodeSnapshot> = env
-                        .topology_snapshot()
-                        .subnets()
-                        .flat_map(|subnet| subnet.nodes())
-                        .collect();
-                    for node in nodes {
-                        node.assert_no_critical_errors();
+        let assert_no_critical_errors_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
+            .assert_no_critical_errors
+        {
+            let teardown_fn = |env: TestEnv| {
+                let topology = match env.safe_topology_snapshot() {
+                    Ok(topology) => topology,
+                    Err(e) => {
+                        info!(
+                            env.logger(),
+                            "Could not get topology ({e:?}) => skipping no critical errors checks."
+                        );
+                        return;
                     }
                 };
-                Some((
-                    format!("{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn"),
-                    Box::new(teardown_fn),
-                ))
-            } else {
-                None
+                let nodes: Vec<IcNodeSnapshot> = topology
+                    .subnets()
+                    .flat_map(|subnet| subnet.nodes())
+                    .collect();
+                for node in nodes {
+                    node.assert_no_critical_errors();
+                }
             };
+            Some((
+                format!("{ASSERT_NO_CRITICAL_ERRORS_TASK_NAME}_fn"),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
 
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
