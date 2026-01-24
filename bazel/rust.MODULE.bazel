@@ -1790,8 +1790,8 @@ crate.spec(
     version = "^0.3.20",
 )
 crate.spec(
-    package = "trust-dns-resolver",
-    version = "^0.23.2",
+    package = "hickory-resolver",
+    version = "^0.24.0",
 )
 crate.spec(
     package = "turmoil",
