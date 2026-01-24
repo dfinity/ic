@@ -642,7 +642,7 @@ impl CanisterManager {
             );
         }
 
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
         let new_controllers = match validated_settings.controllers() {
             Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
             None => None,
@@ -1032,7 +1032,7 @@ impl CanisterManager {
             },
             None => StopCanisterResult::RequestAccepted,
         };
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
         result
     }
 
@@ -1055,7 +1055,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         let stop_contexts = canister.system_state.start_canister();
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
 
         Ok(stop_contexts)
     }
@@ -1082,7 +1082,7 @@ impl CanisterManager {
             .copied()
             .collect::<Vec<PrincipalId>>();
 
-        let version = canister.system_state.canister_version;
+        let version = canister.system_state.canister_version();
 
         let canister_memory_usage = canister.memory_usage();
         let canister_wasm_memory_usage = canister.wasm_memory_usage();
@@ -2456,7 +2456,7 @@ impl CanisterManager {
         };
 
         // Increment canister version.
-        new_canister.system_state.canister_version += 1;
+        new_canister.system_state.bump_canister_version();
         let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
@@ -2808,7 +2808,7 @@ impl CanisterManager {
         let new_snapshot = CanisterSnapshot::from_metadata(
             &valid_args,
             state.time(),
-            canister.system_state.canister_version,
+            canister.system_state.canister_version(),
             Arc::clone(&self.fd_factory),
         );
 
@@ -3216,7 +3216,7 @@ pub fn uninstall_canister(
     // Deactivate global timer.
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
-    canister.system_state.canister_version += 1;
+    canister.system_state.bump_canister_version();
 
     let new_allocated_bytes = canister.memory_allocated_bytes();
     debug_assert!(new_allocated_bytes <= old_allocated_bytes);

@@ -2070,7 +2070,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2121,7 +2121,7 @@ fn install_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 
@@ -2195,7 +2195,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_before = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     let history_entries_before = test
         .canister_state(canister_id)
@@ -2248,7 +2248,7 @@ fn upgrade_with_dts_correctly_updates_system_state() {
     let version_after = test
         .canister_state(canister_id)
         .system_state
-        .canister_version;
+        .canister_version();
 
     assert_eq!(version_before + 1, version_after);
 

@@ -2846,7 +2846,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .clone();
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -2891,7 +2891,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .clone();
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -2944,7 +2944,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .system_state
         .clone();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -6403,7 +6403,7 @@ fn rename_canister(
         .canister_state(&sender_canister)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
@@ -6549,7 +6549,7 @@ fn can_rename_canister() {
                 .canister_state(&new_canister_id)
                 .unwrap()
                 .system_state
-                .canister_version
+                .canister_version()
         );
         assert_eq!(
             expected_num_changes,
@@ -6604,7 +6604,7 @@ fn can_rename_canister() {
         .canister_state(&new_canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     let third_version = version_before_rename - 10;
     let third_num_changes = 10;
     assert_lt!(third_version, version_before_rename);

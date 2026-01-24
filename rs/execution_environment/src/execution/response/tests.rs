@@ -2770,12 +2770,12 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2790,7 +2790,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
 
     // Execute canister A on reply callback.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 3);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2819,12 +2819,12 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2839,7 +2839,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
 
     // Execute canister A on reply callback.
     test.execute_message(a_id);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2868,12 +2868,12 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2889,7 +2889,7 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
     // Execute canister A on reply callback.
     test.execute_message(a_id);
     // The cleanup execution increases the canister version.
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 3);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 3);
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
@@ -2923,12 +2923,12 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Enqueue ingress message to canister A.
     let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
     assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 1);
 
     // Execute canister A ingress.
     test.execute_message(a_id);
     test.induct_messages();
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(1));
@@ -2944,7 +2944,7 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
     // Execute canister A on reply callback.
     test.execute_message(a_id);
     // The cleanup traps, so the canister version is unchanged.
-    assert_eq!(test.canister_state(a_id).system_state.canister_version, 2);
+    assert_eq!(test.canister_state(a_id).system_state.canister_version(), 2);
 
     // Make sure the execution was not ok.
     let call_context = test.get_call_context(a_id, CallbackId::from(2));
