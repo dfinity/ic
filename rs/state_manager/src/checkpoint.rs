@@ -564,7 +564,7 @@ impl CheckpointLoader {
             })?
             .0
             .validate_eq(
-                &ref_canister_states
+                ref_canister_states
                     .get(canister_id)
                     .expect("Failed to get canister from canister_states"),
             )
