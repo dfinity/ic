@@ -27,6 +27,7 @@ use ic_types::{
     xnet::StreamIndex,
 };
 use maplit::btreemap;
+use std::sync::Arc;
 
 fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     const NUM_STREAM_MESSAGES: u64 = 1_000;
@@ -72,7 +73,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     for i in 0..NUM_CANISTERS {
         state.canister_states.insert(
             canister_test_id(i),
-            get_running_canister(canister_test_id(i)),
+            Arc::new(get_running_canister(canister_test_id(i))),
         );
     }
 
@@ -236,8 +237,12 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
         assert_eq!(state.canister_states.len(), 100);
         for canister in state.canister_states.values_mut() {
-            canister.execution_state.as_mut().unwrap().metadata = WasmMetadata::new(btreemap! {
-                "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
+            Arc::make_mut(canister)
+                .execution_state
+                .as_mut()
+                .unwrap()
+                .metadata = WasmMetadata::new(btreemap! {
+            "large_section".to_string() => CustomSection::new(CustomSectionType::Public, vec![1u8; 1 << 20]),
             });
         }
         state

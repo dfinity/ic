@@ -634,13 +634,15 @@ impl StateMachine for FakeStateMachine {
             canister_test_id(1),
             CanisterStateBuilder::new()
                 .with_wasm(vec![2; 1024 * 1024]) // 1MiB wasm
-                .build(),
+                .build()
+                .into(),
         );
         canister_states.insert(
             canister_test_id(2),
             CanisterStateBuilder::new()
                 .with_wasm(vec![5; 10 * 1024]) // 10 KiB wasm
-                .build(),
+                .build()
+                .into(),
         );
         state.put_canister_states(canister_states);
         *self.0.lock().unwrap() = registry_settings.clone();

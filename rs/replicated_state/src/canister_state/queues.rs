@@ -848,7 +848,7 @@ impl CanisterQueues {
         callback_id: CallbackId,
         respondent: &CanisterId,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> Result<bool, String> {
         // For a not yet executed callback, there must be a queue with either a reserved
         // slot or an enqueued response.
@@ -1434,7 +1434,7 @@ impl CanisterQueues {
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) {
@@ -1468,7 +1468,7 @@ impl CanisterQueues {
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
     ) -> bool {
@@ -1648,7 +1648,7 @@ impl CanisterQueues {
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
-        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) {
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         self.input_schedule.split(&input_queue_type_fn);
@@ -1783,7 +1783,7 @@ fn generate_timeout_response(request: &Request) -> Response {
 /// mutating a canister's queues if they were still under `local_canisters`).
 fn input_queue_type_fn<'a>(
     own_canister_id: &'a CanisterId,
-    local_canisters: &'a BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &'a BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> impl Fn(&CanisterId) -> InputQueueType + 'a {
     move |sender| {
         if sender == own_canister_id || local_canisters.contains_key(sender) {

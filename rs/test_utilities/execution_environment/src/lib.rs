@@ -1168,7 +1168,8 @@ impl ExecutionTest {
     pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
-        let mut canister = state.take_canister_state(&canister_id).unwrap();
+        let mut canister_arc = state.take_canister_state(&canister_id).unwrap();
+        let canister = Arc::make_mut(&mut canister_arc);
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
@@ -1205,7 +1206,7 @@ impl ExecutionTest {
         }
         let result = execute_canister(
             &self.exec_env,
-            canister,
+            canister_arc,
             self.instruction_limits.clone(),
             self.instruction_limit_per_query_message,
             Arc::clone(&network_topology),
@@ -1216,7 +1217,7 @@ impl ExecutionTest {
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
-        state.put_canister_state(result.canister);
+        state.put_canister_state_arc(result.canister);
         state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
         self.update_execution_stats(
@@ -1308,6 +1309,7 @@ impl ExecutionTest {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
         let canister = state.take_canister_state(&canister_id).unwrap();
+        let canister = Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
@@ -1686,7 +1688,7 @@ impl ExecutionTest {
         for (canister_id, message) in output_messages {
             match canisters.get_mut(&canister_id) {
                 Some(dest_canister) => {
-                    let result = dest_canister.push_input(
+                    let result = Arc::make_mut(dest_canister).push_input(
                         message.clone(),
                         &mut subnet_available_guaranteed_response_memory,
                         state.metadata.own_subnet_type,
@@ -1820,6 +1822,7 @@ impl ExecutionTest {
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
         let mut new_checkpoint_files = vec![];
         for canister_state in self.state_mut().canisters_iter_mut() {
+            let canister_state = Arc::make_mut(canister_state);
             let es = match canister_state.execution_state.as_mut() {
                 Some(es) => es,
                 None => break,

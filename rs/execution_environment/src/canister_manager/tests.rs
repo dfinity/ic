@@ -405,6 +405,7 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
+    let old_canister = Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
     execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
     execution_parameters.memory_allocation = old_canister.memory_allocation();
 

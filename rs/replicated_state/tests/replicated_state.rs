@@ -1173,7 +1173,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, &expected.canister_states);
     expected.canister_states.insert(CANISTER_1, canister_state);
@@ -1196,7 +1196,7 @@ fn split() {
     // Only `CANISTER_2` should be left.
     expected.canister_states.insert(
         CANISTER_2,
-        fixture.state.canister_state(&CANISTER_2).unwrap().clone(),
+        Arc::new(fixture.state.canister_state(&CANISTER_2).unwrap().clone()),
     );
     // The full ingress history should be preserved.
     expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
@@ -1214,7 +1214,7 @@ fn split() {
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, &expected.canister_states);
     expected.canister_states.insert(CANISTER_2, canister_state);
@@ -1336,7 +1336,7 @@ fn online_split() {
     expected.canister_states.remove(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_1, &expected.canister_states);
     expected.canister_states.insert(CANISTER_1, canister_state);
@@ -1366,11 +1366,11 @@ fn online_split() {
     expected.canister_states.remove(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
-    canister_state
+    Arc::make_mut(&mut canister_state)
         .system_state
         .split_input_schedules(&CANISTER_2, &expected.canister_states);
     // The in-progress `install_code` task should have been silently dropped.
-    canister_state.system_state.task_queue = Default::default();
+    Arc::make_mut(&mut canister_state).system_state.task_queue = Default::default();
     expected.canister_states.insert(CANISTER_2, canister_state);
     // The snapshot of `CANISTER_1` should have been deleted.
     expected.canister_snapshots.remove(canister_1_snapshot_id);
@@ -1660,7 +1660,7 @@ fn iter_with_exclude_queue_yields_correct_elements(
     for raw in ignored_requests {
         let queues = if let Some(canister) = replicated_state.canister_states.get_mut(&raw.sender())
         {
-            canister.system_state.queues_mut()
+            Arc::make_mut(canister).system_state.queues_mut()
         } else {
             replicated_state.subnet_queues_mut()
         };

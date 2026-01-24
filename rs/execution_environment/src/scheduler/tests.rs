@@ -2775,8 +2775,9 @@ fn can_record_metrics_for_a_round() {
     }
 
     for canister in test.state_mut().canister_states.values_mut() {
-        canister.scheduler_state.time_of_last_allocation_charge =
-            UNIX_EPOCH + Duration::from_secs(1);
+        Arc::make_mut(canister)
+            .scheduler_state
+            .time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)

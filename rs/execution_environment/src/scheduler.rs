@@ -393,6 +393,7 @@ impl SchedulerImpl {
                     // is pending.
                 }
                 NextExecution::None | NextExecution::StartNew => {
+                    let canister = Arc::make_mut(canister);
                     for _ in 0..NextScheduledMethod::iter().count() {
                         let method_chosen = is_next_method_chosen(
                             canister,
@@ -512,7 +513,10 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister.system_state.canister_metrics.scheduled_as_first += 1;
+                        Arc::make_mut(canister)
+                            .system_state
+                            .canister_metrics
+                            .scheduled_as_first += 1;
                     }
                 }
             }
@@ -678,7 +682,7 @@ impl SchedulerImpl {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     fn execute_canisters_in_inner_round(
         &self,
-        canisters_by_thread: Vec<Vec<CanisterState>>,
+        canisters_by_thread: Vec<Vec<Arc<CanisterState>>>,
         round_id: ExecutionRound,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -688,7 +692,7 @@ impl SchedulerImpl {
         cost_schedule: CanisterCyclesCostSchedule,
         is_first_iteration: bool,
     ) -> (
-        Vec<CanisterState>,
+        Vec<Arc<CanisterState>>,
         BTreeSet<CanisterId>,
         Vec<CanisterId>,
         Vec<(MessageId, IngressStatus)>,
@@ -826,6 +830,8 @@ impl SchedulerImpl {
             state.filter_subnet_queues_ingress_messages(not_expired_yet);
         let mut canisters = state.take_canister_states();
         for canister in canisters.values_mut() {
+            // TODO Only make a mutable reference if the canister has (expired) ingress messages.
+            let canister = Arc::make_mut(canister);
             expired_ingress_messages.extend(
                 canister
                     .system_state
@@ -913,6 +919,7 @@ impl SchedulerImpl {
                 // since the last charge happened.
                 continue;
             } else {
+                let canister = Arc::make_mut(canister);
                 self.observe_canister_metrics(canister);
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
@@ -1000,13 +1007,14 @@ impl SchedulerImpl {
             // Remove the source canister from the map so that we can
             // `get_mut()` on the map further below for the destination canister.
             // Borrow rules do not allow us to hold multiple mutable references.
-            let mut source_canister = match state.take_canister_state(&source_canister_id) {
+            let mut source_canister_arc = match state.take_canister_state(&source_canister_id) {
                 None => fatal!(
                     self.log,
                     "Should be guaranteed that the canister exists in the map."
                 ),
                 Some(canister) => canister,
             };
+            let source_canister = Arc::make_mut(&mut source_canister_arc);
 
             let messages_before_induction = source_canister
                 .system_state
@@ -1031,7 +1039,7 @@ impl SchedulerImpl {
                 .system_state
                 .output_queues_for_each(|canister_id, msg| {
                     match state.canister_states.get_mut(canister_id) {
-                        Some(dest_canister) => dest_canister
+                        Some(dest_canister) => Arc::make_mut(dest_canister)
                             .push_input(
                                 (*msg).clone(),
                                 &mut subnet_available_guaranteed_response_memory,
@@ -1056,7 +1064,7 @@ impl SchedulerImpl {
                 .output_queues_message_count();
             inducted_messages_to_others +=
                 messages_before_induction.saturating_sub(messages_after_induction);
-            state.put_canister_state(source_canister);
+            state.put_canister_state_arc(source_canister_arc);
         }
         self.metrics
             .inducted_messages
@@ -1174,6 +1182,7 @@ impl SchedulerImpl {
                     .as_ref()
                     .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
                 if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
+                    let canister = Arc::make_mut(canister);
                     canister.system_state.wasm_memory_limit =
                         Some(compute_default_wasm_memory_limit(
                             default_wasm_memory_limit,
@@ -1539,6 +1548,7 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
+                    let canister = Arc::make_mut(canister);
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
                         .canister_heap_delta_debits
@@ -1746,7 +1756,7 @@ fn observe_instructions_consumed_per_message(
 /// This struct holds the result of a single execution thread.
 #[derive(Default)]
 struct ExecutionThreadResult {
-    canisters: Vec<CanisterState>,
+    canisters: Vec<Arc<CanisterState>>,
     executed_canister_ids: BTreeSet<CanisterId>,
     fully_executed_canister_ids: BTreeSet<CanisterId>,
     ingress_results: Vec<(MessageId, IngressStatus)>,
@@ -1764,7 +1774,7 @@ struct ExecutionThreadResult {
 /// or all canisters are processed.
 #[allow(clippy::too_many_arguments)]
 fn execute_canisters_on_thread(
-    canisters_to_execute: Vec<CanisterState>,
+    canisters_to_execute: Vec<Arc<CanisterState>>,
     exec_env: &ExecutionEnvironment,
     config: &SchedulerConfig,
     metrics: Arc<SchedulerMetrics>,
@@ -1797,13 +1807,13 @@ fn execute_canisters_on_thread(
         config.max_instructions_per_slice,
     );
 
-    for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
+    for (rank, mut canister_arc) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
         if round_limits.instructions_reached()
             || total_heap_delta >= config.max_heap_delta_per_iteration
         {
-            canisters.push(canister);
+            canisters.push(canister_arc);
             continue;
         }
 
@@ -1812,6 +1822,7 @@ fn execute_canisters_on_thread(
         // - or the canister is blocked by a long-running install code.
         // - or the instruction limit is reached.
         // - or the canister finishes a long execution
+        let mut canister = Arc::make_mut(&mut canister_arc);
         let mut total_instructions_used = NumInstructions::new(0);
         loop {
             match canister.next_execution() {
@@ -1845,7 +1856,7 @@ fn execute_canisters_on_thread(
                 description,
             } = execute_canister(
                 exec_env,
-                canister,
+                canister_arc,
                 instruction_limits.clone(),
                 config.max_instructions_per_query_message,
                 Arc::clone(&network_topology),
@@ -1883,7 +1894,8 @@ fn execute_canisters_on_thread(
                 );
             }
             total_slices_executed.inc_assign();
-            canister = new_canister;
+            canister_arc = new_canister;
+            canister = Arc::make_mut(&mut canister_arc);
             round_limits.instructions -=
                 as_round_instructions(config.instruction_overhead_per_execution);
             total_heap_delta += heap_delta;
@@ -1918,14 +1930,14 @@ fn execute_canisters_on_thread(
             es.last_executed_round = round_id;
         }
         RoundSchedule::finish_canister_execution(
-            &mut canister,
+            canister,
             &mut fully_executed_canister_ids,
             round_id,
             is_first_iteration,
             rank,
         );
         canister.system_state.canister_metrics.executed += 1;
-        canisters.push(canister);
+        canisters.push(canister_arc);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
             round_limits.instructions -=
@@ -2187,7 +2199,7 @@ fn join_consumed_cycles_by_use_case(
 fn can_execute_subnet_msg(
     msg: &CanisterMessage,
     ongoing_long_install_code: bool,
-    canister_states: &BTreeMap<CanisterId, CanisterState>,
+    canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     round_limits: &mut RoundLimits,
 ) -> bool {
     let Some(effective_canister_id) = msg.effective_canister_id() else {

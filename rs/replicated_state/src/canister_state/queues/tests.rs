@@ -237,7 +237,7 @@ fn time_out_messages(
     queues: &mut CanisterQueues,
     current_time: Time,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> (usize, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -255,7 +255,7 @@ fn time_out_messages(
 fn shed_largest_message(
     queues: &mut CanisterQueues,
     own_canister_id: &CanisterId,
-    local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    local_canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
 ) -> (bool, RefundPool) {
     let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
@@ -753,7 +753,7 @@ fn test_shed_inbound_response() {
     assert_eq!(3, queues.input_queues_response_count());
 
     let this = canister_test_id(13);
-    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, CanisterState> = BTreeMap::new();
+    const NO_LOCAL_CANISTERS: BTreeMap<CanisterId, Arc<CanisterState>> = BTreeMap::new();
 
     // Shed the largest response (callback ID 3).
     let memory_usage3 = queues.best_effort_message_memory_usage();
@@ -1243,7 +1243,7 @@ fn test_split_input_schedules() {
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let scheduler_state = SchedulerState::new(UNIX_EPOCH);
     let local_canisters = btreemap! {
-        other_1 => CanisterState::new(system_state, None, scheduler_state)
+        other_1 => Arc::new(CanisterState::new(system_state, None, scheduler_state))
     };
 
     // Act.
@@ -3523,7 +3523,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                 Cycles::new(1 << 36),
                 NumSeconds::from(100_000),
             );
-            CanisterState::new(system_state, None, scheduler_state)
+            Arc::new(CanisterState::new(system_state, None, scheduler_state))
         }
     };
 

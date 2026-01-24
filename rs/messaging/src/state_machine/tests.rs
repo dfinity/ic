@@ -275,7 +275,8 @@ fn split_fixture() -> StateMachineTestFixture {
             PrincipalId::new_anonymous(),
             Cycles::new(1_000_000_000_000),
             3600.into(),
-        ),
+        )
+        .into(),
     );
     initial_state.canister_states.insert(
         CANISTER_RANGE_B.start,
@@ -284,7 +285,8 @@ fn split_fixture() -> StateMachineTestFixture {
             PrincipalId::new_anonymous(),
             Cycles::new(1_000_000_000_000),
             3600.into(),
-        ),
+        )
+        .into(),
     );
 
     let mut scheduler = Box::new(MockScheduler::new());

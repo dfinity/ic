@@ -55,7 +55,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, NetworkTopology, ReplicatedState,
     canister_state::{
         NextExecution,
         system_state::{CyclesUseCase, PausedExecutionId},
@@ -2520,7 +2520,7 @@ impl ExecutionEnvironment {
         let result = self.canister_manager.take_canister_snapshot(
             subnet_size,
             origin,
-            &mut canister,
+            Arc::make_mut(&mut canister),
             replace_snapshot,
             uninstall_code,
             state,
@@ -2528,7 +2528,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
 
         match result {
             Ok((response, rejects, instructions_used)) => {
@@ -2576,7 +2576,7 @@ impl ExecutionEnvironment {
         let (result, instructions_used) = self.canister_manager.load_canister_snapshot(
             subnet_size,
             sender,
-            &mut old_canister,
+            Arc::make_mut(&mut old_canister),
             snapshot_id,
             state,
             round_limits,
@@ -2593,7 +2593,7 @@ impl ExecutionEnvironment {
             }
             Err(err) => {
                 // Could not load the canister snapshot, thus put back old state.
-                state.put_canister_state(old_canister);
+                state.put_canister_state_arc(old_canister);
                 Err(err.into())
             }
         };
@@ -2644,7 +2644,7 @@ impl ExecutionEnvironment {
             .canister_manager
             .delete_canister_snapshot(
                 sender,
-                &mut canister,
+                Arc::make_mut(&mut canister),
                 args.get_snapshot_id(),
                 state,
                 round_limits,
@@ -2655,7 +2655,7 @@ impl ExecutionEnvironment {
             .map_err(|err| err.into());
 
         // Put canister back.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
         result
     }
 
@@ -2684,7 +2684,7 @@ impl ExecutionEnvironment {
 
         let result = match self.canister_manager.read_snapshot_data(
             sender,
-            &mut canister,
+            Arc::make_mut(&mut canister),
             args.get_snapshot_id(),
             args.kind,
             state,
@@ -2696,7 +2696,7 @@ impl ExecutionEnvironment {
         };
 
         // Put canister back.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
         result
     }
 
@@ -2729,7 +2729,7 @@ impl ExecutionEnvironment {
             .canister_manager
             .rename_canister(
                 sender,
-                &mut canister,
+                Arc::make_mut(&mut canister),
                 origin,
                 old_id,
                 new_id,
@@ -2743,7 +2743,7 @@ impl ExecutionEnvironment {
             .map_err(|err| err.into());
 
         // Put canister back with the new id.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
         result
     }
 
@@ -2798,7 +2798,7 @@ impl ExecutionEnvironment {
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let result = self.canister_manager.create_snapshot_from_metadata(
             sender,
-            &mut canister,
+            Arc::make_mut(&mut canister),
             args,
             state,
             subnet_size,
@@ -2806,7 +2806,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
         match result {
             Ok((snapshot_id, instructions_used)) => (
                 Ok(Encode!(&UploadCanisterSnapshotMetadataResponse { snapshot_id }).unwrap()),
@@ -2843,7 +2843,7 @@ impl ExecutionEnvironment {
             self.subnet_memory_saturation(&round_limits.subnet_available_memory);
         let result = self.canister_manager.write_snapshot_data(
             sender,
-            &mut canister,
+            Arc::make_mut(&mut canister),
             &args,
             state,
             round_limits,
@@ -2851,7 +2851,7 @@ impl ExecutionEnvironment {
             &resource_saturation,
         );
         // Put canister back.
-        state.put_canister_state(canister);
+        state.put_canister_state_arc(canister);
         match result {
             (Ok(()), instructions_used) => (Ok(Encode!(&()).unwrap()), instructions_used),
             (Err(e), instructions_used) => (Err(UserError::from(e)), instructions_used),
@@ -3541,7 +3541,7 @@ impl ExecutionEnvironment {
     fn decode_input_and_take_canister(
         msg: &CanisterCall,
         state: &mut ReplicatedState,
-    ) -> Result<(InstallCodeContext, CanisterState), UserError> {
+    ) -> Result<(InstallCodeContext, Arc<CanisterState>), UserError> {
         let payload = msg.method_payload();
         let method = Ic00Method::from_str(msg.method_name()).map_err(|_| {
             UserError::new(
@@ -3715,6 +3715,8 @@ impl ExecutionEnvironment {
             ingress_with_cycles_error: &self.metrics.ingress_with_cycles_error,
         };
 
+        let old_canister =
+            Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
             msg,
@@ -3886,6 +3888,8 @@ impl ExecutionEnvironment {
                 let since = Instant::now();
                 let paused = self.take_paused_install_code(id).unwrap();
                 let canister = state.take_canister_state(canister_id).unwrap();
+                let canister =
+                    Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
                 let round_counters = RoundCounters {
                     execution_refund_error: &self.metrics.execution_cycles_refund_error,
                     state_changes_error: &self.metrics.state_changes_error,
@@ -4002,8 +4006,9 @@ impl ExecutionEnvironment {
     }
 
     /// Aborts paused execution in the given state.
-    pub fn abort_canister(&self, canister: &mut CanisterState, log: &ReplicaLogger) {
+    pub fn abort_canister(&self, canister: &mut Arc<CanisterState>, log: &ReplicaLogger) {
         if !canister.system_state.task_queue.is_empty() {
+            let canister = Arc::make_mut(canister);
             if let Some(paused_task) = canister.system_state.task_queue.get_paused_task() {
                 self.metrics.executions_aborted.inc();
                 // TODO: EXC-1730 if `PausedExecutionRegistry` becomes local we can abort
@@ -4223,6 +4228,12 @@ impl ExecutionEnvironment {
         let time = state.time();
 
         for canister in canister_states.values_mut() {
+            // TODO: Only make a mutable reference if the canister needs to be mutated.
+            match canister.system_state.get_status() {
+                CanisterStatus::Running { .. } | CanisterStatus::Stopped => continue,
+                CanisterStatus::Stopping { .. } => {}
+            }
+            let canister = Arc::make_mut(canister);
             let (stopped, stop_contexts) =
                 canister.system_state.try_stop_canister(|stop_context| {
                     match stop_context.call_id() {
@@ -4420,7 +4431,7 @@ fn get_canister_mut(
 
 /// The result of `execute_canister()`.
 pub struct ExecuteCanisterResult {
-    pub canister: CanisterState,
+    pub canister: Arc<CanisterState>,
     pub instructions_used: Option<NumInstructions>,
     pub heap_delta: NumBytes,
     pub ingress_status: Option<(MessageId, IngressStatus)>,
@@ -4458,7 +4469,7 @@ fn execute_canister_input(
     );
     let (canister, instructions_used, heap_delta, ingress_status) = exec_env.process_result(result);
     ExecuteCanisterResult {
-        canister,
+        canister: canister.into(),
         instructions_used,
         heap_delta,
         ingress_status,
@@ -4470,7 +4481,7 @@ fn execute_canister_input(
 /// single input message if there is no task.
 pub fn execute_canister(
     exec_env: &ExecutionEnvironment,
-    mut canister: CanisterState,
+    canister: Arc<CanisterState>,
     instruction_limits: InstructionLimits,
     max_instructions_per_query_message: NumInstructions,
     network_topology: Arc<NetworkTopology>,
@@ -4492,6 +4503,7 @@ pub fn execute_canister(
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
 
+    let mut canister = Arc::try_unwrap(canister).unwrap_or_else(|canister| (*canister).clone());
     let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
         Some(task) => match task {
             ExecutionTask::PausedExecution { id, .. } => {
@@ -4526,7 +4538,7 @@ pub fn execute_canister(
                 let (canister, instructions_used, heap_delta, ingress_status) =
                     exec_env.process_result(result);
                 return ExecuteCanisterResult {
-                    canister,
+                    canister: canister.into(),
                     instructions_used,
                     heap_delta,
                     ingress_status,
