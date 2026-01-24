@@ -136,7 +136,7 @@ dependencies = [
  "actix-utils",
  "futures-core",
  "futures-util",
- "mio 0.8.10",
+ "mio 0.8.11",
  "num_cpus",
  "socket2 0.4.9",
  "tokio",
@@ -2955,7 +2955,7 @@ dependencies = [
  "bitflags 2.10.0",
  "crossterm_winapi",
  "libc",
- "mio 0.8.10",
+ "mio 0.8.11",
  "parking_lot 0.12.5",
  "signal-hook",
  "signal-hook-mio",
@@ -8493,9 +8493,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
 dependencies = [
  "libc",
  "log",
@@ -12566,7 +12566,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b75a19a7a740b25bc7944bdee6172368f988763b744e3d4dfe753f6b4ece40cc"
 dependencies = [
  "libc",
- "mio 0.8.10",
+ "mio 0.8.11",
  "mio 1.0.2",
  "signal-hook",
 ]
