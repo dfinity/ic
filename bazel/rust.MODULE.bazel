@@ -1791,7 +1791,7 @@ crate.spec(
 )
 crate.spec(
     package = "trust-dns-resolver",
-    version = "^0.22.0",
+    version = "^0.23.2",
 )
 crate.spec(
     package = "turmoil",
