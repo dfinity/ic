@@ -940,8 +940,13 @@ crate.spec(
     # due to technical idiosyncrasies of the OpenTelemetry
     # crate.  When these do not match, custom metrics are
     # not exported.
+    default_features = False,
+    features = [
+        "rustls-tls-webpki-roots",
+    ],
+    git = "https://github.com/maksymar/metrics-proxy.git",
     package = "metrics-proxy",
-    path = "metrics-proxy",
+    branch = "maksym/fix-protobuf-2.28",
 )
 crate.spec(
     features = [
