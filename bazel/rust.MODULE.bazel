@@ -323,9 +323,9 @@ crate.spec(
     features = [
         "rustls-tls",
     ],
-    git = "https://github.com/dfinity/cloudflare-rs.git",
+    git = "https://github.com/cloudflare/cloudflare-rs.git",
     package = "cloudflare",
-    rev = "8b011d170d9d61eaad77bb9645371f6219285104",
+    rev = "5f196e4707a48196833fad0479103a23ae88f23d",
 )
 crate.spec(
     package = "colored",
@@ -940,9 +940,8 @@ crate.spec(
     # due to technical idiosyncrasies of the OpenTelemetry
     # crate.  When these do not match, custom metrics are
     # not exported.
-    git = "https://github.com/maksymar/metrics-proxy.git",
     package = "metrics-proxy",
-    rev = "f792f037ce5bcf0ea95a1db5038844185562ce6f",
+    path = "metrics-proxy",
 )
 crate.spec(
     features = [
