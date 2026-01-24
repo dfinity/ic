@@ -8394,7 +8394,6 @@ dependencies = [
 [[package]]
 name = "metrics-proxy"
 version = "0.1.0"
-source = "git+https://github.com/maksymar/metrics-proxy.git?rev=f792f037ce5bcf0ea95a1db5038844185562ce6f#f792f037ce5bcf0ea95a1db5038844185562ce6f"
 dependencies = [
  "axum 0.8.4",
  "axum-otel-metrics",
