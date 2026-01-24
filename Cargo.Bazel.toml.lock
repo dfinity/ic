@@ -2390,24 +2390,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cloudflare"
-version = "0.14.0"
-source = "git+https://github.com/cloudflare/cloudflare-rs.git?tag=v0.14.0#5f196e4707a48196833fad0479103a23ae88f23d"
-dependencies = [
- "chrono 0.4.42",
- "http 1.3.1",
- "reqwest 0.12.24",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "serde_with 3.16.0",
- "thiserror 2.0.17",
- "url",
- "urlencoding",
- "uuid",
-]
-
-[[package]]
 name = "cobs"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3625,7 +3607,7 @@ dependencies = [
  "ciborium",
  "cidr",
  "clap 4.5.53",
- "cloudflare 0.14.0",
+ "cloudflare",
  "colored 2.0.4",
  "comparable",
  "console 0.11.3",
@@ -6072,7 +6054,7 @@ dependencies = [
  "candid",
  "chacha20poly1305",
  "clap 4.5.53",
- "cloudflare 0.14.0",
+ "cloudflare",
  "derive-new",
  "flate2",
  "fqdn 0.4.6",
@@ -6150,7 +6132,7 @@ dependencies = [
  "axum 0.8.4",
  "candid",
  "clap 4.5.53",
- "cloudflare 0.14.0",
+ "cloudflare",
  "derive-new",
  "fqdn 0.4.6",
  "hickory-proto 0.25.2",
@@ -6490,7 +6472,7 @@ dependencies = [
  "bytes",
  "candid",
  "clap 4.5.53",
- "cloudflare 0.14.0",
+ "cloudflare",
  "ctrlc",
  "derive-new",
  "fqdn 0.4.6",

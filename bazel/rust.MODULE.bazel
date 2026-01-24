@@ -323,9 +323,8 @@ crate.spec(
     features = [
         "rustls-tls",
     ],
-    git = "https://github.com/cloudflare/cloudflare-rs.git",
     package = "cloudflare",
-    tag = "v0.14.0",
+    version = "0.14.0",
 )
 crate.spec(
     package = "colored",
