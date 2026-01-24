@@ -3238,7 +3238,7 @@ impl StateMachine {
         // Repartition input schedules; Required step for migrating canisters.
         canister_state
             .system_state
-            .split_input_schedules(&canister_id, &state.canister_states);
+            .split_input_schedules(&canister_id, state.canister_states());
 
         state.put_canister_state(canister_state);
 
@@ -4240,7 +4240,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .contains_key(&canister)
     }
 
@@ -4249,7 +4249,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
+            .canister_states()
             .keys()
             .cloned()
             .collect()
@@ -4260,8 +4260,7 @@ impl StateMachine {
         self.state_manager
             .get_latest_state()
             .take()
-            .canister_states
-            .get(&canister)
+            .canister_state(&canister)
             .map(|canister| canister.execution_state.is_some())
             .unwrap_or_default()
     }

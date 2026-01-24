@@ -282,7 +282,7 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
 
             IngressInductionCost::Fee { payer, cost } => {
                 // Get the paying canister from the state.
-                let canister = match state.canister_states.get_mut(&payer) {
+                let canister = match state.canister_state_mut(&payer) {
                     Some(canister) => canister,
                     None => return Err(IngressInductionError::CanisterNotFound(payer)),
                 };
@@ -292,7 +292,6 @@ impl<IngressHistoryWriter_: IngressHistoryWriter<State = ReplicatedState>>
                 let message_memory_usage = canister.message_memory_usage();
                 let compute_allocation = canister.scheduler_state.compute_allocation;
                 let reveal_top_up = canister.controllers().contains(&ingress.source.get());
-                let canister = Arc::make_mut(canister);
                 if let Err(err) = self.cycles_account_manager.charge_ingress_induction_cost(
                     canister,
                     memory_usage,

@@ -575,7 +575,7 @@ fn switch_to_checkpoint(
     layout: &CheckpointLayout<ReadOnly>,
     fd_factory: &Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(), Box<dyn std::error::Error + Send>> {
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+    for (tip_id, tip_canister) in tip.canister_states_iter_mut() {
         // TODO: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
         let canister_layout = layout.canister(tip_id).unwrap();
@@ -668,7 +668,7 @@ fn switch_to_checkpoint(
         new_snapshot.execution_snapshot_mut().wasm_binary = wasm_binary;
     }
 
-    for (tip_id, tip_canister) in tip.canister_states.iter_mut() {
+    for (tip_id, tip_canister) in tip.canister_states_iter_mut() {
         // TODO: Is this necessary for all canisters?
         let tip_canister = Arc::make_mut(tip_canister);
         if let Some(tip_state) = &mut tip_canister.execution_state {

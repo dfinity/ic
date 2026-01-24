@@ -71,10 +71,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     for i in 0..NUM_CANISTERS {
-        state.canister_states.insert(
-            canister_test_id(i),
-            Arc::new(get_running_canister(canister_test_id(i))),
-        );
+        state.put_canister_state(get_running_canister(canister_test_id(i)));
     }
 
     let user_id = user_test_id(1);
@@ -235,8 +232,8 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     let state_100_custom_sections = {
         let mut state = get_initial_state(/*num_canisters=*/ 100u64, 0);
         state.metadata.certification_version = CURRENT_CERTIFICATION_VERSION;
-        assert_eq!(state.canister_states.len(), 100);
-        for canister in state.canister_states.values_mut() {
+        assert_eq!(state.canister_states().len(), 100);
+        for (_, canister) in state.canister_states_iter_mut() {
             Arc::make_mut(canister)
                 .execution_state
                 .as_mut()

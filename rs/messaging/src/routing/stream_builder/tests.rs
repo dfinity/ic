@@ -204,7 +204,10 @@ fn build_streams_success() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -307,7 +310,10 @@ fn build_streams_local_canisters() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -487,7 +493,10 @@ fn build_streams_respects_limits(
         // Act.
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -566,7 +575,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -643,7 +655,10 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -1174,7 +1189,10 @@ fn build_streams_with_oversized_payloads() {
         // Act
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 

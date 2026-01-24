@@ -8156,11 +8156,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.canister_states.remove(&CANISTER_2);
+                expected.take_canister_state(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.canister_states.remove(&CANISTER_1);
+                expected.take_canister_state(&CANISTER_1);
                 // And the snapshot of `CANISTER_1` should be deleted.
                 expected.canister_snapshots = Default::default();
             } else {

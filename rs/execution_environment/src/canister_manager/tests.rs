@@ -6851,7 +6851,7 @@ fn can_create_canister() {
     let canister_id2 = test.create_canister(*INITIAL_CYCLES);
     assert_eq!(canister_id2, expected_generated_id2);
 
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]
@@ -6887,7 +6887,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             );
         }
     }
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
 }
 
 #[test]
@@ -6916,7 +6916,7 @@ fn can_create_canister_with_extra_cycles() {
         .build();
     let result = test.ingress(canister_id, "update", payload);
     let _ = get_reply(result);
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]

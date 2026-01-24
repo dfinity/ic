@@ -76,7 +76,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            canister_ids: state.canister_states.keys().copied().collect(),
+            canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
                 .canister_snapshots
                 .iter()
@@ -193,7 +193,7 @@ impl PageMapType {
     /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
     fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
-        for (id, canister) in &state.canister_states {
+        for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
@@ -274,7 +274,7 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    for (_id, canister) in state.canister_states.iter_mut() {
+    for (_id, canister) in state.canister_states_iter_mut() {
         // TODO: Check if canister has deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         canister
@@ -362,7 +362,7 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         page_map.strip_unflushed_delta();
     };
 
-    for (id, canister) in tip_state.canister_states.iter_mut() {
+    for (id, canister) in tip_state.canister_states_iter_mut() {
         // TODO: Filter out canisters with no heap deltas before making a mutable reference.
         let canister = Arc::make_mut(canister);
         add_to_pagemaps_and_strip(

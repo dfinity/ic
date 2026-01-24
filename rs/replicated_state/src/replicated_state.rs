@@ -413,7 +413,7 @@ impl MemoryTaken {
 pub struct ReplicatedState {
     /// Canister states indexed by canister ID.
     #[validate_eq(CompareWithValidateEq)]
-    pub canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
+    canister_states: BTreeMap<CanisterId, Arc<CanisterState>>,
 
     /// Deterministic processing metadata.
     #[validate_eq(CompareWithValidateEq)]
@@ -538,6 +538,16 @@ impl ReplicatedState {
 
     pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
         self.canister_states.remove(canister_id)
+    }
+
+    pub fn canister_states(&self) -> &BTreeMap<CanisterId, Arc<CanisterState>> {
+        &self.canister_states
+    }
+
+    pub fn canister_states_iter_mut(
+        &mut self,
+    ) -> std::collections::btree_map::IterMut<'_, CanisterId, Arc<CanisterState>> {
+        self.canister_states.iter_mut()
     }
 
     pub fn take_canister_states(&mut self) -> BTreeMap<CanisterId, Arc<CanisterState>> {
