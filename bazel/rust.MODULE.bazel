@@ -1188,7 +1188,7 @@ crate.spec(
 )
 crate.spec(
     package = "publicsuffix",
-    version = "^2.2.3",
+    version = "^2.3.0",
 )
 crate.spec(
     package = "quickcheck",

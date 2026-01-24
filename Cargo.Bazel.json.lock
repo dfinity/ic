@@ -1,5 +1,5 @@
 {
-  "checksum": "cfb5ec5261d26dd6de8ff465fb8885d4077bfe942b29dcb1b886c178cf2a515d",
+  "checksum": "fcbf92bc8b865378690b036d8f0a1e684a1600ec1d46bbb1710e5ea078bd5e7f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22102,7 +22102,7 @@
               "target": "protobuf"
             },
             {
-              "id": "publicsuffix 2.2.3",
+              "id": "publicsuffix 2.3.0",
               "target": "publicsuffix"
             },
             {
@@ -39993,58 +39993,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "idna 0.3.0": {
-      "name": "idna",
-      "version": "0.3.0",
-      "package_url": "https://github.com/servo/rust-url/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/idna/0.3.0/download",
-          "sha256": "e14ddfc70884202db2244c223200c204c2bda1bc6e0998d11b5e024d657209e6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "idna",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "idna",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-bidi 0.3.13",
-              "target": "unicode_bidi"
-            },
-            {
-              "id": "unicode-normalization 0.1.22",
-              "target": "unicode_normalization"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "idna 0.4.0": {
       "name": "idna",
@@ -62099,14 +62047,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "publicsuffix 2.2.3": {
+    "publicsuffix 2.3.0": {
       "name": "publicsuffix",
-      "version": "2.2.3",
+      "version": "2.3.0",
       "package_url": "https://github.com/rushmorem/publicsuffix",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/publicsuffix/2.2.3/download",
-          "sha256": "96a8c1bda5ae1af7f99a2962e49df150414a43d62404644d98dd5c3a93d07457"
+          "url": "https://static.crates.io/crates/publicsuffix/2.3.0/download",
+          "sha256": "6f42ea446cab60335f76979ec15e12619a2165b5ae2c12166bef27d283a9fadf"
         }
       },
       "targets": [
@@ -62139,7 +62087,7 @@
         "deps": {
           "common": [
             {
-              "id": "idna 0.3.0",
+              "id": "idna 1.0.3",
               "target": "idna"
             },
             {
@@ -62150,7 +62098,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.2.3"
+        "version": "2.3.0"
       },
       "license": "MIT/Apache-2.0",
       "license_ids": [
@@ -86388,7 +86336,6 @@
         ],
         "crate_features": {
           "common": [
-            "default",
             "hardcoded-data",
             "std"
           ],
@@ -98537,7 +98484,7 @@
     "prost 0.13.3",
     "prost-build 0.13.3",
     "protobuf 3.7.2",
-    "publicsuffix 2.2.3",
+    "publicsuffix 2.3.0",
     "qrcode 0.14.1",
     "quickcheck 1.0.3",
     "quinn 0.11.5",
