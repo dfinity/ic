@@ -493,6 +493,7 @@ impl ReplicatedState {
     }
 
     /// References into _all_ fields.
+    #[allow(clippy::type_complexity)]
     pub fn component_refs(
         &self,
     ) -> (
