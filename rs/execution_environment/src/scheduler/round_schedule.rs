@@ -248,6 +248,7 @@ impl RoundSchedule {
     /// * Core 1 (long execution core) takes: `CanisterId 1`, `CanisterId 3`
     /// * Core 2 takes: `CanisterId 4`,  `CanisterId 6`, `CanisterId 8`
     /// * Core 3 takes: `CanisterId 5`,  `CanisterId 7`, `CanisterId 2`
+    #[allow(clippy::type_complexity)]
     pub(super) fn partition_canisters_to_cores(
         &self,
         mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,

@@ -820,7 +820,7 @@ fn canisters_as_tree(
         certification_version,
         mk_tree: |_canister_id, canister, certification_version| {
             fork(CanisterFork {
-                canister: &canister,
+                canister,
                 version: certification_version,
             })
         },
