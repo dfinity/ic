@@ -116,15 +116,15 @@ enum ConsumingCycles {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
-// For semantics of the fields please check
-// protobuf/def/state/canister_state_bits/v1/canister_state_bits.proto:
-// CanisterStateBits
+///
+/// For the semantics of the fields, check
+/// `canister_state_bits.proto:CanisterStateBits`.
 pub struct CanisterMetrics {
-    pub scheduled_as_first: u64,
-    pub skipped_round_due_to_no_messages: u64,
-    pub executed: u64,
-    pub interrupted_during_execution: u64,
-    pub consumed_cycles: NominalCycles,
+    scheduled_as_first: u64,
+    skipped_round_due_to_no_messages: u64,
+    executed: u64,
+    interrupted_during_execution: u64,
+    consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
@@ -147,8 +147,44 @@ impl CanisterMetrics {
         }
     }
 
-    pub fn get_consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+    pub fn scheduled_as_first(&self) -> u64 {
+        self.scheduled_as_first
+    }
+
+    pub fn skipped_round_due_to_no_messages(&self) -> u64 {
+        self.skipped_round_due_to_no_messages
+    }
+
+    pub fn executed(&self) -> u64 {
+        self.executed
+    }
+
+    pub fn interrupted_during_execution(&self) -> u64 {
+        self.interrupted_during_execution
+    }
+
+    pub fn consumed_cycles(&self) -> NominalCycles {
+        self.consumed_cycles
+    }
+
+    pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
+    }
+
+    pub fn observe_scheduled_as_first(&mut self) {
+        self.scheduled_as_first += 1;
+    }
+
+    pub fn observe_skipped_round_due_to_no_messages(&mut self) {
+        self.skipped_round_due_to_no_messages += 1;
+    }
+
+    pub fn observe_executed(&mut self) {
+        self.executed += 1;
+    }
+
+    pub fn observe_interrupted_during_execution(&mut self) {
+        self.interrupted_during_execution += 1;
     }
 }
 
@@ -280,7 +316,8 @@ pub struct SystemState {
     /// See also:
     ///   * https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data
     pub certified_data: Vec<u8>,
-    pub canister_metrics: CanisterMetrics,
+
+    canister_metrics: CanisterMetrics,
 
     /// Should only be modified through `CyclesAccountManager`.
     ///
@@ -1793,6 +1830,14 @@ impl SystemState {
                 self.canister_metrics.consumed_cycles -= nominal_amount;
             }
         }
+    }
+
+    pub fn canister_metrics(&self) -> &CanisterMetrics {
+        &self.canister_metrics
+    }
+
+    pub fn canister_metrics_mut(&mut self) -> &mut CanisterMetrics {
+        &mut self.canister_metrics
     }
 
     /// Clears all canister changes and their memory usage,

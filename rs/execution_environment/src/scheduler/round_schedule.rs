@@ -446,8 +446,8 @@ impl RoundSchedule {
             if !canister.has_input() {
                 canister
                     .system_state
-                    .canister_metrics
-                    .skipped_round_due_to_no_messages += 1;
+                    .canister_metrics_mut()
+                    .observe_skipped_round_due_to_no_messages();
             }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.

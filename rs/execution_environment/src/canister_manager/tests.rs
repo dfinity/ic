@@ -644,14 +644,14 @@ fn provisional_create_canister_has_no_creation_fee() {
 
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles,
+        canister.system_state.canister_metrics().consumed_cycles(),
         NominalCycles::default(),
     );
     assert_eq!(
         canister
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation),
         None
     );
@@ -6985,14 +6985,18 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
         creation_fee.get()
     );
     assert_eq!(
         canister
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation)
             .unwrap()
             .get(),
@@ -7041,7 +7045,11 @@ fn create_canister_free() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
         0
     );
     assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);

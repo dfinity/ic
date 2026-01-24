@@ -512,7 +512,10 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister.system_state.canister_metrics.scheduled_as_first += 1;
+                        canister
+                            .system_state
+                            .canister_metrics_mut()
+                            .observe_scheduled_as_first();
                     }
                 }
             }
@@ -1824,8 +1827,8 @@ fn execute_canisters_on_thread(
             if round_limits.instructions_reached() {
                 canister
                     .system_state
-                    .canister_metrics
-                    .interrupted_during_execution += 1;
+                    .canister_metrics_mut()
+                    .observe_interrupted_during_execution();
                 break;
             }
             let measurement_scope = MeasurementScope::nested(
@@ -1924,7 +1927,10 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        canister
+            .system_state
+            .canister_metrics_mut()
+            .observe_executed();
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
@@ -2014,13 +2020,13 @@ fn observe_replicated_state_metrics(
             | Some(&ExecutionTask::OnLowWasmMemory)
             | None => {}
         }
-        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
+        consumed_cycles_total += canister.system_state.canister_metrics().consumed_cycles();
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases(),
+                .canister_metrics()
+                .consumed_cycles_by_use_cases(),
         );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
