@@ -94,7 +94,6 @@ system_test_nns(
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     enable_metrics = True,
     tags = [
-        "manual",  # this test does not pass currently (it serves as a baseline for future work)
         "system_test_large",
     ],
     test_timeout = "eternal",
