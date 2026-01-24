@@ -1,5 +1,5 @@
 {
-  "checksum": "f89f93d75b8e2c8447c4eea6f8abc97983d2ab780919662f59f7e9151f9457f7",
+  "checksum": "86d6d2e84a40d277723a86339d12afc608663a79c59283c2911022def5fc0e1e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22001,7 +22001,7 @@
               "target": "opentelemetry_otlp"
             },
             {
-              "id": "opentelemetry-prometheus 0.14.1",
+              "id": "opentelemetry-prometheus 0.31.0",
               "target": "opentelemetry_prometheus"
             },
             {
@@ -48589,7 +48589,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/metrics-proxy.git",
           "commitish": {
-            "Rev": "b6933ed79ac07baee7f3fbc0793bed95e614d27c"
+            "Rev": "5856ecc04ba41e6ccc6b758574a90e601d0b4108"
           }
         }
       },
@@ -54026,6 +54026,68 @@
       ],
       "license_file": "LICENSE"
     },
+    "opentelemetry 0.31.0": {
+      "name": "opentelemetry",
+      "version": "0.31.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry/0.31.0/download",
+          "sha256": "b84bcd6ae87133e903af7ef497404dda70c60d0ea14895fc8a5e6722754fc2a0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "internal-logs",
+            "metrics",
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
+              {
+                "id": "js-sys 0.3.77",
+                "target": "js_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.31.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "opentelemetry-otlp 0.27.0": {
       "name": "opentelemetry-otlp",
       "version": "0.27.0",
@@ -54202,6 +54264,77 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "opentelemetry-prometheus 0.31.0": {
+      "name": "opentelemetry-prometheus",
+      "version": "0.31.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-prometheus",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry-prometheus/0.31.0/download",
+          "sha256": "14095eb06b569eb5d538fa4555969f7e8a410ed7910c903bfd295f9e1a50d7ea"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_prometheus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_prometheus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "internal-logs",
+            "tracing"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "once_cell 1.21.3",
+              "target": "once_cell"
+            },
+            {
+              "id": "opentelemetry 0.31.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "opentelemetry_sdk 0.31.0",
+              "target": "opentelemetry_sdk"
+            },
+            {
+              "id": "prometheus 0.14.0",
+              "target": "prometheus"
+            },
+            {
+              "id": "tracing 0.1.41",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.31.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "opentelemetry-proto 0.27.0": {
       "name": "opentelemetry-proto",
@@ -54740,6 +54873,76 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "opentelemetry_sdk 0.31.0": {
+      "name": "opentelemetry_sdk",
+      "version": "0.31.0",
+      "package_url": "https://github.com/open-telemetry/opentelemetry-rust/tree/main/opentelemetry-sdk",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/opentelemetry_sdk/0.31.0/download",
+          "sha256": "e14ae4f5991976fd48df6d843de219ca6d31b01daaab2dad5af2badeded372bd"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "opentelemetry_sdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "opentelemetry_sdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "experimental_metrics_custom_reader",
+            "metrics"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "futures-channel 0.3.31",
+              "target": "futures_channel"
+            },
+            {
+              "id": "futures-executor 0.3.31",
+              "target": "futures_executor"
+            },
+            {
+              "id": "futures-util 0.3.31",
+              "target": "futures_util"
+            },
+            {
+              "id": "opentelemetry 0.31.0",
+              "target": "opentelemetry"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.31.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "option-ext 0.2.0": {
       "name": "option-ext",
@@ -98347,7 +98550,7 @@
     "openssh-keys 0.5.0",
     "opentelemetry 0.27.0",
     "opentelemetry-otlp 0.27.0",
-    "opentelemetry-prometheus 0.14.1",
+    "opentelemetry-prometheus 0.31.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
     "p384 0.13.1",

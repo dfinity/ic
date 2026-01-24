@@ -942,7 +942,7 @@ crate.spec(
     ],
     git = "https://github.com/dfinity/metrics-proxy.git",
     package = "metrics-proxy",
-    rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
+    rev = "5856ecc04ba41e6ccc6b758574a90e601d0b4108",
 )
 crate.spec(
     features = [
@@ -1049,7 +1049,7 @@ crate.spec(
 )
 crate.spec(
     package = "opentelemetry-prometheus",
-    version = "^0.14.1",
+    version = "^0.31.0",
 )
 crate.spec(
     default_features = False,
