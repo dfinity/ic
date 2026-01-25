@@ -1,5 +1,5 @@
 {
-  "checksum": "a394d87b25308b061ba86eb0000e832f59fa9845ecf27c0671375caac5d745e8",
+  "checksum": "f2b663842d4b3596c854e7277531a75307a2cc76fbaa0c6055c36667503f26bf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7141,7 +7141,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -8159,6 +8159,31 @@
           "selects": {}
         },
         "edition": "2015",
+        "rustc_flags": {
+          "common": [],
+          "selects": {
+            "@@//bazel:fuzzing_code_enabled": [
+              "-Cpasses=sancov-module",
+              "-Cllvm-args=-sanitizer-coverage-level=4",
+              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+              "-Cllvm-args=-sanitizer-coverage-pc-table",
+              "-Cllvm-args=-sanitizer-coverage-trace-compares",
+              "-Cllvm-args=-sanitizer-coverage-stack-depth",
+              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+              "-Ctarget-cpu=native",
+              "-Coverflow_checks",
+              "-Copt-level=3",
+              "-Clink-dead-code",
+              "-Cdebug-assertions",
+              "-Ccodegen-units=1",
+              "-Zextra-const-ub-checks",
+              "-Zstrict-init-checks",
+              "-Zsanitizer=address",
+              "-Zexternal-clangrt",
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+            ]
+          }
+        },
         "version": "0.28.2"
       },
       "license": "CC0-1.0",
@@ -8301,7 +8326,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -11803,7 +11828,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -38007,7 +38032,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -38079,7 +38104,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
@@ -45677,7 +45702,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@@+_repo_rules+openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -46469,8 +46494,8 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~lmdb//:liblmdb",
-            "@@_main~_repo_rules~lmdb//:lmdb.h"
+            "@@+_repo_rules+lmdb//:liblmdb",
+            "@@+_repo_rules+lmdb//:lmdb.h"
           ],
           "selects": {}
         },
@@ -46492,8 +46517,8 @@
         },
         "build_script_env": {
           "common": {
-            "LMDB_H_PATH": "$(location @@_main~_repo_rules~lmdb//:lmdb.h)",
-            "LMDB_OVERRIDE": "$(location @@_main~_repo_rules~lmdb//:liblmdb)"
+            "LMDB_H_PATH": "$(location @@+_repo_rules+lmdb//:lmdb.h)",
+            "LMDB_OVERRIDE": "$(location @@+_repo_rules+lmdb//:liblmdb)"
           },
           "selects": {}
         }
@@ -53744,7 +53769,7 @@
         ],
         "data": {
           "common": [
-            "@@_main~_repo_rules~openssl//:gen_dir"
+            "@@+_repo_rules+openssl//:gen_dir"
           ],
           "selects": {}
         },
@@ -53770,8 +53795,8 @@
         },
         "build_script_env": {
           "common": {
-            "OPENSSL_INCLUDE_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/include",
-            "OPENSSL_LIB_DIR": "$(execpath @@_main~_repo_rules~openssl//:gen_dir)/lib64",
+            "OPENSSL_INCLUDE_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/include",
+            "OPENSSL_LIB_DIR": "$(execpath @@+_repo_rules+openssl//:gen_dir)/lib64",
             "OPENSSL_NO_VENDOR": "1",
             "OPENSSL_STATIC": "1"
           },
@@ -58858,7 +58883,7 @@
         ],
         "data": {
           "common": [
-            "@@protobuf~//:protoc"
+            "@@protobuf+//:protoc"
           ],
           "selects": {}
         },
@@ -58880,7 +58905,7 @@
         },
         "build_script_env": {
           "common": {
-            "PROTOC": "$(execpath @@protobuf~//:protoc)"
+            "PROTOC": "$(execpath @@protobuf+//:protoc)"
           },
           "selects": {}
         }
@@ -81006,7 +81031,7 @@
           "common": [],
           "selects": {
             "x86_64-unknown-linux-gnu": [
-              "@@_main~_repo_rules~jemalloc//:libjemalloc"
+              "@@+_repo_rules+jemalloc//:libjemalloc"
             ]
           }
         },
@@ -81026,7 +81051,7 @@
           "common": {},
           "selects": {
             "x86_64-unknown-linux-gnu": {
-              "JEMALLOC_OVERRIDE": "$(location @@_main~_repo_rules~jemalloc//:libjemalloc)"
+              "JEMALLOC_OVERRIDE": "$(location @@+_repo_rules+jemalloc//:libjemalloc)"
             }
           }
         },
@@ -90370,7 +90395,7 @@
               "-Zstrict-init-checks",
               "-Zsanitizer=address",
               "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust~~rust~rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
+              "-Clink-arg=bazel-out/k8-opt/bin/external/rules_rust++rust+rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
             ]
           }
         },
