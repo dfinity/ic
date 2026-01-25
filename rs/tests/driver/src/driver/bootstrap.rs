@@ -13,7 +13,7 @@ use crate::driver::{
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
-        get_build_setupos_config_image_tool, get_dependency_path, get_guestos_img_version,
+        get_build_setupos_config_image_tool, get_guestos_img_version,
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
         try_get_guestos_img_version,
@@ -648,8 +648,7 @@ fn create_setupos_config_image(
     let node_operator_private_key = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map(PathBuf::from)
-        .map(get_dependency_path);
+        .map(PathBuf::from);
 
     let vm_spec = nested_vm.get_vm_spec()?;
 

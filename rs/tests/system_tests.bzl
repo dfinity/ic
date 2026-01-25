@@ -122,6 +122,8 @@ def system_test(
 
     _runtime_deps = dict(runtime_deps)
 
+    _runtime_deps["TEST_BIN"] = test_driver_target
+
     env_var_files = {}
     icos_images = dict()
 
@@ -201,12 +203,14 @@ def system_test(
         if dep not in data:
             data.append(dep)
 
+    env["RUNTIME_DEP_ENV_VARS"] = ";".join(_runtime_deps.keys())
+
     tags = tags + ["requires-network", "system_test"]
 
     sh_test(
         name = test_name,
         srcs = ["//rs/tests:run_systest.sh"],
-        data = data + [test_driver_target],
+        data = data,
         env = env | {
             "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_simple),
             "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath {})".format(test_driver_target),
@@ -226,11 +230,10 @@ def system_test(
         data = data + [
             "//rs/tests:colocate_uvm_config_image",
             "//rs/tests/idx:colocate_test_bin",
-            test_driver_target,
         ],
         env_inherit = env_inherit,
         env = env | {
-                  "COLOCATED_TEST_BIN": "$(rootpath {})".format(test_driver_target),
+                  "COLOCATE_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
                   "COLOCATED_TEST": test_name,
