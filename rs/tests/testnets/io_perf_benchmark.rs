@@ -255,7 +255,7 @@ pub fn setup(env: TestEnv, config: Config) {
     ic = ic.add_subnet(subnet);
 
     let vms = ic
-        .setup_and_start_return_vms(&env)
+        .setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
     let topology_snapshot = env.topology_snapshot();

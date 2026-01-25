@@ -55,12 +55,16 @@ impl NestedNodes {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        let farm = block_on(Farm::from_test_env(env, "Internet Computer"));
+        block_on(self.setup_and_start_async(env))
+    }
+
+    pub async fn setup_and_start_async(&mut self, env: &TestEnv) -> Result<()> {
+        let farm = Farm::from_test_env(env, "Internet Computer").await;
 
         let group_setup = GroupSetup::read_attribute(env);
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request_for_nested_nodes(&self.nodes, env, &group_name)?;
-        let res_group = allocate_resources(&farm, &res_request, env)?;
+        let res_group = allocate_resources(&farm, &res_request, env).await?;
 
         for (node, vm_spec) in self.nodes.iter().zip(&res_request.vm_configs) {
             let vm_spec = VmSpec {
@@ -70,7 +74,7 @@ impl NestedNodes {
             env.write_nested_vm(&node.name, &vm_spec, &res_group.vms[&node.name])?;
         }
 
-        setup_and_start_nested_vms(env, &farm, &group_name)?;
+        setup_and_start_nested_vms(env, &farm, &group_name).await?;
 
         Ok(())
     }

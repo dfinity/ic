@@ -20,7 +20,6 @@ use crate::driver::{
     },
     test_setup::InfraProvider,
 };
-use crate::util::block_on;
 use anyhow::{Context, Result, bail};
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::setupos::{
@@ -53,7 +52,6 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     process::Command,
-    thread::{self, JoinHandle},
 };
 use url::Url;
 use zstd::stream::write::Encoder;
@@ -219,7 +217,7 @@ pub fn init_ic(
     Ok(ic_config.initialize()?)
 }
 
-pub fn setup_and_start_vms(
+pub async fn setup_and_start_vms(
     initialized_ic: &InitializedIc,
     ic: &InternetComputer,
     env: &TestEnv,
@@ -238,47 +236,48 @@ pub fn setup_and_start_vms(
     for node in initialized_ic.api_boundary_nodes.values() {
         nodes.push(node.clone());
     }
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    let mut join_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>> = vec![];
     let mut nodes_info = NodesInfo::new();
     for node in nodes {
         let group_name = group_name.to_string();
         let vm_name = node.node_id.to_string();
-        let t_farm = farm.clone();
-        let t_env = env.clone();
+        let farm = farm.clone();
         let ic_name = ic.name();
         let malicious_behavior = ic.get_malicious_behavior_of_node(node.node_id);
         let query_stats_epoch_length = ic.get_query_stats_epoch_length_of_node(node.node_id);
         let ipv4_config = ic.get_ipv4_config_of_node(node.node_id);
         let domain = ic.get_domain_of_node(node.node_id);
         let recovery_hash: Option<String> = ic.get_recovery_hash_of_node(node.node_id);
+        let conf_img_path = node.node_path.join(mk_compressed_img_path());
         nodes_info.insert(node.node_id, malicious_behavior.clone());
-        join_handles.push(thread::spawn(move || {
-            create_config_disk_image(
-                &ic_name,
-                &node,
-                malicious_behavior,
-                query_stats_epoch_length,
-                ipv4_config,
-                domain,
-                recovery_hash,
-                &t_env,
-            )?;
+        let node = node.clone();
+        let node_for_create_config_disk_image = node.clone();
+        let env_1 = env.clone();
+        let env_2 = env.clone();
+        join_handles.push(tokio::spawn(async move {
+            // create_config_disk_image is blocking, so wrap it
+            tokio::task::spawn_blocking(move || {
+                create_config_disk_image(
+                    &ic_name,
+                    &node_for_create_config_disk_image,
+                    malicious_behavior,
+                    query_stats_epoch_length,
+                    ipv4_config,
+                    domain,
+                    recovery_hash,
+                    &env_1,
+                )
+            })
+            .await??;
 
-            let conf_img_path = PathBuf::from(&node.node_path).join(mk_compressed_img_path());
-            match InfraProvider::read_attribute(&t_env) {
+            match InfraProvider::read_attribute(&env_2) {
                 InfraProvider::Farm => {
-                    let image_spec = AttachImageSpec::new(upload_config_disk_image(
-                        &group_name,
-                        &node,
-                        &t_farm,
-                    )?);
-                    block_on(t_farm.attach_disk_images(
-                        &group_name,
-                        &vm_name,
-                        "usb-storage",
-                        vec![image_spec],
-                    ))?;
-                    block_on(t_farm.start_vm(&group_name, &vm_name))?;
+                    let image_spec = AttachImageSpec::new(
+                        upload_config_disk_image(&group_name, &node, &farm).await?,
+                    );
+                    farm.attach_disk_images(&group_name, &vm_name, "usb-storage", vec![image_spec])
+                        .await?;
+                    farm.start_vm(&group_name, &vm_name).await?;
                 }
             }
             std::fs::remove_file(conf_img_path)?;
@@ -290,14 +289,21 @@ pub fn setup_and_start_vms(
     env.write_json_object(NODES_INFO, &nodes_info)?;
 
     let mut result = Ok(());
-    // Wait for all threads to finish and return an error if any of them fails.
+    // Wait for all tasks to finish and return an error if any of them fails.
     for jh in join_handles {
-        if let Err(e) = jh.join().expect("Waiting for a thread failed") {
-            warn!(farm.logger, "Starting VM failed with: {:?}", e);
-            result = Err(anyhow::anyhow!(
-                "Failed to set up and start a VM pool: {:?}",
-                e
-            ));
+        match jh.await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                warn!(farm.logger, "Starting VM failed with: {:?}", e);
+                result = Err(anyhow::anyhow!(
+                    "Failed to set up and start a VM pool: {:?}",
+                    e
+                ));
+            }
+            Err(e) => {
+                warn!(farm.logger, "Tokio task join error: {:?}", e);
+                result = Err(anyhow::anyhow!("Tokio task join error: {:?}", e));
+            }
         }
     }
     result
@@ -306,7 +312,7 @@ pub fn setup_and_start_vms(
 // Setup and start nested VMs. NOTE: This is different from
 // `setup_and_start_vms` in that we need to configure and push SetupOS config
 // for each node.
-pub fn setup_and_start_nested_vms(
+pub async fn setup_and_start_nested_vms(
     env: &TestEnv,
     farm: &Farm,
     group_name: &str,
@@ -330,7 +336,7 @@ pub fn setup_and_start_nested_vms(
     let setupos_hash = get_setupos_img_sha256();
     let setupos_image_spec = AttachImageSpec::via_url(setupos_url, setupos_hash);
 
-    let mut join_handles: Vec<JoinHandle<anyhow::Result<()>>> = vec![];
+    let mut join_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>> = vec![];
     for node in env.get_all_nested_vms()? {
         let t_env = env.clone();
         let t_farm = farm.clone();
@@ -338,28 +344,32 @@ pub fn setup_and_start_nested_vms(
         let t_ic_gateway_url = ic_gateway_url.clone();
         let t_nns_public_key_override = nns_public_key_override.clone();
         let t_setupos_image_spec = setupos_image_spec.clone();
-        join_handles.push(thread::spawn(move || {
+        join_handles.push(tokio::spawn(async move {
             let vm_name = node.vm_name();
 
-            let config_image = create_setupos_config_image(
-                &t_env,
-                &vm_name,
-                &t_ic_gateway_url,
-                t_nns_public_key_override.as_deref(),
-            )?;
-            let config_image_spec = AttachImageSpec::new(block_on(t_farm.upload_file(
-                &t_group_name,
-                config_image,
-                NESTED_CONFIG_IMAGE_PATH,
-            ))?);
-
-            block_on(t_farm.attach_disk_images(
-                &t_group_name,
-                &vm_name,
-                "usb-storage",
-                vec![t_setupos_image_spec, config_image_spec],
-            ))?;
-            block_on(t_farm.start_vm(&t_group_name, &vm_name))?;
+            let config_image = tokio::task::spawn_blocking(move || {
+                create_setupos_config_image(
+                    &t_env,
+                    &node.vm_name(),
+                    &t_ic_gateway_url,
+                    t_nns_public_key_override.as_deref(),
+                )
+            })
+            .await??;
+            let config_image_spec = AttachImageSpec::new(
+                t_farm
+                    .upload_file(&t_group_name, config_image, NESTED_CONFIG_IMAGE_PATH)
+                    .await?,
+            );
+            t_farm
+                .attach_disk_images(
+                    &t_group_name,
+                    &vm_name,
+                    "usb-storage",
+                    vec![t_setupos_image_spec, config_image_spec],
+                )
+                .await?;
+            t_farm.start_vm(&t_group_name, &vm_name).await?;
 
             Ok(())
         }));
@@ -374,7 +384,7 @@ pub fn setup_and_start_nested_vms(
 
     let mut result = Ok(());
     for jh in join_handles {
-        if let Err(e) = jh.join().expect("Waiting for a thread failed") {
+        if let Err(e) = jh.await.expect("Waiting for a thread failed") {
             warn!(farm.logger, "Setting up VM failed with: {:?}", e);
             result = Err(anyhow::anyhow!("Failed to set up a VM pool"));
         }
@@ -407,14 +417,16 @@ fn validate_version_config(env: &TestEnv) {
     }
 }
 
-pub fn upload_config_disk_image(
+pub async fn upload_config_disk_image(
     group_name: &str,
     node: &InitializedNode,
     farm: &Farm,
 ) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = block_on(farm.upload_file(group_name, target_file, &compressed_img_path))?;
+    let image_id = farm
+        .upload_file(group_name, target_file, &compressed_img_path)
+        .await?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }

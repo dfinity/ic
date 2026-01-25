@@ -229,12 +229,12 @@ impl InternetComputer {
         self
     }
 
-    pub fn setup_and_start_return_vms(
+    pub async fn setup_and_start_return_vms(
         &mut self,
         env: &TestEnv,
     ) -> Result<BTreeMap<String, AllocatedVm>> {
         // propagate required host features and resource settings to all vms
-        let farm = block_on(Farm::from_test_env(env, "Internet Computer"));
+        let farm = Farm::from_test_env(env, "Internet Computer").await;
         for node in self
             .subnets
             .iter_mut()
@@ -261,7 +261,7 @@ impl InternetComputer {
             record.write_attribute(env);
         }
 
-        let res_group = allocate_resources(&farm, &res_request, env)?;
+        let res_group = allocate_resources(&farm, &res_request, env).await?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(
             self,
@@ -288,12 +288,12 @@ impl InternetComputer {
         info!(env.logger(), "{topology_snapshot}");
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
-        setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        setup_and_start_vms(&init_ic, self, env, &farm, &group_name).await?;
         Ok(res_group.vms)
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
-        self.setup_and_start_return_vms(env)?;
+        block_on(self.setup_and_start_return_vms(env))?;
         Ok(())
     }
 

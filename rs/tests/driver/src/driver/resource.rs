@@ -14,7 +14,6 @@ use crate::driver::test_env_api::{
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
-use crate::util::block_on;
 use anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -247,14 +246,15 @@ pub fn get_resource_request_for_universal_vm(
     Ok(res_req)
 }
 
-pub fn allocate_resources(
+pub async fn allocate_resources(
     farm: &Farm,
     req: &ResourceRequest,
     env: &TestEnv,
 ) -> FarmResult<ResourceGroup> {
     let group_name = req.group_name.clone();
 
-    let mut threads = vec![];
+    use futures::future::join_all;
+    let mut handles = vec![];
     for vm_config in req.vm_configs.iter() {
         let farm_cloned = farm.clone();
         let vm_name = vm_config.name.clone();
@@ -281,10 +281,10 @@ pub fn allocate_resources(
 
         match InfraProvider::read_attribute(env) {
             InfraProvider::Farm => {
-                threads.push(std::thread::spawn(move || {
+                handles.push(tokio::spawn(async move {
                     (
                         vm_name,
-                        block_on(farm_cloned.create_vm(&group_name, create_vm_request)),
+                        farm_cloned.create_vm(&group_name, create_vm_request).await,
                     )
                 }));
             }
@@ -293,10 +293,9 @@ pub fn allocate_resources(
     let mut res_group = ResourceGroup::new(group_name.clone());
     match InfraProvider::read_attribute(env) {
         InfraProvider::Farm => {
-            for thread in threads {
-                let (vm_name, created_vm) = thread
-                    .join()
-                    .expect("Couldn't join on the associated thread");
+            let results = join_all(handles).await;
+            for res in results {
+                let (vm_name, created_vm) = res.expect("Task panicked");
                 let VMCreateResponse {
                     hostname,
                     ipv6,
