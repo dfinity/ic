@@ -167,13 +167,10 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 
-# detect if the chosen container command will run podman as root (via sudo)
-if [ "${CONTAINER_CMD[0]:-}" = "sudo" ]; then
-    eprintln "Detected rootful podman (sudo) — disabling idmap on mounts to avoid crun overflow."
-    IDMAP=""
-else
-    IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-fi
+UID_HOST=$(id -u)
+GID_HOST=$(id -g)
+
+IDMAP="uids=0:${UID_HOST}:1;gids=0:${GID_HOST}:1"
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
