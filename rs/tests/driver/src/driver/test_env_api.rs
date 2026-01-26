@@ -199,7 +199,8 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    os::fd::AsRawFd,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -1292,11 +1293,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> ReplicaVersion {
-    ReplicaVersion::try_from(
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
-    )
-    .expect("Invalid ReplicaVersion")
+/// Returns the build version specified by the build. May be an actual version or a
+/// placeholder version. See build files for exact semantics.
+pub fn get_ic_build_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(read_dependency_from_env_to_string("IC_VERSION_FILE").unwrap())
+        .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
@@ -1499,8 +1500,20 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
-        get_ssh_session_from_env(&self.test_env(), self.get_host_ip()?)
-            .context("Failed to get SSH session")
+        let ip = self.get_host_ip()?;
+        let tcp =
+            std::net::TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
+
+        get_ssh_session_from_socket(&self.test_env(), tcp).context("Failed to get SSH session")
+    }
+
+    /// Return an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `get_ssh_session`.
+    async fn get_ssh_session_async(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        let tcp = tokio::net::TcpStream::connect(SocketAddr::new(ip, 22)).await?;
+
+        get_ssh_session_from_socket(&self.test_env(), tcp).context("Failed to get SSH session")
     }
 
     /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
@@ -1529,7 +1542,7 @@ pub trait SshSession: HasTestEnv {
             &self.test_env().logger(),
             SSH_RETRY_TIMEOUT,
             RETRY_BACKOFF,
-            || async { self.get_ssh_session() }
+            || self.get_ssh_session_async()
         )
         .await
     }
@@ -2117,8 +2130,7 @@ where
     }
 }
 
-pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
-    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
+pub fn get_ssh_session_from_socket<S: 'static + AsRawFd>(env: &TestEnv, tcp: S) -> Result<Session> {
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;

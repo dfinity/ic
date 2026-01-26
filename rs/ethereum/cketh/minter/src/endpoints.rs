@@ -1,5 +1,7 @@
+use crate::CKETH_LEDGER_MEMO_SIZE;
 use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::ledger_client::LedgerBurnError;
+use crate::memo;
 use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
@@ -491,3 +493,125 @@ pub mod events {
         },
     }
 }
+
+#[derive(Clone, Copy, Debug, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum MemoType {
+    Burn,
+    Mint,
+}
+
+#[derive(Debug, CandidType, serde::Serialize, serde::Deserialize)]
+pub struct DecodeLedgerMemoArgs {
+    pub memo_type: MemoType,
+    pub encoded_memo: Vec<u8>,
+}
+
+impl DecodeLedgerMemoArgs {
+    pub fn validate_input(&self) -> Result<(), String> {
+        if self.encoded_memo.len() > CKETH_LEDGER_MEMO_SIZE as usize {
+            Err(format!(
+                "Memo longer than permitted length {}",
+                CKETH_LEDGER_MEMO_SIZE
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum MintMemo {
+    Convert {
+        from_address: String,
+        tx_hash: String,
+        log_index: Nat,
+    },
+    ReimburseTransaction {
+        withdrawal_id: u64,
+        tx_hash: String,
+    },
+    ReimburseWithdrawal {
+        withdrawal_id: u64,
+    },
+}
+
+impl From<memo::MintMemo> for MintMemo {
+    fn from(m: memo::MintMemo) -> Self {
+        match m {
+            memo::MintMemo::Convert {
+                from_address,
+                tx_hash,
+                log_index,
+            } => MintMemo::Convert {
+                from_address: from_address.to_string(),
+                tx_hash: tx_hash.to_string(),
+                log_index: Nat::from(log_index),
+            },
+            memo::MintMemo::ReimburseTransaction {
+                withdrawal_id,
+                tx_hash,
+            } => MintMemo::ReimburseTransaction {
+                withdrawal_id,
+                tx_hash: tx_hash.to_string(),
+            },
+            memo::MintMemo::ReimburseWithdrawal { withdrawal_id } => {
+                MintMemo::ReimburseWithdrawal { withdrawal_id }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum BurnMemo {
+    Convert {
+        to_address: String,
+    },
+    Erc20GasFee {
+        ckerc20_token_symbol: String,
+        ckerc20_withdrawal_amount: Nat,
+        to_address: String,
+    },
+    Erc20Convert {
+        ckerc20_withdrawal_id: u64,
+        to_address: String,
+    },
+}
+
+impl From<memo::BurnMemo> for BurnMemo {
+    fn from(m: memo::BurnMemo) -> Self {
+        match m {
+            memo::BurnMemo::Convert { to_address } => BurnMemo::Convert {
+                to_address: to_address.to_string(),
+            },
+            memo::BurnMemo::Erc20GasFee {
+                ckerc20_token_symbol,
+                ckerc20_withdrawal_amount,
+                to_address,
+            } => BurnMemo::Erc20GasFee {
+                ckerc20_token_symbol: ckerc20_token_symbol.to_string(),
+                ckerc20_withdrawal_amount: Nat::from(ckerc20_withdrawal_amount),
+                to_address: to_address.to_string(),
+            },
+            memo::BurnMemo::Erc20Convert {
+                ckerc20_withdrawal_id,
+                to_address,
+            } => BurnMemo::Erc20Convert {
+                ckerc20_withdrawal_id,
+                to_address: to_address.to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum DecodedMemo {
+    Mint(Option<MintMemo>),
+    Burn(Option<BurnMemo>),
+}
+
+#[derive(Debug, Eq, PartialEq, CandidType, serde::Serialize, serde::Deserialize)]
+pub enum DecodeLedgerMemoError {
+    InvalidMemo(String),
+}
+
+pub type DecodeLedgerMemoResult = Result<Option<DecodedMemo>, Option<DecodeLedgerMemoError>>;

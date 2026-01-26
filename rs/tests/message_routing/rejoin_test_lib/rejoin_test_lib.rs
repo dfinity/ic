@@ -3,7 +3,7 @@ use canister_test::{Canister, Runtime, Wasm};
 use futures::future::join_all;
 use ic_agent::Agent;
 use ic_system_test_driver::driver::test_env::TestEnv;
-use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
@@ -15,7 +15,6 @@ use slog::Logger;
 use slog::info;
 use statesync_test::CanisterCreationStatus;
 use std::collections::BTreeMap;
-use std::env;
 use std::fmt::Debug;
 use std::str::FromStr;
 use std::time::Duration;
@@ -238,10 +237,7 @@ async fn deploy_seed_canister(
         .await
         .expect("Failed to create a seed canister")
         .0;
-    let seed_canister_wasm_path = get_dependency_path(
-        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
-    );
+    let seed_canister_wasm_path = get_dependency_path_from_env("STATESYNC_TEST_CANISTER_WASM_PATH");
     let seed_canister_wasm = std::fs::read(seed_canister_wasm_path)
         .expect("Could not read STATESYNC_TEST_CANISTER_WASM_PATH");
     ic00.install(&seed_canister_id, &seed_canister_wasm)
@@ -596,9 +592,8 @@ pub async fn install_statesync_test_canisters<'a>(
     num_canisters: usize,
 ) -> Vec<Canister<'a>> {
     let logger = env.logger();
-    let wasm = Wasm::from_file(get_dependency_path(
-        env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
-            .expect("STATESYNC_TEST_CANISTER_WASM_PATH not set"),
+    let wasm = Wasm::from_file(get_dependency_path_from_env(
+        "STATESYNC_TEST_CANISTER_WASM_PATH",
     ));
     let mut futures: Vec<_> = Vec::new();
     for canister_idx in 0..num_canisters {

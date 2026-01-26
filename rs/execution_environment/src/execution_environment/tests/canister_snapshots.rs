@@ -38,7 +38,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::user_test_id;
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
-use more_asserts::assert_gt;
+use more_asserts::{assert_gt, assert_lt};
 use std::borrow::Borrow;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
@@ -570,10 +570,10 @@ fn canister_snapshot_reserves_cycles_difference() {
             .system_state
             .reserved_balance();
         // Make sure the reserved cycles are increased even more than before.
-        assert!(
-            reserved_cycles_after_a_new_snapshot
-                > reserved_cycles_after_snapshot_1 + reserved_cycles_after_snapshot_1
-                    - reserved_cycles_after_snapshot_2
+        assert_gt!(
+            reserved_cycles_after_a_new_snapshot,
+            reserved_cycles_after_snapshot_1 + reserved_cycles_after_snapshot_1
+                - reserved_cycles_after_snapshot_2
         );
     });
 }
@@ -726,7 +726,7 @@ fn take_canister_snapshot_increases_heap_delta() {
 
     let heap_delta_after = test.state().metadata.heap_delta_estimate;
 
-    assert!(heap_delta_after > heap_delta_before);
+    assert_gt!(heap_delta_after, heap_delta_before);
 }
 
 #[test]
@@ -1494,7 +1494,7 @@ fn load_canister_snapshot_succeeds() {
         .system_state
         .canister_version;
     // Canister version should be bumped after loading a snapshot.
-    assert!(canister_version_after > canister_version_before);
+    assert_gt!(canister_version_after, canister_version_before);
     assert_eq!(canister_version_after, 2u64);
 
     // Entry in canister history should contain the information of
@@ -1778,8 +1778,9 @@ fn load_canister_snapshot_charges_canister_cycles() {
         LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
     let result = test.subnet_message("load_canister_snapshot", args.encode());
     assert!(result.is_ok());
-    assert!(
-        test.canister_state(canister_id).system_state.balance() < initial_balance - expected_charge
+    assert_lt!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_balance - expected_charge
     );
 }
 

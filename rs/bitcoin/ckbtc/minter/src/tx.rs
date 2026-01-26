@@ -3,13 +3,14 @@
 
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
-use ic_crypto_sha2::Sha256;
-use serde_bytes::{ByteBuf, Bytes};
-use std::fmt;
-
 use crate::{CanisterRuntime, ECDSAPublicKey, management, signature, tx};
 pub use ic_btc_interface::{OutPoint, Satoshi, Txid};
+use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
+use serde_bytes::{ByteBuf, Bytes};
+use std::fmt;
+use std::num::NonZeroU32;
+use std::ops::Add;
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.
@@ -353,15 +354,24 @@ pub struct UnsignedTransaction {
 pub struct SignedRawTransaction {
     signed_tx: Vec<u8>,
     txid: Txid,
+    fee_rate: FeeRate,
 }
 
 impl SignedRawTransaction {
-    pub fn new(signed_tx: Vec<u8>, txid: Txid) -> Self {
-        Self { signed_tx, txid }
+    pub fn new(signed_tx: Vec<u8>, txid: Txid, fee_rate: FeeRate) -> Self {
+        Self {
+            signed_tx,
+            txid,
+            fee_rate,
+        }
     }
 
     pub fn txid(&self) -> Txid {
         self.txid
+    }
+
+    pub fn fee_rate(&self) -> FeeRate {
+        self.fee_rate
     }
 
     pub fn into_bytes(self) -> Vec<u8> {
@@ -372,6 +382,66 @@ impl SignedRawTransaction {
 impl AsRef<[u8]> for SignedRawTransaction {
     fn as_ref(&self) -> &[u8] {
         &self.signed_tx
+    }
+}
+
+/// Fee rate in millis base unit per (v)byte.
+#[derive(Copy, Eq, PartialEq, Ord, PartialOrd, Debug, Clone)]
+pub struct FeeRate(u64);
+
+impl FeeRate {
+    /// Computes the fee rate for a given signed transaction, where :
+    /// * the total transaction fee is given in base units.
+    /// * the size of the transaction is given in (v)bytes.
+    ///
+    /// The resulting fee rate will be rounded up.
+    pub fn from_tx_ceil(fee: u64, signed_tx_len: NonZeroU32) -> Self {
+        Self((fee * 1_000).div_ceil(signed_tx_len.get() as u64))
+    }
+
+    pub const fn from_millis_per_byte(millis_per_byte: u64) -> Self {
+        Self(millis_per_byte)
+    }
+
+    /// Returns the fee rate in millis base unit per (v)byte.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ic_ckbtc_minter::tx::FeeRate;
+    /// use std::num::NonZeroU32;
+    ///
+    /// let fee_rate = FeeRate::from_tx_ceil(42_300, NonZeroU32::new(141).unwrap());
+    /// assert_eq!(fee_rate.millis(), 300_000);
+    /// ```
+    pub fn millis(self) -> u64 {
+        self.0
+    }
+
+    /// Returns the total fee for a signed transaction of a given size in (v)bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use ic_ckbtc_minter::tx::FeeRate;
+    ///
+    /// let fee_rate = FeeRate::from_millis_per_byte(3_000);
+    /// let signed_tx_len: u64 = 141;
+    /// assert_eq!(fee_rate.fee_ceil(signed_tx_len), 423);
+    ///
+    /// let fee_rate = FeeRate::from_millis_per_byte(999);
+    /// assert_eq!(fee_rate.fee_ceil(signed_tx_len), 141);
+    /// ```
+    pub fn fee_ceil(&self, signed_tx_len: u64) -> u64 {
+        (signed_tx_len * self.0).div_ceil(1_000)
+    }
+}
+
+impl Add for FeeRate {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0.saturating_add(rhs.0))
     }
 }
 
@@ -602,6 +672,17 @@ impl BitcoinTransactionSigner {
             "BUG: expected on account per input"
         );
 
+        let sum_inputs = unsigned_tx
+            .inputs
+            .iter()
+            .map(|input| input.value)
+            .sum::<u64>();
+        let sum_outputs = unsigned_tx
+            .outputs
+            .iter()
+            .map(|output| output.value)
+            .sum::<u64>();
+
         let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
         let sighasher = tx::TxSigHasher::new(&unsigned_tx);
         for (input, account) in unsigned_tx.inputs.iter().zip(accounts) {
@@ -634,9 +715,16 @@ impl BitcoinTransactionSigner {
             outputs: unsigned_tx.outputs,
             lock_time: unsigned_tx.lock_time,
         };
+        let fee_rate = FeeRate::from_tx_ceil(
+            sum_inputs - sum_outputs,
+            NonZeroU32::try_from(signed_tx.vsize() as u32)
+                .expect("BUG: signed transaction cannot have zero size"),
+        );
+
         Ok(SignedRawTransaction::new(
             signed_tx.serialize(),
             signed_tx.compute_txid(),
+            fee_rate,
         ))
     }
 }

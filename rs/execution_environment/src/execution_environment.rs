@@ -383,8 +383,9 @@ impl ExecutionEnvironment {
         scheduler_cores: usize,
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
-        assert!(
-            config.canister_sandboxing_flag == FlagStatus::Enabled,
+        assert_eq!(
+            config.canister_sandboxing_flag,
+            FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
 
@@ -593,6 +594,9 @@ impl ExecutionEnvironment {
                         (state, Some(NumInstructions::from(0)))
                     }
                 };
+            }
+            CanisterMessage::NewResponse { .. } => {
+                unreachable!("NewResponse is only used during state loading")
             }
 
             CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
@@ -2020,6 +2024,9 @@ impl ExecutionEnvironment {
                     subnet_size,
                     cost_schedule,
                 );
+            }
+            CanisterMessageOrTask::Message(CanisterMessage::NewResponse { .. }) => {
+                unreachable!("NewResponse is only used during state loading")
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 CanisterCall::Request(request)
