@@ -517,7 +517,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let iter = reject_signals.iter().map(|signal| signal.index);
         for (index, next_index) in iter
             .clone()
-            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+            .zip(iter.skip(1).chain(std::iter::once(signals_end)))
         {
             if index >= next_index {
                 return Err(ProxyDecodeError::Other(format!(
