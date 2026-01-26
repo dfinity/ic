@@ -128,6 +128,8 @@ PODMAN_RUN_ARGS=(
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+    -e TERM
+    -e LANG=C.UTF-8
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
@@ -154,9 +156,11 @@ mkdir -p "${ICT_TESTNETS_DIR}"
 MISC_TMP_DIR="/tmp/misc"
 mkdir -p "${MISC_TMP_DIR}"
 
-trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
+trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}" "${BAZELRC_FILE}"' EXIT
 SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
+BAZELRC_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=bazelrc)
+echo "common --color=yes" > "${BAZELRC_FILE}"
 
 IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
 
@@ -170,6 +174,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${BAZELRC_FILE}",target="${CTR_HOME}/.bazelrc",idmap="${IDMAP}"
     --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
 )
 
