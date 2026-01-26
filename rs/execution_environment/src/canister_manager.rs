@@ -1810,7 +1810,6 @@ impl CanisterManager {
                 cycles_for_instructions,
                 new_memory_usage,
                 canister.message_memory_usage(),
-                canister.compute_allocation(),
                 subnet_size,
                 cost_schedule,
                 reveal_top_up,

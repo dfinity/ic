@@ -3009,7 +3009,6 @@ impl ExecutionEnvironment {
                     cost,
                     paying_canister.memory_usage(),
                     paying_canister.message_memory_usage(),
-                    paying_canister.compute_allocation(),
                     subnet_size,
                     state.get_own_cost_schedule(),
                     reveal_top_up,
