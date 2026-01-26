@@ -6,21 +6,21 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
-use std::cell::Cell;
+use parking_lot::RwLock;
 
 pub(super) struct StructIO {
     buffer: Buffer,
     /// Caches the header for the lifetime of the `StructIO` instance (typically
     /// one high-level operation), avoiding repeated `PageMap` reads during
     /// complex operations like `append_log`.
-    cache_header: Cell<Option<Header>>,
+    cache_header: RwLock<Option<Header>>,
 }
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
-            cache_header: Cell::new(None),
+            cache_header: RwLock::new(None),
         }
     }
 
@@ -29,7 +29,7 @@ impl StructIO {
     }
 
     pub fn load_header(&self) -> Header {
-        if let Some(cached_header) = self.cache_header.get() {
+        if let Some(cached_header) = *self.cache_header.read() {
             return cached_header;
         }
         let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
@@ -56,12 +56,12 @@ impl StructIO {
             next_idx,
             max_timestamp,
         };
-        self.cache_header.set(Some(header));
+        *self.cache_header.write() = Some(header);
         header
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        self.cache_header.set(Some(*header));
+        *self.cache_header.write() = Some(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -522,7 +522,7 @@ mod tests {
         // Manually overwrite cache with a fake header.
         // This proves that load_header() uses the cache instead of reading from page map.
         let header_fake = Header::new(MemorySize::new(9999));
-        io.cache_header.set(Some(header_fake));
+        *io.cache_header.write() = Some(header_fake);
 
         let loaded = io.load_header();
         assert_eq!(loaded.data_capacity.get(), 9999);

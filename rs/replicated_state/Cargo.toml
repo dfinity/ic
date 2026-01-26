@@ -35,6 +35,7 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 maplit = "1.0.2"
 nix = { workspace = true }
+parking_lot = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
