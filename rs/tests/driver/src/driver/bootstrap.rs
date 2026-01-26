@@ -2,6 +2,7 @@ use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
 use crate::driver::ic_images::try_get_setupos_img_version;
 use crate::driver::nested::NestedVm;
+use crate::driver::test_env_api::get_guestos_launch_measurements;
 use crate::driver::test_env_api::{
     SshSession, get_guestos_img_url, get_guestos_initial_launch_measurements,
     get_hostos_initial_update_img_url,
@@ -192,7 +193,7 @@ pub fn init_ic(
     let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
         get_guestos_initial_update_img_sha256(),
         get_guestos_initial_update_img_url(),
-        get_guestos_initial_launch_measurements(),
+        get_guestos_launch_measurements(),
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
