@@ -83,7 +83,7 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
         let block_index = test_retrieve_doge_with_approval(
             &minter_agent,
             &ledger_agent,
-            &default_address,
+            default_address,
             received / 2,
         )
         .await;
@@ -170,7 +170,7 @@ async fn test_update_balance(minter_agent: &CkDogeMinterAgent, ledger_agent: &Ic
         .await
         .unwrap();
     assert_eq!(balance, Nat::from(received));
-    return received;
+    received
 }
 
 async fn test_retrieve_doge_with_approval(
@@ -186,7 +186,7 @@ async fn test_retrieve_doge_with_approval(
         subaccount: None,
     };
     let balance = ledger_agent
-        .balance_of(account.clone(), CallMode::Update)
+        .balance_of(account, CallMode::Update)
         .await
         .unwrap();
     assert!(amount + TRANSFER_FEE <= balance);
@@ -219,7 +219,7 @@ async fn test_retrieve_doge_with_approval(
     assert!(res.is_ok(), "retrieve_doge_with_approval failed: {res:?}");
 
     let new_balance = ledger_agent
-        .balance_of(account.clone(), CallMode::Update)
+        .balance_of(account, CallMode::Update)
         .await
         .unwrap();
     let expected_balance = balance - Nat::from(amount + TRANSFER_FEE);
