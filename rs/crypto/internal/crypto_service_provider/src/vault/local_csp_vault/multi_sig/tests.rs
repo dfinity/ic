@@ -16,7 +16,9 @@ use crate::vault::local_csp_vault::multi_sig::SecretKeyStoreInsertionError;
 use crate::vault::local_csp_vault::multi_sig::committee_signing_pk_to_proto;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types::crypto::AlgorithmId;
+use ic_types::time::GENESIS;
 use mockall::Sequence;
 use rand::Rng;
 use strum::IntoEnumIterator;
@@ -37,6 +39,30 @@ fn should_generate_committee_signing_key_pair_and_store_keys() {
             .committee_signing_public_key
             .expect("missing node signing key"),
         committee_signing_pk_to_proto((pk, pop))
+    );
+}
+
+#[test]
+fn should_generate_committee_signing_public_key_with_timestamp() {
+    let time_source = FastForwardTimeSource::new();
+    time_source.set_time(GENESIS).expect("wrong time");
+    let vault = LocalCspVault::builder_for_test()
+        .with_time_source(time_source)
+        .build();
+
+    let _ = vault
+        .gen_committee_signing_key_pair()
+        .expect("failed to create keys");
+
+    assert_eq!(
+        vault
+            .current_node_public_keys_with_timestamps()
+            .expect("Failed to retrieve current public keys")
+            .committee_signing_public_key
+            .expect("missing committee signing public key")
+            .timestamp
+            .expect("missing committee signing key generation timestamp"),
+        GENESIS.as_millis_since_unix_epoch()
     );
 }
 

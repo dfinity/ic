@@ -34,8 +34,7 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path,
-            get_dependency_path_from_env,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path_from_env,
         },
     },
     util::block_on,
@@ -50,7 +49,7 @@ use lazy_static::lazy_static;
 use slog::info;
 use std::{
     collections::{BTreeMap, HashMap},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 use url::Url;
@@ -207,6 +206,11 @@ pub fn test(env: TestEnv) {
 
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
+        let rosetta_workspace_path = env.get_path("rosetta_workspace");
+        std::fs::create_dir_all(&rosetta_workspace_path)
+            .expect("Failed to create rosetta workspace directory");
+        let rosetta_workspace_path = rosetta_workspace_path.as_path();
+
         info!(log, "Starting Rosetta");
         let rosetta_api_bin_path = rosetta_api_bin_path();
         let mut rosetta_api_serv = RosettaApiHandle::start(
@@ -216,7 +220,7 @@ pub fn test(env: TestEnv) {
             8099,
             ledger.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(),
+            rosetta_workspace_path,
             Some(&root_key),
         )
         .await;
@@ -252,11 +256,8 @@ pub fn test(env: TestEnv) {
         );
 
         // Rosetta-cli tests
-        let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", rosetta_workspace_path()));
-        let cli_ros = PathBuf::from(format!(
-            "{}/rosetta_workflows.ros",
-            rosetta_workspace_path()
-        ));
+        let cli_json = get_dependency_path_from_env("ROSETTA_CLI_JSON_PATH");
+        let cli_ros = get_dependency_path_from_env("ROSETTA_WORKFLOWS_ROS_PATH");
         let conf = rosetta_api_serv.generate_rosetta_cli_config(&cli_json, &cli_ros);
         info!(log, "Running rosetta-cli check:construction");
         rosetta_cli_construction_check(&conf);
@@ -282,7 +283,7 @@ pub fn test(env: TestEnv) {
             8101,
             ledger.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(),
+            rosetta_workspace_path,
             Some(&root_key),
         )
         .await;
@@ -304,7 +305,13 @@ pub fn test(env: TestEnv) {
             log,
             "Test wrong canister id (expected Rosetta sync errors in logs)"
         );
-        test_wrong_canister_id(&env, nns_node.get_public_url(), None).await;
+        test_wrong_canister_id(
+            &env,
+            rosetta_workspace_path,
+            nns_node.get_public_url(),
+            None,
+        )
+        .await;
         info!(log, "Test wrong canister id finished");
 
         let (_cert, tip_idx) = get_tip(&ledger_for_governance).await;
@@ -317,7 +324,7 @@ pub fn test(env: TestEnv) {
             8100,
             ledger_for_governance.canister_id(),
             governance.canister_id(),
-            rosetta_workspace_path(),
+            rosetta_workspace_path,
             Some(&root_key),
         )
         .await;
@@ -348,7 +355,12 @@ async fn get_tip(ledger: &Canister<'_>) -> (Certification, BlockIndex) {
     (res.certification, res.tip_index)
 }
 
-async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Option<&Blob>) {
+async fn test_wrong_canister_id(
+    env: &TestEnv,
+    rosetta_workspace_path: &Path,
+    node_url: Url,
+    root_key_blob: Option<&Blob>,
+) {
     let (_acc1, kp, _pk, pid) = make_user_ed25519(1);
 
     let some_can_id = CanisterId::unchecked_from_principal(pid);
@@ -360,7 +372,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
         8101,
         some_can_id,
         some_can_id,
-        rosetta_workspace_path(),
+        rosetta_workspace_path,
         root_key_blob,
     )
     .await;
@@ -425,15 +437,8 @@ fn rosetta_cli_data_check(conf_file: &str) {
     );
 }
 
-fn rosetta_workspace_path() -> String {
-    get_dependency_path("rs/tests/rosetta_workspace")
-        .into_os_string()
-        .into_string()
-        .unwrap()
-}
-
 fn rosetta_api_bin_path() -> PathBuf {
-    get_dependency_path("rs/rosetta-api/icp/ic-rosetta-api")
+    get_dependency_path_from_env("IC_ROSETTA_API_PATH")
 }
 
 fn rosetta_cli_bin_path() -> String {

@@ -2,17 +2,10 @@ load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-LEDGER_CANISTER_DATA = [
-    # Keep sorted.
-    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
-]
-
 system_test(
     name = "icrc1_agent_test",
-    data =
-        LEDGER_CANISTER_DATA,
-    env = {
-        "LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    runtime_deps = {
+        "LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
     },
     deps = [
         "//packages/icrc-ledger-agent:icrc_ledger_agent",
