@@ -104,10 +104,9 @@ pub fn query_encoded_blocks(
             }
         }
 
-        let first_block_index = if result_blocks.is_empty() {
-            chain_length
-        } else {
-            start
+        let first_block_index = match result_blocks.is_empty() {
+            true => chain_length,
+            false => start,
         };
 
         QueryEncodedBlocksResponse {
