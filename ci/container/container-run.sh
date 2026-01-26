@@ -19,8 +19,14 @@ fi
 
 if ! which podman >/dev/null 2>&1; then
     eprintln "Podman missing...install it."
+    eprintln "Podman needs to be installed to run this script."
     exit 1
 fi
+
+# Verify podman is reachable/responding
+if ! podman info >/dev/null 2>&1; then
+    eprintln "Podman found but not responding (daemon/service not running or not reachable)."
+    exit 1
 
 usage() {
     cat <<EOF
