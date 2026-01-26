@@ -3130,12 +3130,11 @@ impl StateManager for StateManagerImpl {
 
     /// Variant of `remove_states_below()` that only removes states committed with
     /// partial certification scope.
-    /// The specified `requested_height` is expected to be the *latest certified height*
-    /// of the subnet, i.e., the latest height for which a valid certification is available
-    /// to consensus.
     /// There are no guarantees for future heights in `extra_heights_to_keep`
     /// w.r.t. the height of the latest state snapshot stored by the state manager, i.e.,
     /// for heights greater than `self.latest_state_height`.
+    /// Such heights must also be included in `extra_heights_to_keep`
+    /// of subsequent calls to prevent removal of their corresponding states.
     ///
     /// The following states are NOT removed:
     /// * Any state with height >= min(requested_height, latest state height)
@@ -3154,12 +3153,6 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["remove_inmemory_states_below"])
             .start_timer();
-
-        let latest_subnet_certified_height =
-            update_latest_height(&self.latest_subnet_certified_height, requested_height);
-        self.metrics
-            .latest_subnet_certified_height
-            .set(latest_subnet_certified_height as i64);
 
         let requested_height = min(requested_height, self.latest_state_height());
 
@@ -3206,6 +3199,16 @@ impl StateManager for StateManagerImpl {
             None,
             extra_heights_to_keep,
         );
+    }
+
+    /// Updates the *latest certified height* of the subnet, i.e.,
+    /// the latest height for which a valid certification is available to consensus.
+    fn update_latest_subnet_certified_height(&self, height: Height) {
+        let latest_subnet_certified_height =
+            update_latest_height(&self.latest_subnet_certified_height, height);
+        self.metrics
+            .latest_subnet_certified_height
+            .set(latest_subnet_certified_height as i64);
     }
 
     fn commit_and_certify(

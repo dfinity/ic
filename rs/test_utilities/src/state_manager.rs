@@ -218,6 +218,10 @@ impl StateManager for FakeStateManager {
         // All heights are checkpoints
     }
 
+    fn update_latest_subnet_certified_height(&self, _height: Height) {
+        // The latest subnet certified height is not used by `FakeStateManager`.
+    }
+
     fn commit_and_certify(
         &self,
         state: ReplicatedState,
@@ -699,6 +703,10 @@ impl StateManager for RefMockStateManager {
 
     fn remove_states_below(&self, height: Height) {
         self.mock.read().unwrap().remove_states_below(height)
+    }
+
+    fn update_latest_subnet_certified_height(&self, height: Height) {
+        self.mock.read().unwrap().update_latest_subnet_certified_height(height)
     }
 
     fn remove_inmemory_states_below(

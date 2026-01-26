@@ -226,11 +226,10 @@ pub trait StateManager: StateReader {
     /// Notify the state manager that states committed with partial certification
     /// state and heights strictly less than the specified `height` can be removed, except
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
-    /// The specified `height` is expected to be the *latest certified height*
-    /// of the subnet, i.e., the latest height for which a valid certification is available
-    /// to consensus.
     /// There are no guarantees for future heights in `extra_heights_to_keep`
-    /// w.r.t. the height of the latest state snapshot stored by the state manager.
+    /// w.r.t. the height of the latest state snapshot stored by the state manager,
+    /// i.e., such heights must also be included in `extra_heights_to_keep`
+    /// of subsequent calls to prevent removal of their corresponding states.
     ///
     /// Note that:
     ///  * The initial state (height = 0) is not removed.
@@ -244,6 +243,10 @@ pub trait StateManager: StateReader {
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
     );
+
+    /// Notify the state manager about the *latest certified height* of the subnet, i.e.,
+    /// the latest height for which a valid certification is available to consensus.
+    fn update_latest_subnet_certified_height(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to
