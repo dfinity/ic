@@ -104,7 +104,7 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
         echo "Using hoststorage for podman root."
         CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
     else
-        CONTAINER_CMD=(podman)
+        CONTAINER_CMD=(sudo podman)
     fi
 fi
 
@@ -177,8 +177,8 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
     --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
 )
 
