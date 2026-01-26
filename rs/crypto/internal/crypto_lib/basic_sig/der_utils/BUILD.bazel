@@ -9,8 +9,8 @@ rust_library(
         "//rs/crypto/internal/crypto_lib/basic_sig/iccsa:__subpackages__",
         "//rs/crypto/standalone-sig-verifier:__subpackages__",
         "//rs/tests/crypto:__subpackages__",
-        "//rs/validator/http_request_test_utils:__subpackages__",
         "//rs/validator:__subpackages__",
+        "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
         # Keep sorted.
