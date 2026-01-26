@@ -144,7 +144,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/hash_tree_direct", |b| {
         b.iter(|| {
             black_box(crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(
-                height, &state,
+                &state, height,
             )))
         })
     });
@@ -251,8 +251,8 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
         b.iter(|| {
             black_box(
                 hash_lazy_tree(&replicated_state_as_lazy_tree(
-                    height,
                     &state_100_custom_sections,
+                    height,
                 ))
                 .unwrap(),
             )

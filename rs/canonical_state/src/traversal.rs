@@ -698,7 +698,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(&state, Height::new(0), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
