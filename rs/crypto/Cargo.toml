@@ -101,7 +101,6 @@ rand = { workspace = true }
 rand_chacha = { workspace = true }
 rsa = { workspace = true }
 sha2 = { workspace = true }
-simple_asn1 = { workspace = true }
 
 [[bench]]
 name = "basic_sig"

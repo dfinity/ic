@@ -15,7 +15,6 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/types/types",
-        "@crate_index//:hex",
         "@crate_index//:simple_asn1",
     ],
 )

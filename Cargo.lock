@@ -8077,7 +8077,6 @@ dependencies = [
  "rustls 0.23.27",
  "serde",
  "sha2 0.10.9",
- "simple_asn1",
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -8121,7 +8120,6 @@ name = "ic-crypto-internal-basic-sig-cose"
 version = "0.9.0"
 dependencies = [
  "hex",
- "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
  "ic-secp256r1",
@@ -8134,7 +8132,6 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-der-utils"
 version = "0.9.0"
 dependencies = [
- "hex",
  "ic-types",
  "simple_asn1",
 ]
@@ -8187,7 +8184,6 @@ dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
  "hex",
- "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8202,7 +8198,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
- "simple_asn1",
  "strum 0.26.3",
  "wycheproof",
  "zeroize",

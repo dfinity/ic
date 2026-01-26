@@ -8,7 +8,6 @@ documentation.workspace = true
 
 [dependencies]
 ic-secp256r1 = { path = "../../../../../../packages/ic-secp256r1" }
-ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../rsa_pkcs1" }
 ic-types = { path = "../../../../../types/types" }
 serde = { workspace = true }
