@@ -59,7 +59,7 @@ mod tests {
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        Memory, SystemMetadata,
+        Memory,
         canister_state::{
             ExecutionState, ExportedFunctions, NumWasmPages,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
@@ -73,8 +73,9 @@ mod tests {
         canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
-        CanisterId, Cycles, Height,
+        CanisterId, CryptoHashOfPartialState, Cycles, Height,
         batch::CanisterCyclesCostSchedule,
+        crypto::CryptoHash,
         xnet::{StreamFlags, StreamHeader},
     };
     use ic_wasm_types::CanisterModule;
@@ -113,13 +114,13 @@ mod tests {
 
     fn expected_metadata(
         height: u64,
-        metadata: &SystemMetadata,
+        prev_state_hash: Option<CryptoHashOfPartialState>,
         certification_version: CertificationVersion,
     ) -> Option<Vec<crate::test_visitors::TraceEntry>> {
         if certification_version >= V24 {
             let height = vec![edge("height"), leb_num(height)];
-            let prev_state_hash = if let Some(hash) = &metadata.prev_state_hash {
-                vec![edge("prev_state_hash"), E::VisitBlob(hash.clone().get().0)]
+            let prev_state_hash = if let Some(hash) = prev_state_hash {
+                vec![edge("prev_state_hash"), E::VisitBlob(hash.get().0)]
             } else {
                 vec![]
             };
@@ -137,12 +138,61 @@ mod tests {
                 edge("metadata"),
                 E::VisitBlob(encode_metadata(SystemMetadataV23 {
                     deprecated_id_counter: None,
-                    prev_state_hash: metadata
-                        .prev_state_hash
-                        .as_ref()
-                        .map(|hash| hash.clone().get().0),
+                    prev_state_hash: prev_state_hash.as_ref().map(|hash| hash.clone().get().0),
                 })),
             ])
+        }
+    }
+
+    #[test]
+    fn test_traverse_metadata() {
+        let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+        let prev_state_hash = Some(CryptoHashOfPartialState::from(CryptoHash(vec![42; 32])));
+        state.metadata.prev_state_hash = prev_state_hash.clone();
+        let height = 42;
+
+        for certification_version in all_supported_versions() {
+            state.metadata.certification_version = certification_version;
+            let visitor = TracingVisitor::new(NoopVisitor);
+
+            let expected_traversal = vec![
+                Some(vec![E::StartSubtree]), // global
+                Some(vec![
+                    edge("api_boundary_nodes"),
+                    E::StartSubtree,
+                    E::EndSubtree, // api_boundary_nodes
+                ]),
+                Some(vec![
+                    edge("canister"),
+                    E::StartSubtree,
+                    E::EndSubtree, // canisters
+                ]),
+                expected_empty_canister_ranges(certification_version),
+                expected_metadata(height, prev_state_hash.clone(), certification_version),
+                Some(vec![
+                    edge("request_status"),
+                    E::StartSubtree,
+                    E::EndSubtree, // request_status
+                    edge("streams"),
+                    E::StartSubtree,
+                    E::EndSubtree, // streams
+                    edge("subnet"),
+                    E::StartSubtree,
+                    E::EndSubtree, // subnets
+                    edge("time"),
+                    leb_num(0),
+                    E::EndSubtree, // global
+                ]),
+            ]
+            .into_iter()
+            .flat_map(Option::unwrap_or_default)
+            .collect::<Vec<_>>();
+
+            assert_eq!(
+                expected_traversal,
+                traverse(Height::new(height), &state, visitor).0,
+                "unexpected traversal for certification_version: {certification_version:?}"
+            );
         }
     }
 
@@ -168,7 +218,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -242,7 +292,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -355,7 +405,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -432,7 +482,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -679,7 +729,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -783,7 +833,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    expected_metadata(height, &state.metadata, certification_version),
+                    expected_metadata(height, None, certification_version),
                     Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -993,7 +1043,7 @@ mod tests {
                             E::EndSubtree, // canister_ranges
                         ]
                     ),
-                    expected_metadata(height, &state.metadata, certification_version),
+                    expected_metadata(height, None, certification_version),
                     Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
@@ -1167,7 +1217,7 @@ mod tests {
                     E::EndSubtree, // canisters
                 ]),
                 expected_empty_canister_ranges(certification_version),
-                expected_metadata(height, &state.metadata, certification_version),
+                expected_metadata(height, None, certification_version),
                 Some(vec![
                     edge("request_status"),
                     E::StartSubtree,
