@@ -163,7 +163,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/build_witness_gen", |b| {
-        let labeled_tree = traverse(height, &state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         b.iter(|| {
             black_box(build_witness_gen(&labeled_tree));
         })
@@ -172,7 +172,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/certify_response/1", |b| {
         use LabeledTree::*;
 
-        let labeled_tree = traverse(height, &state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         let witness_gen = build_witness_gen(&labeled_tree);
 
         let data_tree = SubTree(flatmap! {
@@ -212,7 +212,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     };
 
     c.bench_function("traverse/certify_response/100", |b| {
-        let labeled_tree = traverse(height, &state, LabeledTreeVisitor::default());
+        let labeled_tree = traverse(&state, height, LabeledTreeVisitor::default());
         let witness_gen = build_witness_gen(&labeled_tree);
 
         b.iter(|| {

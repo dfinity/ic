@@ -53,8 +53,8 @@ where
 /// Compute the hash tree corresponding to the full replicated state.
 pub fn hash_state(state: &ReplicatedState, height: Height) -> HashTree {
     ic_canonical_state::traverse(
-        height,
         state,
+        height,
         HashingVisitor::<HashTreeBuilderImpl>::default(),
     )
     .into_hash_tree()

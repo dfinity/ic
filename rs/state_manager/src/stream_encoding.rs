@@ -116,7 +116,7 @@ pub fn encode_stream_slice(
         ),
     );
 
-    let mut tree = traverse(height, state, SubtreeVisitor::new(&pattern, visitor));
+    let mut tree = traverse(state, height, SubtreeVisitor::new(&pattern, visitor));
     let mut actual_to = from;
 
     // The crypto library that constructs witnesses doesn't like empty subtrees as
