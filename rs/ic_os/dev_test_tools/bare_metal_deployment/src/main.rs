@@ -1,6 +1,10 @@
 use anyhow::{Context, Result, bail, ensure};
-use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
-use bare_metal_deployment::{BareMetalIpmiSession, parse_login_info_from_csv};
+use bare_metal_deployment::deploy::{
+    DeploymentConfig, DeploymentError, ImageSource, deploy_to_bare_metal, establish_ssh_connection,
+};
+use bare_metal_deployment::{
+    BareMetalIpmiSession, LoginInfo, SshAuthMethod, parse_login_info_from_ini,
+};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
@@ -9,10 +13,10 @@ use std::{env, fs};
 
 #[derive(Parser, Debug)]
 #[command(
-    about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, only injects SSH key via IPMI."
+    about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, checks SSH connection and injects key via IPMI if needed."
 )]
 struct Args {
-    /// Path to CSV file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.csv.
+    /// Path to INI file with baremetal login info e.g. zh2-dll01.ini.
     /// Ask the node team for access to this file.
     #[arg(long)]
     login_info: PathBuf,
@@ -31,6 +35,11 @@ struct Args {
     /// Fails if images are not found at expected paths.
     #[arg(long)]
     nobuild: bool,
+
+    /// Path to SSH public key file. Required when using SSH agent forwarding
+    /// (when private key files are not available locally).
+    #[arg(long)]
+    public_key: Option<PathBuf>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -48,9 +57,8 @@ impl Display for OsType {
     }
 }
 
-/// Attempts to find a default SSH key in the user's .ssh directory.
-/// Returns (public_key, private_key_path)
-fn get_default_ssh_keys() -> Result<(String, PathBuf)> {
+/// Attempts to find SSH keys and determine the authentication method.
+fn get_ssh_keys(public_key_path: Option<&Path>) -> Result<(String, SshAuthMethod)> {
     let home_dir = std::env::var("HOME").context("HOME environment variable not set")?;
     let home_path = Path::new(&home_dir);
 
@@ -60,18 +68,42 @@ fn get_default_ssh_keys() -> Result<(String, PathBuf)> {
         home_path.join(".ssh/id_ecdsa"),
     ];
 
+    // Try to find private key files
     for private_key_path in &key_paths {
         if private_key_path.exists() {
-            let public_key_path = private_key_path.with_extension("pub");
-            let public_key = fs::read_to_string(&public_key_path).with_context(|| {
-                format!("Failed to read SSH public key from {:?}", public_key_path)
+            let derived_public_key_path = private_key_path.with_extension("pub");
+            let public_key = fs::read_to_string(&derived_public_key_path).with_context(|| {
+                format!(
+                    "Failed to read SSH public key from {:?}",
+                    derived_public_key_path
+                )
             })?;
-            return Ok((public_key, private_key_path.clone()));
+            return Ok((public_key, SshAuthMethod::KeyFile(private_key_path.clone())));
         }
     }
 
+    // No private key files found, check if SSH agent is available
+    if std::env::var("SSH_AUTH_SOCK").is_ok() {
+        let provided_public_key_path = public_key_path.ok_or_else(|| {
+            anyhow::anyhow!(
+                "SSH agent detected but --public-key is required.\n\
+                 The public key is needed for IPMI key injection if SSH fails."
+            )
+        })?;
+        let public_key = fs::read_to_string(provided_public_key_path).with_context(|| {
+            format!(
+                "Failed to read SSH public key from {:?}",
+                provided_public_key_path
+            )
+        })?;
+        println!("Using SSH agent for authentication");
+        return Ok((public_key, SshAuthMethod::Agent));
+    }
+
     bail!(
-        "No SSH private key found. Tried: {}",
+        "No SSH private key found and SSH agent not available.\n\
+         Tried: {}\n\
+         If using SSH agent forwarding, set SSH_AUTH_SOCK and use --public-key.",
         key_paths
             .iter()
             .map(|p| p.display().to_string())
@@ -129,62 +161,98 @@ fn get_or_build_image(os_type: OsType, env: &str, build: bool) -> Result<PathBuf
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    // If running via bazel run, set the current directory to the "main" directory.
     if let Some(working_dir) = env::var_os("BUILD_WORKING_DIRECTORY") {
         env::set_current_dir(working_dir)?;
     }
 
-    if args.hostos.is_none() && args.guestos.is_none() {
-        println!("Neither --hostos nor --guestos specified; will only inject SSH key via IPMI.");
-    }
-
-    let hostos_image = args
-        .hostos
-        .map(|env| get_or_build_image(OsType::HostOs, &env, !args.nobuild))
-        .transpose()?;
-    let guestos_image = args
-        .guestos
-        .map(|env| get_or_build_image(OsType::GuestOs, &env, !args.nobuild))
-        .transpose()?;
-
     let config = DeploymentConfig {
-        hostos_upgrade_image: hostos_image.map(ImageSource::File),
-        guestos_image: guestos_image.map(ImageSource::File),
-        // TODO: Maybe in the future we could support injecting config via this tool.
+        hostos_upgrade_image: args
+            .hostos
+            .map(|env| get_or_build_image(OsType::HostOs, &env, !args.nobuild))
+            .transpose()?
+            .map(ImageSource::File),
+        guestos_image: args
+            .guestos
+            .map(|env| get_or_build_image(OsType::GuestOs, &env, !args.nobuild))
+            .transpose()?
+            .map(ImageSource::File),
         setupos_config_image: None,
     };
 
-    // Read login info from CSV file
-    println!("Reading login info from {:?}", args.login_info);
-    let login_csv = fs::read_to_string(&args.login_info)
-        .with_context(|| format!("Failed to read login info from {:?}", args.login_info))?;
-    let login_info = parse_login_info_from_csv(&login_csv)?;
-
-    // Get SSH keys
     println!("Loading SSH keys...");
-    let (ssh_public_key, ssh_private_key_path) = get_default_ssh_keys()?;
-    println!("Using SSH key: {:?}.pub", ssh_private_key_path);
+    let (ssh_public_key, ssh_auth_method) = get_ssh_keys(args.public_key.as_deref())?;
+    match &ssh_auth_method {
+        SshAuthMethod::Agent => println!("Using SSH agent for authentication"),
+        SshAuthMethod::KeyFile(path) => println!("Using SSH key file: {:?}", path),
+    }
 
-    // Inject SSH key via IPMI
-    println!("Connecting to bare metal host via IPMI...");
-    let mut ipmi_session = BareMetalIpmiSession::start(&login_info)?;
-    let host_ip = ipmi_session.host_address();
-    println!("Connected to bare metal host. HostOS IP: {host_ip}");
-    ipmi_session.inject_ssh_key(&ssh_public_key)?;
-    println!("SSH key injected successfully");
+    println!("Reading login info from {:?}", args.login_info);
+    let login_ini = fs::read_to_string(&args.login_info)
+        .with_context(|| format!("Failed to read login info from {:?}", args.login_info))?;
+    let login_info = parse_login_info_from_ini(&login_ini)?;
 
-    if config.guestos_image.is_some() || config.hostos_upgrade_image.is_some() {
+    let host_ip = login_info.hostos_address();
+
+    // Check if we need to deploy or just verify SSH connection
+    let has_images = config.hostos_upgrade_image.is_some()
+        || config.guestos_image.is_some()
+        || config.setupos_config_image.is_some();
+
+    let final_host_ip = if has_images {
         println!("Deploying to bare metal host at {host_ip}");
-        deploy_to_bare_metal(&config, host_ip.into(), &ssh_private_key_path)?;
-        if config.hostos_upgrade_image.is_some() {
-            println!("You'll need to wait 1-2 minutes for the host to reboot.");
-        }
+        let ip = execute_with_ssh_recovery(
+            |ip| deploy_to_bare_metal(&config, ip.into(), &ssh_auth_method),
+            &login_info,
+            &ssh_public_key,
+        )?;
+        println!("Deployment completed successfully");
+        ip
     } else {
-        println!("Skipping deployment (--hostos or --guestos not specified)");
+        println!("No images specified. Checking SSH connection to {host_ip}...");
+        let ip = execute_with_ssh_recovery(
+            |ip| establish_ssh_connection(ip.into(), &ssh_auth_method).map(|_| ()),
+            &login_info,
+            &ssh_public_key,
+        )?;
+        println!("SSH connection successful");
+        ip
+    };
+    if config.hostos_upgrade_image.is_some() {
+        println!("You'll need to wait 1-2 minutes for the host to reboot.");
     }
 
     println!("You can SSH into the host using the following command:");
-    println!("ssh admin@{host_ip}");
+    println!("ssh admin@{final_host_ip}");
 
     Ok(())
+}
+
+/// Executes an SSH operation with automatic error recovery via IPMI:
+/// If SSH connection or authentication fails: Connects via IPMI, injects SSH key, uses IPMI's
+/// host IP, and retries.
+/// Returns the final host IP address used (may differ from initial IP if recovery was needed).
+fn execute_with_ssh_recovery<F>(
+    mut operation: F,
+    login_info: &LoginInfo,
+    ssh_public_key: &str,
+) -> Result<std::net::Ipv6Addr>
+where
+    F: FnMut(std::net::Ipv6Addr) -> Result<(), DeploymentError>,
+{
+    match operation(login_info.hostos_address()) {
+        Ok(_) => Ok(login_info.hostos_address()),
+        Err(DeploymentError::SshAuthFailed) | Err(DeploymentError::SshConnectionFailed(_)) => {
+            println!("SSH failed. Connecting via IPMI to inject key and get current host IP...");
+            let mut ipmi_session = BareMetalIpmiSession::start(login_info)?;
+            ipmi_session.inject_ssh_key(ssh_public_key)?;
+            let ipmi_host_ip = ipmi_session.hostos_address();
+            println!("SSH key injected. Using host IP from IPMI: {ipmi_host_ip}");
+            drop(ipmi_session);
+
+            println!("Retrying...");
+            operation(ipmi_host_ip)?;
+            Ok(ipmi_host_ip)
+        }
+        Err(DeploymentError::Other(e)) => Err(e),
+    }
 }

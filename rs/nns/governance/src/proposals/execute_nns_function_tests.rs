@@ -1,5 +1,24 @@
-use crate::pb::v1::{ExecuteNnsFunction, NnsFunction};
-use crate::proposals::execute_nns_function::ValidExecuteNnsFunction;
+use crate::{
+    pb::v1::{ExecuteNnsFunction, NnsFunction},
+    proposals::{
+        ValidProposalAction,
+        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+    },
+    test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
+};
+use candid::{Decode, Encode};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_crypto_sha2::Sha256;
+use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nns_constants::{BITCOIN_MAINNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID};
+use ic_nns_governance_api::{
+    SelfDescribingValue,
+    bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
+    subnet_rental::{RentalConditionId, SubnetRentalRequest},
+};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
+use maplit::hashmap;
+use std::sync::Arc;
 
 #[test]
 fn test_execute_nns_function_try_from_errors() {
@@ -101,4 +120,299 @@ fn test_execute_nns_function_try_from_errors() {
     for (execute_nns_function, error_message) in try_from_error_test_cases {
         test_execute_nns_function_try_from_error(execute_nns_function, error_message);
     }
+}
+
+#[tokio::test]
+async fn test_to_self_describing_update_subnet_type() {
+    // Minimal CMC candid file with only update_subnet_type method
+    let cmc_candid = r#"
+type UpdateSubnetTypeArgs = variant {
+  Add : text;
+  Remove : text;
+};
+
+service : {
+  update_subnet_type : (UpdateSubnetTypeArgs) -> ();
+}
+"#;
+
+    // Create the UpdateSubnetTypeArgs::Add variant
+    #[derive(candid::CandidType)]
+    #[allow(dead_code)]
+    enum UpdateSubnetTypeArgs {
+        Add(String),
+        Remove(String),
+    }
+
+    let arg = UpdateSubnetTypeArgs::Add("application".to_string());
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UpdateSubnetType,
+        payload,
+    };
+
+    // Mock the canister_metadata call
+    let metadata_request =
+        CanisterMetadataRequest::new(CYCLES_MINTING_CANISTER_ID, "candid:service".to_string());
+    let metadata_response = CanisterMetadataResponse::new(cmc_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0,
+    ));
+
+    // Test through ValidProposalAction::to_self_describing
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    // Verify the type name and description
+    assert_eq!(result.type_name, "Update Subnet Type");
+    assert!(
+        result
+            .type_description
+            .contains("Add or remove a subnet type")
+    );
+
+    // Verify the value
+    let self_describing_value = SelfDescribingValue::from(result.value.unwrap());
+    assert_eq!(
+        self_describing_value,
+        SelfDescribingValue::Map(hashmap! {
+            "Add".to_string() => SelfDescribingValue::from("application"),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_uninstall_code() {
+    // Create the uninstall_code_args payload
+    #[derive(candid::CandidType)]
+    struct UninstallCodeArgs {
+        canister_id: CanisterId,
+        sender_canister_version: Option<u64>,
+    }
+
+    let target_canister = CanisterId::from_u64(123);
+    let arg = UninstallCodeArgs {
+        canister_id: target_canister,
+        sender_canister_version: Some(42),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UninstallCode,
+        payload,
+    };
+
+    // No canister_metadata call expected a hard-coded DID file is used instead.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Uninstall Code");
+    assert!(
+        result
+            .type_description
+            .contains("Uninstall code of a canister")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "canister_id".to_string() => SelfDescribingValue::from(target_canister.to_string()),
+            "sender_canister_version".to_string() => SelfDescribingValue::Array(vec![
+                SelfDescribingValue::from(42_u64),
+            ]),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_bitcoin_set_config() {
+    let bitcoin_payload = vec![1, 2, 3, 4, 5];
+    let arg = BitcoinSetConfigProposal {
+        network: BitcoinNetwork::Mainnet,
+        payload: bitcoin_payload.clone(),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::BitcoinSetConfig,
+        payload,
+    };
+
+    // No canister_metadata call expected - BitcoinSetConfig uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Set Bitcoin Config");
+    assert!(
+        result
+            .type_description
+            .contains("set the configuration of the underlying Bitcoin")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "canister_id".to_string() => SelfDescribingValue::from(BITCOIN_MAINNET_CANISTER_ID.to_string()),
+            "method_name".to_string() => SelfDescribingValue::from("set_config"),
+            "payload".to_string() => SelfDescribingValue::from(bitcoin_payload),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_subnet_rental_request() {
+    let user = PrincipalId::new_user_test_id(123);
+    let rental_condition_id = RentalConditionId::App13CH;
+
+    let arg = SubnetRentalRequest {
+        user,
+        rental_condition_id,
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::SubnetRentalRequest,
+        payload,
+    };
+
+    // No canister_metadata call expected - SubnetRentalRequest uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(result.type_name, "Subnet Rental Request");
+    assert!(
+        result
+            .type_description
+            .contains("A proposal to rent a subnet on the Internet Computer")
+    );
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "user".to_string() => SelfDescribingValue::Text(user.to_string()),
+            "rental_condition_id".to_string() => SelfDescribingValue::Text("App13CH".to_string()),
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_to_self_describing_add_sns_wasm() {
+    let wasm_bytes = vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
+    let canister_type = SnsCanisterType::Root as i32;
+    let hash = vec![1, 2, 3, 4];
+
+    let arg = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            wasm: wasm_bytes.clone(),
+            canister_type,
+            proposal_id: None, // Will be set by the NNS function
+        }),
+        hash: hash.clone(),
+        skip_update_latest_version: Some(false),
+    };
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    // No canister_metadata call expected - AddSnsWasm uses static conversion.
+    let env = Arc::new(MockEnvironment::new(vec![], 0));
+
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    assert_eq!(
+        SelfDescribingValue::from(result.value.unwrap()),
+        SelfDescribingValue::Map(hashmap! {
+            "wasm".to_string() => SelfDescribingValue::Map(hashmap! {
+                "wasm_hash".to_string() => SelfDescribingValue::from(Sha256::hash(&wasm_bytes).to_vec()),
+                "canister_type".to_string() => SelfDescribingValue::from("Root"),
+            }),
+            "hash".to_string() => SelfDescribingValue::from(hash),
+            "skip_update_latest_version".to_string() => SelfDescribingValue::from(false),
+        })
+    );
+}
+
+#[test]
+fn test_re_encode_payload_to_target_canister_sets_proposal_id_for_add_wasm() {
+    let proposal_id = 42;
+    let wasm = vec![1, 2, 3];
+    let canister_type = 3;
+    let hash = vec![1, 2, 3, 4];
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: None,
+            wasm: wasm.clone(),
+            canister_type,
+        }),
+        hash: hash.clone(),
+        skip_update_latest_version: Some(false),
+    })
+    .unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    let effective_payload = execute_nns_function
+        .re_encode_payload_to_target_canister(proposal_id, 0)
+        .unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(
+        decoded,
+        AddWasmRequest {
+            wasm: Some(SnsWasm {
+                proposal_id: Some(proposal_id), // The proposal_id should be set
+                wasm,
+                canister_type
+            }),
+            hash,
+            skip_update_latest_version: Some(false),
+        }
+    );
+}
+
+#[test]
+fn test_re_encode_payload_to_target_canister_overrides_proposal_id_for_add_wasm() {
+    let proposal_id = 42;
+    let payload = Encode!(&AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id - 1),
+            ..SnsWasm::default()
+        }),
+        ..AddWasmRequest::default()
+    })
+    .unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::AddSnsWasm,
+        payload,
+    };
+
+    let effective_payload = execute_nns_function
+        .re_encode_payload_to_target_canister(proposal_id, 0)
+        .unwrap();
+
+    let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
+    assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);
 }

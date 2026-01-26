@@ -33,7 +33,7 @@ use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
 };
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_pem_file;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{ReplicaLogger, debug, error, info, warn};
@@ -242,7 +242,7 @@ impl RegistryReplicator {
                 info!(logger, "No NNS public key is configured.");
                 None
             }
-            Some(path) => match parse_threshold_sig_key(path) {
+            Some(path) => match parse_threshold_sig_key_from_pem_file(path) {
                 Err(e) => {
                     info!(
                         logger,

@@ -33,11 +33,9 @@ fn setup(env: TestEnv) {
                 .into_iter()
                 .map(|key_id| KeyConfig {
                     max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                        5
-                    } else {
-                        0
-                    },
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                     key_id,
                 })
                 .collect(),
@@ -74,7 +72,6 @@ fn upgrade_app_subnet(env: TestEnv) {
         &target_version,
         SubnetType::Application,
         Some(&ecdsa_state),
-        /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
 }
 

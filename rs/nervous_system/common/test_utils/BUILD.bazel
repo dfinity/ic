@@ -7,6 +7,7 @@ package(default_visibility = [
 package_group(
     name = "ic_nervous_system_common_test_utils_visibility",
     packages = [
+        "//rs/migration_canister/...",
         "//rs/nervous_system/common/...",
         "//rs/nervous_system/integration_tests/...",
         "//rs/nns/...",

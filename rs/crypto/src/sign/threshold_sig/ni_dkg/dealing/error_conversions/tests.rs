@@ -18,7 +18,7 @@ mod create_dealing_error_conversions {
             let csp_error = CspDkgCreateReshareDealingError::MalformedFsPublicKeyError {
                 receiver_index: 2,
                 error: MalformedPublicKeyError {
-                    algorithm: AlgorithmId::Placeholder,
+                    algorithm: AlgorithmId::Unspecified,
                     key_bytes: None,
                     internal_error: "some error".to_string(),
                 },
@@ -30,7 +30,7 @@ mod create_dealing_error_conversions {
                 result,
                 DkgCreateDealingError::MalformedFsEncryptionPublicKey(
                     MalformedFsEncryptionPublicKeyError {
-                        internal_error: "error for receiver index 2: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string(),
+                        internal_error: "error for receiver index 2: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string(),
                     },
                 )
             );
@@ -58,11 +58,11 @@ mod create_dealing_error_conversions {
 
         #[test]
         #[should_panic(
-            expected = "NI-DKG create_dealing error - UnsupportedAlgorithmId: The algorithm id Placeholder is unsupported."
+            expected = "NI-DKG create_dealing error - UnsupportedAlgorithmId: The algorithm id Unspecified is unsupported."
         )]
         fn should_panic_on_unsupported_algorithm_id_error() {
             let csp_error =
-                CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(AlgorithmId::Placeholder);
+                CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(AlgorithmId::Unspecified);
 
             let _panic = DkgCreateDealingError::from(csp_error);
         }
@@ -107,12 +107,12 @@ mod create_dealing_error_conversions {
 
         #[test]
         #[should_panic(
-            expected = "NI-DKG create_dealing error - MalformedReshareSecretKeyError: MalformedSecretKeyError { algorithm: Placeholder, internal_error: \"some error\" }"
+            expected = "NI-DKG create_dealing error - MalformedReshareSecretKeyError: MalformedSecretKeyError { algorithm: Unspecified, internal_error: \"some error\" }"
         )]
         fn should_panic_on_malformed_reshare_secret_key_error() {
             let csp_error = CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(
                 MalformedSecretKeyError {
-                    algorithm: AlgorithmId::Placeholder,
+                    algorithm: AlgorithmId::Unspecified,
                     internal_error: "some error".to_string(),
                 },
             );
@@ -136,7 +136,7 @@ mod verify_dealing_error_conversions {
         let csp_error = CspDkgVerifyReshareDealingError::MalformedFsPublicKeyError {
             receiver_index: 2,
             error: MalformedPublicKeyError {
-                algorithm: AlgorithmId::Placeholder,
+                algorithm: AlgorithmId::Unspecified,
                 key_bytes: None,
                 internal_error: "some error".to_string(),
             },
@@ -148,7 +148,7 @@ mod verify_dealing_error_conversions {
             result,
             DkgVerifyDealingError::MalformedFsEncryptionPublicKey(
                 MalformedFsEncryptionPublicKeyError {
-                    internal_error: "error for receiver index 2: MalformedPublicKeyError { algorithm: Placeholder, key_bytes: None, internal_error: \"some error\" }".to_string(),
+                    internal_error: "error for receiver index 2: MalformedPublicKeyError { algorithm: Unspecified, key_bytes: None, internal_error: \"some error\" }".to_string(),
                 },
             )
         );
@@ -157,7 +157,7 @@ mod verify_dealing_error_conversions {
     #[test]
     fn should_return_error_on_malformed_reshare_pub_coeffs_error() {
         let malformed_pk_error = MalformedPublicKeyError {
-            algorithm: AlgorithmId::Placeholder,
+            algorithm: AlgorithmId::Unspecified,
             key_bytes: None,
             internal_error: "some error".to_string(),
         };
@@ -207,11 +207,11 @@ mod verify_dealing_error_conversions {
 
     #[test]
     #[should_panic(
-        expected = "NI-DKG verify_dealing error - UnsupportedAlgorithmId: The algorithm id Placeholder is unsupported."
+        expected = "NI-DKG verify_dealing error - UnsupportedAlgorithmId: The algorithm id Unspecified is unsupported."
     )]
     fn should_panic_on_unsupported_algorithm_id_error() {
         let csp_error =
-            CspDkgVerifyReshareDealingError::UnsupportedAlgorithmId(AlgorithmId::Placeholder);
+            CspDkgVerifyReshareDealingError::UnsupportedAlgorithmId(AlgorithmId::Unspecified);
 
         let _panic = DkgVerifyDealingError::from(csp_error);
     }

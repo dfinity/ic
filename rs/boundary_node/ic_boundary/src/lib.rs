@@ -4,7 +4,6 @@ mod cli;
 mod core;
 mod dns;
 mod errors;
-mod firewall;
 mod http;
 mod metrics;
 mod persist;

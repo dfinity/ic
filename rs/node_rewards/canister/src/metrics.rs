@@ -1,12 +1,10 @@
-#![allow(deprecated)]
 use crate::KeyRange;
 use crate::chrono_utils::{first_unix_timestamp_nanoseconds, last_unix_timestamp_nanoseconds};
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use async_trait::async_trait;
-use candid::Principal;
 use chrono::{DateTime, NaiveDate};
 use ic_base_types::{NodeId, SubnetId};
-use ic_cdk::api::call::CallResult;
+use ic_cdk::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
@@ -20,7 +18,7 @@ pub type RetryCount = u64;
 pub trait ManagementCanisterClient {
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>>;
 }
 
@@ -33,16 +31,9 @@ impl ManagementCanisterClient for ICCanisterClient {
     /// in the 'contract' to fetch daily node metrics.
     async fn node_metrics_history(
         &self,
-        args: NodeMetricsHistoryArgs,
+        args: &NodeMetricsHistoryArgs,
     ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
-        ic_cdk::api::call::call_with_payment128::<_, (Vec<NodeMetricsHistoryRecord>,)>(
-            Principal::management_canister(),
-            "node_metrics_history",
-            (args,),
-            0_u128,
-        )
-        .await
-        .map(|(response,)| response)
+        ic_cdk::management_canister::node_metrics_history(args).await
     }
 }
 
@@ -78,7 +69,7 @@ where
             };
 
             subnets_history
-                .push(async move { (*subnet_id, self.client.node_metrics_history(args).await) });
+                .push(async move { (*subnet_id, self.client.node_metrics_history(&args).await) });
         }
 
         futures::future::join_all(subnets_history)
@@ -118,14 +109,9 @@ where
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {
-                    if subnet_update.is_empty() {
-                        ic_cdk::println!("No updates for subnet {}", subnet_id);
-                    } else {
-                        // Update the last timestamp for this subnet.
-                        let last_timestamp = subnet_update
-                            .last()
-                            .map(|metrics| metrics.timestamp_nanos)
-                            .expect("Not empty");
+                    if let Some(last_timestamp) =
+                        subnet_update.last().map(|metrics| metrics.timestamp_nanos)
+                    {
                         self.last_timestamp_per_subnet
                             .borrow_mut()
                             .insert(subnet_id.into(), last_timestamp);
@@ -156,9 +142,11 @@ where
                             subnet_id,
                             date
                         );
+                    } else {
+                        ic_cdk::println!("No updates for subnet {}", subnet_id);
                     }
                 }
-                Err((_, e)) => {
+                Err(e) => {
                     success = false;
                     ic_cdk::println!(
                         "Error fetching metrics for subnet {}: ERROR: {}",
@@ -193,7 +181,7 @@ where
     ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
         let mut metrics_by_subnet = BTreeMap::new();
         let first_key = SubnetMetricsKey {
-            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred()),
+            timestamp_nanos: first_unix_timestamp_nanoseconds(&date.pred_opt().unwrap()),
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
@@ -264,7 +252,6 @@ where
 
 #[cfg(feature = "test")]
 pub mod management_canister_client_test {
-    #![allow(deprecated)]
     use crate::chrono_utils::last_unix_timestamp_nanoseconds;
     use crate::metrics::ManagementCanisterClient;
     use crate::storage::RegistryStoreStableMemoryBorrower;
@@ -272,7 +259,7 @@ pub mod management_canister_client_test {
     use candid::Principal;
     use chrono::DateTime;
     use ic_base_types::SubnetId;
-    use ic_cdk::api::call::CallResult;
+    use ic_cdk::call::CallResult;
     use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
     use ic_nervous_system_canisters::registry::RegistryCanister;
     use ic_registry_canister_client::StableCanisterRegistryClient;
@@ -293,7 +280,7 @@ pub mod management_canister_client_test {
     impl ManagementCanisterClient for ICCanisterClient {
         async fn node_metrics_history(
             &self,
-            args: NodeMetricsHistoryArgs,
+            args: &NodeMetricsHistoryArgs,
         ) -> CallResult<Vec<NodeMetricsHistoryRecord>> {
             use crate::canister::current_time;
             use crate::registry_querier::RegistryQuerier;
@@ -361,7 +348,7 @@ pub mod management_canister_client_test {
                 node_metrics_history.push(date_result);
             }
 
-            CallResult::Ok(node_metrics_history)
+            Ok(node_metrics_history)
         }
     }
 }

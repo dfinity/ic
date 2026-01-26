@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
+    RecoveryArgs, RecoveryResult,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_version,
@@ -48,8 +48,7 @@ pub enum StepType {
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
     /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery. It is possible to skip this step and the next one
-    /// (`DownloadState`) will download the consensus pool from the same node as the state.
+    /// all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -241,6 +240,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
         match step_type {
             StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
                 if self.params.admin_access_location.is_none() {
@@ -254,15 +255,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         }
         match step_type {
             StepType::DownloadConsensusPool => {
-                // We could pick a node with highest finalization height automatically,
-                // but we might have a preference between nodes of the same finalization height.
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_pool_node.is_none() {
+                    // We could pick a node with highest finalization height automatically, but we
+                    // might have a preference between nodes of the same finalization height.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
                     self.params.download_pool_node = read_optional(
                         &self.logger,
                         "Enter consensus pool download IP (backup access required):",
@@ -367,38 +368,30 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadConsensusPool => {
                 if let Some(node_ip) = self.params.download_pool_node {
-                    Ok(Box::new(self.recovery.get_download_state_step(
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
                         node_ip,
                         SshUser::Backup,
                         self.params.backup_key_file.clone(),
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
-                                                                      // download only the
-                                                                      // consensus pool
-                    )))
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::DownloadState => {
-                match self.params.admin_access_location {
-                    Some(DataLocation::Local) => {
-                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                    }
-                    Some(DataLocation::Remote(node_ip)) => {
-                        Ok(Box::new(self.recovery.get_download_state_step(
-                            node_ip,
-                            SshUser::Admin,
-                            self.recovery.admin_key_file.clone(),
-                            self.params.keep_downloaded_state == Some(true),
-                            /*additional_excludes=*/ vec![CUPS_DIR],
-                        )))
-                    }
-                    None => Err(RecoveryError::StepSkipped),
+            StepType::DownloadState => match self.params.admin_access_location {
+                Some(DataLocation::Local) => {
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
-            }
+                Some(DataLocation::Remote(node_ip)) => {
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                        self.params.keep_downloaded_state == Some(true),
+                    )?))
+                }
+                None => Err(RecoveryError::StepSkipped),
+            },
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {
@@ -461,7 +454,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.admin_access_location {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                    Ok(Box::new(
+                        self.recovery.get_upload_state_and_restart_step(method),
+                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

@@ -30,6 +30,31 @@ message HttpsOutcallResponse {
   bytes content = 3;
 }
 
+enum CanisterHttpErrorKind {
+  CANISTER_HTTP_ERROR_KIND_UNSPECIFIED = 0;
+  CANISTER_HTTP_ERROR_KIND_INVALID_INPUT = 1;
+  CANISTER_HTTP_ERROR_KIND_CONNECTION = 2;
+  CANISTER_HTTP_ERROR_KIND_LIMIT_EXCEEDED = 3;
+  CANISTER_HTTP_ERROR_KIND_INTERNAL = 4;
+}
+
+message CanisterHttpError {
+  CanisterHttpErrorKind kind = 1;
+  string message = 2;
+}
+
+message CanisterHttpAdapterMetrics {
+  uint64 downloaded_bytes = 1;
+}
+
+message HttpsOutcallResult {
+  CanisterHttpAdapterMetrics metrics = 1;
+  oneof result {
+    HttpsOutcallResponse response = 2;
+    CanisterHttpError error = 3;
+  }
+}
+
 service HttpsOutcallsService {
-  rpc HttpsOutcall(HttpsOutcallRequest) returns (HttpsOutcallResponse);
+  rpc HttpsOutcall(HttpsOutcallRequest) returns (HttpsOutcallResult);
 }

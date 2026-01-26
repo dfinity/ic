@@ -21,6 +21,9 @@ type Action = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 type AddHotKey = record {
@@ -448,10 +451,12 @@ type DeregisterKnownNeuron = record {
 type KnownNeuronData = record {
   name : text;
   description : opt text;
+  // Links related to the known neuron. Can be links to social URLs (OpenChat, X, etc.), or a homepage.
   links : opt vec text;
-  // The first `opt` makes it so that the field can be renamed/deprecated in the future, and
-  // the second `opt` makes it so that an older client not recognizing a new variant can still
-  // get the rest of the `vec`.
+  // Topics that the known neuron is committed to always vote on.
+  // Note regarding the type: the first `opt` makes it so that the field can be renamed/deprecated
+  // in the future, and the second `opt` makes it so that an older client not recognizing a new
+  // variant can still get the rest of the `vec`.
   committed_topics : opt vec opt TopicToFollow;
 };
 
@@ -464,6 +469,11 @@ type LedgerParameters = record {
 
 type ListKnownNeuronsResponse = record {
   known_neurons : vec KnownNeuron;
+};
+
+type LoadCanisterSnapshot = record {
+  canister_id : opt principal;
+  snapshot_id : opt blob;
 };
 
 // Parameters of the list_neurons method.
@@ -1027,6 +1037,9 @@ type ProposalActionRequest = variant {
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
   FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+  BlessAlternativeGuestOsVersion : BlessAlternativeGuestOsVersion;
+  TakeCanisterSnapshot : TakeCanisterSnapshot;
+  LoadCanisterSnapshot : LoadCanisterSnapshot;
 };
 
 // Creates a rented subnet from a rental request (in the Subnet Rental
@@ -1059,6 +1072,45 @@ type FulfillSubnetRentalRequest = record {
   //
   //     https://github.com/dfinity/ic/releases/latest
   replica_version_id : opt text;
+};
+
+// Declares an approved set of alternative replica virtual machine software for
+// disaster recovery purposes.
+type BlessAlternativeGuestOsVersion = record {
+  // AMD Secure Processor chip IDs that are allowed to run this software.
+  // Each chip ID must be exactly 64 bytes.
+  chip_ids : opt vec blob;
+
+  // Hexadecimal fingerprint of the recovery rootfs.
+  // Must contain only hexadecimal characters (0-9, A-F, a-f).
+  rootfs_hash : opt text;
+
+  // The version being replaced by this (alternative version) must match this
+  // field (or one of the possibilities therein).
+  //
+  // (Here, we refer to the version being replaced as the "base" version.)
+  base_guest_launch_measurements : opt GuestLaunchMeasurements; };
+
+type GuestLaunchMeasurements = record {
+  guest_launch_measurements : opt vec GuestLaunchMeasurement;
+};
+
+type GuestLaunchMeasurement = record {
+  // SEV-SNP measurement (48 bytes).
+  measurement : opt blob;
+
+  // Metadata associated with the measurement.
+  metadata : opt GuestLaunchMeasurementMetadata;
+};
+
+type GuestLaunchMeasurementMetadata = record {
+  // Kernel command line used for this measurement.
+  kernel_cmdline : opt text;
+};
+
+type TakeCanisterSnapshot = record {
+  canister_id : opt principal;
+  replace_snapshot : opt blob;
 };
 
 type ProposalData = record {
@@ -1437,10 +1489,12 @@ type SelfDescribingProposalAction = record {
 type SelfDescribingValue = variant {
   Blob : blob;
   Text : text;
+  Bool : bool;
   Nat : nat;
   Int : int;
   Array : vec SelfDescribingValue;
   Map : vec record { text; SelfDescribingValue };
+  Null;
 };
 
 type GetPendingProposalsRequest = record {

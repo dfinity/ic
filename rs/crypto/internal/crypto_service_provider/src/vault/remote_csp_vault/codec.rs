@@ -295,6 +295,7 @@ enum CspVaultMethod {
     GenDealingEncryptionKeyPair,
     UpdateForwardSecureEpoch,
     CreateDealing,
+    CreateResharingDealing,
     LoadThresholdSigningKey,
     RetainThresholdKeysIfPresent,
     SksContains,
@@ -339,6 +340,9 @@ impl CspVaultMethod {
                 (MetricsDomain::NiDkgAlgorithm, "update_forward_secure_epoch")
             }
             CspVaultMethod::CreateDealing => (MetricsDomain::NiDkgAlgorithm, "create_dealing"),
+            CspVaultMethod::CreateResharingDealing => {
+                (MetricsDomain::NiDkgAlgorithm, "create_resharing_dealing")
+            }
             CspVaultMethod::LoadThresholdSigningKey => {
                 (MetricsDomain::NiDkgAlgorithm, "load_threshold_signing_key")
             }
@@ -411,6 +415,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
             Req::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
             Req::CreateDealing { .. } => Method::CreateDealing,
+            Req::CreateResharingDealing { .. } => Method::CreateResharingDealing,
             Req::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Req::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Req::SksContains { .. } => Method::SksContains,
@@ -451,6 +456,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
             Resp::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
             Resp::CreateDealing { .. } => Method::CreateDealing,
+            Resp::CreateResharingDealing { .. } => Method::CreateResharingDealing,
             Resp::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Resp::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Resp::SksContains { .. } => Method::SksContains,

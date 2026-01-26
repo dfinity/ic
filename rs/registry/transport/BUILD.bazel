@@ -41,7 +41,6 @@ rust_library(
     name = "transport",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_registry_transport",
     proc_macro_deps = MACRO_DEPENDENCIES,

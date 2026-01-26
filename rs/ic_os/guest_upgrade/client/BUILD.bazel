@@ -17,7 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:x509-parser",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/ic_os/attestation",
-    "//rs/ic_os/config_types",
+    "//rs/ic_os/config/types:config_types",
     "//rs/ic_os/guest_upgrade/shared",
     "//rs/ic_os/os_tools/guest_disk:guest_disk_lib",
     "//rs/ic_os/sev",
@@ -34,7 +34,7 @@ rust_binary(
     ],
     deps = DEPENDENCIES + [
         ":lib",
-        "//rs/ic_os/config:config_lib",
+        "//rs/ic_os/config/tool:config_lib",
     ],
 )
 
@@ -46,7 +46,7 @@ rust_binary(
     ],
     deps = DEPENDENCIES + [
         ":lib",
-        "//rs/ic_os/config:config_lib_dev",
+        "//rs/ic_os/config/tool:config_lib_dev",
     ],
 )
 

@@ -131,7 +131,7 @@ fn ckbtc_config<Network: IcRpcClientType>(env: TestEnv) {
                             curve: EcdsaCurve::Secp256k1,
                             name: TEST_KEY_LOCAL.to_string(),
                         }),
-                        pre_signatures_to_create_in_advance: 10,
+                        pre_signatures_to_create_in_advance: Some(10),
                         max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
                     }],
                     signature_request_timeout_ns: None,
@@ -413,6 +413,8 @@ pub async fn install_minter(
         kyt_principal: None,
         kyt_fee: None,
         get_utxos_cache_expiration_seconds: None,
+        utxo_consolidation_threshold: None,
+        max_num_inputs_in_transaction: None,
     };
 
     let minter_arg = MinterArg::Init(args);

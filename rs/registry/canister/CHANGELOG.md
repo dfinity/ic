@@ -11,6 +11,63 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-16: Proposal 140014
+
+http://dashboard.internetcomputer.org/proposal/140014
+
+## Changed
+
+* Promoted the check for empty SEV measurements in replica versions from a check on proposals, to an invariant of the registry.
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now mandatory to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys).
+
+  This is a *breaking* change because setting the `pre_signatures_to_create_in_advance` field for vetKD keys is no longer allowed. However, only governance proposals are affected, which are typically constructed via ic-admin, which was adapted to behave correctly.
+
+## Fixed
+
+* Migrate vetKD chain keys in specific subnets: change the chain key config's `pre_signatures_to_create_in_advance` field from `Some(0)` to `None` to align with the correct representation for keys that do not have pre-signatures
+
+
+# 2026-01-09: Proposal 139941
+
+http://dashboard.internetcomputer.org/proposal/139941
+
+## Fixed
+
+* Display correct error message for node swaps in case of rate limit errors
+
+
+# 2025-12-05: Proposal 139679
+
+http://dashboard.internetcomputer.org/proposal/139679
+
+## Changed
+
+* When performing subnet creation, subnet update, or subnet recovery, it is now allowed to omit the `KeyConfig`'s `pre_signatures_to_create_in_advance` field for keys that do not have pre-signatures. Currently only vetKD keys do not have pre-signatures (unlike Ecdsa/Schnorr keys). When the field is omitted, it is automatically set to zero.
+
+### Fixed
+
+* Repair a handful or so of broken node operator records.
+
+
+# 2025-11-28: Proposal 139576
+
+http://dashboard.internetcomputer.org/proposal/139576
+
+## Added
+
+### Node Swaps
+
+All node operators can now swap nodes on non-system subnets; later, swapping will be enabled on all subnets.
+
+### Other
+
+* Temporary logging for when add_node traps.
+
+* Migration Swiss subnet Node Operators max_rewardable_nodes to btreemap! {"type3.1" => 1} as requested by
+  Alexander Ufimtsev.
+
+
 # 2025-11-14: Proposal 139405
 
 http://dashboard.internetcomputer.org/proposal/139405

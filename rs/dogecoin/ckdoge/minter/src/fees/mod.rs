@@ -1,15 +1,15 @@
 #[cfg(test)]
 mod tests;
 
-use crate::Utxo;
 use crate::candid_api::WithdrawalFee;
 use crate::lifecycle::init::Network;
+use crate::transaction::DogecoinTransactionSigner;
 use crate::tx::UnsignedTransaction;
+use ic_ckbtc_minter::tx::FeeRate;
 use ic_ckbtc_minter::{
-    BuildTxError, MillisatoshiPerByte, Satoshi, address::BitcoinAddress, fees::FeeEstimator,
+    BuildTxError, Satoshi, address::BitcoinAddress, fees::FeeEstimator, state::utxos::UtxoSet,
 };
 use std::cmp::max;
-use std::collections::BTreeSet;
 
 // TODO DEFI-2458: have proper domain design for handling units:
 // * fee rate (millisatoshis/vbyte or millikoinus/byte)
@@ -35,7 +35,7 @@ impl DogecoinFeeEstimator {
 
     pub fn from_state(state: &ic_ckbtc_minter::state::CkBtcMinterState) -> Self {
         Self::new(
-            Network::from(state.btc_network),
+            Network::try_from(state.btc_network).expect("BUG: unsupported network"),
             state.retrieve_btc_min_amount,
         )
     }
@@ -46,19 +46,20 @@ impl FeeEstimator for DogecoinFeeEstimator {
     // in Koinu
     const DUST_LIMIT: u64 = 1_000_000;
 
-    // Incremental fee rate for resubmission is 10 koinu/byte,
-    // corresponding to 10k millikoinus/byte
-    const MIN_RELAY_FEE_RATE_INCREASE: u64 = 10_000;
+    // Incremental fee rate for resubmission is 100 koinu/byte,
+    // corresponding to 100k millikoinus/byte
+    const MIN_RELAY_FEE_RATE_INCREASE: FeeRate = FeeRate::from_millis_per_byte(100_000);
 
-    fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
-        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
+    fn estimate_nth_fee(&self, fee_percentiles: &[FeeRate], nth: usize) -> Option<FeeRate> {
+        const DEFAULT_REGTEST_FEE: FeeRate =
+            FeeRate::from_millis_per_byte(DogecoinFeeEstimator::DUST_LIMIT * 1_000);
 
         match &self.network {
-            Network::Mainnet | Network::Testnet => {
-                if fee_percentiles.len() < 100 {
+            Network::Mainnet => {
+                if fee_percentiles.len() < 100 || nth >= 100 {
                     return None;
                 }
-                Some(fee_percentiles[50])
+                Some(fee_percentiles[nth])
             }
             Network::Regtest => Some(DEFAULT_REGTEST_FEE),
         }
@@ -90,9 +91,9 @@ impl FeeEstimator for DogecoinFeeEstimator {
         )
     }
 
-    fn fee_based_minimum_withdrawal_amount(&self, median_fee: u64) -> u64 {
+    fn fee_based_minimum_withdrawal_amount(&self, median_fee_rate: FeeRate) -> u64 {
         match self.network {
-            Network::Mainnet | Network::Testnet => {
+            Network::Mainnet => {
                 //in Koinu
                 const PER_REQUEST_RBF_BOUND: u64 = 374_000;
                 // in Bytes
@@ -103,9 +104,8 @@ impl FeeEstimator for DogecoinFeeEstimator {
                 const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;
 
                 let min_withdrawal_amount_increment = self.retrieve_doge_min_amount >> 1;
-                let median_fee_rate = median_fee / 1_000;
                 ((PER_REQUEST_RBF_BOUND
-                    + PER_REQUEST_SIZE_BOUND * median_fee_rate
+                    + median_fee_rate.fee_ceil(PER_REQUEST_SIZE_BOUND)
                     + PER_REQUEST_MINTER_FEE_BOUND)
                     / min_withdrawal_amount_increment)
                     * min_withdrawal_amount_increment
@@ -115,13 +115,9 @@ impl FeeEstimator for DogecoinFeeEstimator {
         }
     }
 
-    fn evaluate_transaction_fee(
-        &self,
-        unsigned_tx: &UnsignedTransaction,
-        fee_per_byte: u64,
-    ) -> u64 {
-        let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
-        (tx_size as u64 * fee_per_byte) / 1000
+    fn evaluate_transaction_fee(&self, tx: &UnsignedTransaction, fee_rate: FeeRate) -> u64 {
+        let tx_size = DogecoinTransactionSigner::fake_sign(tx).len();
+        fee_rate.fee_ceil(tx_size as u64)
     }
 
     fn reimbursement_fee_for_pending_withdrawal_requests(&self, num_requests: u64) -> u64 {
@@ -132,26 +128,24 @@ impl FeeEstimator for DogecoinFeeEstimator {
 }
 
 pub fn estimate_retrieve_doge_fee<F: FeeEstimator>(
-    available_utxos: &BTreeSet<Utxo>,
+    available_utxos: &mut UtxoSet,
     withdrawal_amount: u64,
-    median_fee_millikoinu_per_byte: u64,
+    median_fee_millikoinu_per_byte: FeeRate,
+    max_num_inputs_in_transaction: usize,
     fee_estimator: &F,
 ) -> Result<WithdrawalFee, BuildTxError> {
-    // We simulate the algorithm that selects UTXOs for the
-    // specified amount.
-    // TODO DEFI-2518: remove expensive clone operation
-    let mut utxos = available_utxos.clone();
-
+    // We simulate the algorithm that selects UTXOs for the specified amount.
     // Only the address type matters for the amount of bytes, not the actual bytes in the address.
     let dummy_minter_address = BitcoinAddress::P2pkh([u8::MAX; 20]);
     let dummy_recipient_address = BitcoinAddress::P2pkh([42_u8; 20]);
 
     ic_ckbtc_minter::queries::estimate_withdrawal_fee(
-        &mut utxos,
+        available_utxos,
         withdrawal_amount,
         median_fee_millikoinu_per_byte,
         dummy_minter_address,
         dummy_recipient_address,
+        max_num_inputs_in_transaction,
         fee_estimator,
     )
     .map(WithdrawalFee::from)

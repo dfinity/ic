@@ -26,6 +26,7 @@ on:
       - Update mainnet ICOS versions file
       - Update mainnet canister versions file
       - CI Main
+      - Bazel Dependency Submission
 
 jobs:
   slack-workflow-run:

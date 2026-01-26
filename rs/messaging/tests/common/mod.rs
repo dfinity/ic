@@ -192,6 +192,12 @@ impl TestSubnet {
     pub fn split(&self, seed: [u8; 32]) -> Result<Self, String> {
         self.env.split(seed).map(|env| Self { env })
     }
+
+    /// Splits `self` according to the routing table in the latest registry version,
+    /// in a special checkpoint round, and returns the split off `TestSubnet`.
+    pub fn online_split(&self, seed: [u8; 32]) -> Result<Self, String> {
+        self.env.online_split(seed).map(|env| Self { env })
+    }
 }
 
 /// Checks for an async rejection in the `Reply` that indicates the canister trapped.
@@ -229,10 +235,9 @@ impl TestSubnetConfig {
                 scheduler_config: SchedulerConfig {
                     scheduler_cores: 4,
                     max_instructions_per_round: self.max_instructions_per_round.into(),
-                    max_instructions_per_message_without_dts: self
-                        .max_instructions_per_round
-                        .into(),
+                    max_instructions_per_query_message: self.max_instructions_per_round.into(),
                     max_instructions_per_slice: self.max_instructions_per_round.into(),
+                    max_instructions_per_install_code_slice: self.max_instructions_per_round.into(),
                     ..SchedulerConfig::application_subnet()
                 },
                 cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),

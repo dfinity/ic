@@ -778,7 +778,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
     // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
-    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap();
 
     // Ensure that at least one round has passed between the attempts to take a snapshot.
@@ -787,7 +787,12 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     // Taking a snapshot of the second canister should take another 25MiB, however the available
     // memory at this point is (120 - 30 - 25 - 30) / 2 = 17.5 MiB, so it should fail.
     let error = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+            other_canister_id,
+            None,
+            None,
+            None,
+        ))
         .map(|_| ())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::SubnetOversubscribed);
@@ -845,7 +850,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
     // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
     let snapshot_id = env
-        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap()
         .snapshot_id();
 
@@ -858,8 +863,13 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
 
     // Taking a snapshot of the second canister should take another 25MiB,
     // making the available memory (120 - 30 - 25 - 30 + 30 - 25) / 2 = 20 MiB.
-    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
-        .unwrap();
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(
+        other_canister_id,
+        None,
+        None,
+        None,
+    ))
+    .unwrap();
 
     // Loading the snapshot back to the first canister should fail as there
     // is not enough memory available.
@@ -922,7 +932,7 @@ fn canister_snapshot_metrics_are_observed() {
     )
     .expect("Error increasing the canister memory size");
 
-    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap();
 
     let gauge = fetch_gauge(
@@ -949,7 +959,7 @@ fn canister_snapshot_metrics_are_consistent_after_canister_deletion() {
         INITIAL_CYCLES_BALANCE,
     );
 
-    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+    env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None, None, None))
         .unwrap();
 
     let count = fetch_gauge(env.metrics_registry(), "scheduler_num_canister_snapshots").unwrap();

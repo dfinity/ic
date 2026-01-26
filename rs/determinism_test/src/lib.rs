@@ -26,7 +26,6 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
     Batch {
         batch_number: message_routing.expected_batch_height(),
         batch_summary: None,
-        requires_full_state_hash: false,
         content: BatchContent::Data {
             batch_messages: BatchMessages {
                 signed_ingress_msgs: msgs,
@@ -34,6 +33,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             },
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            requires_full_state_hash: false,
         },
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),
@@ -47,11 +47,11 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
     Batch {
         batch_number: message_routing.expected_batch_height(),
         batch_summary: None,
-        requires_full_state_hash: true,
         content: BatchContent::Data {
             batch_messages: BatchMessages::default(),
             chain_key_data: Default::default(),
             consensus_responses: vec![],
+            requires_full_state_hash: true,
         },
         randomness: Randomness::from([0; 32]),
         registry_version: RegistryVersion::from(1),

@@ -12,11 +12,12 @@ use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance_api::{
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic, Visibility,
     manage_neuron::{
-        ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        self, ClaimOrRefresh, Configure, IncreaseDissolveDelay, NeuronIdOrSubaccount, SetFollowing,
         claim_or_refresh::{By, MemoAndController},
-        configure::Operation,
+        configure::{self, Operation},
+        set_following::FolloweesForTopic,
     },
     manage_neuron_response,
 };
@@ -39,7 +40,13 @@ use ic_types::{
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
 use std::{convert::TryFrom, str::FromStr, time::Duration};
+use strum::IntoEnumIterator;
 use time::OffsetDateTime;
+
+// This is the buffer time added to the expiry time of added ingress messages to make sure those
+// messages do not expire too early, in particular in case the original expiry time was chosen to be
+// the current time.
+const INGRESS_EXPIRY_BUFFER_SECS: u64 = 180;
 
 pub struct IngressWithPrinter {
     pub ingress: SignedIngress,
@@ -89,8 +96,12 @@ fn make_signed_ingress(
         .update(&Principal::from(canister_id), method)
         .with_arg(payload)
         .expire_at(
-            OffsetDateTime::from_unix_timestamp_nanos(expiry.as_nanos_since_unix_epoch().into())
-                .map_err(|err| format!("Error preparing update message: {err:?}"))?,
+            OffsetDateTime::from_unix_timestamp_nanos(
+                (expiry + Duration::from_secs(INGRESS_EXPIRY_BUFFER_SECS))
+                    .as_nanos_since_unix_epoch()
+                    .into(),
+            )
+            .map_err(|err| format!("Error preparing update message: {err:?}"))?,
         )
         .sign()
         .map_err(|err| format!("Error preparing update message: {err:?}"))?;
@@ -188,43 +199,55 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
 ) -> Result<Vec<SignedIngress>, String> {
     let mut msgs = Vec::new();
 
-    let trusted_neurons: &[(&str, u64)] = &[
-        (
-            "pkjng-fnb6a-zzirr-kykal-ghbjs-ndmj2-tfoma-bzski-wtbsl-2fgbu-hae",
-            16,
-        ),
-        (
-            "ilqei-ofqjz-v7jbw-usmzf-jtdss-6mvzv-puesh-3kfga-nhr3v-zmgig-eqe",
-            15,
-        ),
-        (
-            "2q5kv-5vcol-eh2je-udy6s-j74gx-djqza-siucy-2jxyq-u5kw6-imugq-uae",
-            18,
-        ),
-        (
-            "wyzjx-3pde2-wzr4k-fblse-7hzgm-v2kkx-lcuhl-dftmv-5ywr7-gsszf-6ae",
-            1_947_868_782_075_274_250,
-        ),
-        (
-            "j2xaq-c6ph5-e4oa7-nleph-joz7b-nvv4r-if4ol-ilz7w-mzetf-jof6l-mae",
-            5_091_612_375_828_828_066,
-        ),
-        (
-            "2yjpj-uumzi-wnefi-5tum7-qt6yq-7gtxo-i4jt5-enll5-pma6q-2gild-mqe",
-            12_262_067_573_992_506_876,
-        ),
-    ];
+    // It is enough to be followed only by Neuron 27 to pass all proposals as of December 2025.
+    let trusted_neurons = [(
+        "4vnki-cqaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aaaaa-aae",
+        27,
+    )];
+
+    let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
+    let make_public_payload = Encode!(&ManageNeuronRequest {
+        id: None,
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+            id: cmd.neuron_id,
+        })),
+        command: Some(ManageNeuronCommandRequest::Configure(Configure {
+            operation: Some(configure::Operation::SetVisibility(
+                manage_neuron::SetVisibility {
+                    visibility: Some(Visibility::Public as i32),
+                }
+            ))
+        })),
+    })
+    .expect("Couldn't encode payload for manage neuron command");
+    msgs.push(
+        make_signed_ingress(
+            user_agent,
+            GOVERNANCE_CANISTER_ID,
+            "manage_neuron",
+            make_public_payload,
+            time,
+        )
+        .expect("Couldn't create message to make the neuron public"),
+    );
 
     for (principal, neuron_id) in trusted_neurons {
         let principal = PrincipalId::from_str(principal).expect("Invalid principal");
-        let follow_payload = Encode!(&ManageNeuronRequest {
+        let set_following_payload = Encode!(&ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                id: *neuron_id,
+                id: neuron_id,
             })),
-            command: Some(ManageNeuronCommandRequest::Follow(Follow {
-                topic: Topic::Unspecified as i32,
-                followees: [NeuronId { id: cmd.neuron_id }].to_vec(),
+            // Make trusted neuron follow the test neuron on all topics
+            command: Some(ManageNeuronCommandRequest::SetFollowing(SetFollowing {
+                topic_following: Some(
+                    Topic::iter()
+                        .map(|topic| FolloweesForTopic {
+                            topic: Some(topic as i32),
+                            followees: Some(vec![NeuronId { id: cmd.neuron_id }]),
+                        })
+                        .collect()
+                ),
             })),
         })
         .expect("Couldn't encode payload for manage neuron command");
@@ -234,7 +257,7 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
                 user_agent,
                 GOVERNANCE_CANISTER_ID,
                 "manage_neuron",
-                follow_payload,
+                set_following_payload,
                 time,
             )
             .expect("Couldn't create message to make trusted neurons follow test neuron"),
@@ -399,7 +422,7 @@ pub fn cmd_add_registry_content(
                     REGISTRY_CANISTER_ID,
                     mutations,
                     req.preconditions,
-                    context_time + Duration::from_secs(60),
+                    context_time,
                 ))
             } else {
                 None
@@ -476,7 +499,7 @@ pub(crate) fn bless_replica_version(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
     )
 }
 
@@ -501,7 +524,7 @@ pub fn add_replica_version(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
     )
 }
 
@@ -526,6 +549,6 @@ pub fn update_subnet_record(
         REGISTRY_CANISTER_ID,
         vec![mutation],
         vec![],
-        context_time + Duration::from_secs(60),
+        context_time,
     )
 }

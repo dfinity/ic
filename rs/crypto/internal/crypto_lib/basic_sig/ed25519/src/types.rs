@@ -24,7 +24,7 @@ impl PublicKeyBytes {
 }
 
 /// A wrapper for Ed25519 signature bytes.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub struct SignatureBytes(pub [u8; SignatureBytes::SIZE]);
 ic_crypto_internal_types::derive_serde!(SignatureBytes, SignatureBytes::SIZE);
 impl SignatureBytes {

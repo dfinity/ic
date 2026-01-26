@@ -42,7 +42,7 @@ jobs:
           echo "channel=${CHANNEL}" >> $GITHUB_OUTPUT
           echo "message=${MESSAGE}" >> $GITHUB_OUTPUT
         env:
-          MESSAGE: ":github: `${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title || '' }}>"
+          MESSAGE: ":github: ${{ github.event.pull_request.head.repo.full_name != github.repository && ':alert: EXTERNAL PR, review extra carefully! :alert: ' || '' }}`${{ github.repository }}` <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title || '' }}>"
 
       - name: Post to a Slack channel
         if: steps.get-reviewers.outputs.result != '""' && steps.lookup.outputs.channel != 'null'

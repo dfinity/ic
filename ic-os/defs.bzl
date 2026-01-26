@@ -15,7 +15,7 @@ load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
 load("//ic-os/components/conformance_tests:defs.bzl", "component_file_references_test")
-load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "disk_image_no_tar", "ext4_image", "upgrade_image")
+load("//toolchains/sysimage:toolchain.bzl", "build_container_base_image", "build_container_filesystem", "disk_image", "ext4_image", "upgrade_image")
 
 def icos_build(
         name,
@@ -334,17 +334,6 @@ def icos_build(
             "//ic-os:__subpackages__",
             "//rs/ic_os:__subpackages__",
         ],
-    )
-
-    # Disk images just for testing.
-    disk_image_no_tar(
-        name = "disk.img",
-        layout = image_deps["partition_table"],
-        partitions = partitions,
-        expanded_size = image_deps.get("expanded_size", default = None),
-        tags = ["manual", "no-cache"],
-        target_compatible_with = ["@platforms//os:linux"],
-        visibility = visibility,
     )
 
     zstd_compress(

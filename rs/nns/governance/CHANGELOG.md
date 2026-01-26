@@ -11,6 +11,55 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2026-01-16: Proposal 140012
+
+http://dashboard.internetcomputer.org/proposal/140012
+
+A "maintenance" release. That is, new code for upcoming features, but no new
+(enabled) behaviors.
+
+
+# 2026-01-05: Proposal 139940
+
+http://dashboard.internetcomputer.org/proposal/139940
+
+Just a maintenance release. That is, no new features, and no bug fixes.
+Just newer code, much of which is inactive now, but will be active later.
+
+
+# 2026-01-05: Proposal 139922
+
+http://dashboard.internetcomputer.org/proposal/139922
+
+## Added
+
+* Enabled performance-based node provider rewards. See the motion proposal
+  [NNS Proposal 135054](https://dashboard.internetcomputer.org/proposal/135054)
+  for details about how the performance-based algorithm works. More details can also be found in the forum post
+  [Performance Based Node Rewards](https://forum.dfinity.org/t/performance-based-node-rewards/35208)
+
+
+# 2025-12-05: Proposal 139678
+
+http://dashboard.internetcomputer.org/proposal/139678
+
+## Fixed
+
+- Typo in error message about obsolete proposal type SetDefaultFollowees.
+
+
+# 2025-11-28: Proposal 139575
+
+http://dashboard.internetcomputer.org/proposal/139575
+
+##  Fixed
+
+- Add default case for start_date fetching in Performance Based Rewards. This is done to ensure that a valid start date
+  is always returned, even when no previous rewards exist.
+  
+- Added `algorithm_version` field to node provider rewards.
+
+
 # 2025-11-07: Proposal 139313
 
 http://dashboard.internetcomputer.org/proposal/139313

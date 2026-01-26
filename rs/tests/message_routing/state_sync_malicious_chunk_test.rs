@@ -25,7 +25,6 @@ use ic_system_test_driver::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, Subnet, VmResources,
 };
 use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
-use ic_system_test_driver::driver::prometheus_vm::PrometheusVm;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -55,7 +54,7 @@ const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
 const DKG_INTERVAL_LARGE: u64 = 199;
 const NUM_CANISTERS: usize = 8;
-const SIZE_LEVEL: usize = 8;
+const CANISTER_SIZE_GIB: u64 = 1;
 
 fn main() -> Result<()> {
     let config = Config::new(NUM_NODES);
@@ -122,10 +121,6 @@ impl Config {
     }
 }
 fn setup(env: TestEnv, config: Config) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -229,7 +224,7 @@ async fn test_async(env: TestEnv, config: Config) {
     rejoin_test_large_state(
         env,
         config.allowed_failures,
-        SIZE_LEVEL,
+        CANISTER_SIZE_GIB,
         NUM_CANISTERS,
         DKG_INTERVAL_LARGE,
         rejoin_node.clone(),

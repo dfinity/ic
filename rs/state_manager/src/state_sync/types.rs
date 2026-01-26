@@ -254,6 +254,12 @@ pub struct ManifestData {
     pub chunk_table: Vec<ChunkInfo>,
 }
 
+impl ManifestData {
+    pub fn state_size_bytes(&self) -> u64 {
+        self.file_table.iter().map(|f| f.size_bytes).sum()
+    }
+}
+
 /// MetaManifest describes how the manifest is encoded, split and hashed.
 ///
 /// The meta-manifest is built in the following way:

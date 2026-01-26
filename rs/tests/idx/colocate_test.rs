@@ -1,12 +1,11 @@
 use anyhow::Result;
+use ic_system_test_driver::driver::constants::COLOCATE_CONTAINER_NAME;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::group::{
-    COLOCATE_CONTAINER_NAME, CliArguments, SystemTestGroup,
-};
+use ic_system_test_driver::driver::group::{CliArguments, SystemTestGroup};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
@@ -102,6 +101,7 @@ fn setup(env: TestEnv) {
         .arg(runfiles)
         .arg("--dereference")
         .arg("--exclude=rs/tests/colocate_test_bin")
+        .arg("--exclude=rs/tests/run_systest.sh")
         .arg("--exclude=rs/tests/colocate_uvm_config_image.zst")
         // Avoid packing in ic-os images. Those are runtime dependencies for the
         // top-level test runner which uploads them to shared storage; after that
@@ -243,6 +243,11 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
+    let metrics_flag = match env::var("ENABLE_METRICS") {
+        Ok(val) if val == "1" || val.eq_ignore_ascii_case("true") => "--enable-metrics".to_string(),
+        _ => "".to_string(),
+    };
+
     let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
         "--no-logs".to_string()
     } else {
@@ -299,6 +304,7 @@ docker run \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
     --group-base-name {colocated_test} \
+    {metrics_flag} \
     {logs_flag} \
     {exclude_logs_args} \
     run

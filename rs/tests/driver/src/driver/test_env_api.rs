@@ -908,21 +908,6 @@ impl IcNodeSnapshot {
         node_record.domain
     }
 
-    /// Is it accessible via ssh with the `admin` user.
-    /// Waits until connection is ready.
-    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        let sess = self.block_on_ssh_session()?;
-        let mut channel = sess.channel_session()?;
-        channel.exec("echo ready")?;
-        let mut s = String::new();
-        channel.read_to_string(&mut s)?;
-        if s.trim() == "ready" {
-            Ok(())
-        } else {
-            bail!("Failed receive from ssh session")
-        }
-    }
-
     pub fn subnet_id(&self) -> Option<SubnetId> {
         let registry_version = self.registry_version;
         self.local_registry
@@ -1087,7 +1072,7 @@ impl IcNodeSnapshot {
             set -e
             ADAPTER_UID=$(id -u ic-http-adapter)
             RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
-            
+
             sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
         "#;
 
@@ -1307,11 +1292,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> ReplicaVersion {
-    ReplicaVersion::try_from(
-        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
-    )
-    .expect("Invalid ReplicaVersion")
+/// Returns the build version specified by the build. May be an actual version or a
+/// placeholder version. See build files for exact semantics.
+pub fn get_ic_build_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(read_dependency_from_env_to_string("IC_VERSION_FILE").unwrap())
+        .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
@@ -1353,7 +1338,7 @@ pub trait HasGroupSetup {
 impl HasGroupSetup for TestEnv {
     fn create_group_setup(&self, group_base_name: String, no_group_ttl: bool) {
         let log = self.logger();
-        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+        if GroupSetup::attribute_exists(self) {
             let group_setup = GroupSetup::read_attribute(self);
             info!(
                 log,
@@ -1367,19 +1352,19 @@ impl HasGroupSetup for TestEnv {
             match InfraProvider::read_attribute(self) {
                 InfraProvider::Farm => {
                     let farm_base_url = FarmBaseUrl::read_attribute(self);
-                    let farm = Farm::new(farm_base_url.into(), self.logger());
+                    let farm = block_on(Farm::new(farm_base_url.into(), self.logger()));
                     let group_spec = GroupSpec {
                         vm_allocation: None,
                         required_host_features: vec![],
                         preferred_network: None,
                         metadata: None,
                     };
-                    farm.create_group(
+                    block_on(farm.create_group(
                         &group_setup.group_base_name,
                         &group_setup.infra_group_name,
                         group_setup.group_timeout,
                         group_spec,
-                    )
+                    ))
                     .unwrap();
                 }
             };
@@ -1577,6 +1562,21 @@ pub trait SshSession: HasTestEnv {
             bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out} Err: {err}");
         }
         Ok(out)
+    }
+
+    /// Is it accessible via ssh with the `admin` user.
+    /// Waits until connection is ready.
+    fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        let sess = self.block_on_ssh_session()?;
+        let mut channel = sess.channel_session()?;
+        channel.exec("echo ready")?;
+        let mut s = String::new();
+        channel.read_to_string(&mut s)?;
+        if s.trim() == "ready" {
+            Ok(())
+        } else {
+            bail!("Failed receive from ssh session")
+        }
     }
 }
 
@@ -2050,10 +2050,11 @@ impl IcNodeContainer for SubnetSnapshot {
 
 /* ### VM Control ### */
 
+#[async_trait]
 pub trait VmControl {
-    fn kill(&self);
-    fn reboot(&self);
-    fn start(&self);
+    async fn kill(&self);
+    async fn reboot(&self);
+    async fn start(&self);
 }
 
 pub struct HostedVm {
@@ -2065,41 +2066,47 @@ pub struct HostedVm {
 /// VmControl enables a user to interact with VMs, i.e. change their state.
 /// All functions belonging to this trait crash if a respective operation is for any reason
 /// unsuccessful.
+#[async_trait]
 impl VmControl for HostedVm {
-    fn kill(&self) {
+    async fn kill(&self) {
         self.farm
             .destroy_vm(&self.group_name, &self.vm_name)
+            .await
             .expect("could not kill VM");
     }
 
-    fn reboot(&self) {
+    async fn reboot(&self) {
         self.farm
             .reboot_vm(&self.group_name, &self.vm_name)
+            .await
             .expect("could not reboot VM");
     }
 
-    fn start(&self) {
+    async fn start(&self) {
         self.farm
             .start_vm(&self.group_name, &self.vm_name)
+            .await
             .expect("could not start VM");
     }
 }
 
+#[async_trait]
 pub trait HasVm {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    fn vm(&self) -> Box<dyn VmControl>;
+    async fn vm(&self) -> Box<dyn VmControl>;
 }
 
+#[async_trait]
 impl<T> HasVm for T
 where
-    T: HasTestEnv + HasVmName,
+    T: HasTestEnv + HasVmName + Sync,
 {
     /// Returns a handle used for controlling a VM, i.e. starting, stopping and rebooting.
-    fn vm(&self) -> Box<dyn VmControl> {
+    async fn vm(&self) -> Box<dyn VmControl> {
         let env = self.test_env();
         let pot_setup = GroupSetup::read_attribute(&env);
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, env.logger());
+        let farm = Farm::new(farm_base_url, env.logger()).await;
 
         let vm_name = self.vm_name();
         Box::new(HostedVm {
@@ -2493,35 +2500,38 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log);
+        let farm = block_on(Farm::new(farm_base_url, log));
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        farm.create_dns_records(&group_name, dns_records)
+        block_on(farm.create_dns_records(&group_name, dns_records))
             .expect("Failed to create DNS records")
     }
 }
 
+#[async_trait]
 pub trait CreatePlaynetDnsRecords {
     /// Creates DNS records under the suffix: `.ic{ix}.farm.dfinity.systems`
     /// where `ix` is the index of the acquired playnet.
     ///
     /// The records will be garbage collected some time after the group has expired.
     /// The suffix will be returned from this function such that the FQDNs can be constructed.
-    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
 }
 
+#[async_trait]
 impl<T> CreatePlaynetDnsRecords for T
 where
-    T: HasTestEnv,
+    T: HasTestEnv + std::marker::Sync,
 {
-    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
+    async fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log);
+        let farm = Farm::new(farm_base_url, log).await;
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
         farm.create_playnet_dns_records(&group_name, dns_records)
+            .await
             .expect("Failed to create playnet DNS records")
     }
 }
@@ -2540,10 +2550,10 @@ where
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = self.get_farm_url().unwrap();
-        let farm = Farm::new(farm_base_url, log);
+        let farm = block_on(Farm::new(farm_base_url, log));
         let group_setup = GroupSetup::read_attribute(&env);
         let group_name = group_setup.infra_group_name;
-        farm.acquire_playnet_certificate(&group_name)
+        block_on(farm.acquire_playnet_certificate(&group_name))
             .expect("Failed to acquire a certificate for a playnet")
     }
 }

@@ -10,9 +10,9 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-config = { path = "../../config" }
-config_types = { path = "../../config_types" }
+config_tool = { path = "../../config/tool" }
+config_types = { path = "../../config/types" }
 indoc = { workspace = true }
-network = { path = "../../network" }
+network = { path = "../../networking/network" }
 regex = { workspace = true }
 utils = { path = "../../utils" }

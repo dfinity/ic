@@ -22,7 +22,7 @@ use std::{
     convert::{Infallible, TryFrom},
     fmt,
     ops::{AddAssign, SubAssign},
-    sync::Arc,
+    sync::{Arc, atomic::AtomicU64},
     time::Duration,
 };
 use strum_macros::EnumIter;
@@ -590,6 +590,7 @@ pub type QueryExecutionService =
 #[derive(Debug)]
 pub struct TransformExecutionInput {
     pub query: Query,
+    pub instruction_observation: Arc<AtomicU64>,
 }
 
 /// Interface for the component to execute canister http transform.
@@ -1462,7 +1463,7 @@ pub struct RegistryExecutionSettings {
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct ChainKeySettings {
     pub max_queue_size: u32,
-    pub pre_signatures_to_create_in_advance: u32,
+    pub pre_signatures_to_create_in_advance: Option<u32>,
 }
 
 pub trait Scheduler: Send {
@@ -1526,6 +1527,13 @@ pub trait Scheduler: Send {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> Self::State;
+
+    /// Code to be executed in a checkpoint round, iff `execute_round()` was not
+    /// called (e.g. during a subnet split).
+    ///
+    /// This aborts all paused executions and resets transient state (such as heap
+    /// delta estimate and compiled Wasms).
+    fn checkpoint_round_with_no_execution(&self, state: &mut Self::State);
 }
 
 /// Combination of memory used by and reserved for guaranteed response messages

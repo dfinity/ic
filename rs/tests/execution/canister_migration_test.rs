@@ -64,8 +64,8 @@ fn test(env: TestEnv) {
 
 #[derive(Clone, Debug, CandidType)]
 struct MigrateCanisterArgs {
-    pub canister_id: Principal,
-    pub replace_canister_id: Principal,
+    pub migrated_canister_id: Principal,
+    pub replaced_canister_id: Principal,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
@@ -78,11 +78,11 @@ pub enum ValidationError {
     SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped(Reserved),
-    SourceNotReady(Reserved),
-    TargetNotStopped(Reserved),
-    TargetHasSnapshots(Reserved),
-    SourceInsufficientCycles(Reserved),
+    MigratedCanisterNotStopped(Reserved),
+    MigratedCanisterNotReady(Reserved),
+    ReplacedCanisterNotStopped(Reserved),
+    ReplacedCanisterHasSnapshots(Reserved),
+    MigratedCanisterInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -151,14 +151,14 @@ async fn test_async(env: TestEnv) {
 
     let app_subnet_1 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 1);
     let app_subnet_1_agent = app_subnet_1.build_default_agent_async().await;
-    let source_canister = install_canister(
+    let migrated_canister = install_canister(
         &app_subnet_1,
         &app_subnet_1_agent,
         migration_canister_id,
         &logger,
     )
     .await;
-    let source_canister2 = install_canister(
+    let migrated_canister2 = install_canister(
         &app_subnet_1,
         &app_subnet_1_agent,
         migration_canister_id,
@@ -173,14 +173,14 @@ async fn test_async(env: TestEnv) {
     .await;
     let app_subnet_2 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 2);
     let app_subnet_2_agent = app_subnet_2.build_default_agent_async().await;
-    let target_canister = install_canister(
+    let replaced_canister = install_canister(
         &app_subnet_2,
         &app_subnet_2_agent,
         migration_canister_id,
         &logger,
     )
     .await;
-    let target_canister2 = install_canister(
+    let replaced_canister2 = install_canister(
         &app_subnet_2,
         &app_subnet_2_agent,
         migration_canister_id,
@@ -207,8 +207,8 @@ async fn test_async(env: TestEnv) {
         let token = token.clone();
         let app_subnet_1_agent = app_subnet_1_agent.clone();
         let app_subnet_2_agent = app_subnet_2_agent.clone();
-        let source_canister_id = source_canister.canister_id();
-        let target_canister_id = target_canister.canister_id();
+        let migrated_canister_id = migrated_canister.canister_id();
+        let replaced_canister_id = replaced_canister.canister_id();
         let api_bn = env
             .topology_snapshot()
             .api_boundary_nodes()
@@ -223,12 +223,12 @@ async fn test_async(env: TestEnv) {
         tokio::spawn(async move {
             let data = [4, 2];
             let original_canister =
-                UniversalCanister::from_canister_id(&app_subnet_1_agent, source_canister_id);
+                UniversalCanister::from_canister_id(&app_subnet_1_agent, migrated_canister_id);
             let migrated_canister =
-                UniversalCanister::from_canister_id(&app_subnet_2_agent, source_canister_id);
-            let target_canister =
-                UniversalCanister::from_canister_id(&app_subnet_2_agent, target_canister_id);
-            let bn_canister = UniversalCanister::from_canister_id(&bn_agent, source_canister_id);
+                UniversalCanister::from_canister_id(&app_subnet_2_agent, migrated_canister_id);
+            let replaced_canister =
+                UniversalCanister::from_canister_id(&app_subnet_2_agent, replaced_canister_id);
+            let bn_canister = UniversalCanister::from_canister_id(&bn_agent, migrated_canister_id);
             let other_canister1 =
                 UniversalCanister::from_canister_id(&bn_agent, other_canister_id1);
             let other_canister2 =
@@ -240,92 +240,92 @@ async fn test_async(env: TestEnv) {
 
             let call_from_everywhere = async |counts: &mut BTreeMap<(String, String), usize>| {
                 let mut requests = BTreeMap::new();
-                // Ingress message to the migrating canister, sent to the source subnet directly.
+                // Ingress message to the migrated canister, sent to the migrated canister subnet directly.
                 requests.insert(
-                    "source_subnet".to_string(),
+                    "migrated_canister_subnet".to_string(),
                     original_canister.update(wasm().reply_data(&data)),
                 );
-                // Ingress message to the migrating canister, sent to the target subnet directly.
+                // Ingress message to the migrated canister, sent to the replaced canister subnet directly.
                 requests.insert(
-                    "target subnet".to_string(),
+                    "replaced_canister_subnet".to_string(),
                     migrated_canister.update(wasm().reply_data(&data)),
                 );
-                // Ingress message to the migrating canister, sent to the boundary node.
+                // Ingress message to the migrated canister, sent to the boundary node.
                 requests.insert(
                     "boundary node".to_string(),
                     bn_canister.update(wasm().reply_data(&data)),
                 );
-                // Ingress message to the canister that id that is being overwritten by the migration.
+                // Ingress message to the replaced canister.
                 requests.insert(
-                    "target canister".to_string(),
-                    target_canister.update(wasm().reply_data(&data)),
+                    "replaced canister".to_string(),
+                    replaced_canister.update(wasm().reply_data(&data)),
                 );
-                // XNet message to the migrating canister, sent from the source subnet.
+                // XNet message to the migrated canister, sent from the migrated canister subnet.
                 requests.insert(
-                    "xnet from source".to_string(),
+                    "xnet from migrated_canister_subnet".to_string(),
                     other_canister1.update(
                         wasm().inter_update(
-                            source_canister_id,
+                            migrated_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
                         ),
                     ),
                 );
-                // XNet message to the migrating canister, sent from the target subnet.
+                // XNet message to the migrated canister, sent from the replaced canister subnet.
                 requests.insert(
-                    "xnet from target".to_string(),
+                    "xnet from replaced_canister_subnet".to_string(),
                     other_canister2.update(
                         wasm().inter_update(
-                            source_canister_id,
+                            migrated_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
                         ),
                     ),
                 );
-                // XNet message to the migrating canister, sent from a subnet not involved in the migration.
+                // XNet message to the migrated canister, sent from a subnet not involved in the migration.
                 requests.insert(
                     "xnet from third".to_string(),
                     other_canister3.update(
                         wasm().inter_update(
-                            source_canister_id,
+                            migrated_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
                         ),
                     ),
                 );
-                // XNet message to the canister being overwritten, sent from the source subnet.
+                // XNet message to the replaced canister, sent from the migrated canister subnet.
                 requests.insert(
-                    "xnet from source to target".to_string(),
+                    "xnet from migrated_canister_subnet to replaced_canister".to_string(),
                     other_canister1.update(
                         wasm().inter_update(
-                            target_canister_id,
+                            replaced_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
                         ),
                     ),
                 );
-                // XNet message to the canister being overwritten, sent from the target subnet.
+                // XNet message to the replaced canister, sent from the replaced canister subnet.
                 requests.insert(
-                    "xnet from target to target".to_string(),
+                    "xnet from replaced_canister_subnet to replaced_canister".to_string(),
                     other_canister2.update(
                         wasm().inter_update(
-                            target_canister_id,
+                            replaced_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
                         ),
                     ),
                 );
-                // XNet message to the canister being overwritten, sent from a subnet not involved in the migration.
+                // XNet message to the replaced canister, sent from a subnet not involved in the migration.
                 requests.insert(
-                    "xnet from third to target".to_string(),
+                    "xnet from third to replaced_canister".to_string(),
                     other_canister3.update(
                         wasm().inter_update(
-                            target_canister_id,
+                            replaced_canister_id,
                             call_args()
                                 .other_side(wasm().reply_data(&data))
                                 .on_reject(wasm().reject_message().reject()),
@@ -379,13 +379,13 @@ async fn test_async(env: TestEnv) {
     pause_canister_migrations(&governance_canister).await;
 
     let args = Encode!(&MigrateCanisterArgs {
-        canister_id: source_canister.canister_id(),
-        replace_canister_id: target_canister.canister_id(),
+        migrated_canister_id: migrated_canister.canister_id(),
+        replaced_canister_id: replaced_canister.canister_id(),
     })
     .unwrap();
     let args2 = Encode!(&MigrateCanisterArgs {
-        canister_id: source_canister2.canister_id(),
-        replace_canister_id: target_canister2.canister_id(),
+        migrated_canister_id: migrated_canister2.canister_id(),
+        replaced_canister_id: replaced_canister2.canister_id(),
     })
     .unwrap();
 
@@ -431,13 +431,13 @@ async fn test_async(env: TestEnv) {
 
     assert_eq!(decoded_result, Ok(()));
 
-    // The migration canister has a step where it waits for 5 minutes, so we give it a minute more than that.
-    println!("Wait over 5 minutes for processing.");
+    // The migration canister has a step where it waits for 6 minutes, so we give it a minute more than that.
+    println!("Wait 7 minutes for processing.");
 
     retry_with_msg_async!(
-        "Wait 5m for migration canister to process",
+        "Wait 7m for migration canister to process",
         &logger,
-        Duration::from_secs(360),
+        Duration::from_secs(420),
         Duration::from_secs(10),
         || async {
             let status = nns_agent
@@ -446,20 +446,21 @@ async fn test_async(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .expect("Failed to call migration_status.");
-            let decoded_status = Decode!(&status, Vec<MigrationStatus>)
-                .expect("Failed to decode response from migration_status.");
+            let decoded_status = Decode!(&status, Option<MigrationStatus>)
+                .expect("Failed to decode response from migration_status.")
+                .expect("There should be a migration status available.");
 
-            if matches!(decoded_status[0], MigrationStatus::Succeeded { .. }) {
+            if matches!(decoded_status, MigrationStatus::Succeeded { .. }) {
                 Ok(())
             } else {
-                bail!("Not ready. Status: {:?}", decoded_status[0])
+                bail!("Not ready. Status: {:?}", decoded_status)
             }
         }
     )
     .await
     .unwrap();
 
-    // assert that the source canister is on the target subnet.
+    // assert that the migrated canister is on the replaced canister subnet.
     #[derive(CandidType, Deserialize)]
     struct GetSubnetForCanisterArgs {
         principal: Option<Principal>,
@@ -472,7 +473,7 @@ async fn test_async(env: TestEnv) {
         .update(&REGISTRY_CANISTER_ID.into(), "get_subnet_for_canister")
         .with_arg(
             Encode!(&GetSubnetForCanisterArgs {
-                principal: Some(source_canister.canister_id())
+                principal: Some(migrated_canister.canister_id())
             })
             .unwrap(),
         )
@@ -488,7 +489,7 @@ async fn test_async(env: TestEnv) {
     );
 
     let migrated_canister =
-        UniversalCanister::from_canister_id(&app_subnet_2_agent, source_canister.canister_id());
+        UniversalCanister::from_canister_id(&app_subnet_2_agent, migrated_canister.canister_id());
     let mgr = ManagementCanister::create(&app_subnet_2_agent);
 
     // wait until delegation updates
@@ -498,8 +499,8 @@ async fn test_async(env: TestEnv) {
         Duration::from_secs(660),
         Duration::from_secs(10),
         || async {
-            // assert that "source" canister responds
-            match mgr.start_canister(&source_canister.canister_id()).await {
+            // assert that "migrated" canister responds
+            match mgr.start_canister(&migrated_canister.canister_id()).await {
                 Ok(_) => Ok(()),
                 Err(_) => bail!("Not ready"),
             }

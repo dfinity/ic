@@ -1,8 +1,6 @@
 use crate::{Args, Partition, crypt_name, run};
 use anyhow::Result;
-use config_types::{
-    DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
-};
+use config_types::{GuestOSConfig, ICOSSettings};
 use guest_disk::crypt::{
     activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
 };
@@ -67,28 +65,11 @@ impl<'a> TestFixture<'a> {
 
     fn create_guestos_config(enable_trusted_execution_environment: bool) -> GuestOSConfig {
         GuestOSConfig {
-            config_version: "".to_string(),
-            network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
-                ipv4_config: None,
-                domain_name: None,
-            },
             icos_settings: ICOSSettings {
-                node_reward_type: None,
-                mgmt_mac: Default::default(),
-                deployment_environment: DeploymentEnvironment::Mainnet,
-                use_nns_public_key: false,
-                nns_urls: vec![],
-                use_node_operator_private_key: false,
                 enable_trusted_execution_environment,
-                use_ssh_authorized_keys: false,
-                icos_dev_settings: Default::default(),
+                ..Default::default()
             },
-            guestos_settings: Default::default(),
-            guest_vm_type: Default::default(),
-            upgrade_config: Default::default(),
-            trusted_execution_environment_config: None,
-            recovery_config: Default::default(),
+            ..GuestOSConfig::default()
         }
     }
 
@@ -149,7 +130,7 @@ fn deactive_crypt_device_with_check(crypt_device_name: &str) {
 
 fn get_crypt_device(partition: Partition) -> &'static Path {
     match partition {
-        Partition::Store => Path::new("/dev/mapper/vda10-crypt"),
+        Partition::Store => Path::new("/dev/mapper/store-crypt"),
         Partition::Var => Path::new("/dev/mapper/var_crypt"),
     }
 }
@@ -248,7 +229,7 @@ fn test_fail_to_open_if_device_is_not_formatted() {
         .open(Partition::Store)
         .expect_err("Expected setup_disk_encryption to fail due to unformatted device");
 
-    assert!(!Path::new("/dev/mapper/vda10-crypt").exists());
+    assert!(!Path::new("/dev/mapper/store-crypt").exists());
 }
 
 #[test]
@@ -273,13 +254,13 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     // Write some data to the disk.
     activate_crypt_device(
         &fixture.device.path().unwrap(),
-        "vda10-crypt",
+        "store-crypt",
         PREVIOUS_KEY,
         CryptActivate::empty(),
     )
     .expect("Failed to activate device");
-    fs::write("/dev/mapper/vda10-crypt", "hello world").unwrap();
-    deactive_crypt_device_with_check("vda10-crypt");
+    fs::write("/dev/mapper/store-crypt", "hello world").unwrap();
+    deactive_crypt_device_with_check("store-crypt");
 
     check_encryption_key(&fixture.device.path().unwrap(), PREVIOUS_KEY)
         .expect("previous key should unlock the store partition");
@@ -292,7 +273,7 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     fixture.open(Partition::Store).unwrap();
 
     // Check that previous content is still there.
-    assert_device_has_content(Path::new("/dev/mapper/vda10-crypt"), b"hello world");
+    assert_device_has_content(Path::new("/dev/mapper/store-crypt"), b"hello world");
 
     // Check that the previous key file has been deleted.
     assert!(!fixture.previous_key_path.exists());
@@ -400,8 +381,8 @@ fn test_open_store_multiple_times_with_different_keys() {
         fixture
             .open(Partition::Store)
             .unwrap_or_else(|_| panic!("Failed to open store partition on iteration {i}"));
-        assert!(Path::new("/dev/mapper/vda10-crypt").exists());
-        deactive_crypt_device_with_check("vda10-crypt");
+        assert!(Path::new("/dev/mapper/store-crypt").exists());
+        deactive_crypt_device_with_check("store-crypt");
     }
 }
 

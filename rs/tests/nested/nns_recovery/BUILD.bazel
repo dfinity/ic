@@ -2,23 +2,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 load(
     "//rs/tests:common.bzl",
     "IC_GATEWAY_RUNTIME_DEPS",
-    "IMPERSONATE_UPSTREAMS_ENV",
     "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
-    "MESSAGE_CANISTER_ENV",
     "MESSAGE_CANISTER_RUNTIME_DEPS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-ENV = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV | {
-    "RECOVERY_GUESTOS_IMG_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:update-img.tar.zst)",
-}
+ENV = MAINNET_ENV
 
-RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
-    "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
-]
+RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | IMPERSONATE_UPSTREAMS_RUNTIME_DEPS | {
+    "RECOVERY_GUESTOS_IMG_PATH": "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
+}
 
 rust_library(
     name = "common",
@@ -27,6 +23,7 @@ rust_library(
     crate_name = "ic_nested_nns_recovery_common",
     deps = [
         # Keep sorted.
+        "//rs/ic_os/os_tools/manual_guestos_recovery",
         "//rs/recovery",
         "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",
@@ -35,7 +32,6 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
-        "@crate_index//:sha2",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -43,15 +39,16 @@ rust_library(
 
 system_test_nns(
     name = "nr_broken_dfinity_node",
-    env = ENV,
-    flaky = True,
-    tags = ["long_test"],
-    test_timeout = "eternal",
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
+    data = [
         "//rs/tests:recovery/binaries",
     ],
+    env = ENV,
+    flaky = True,
+    guestos_update = "test",
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -62,18 +59,20 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_large",
+    data = [
+        "//rs/tests:recovery/binaries",
+    ],
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = [
+        "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
-        "//rs/tests:recovery/binaries",
-    ],
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -86,9 +85,9 @@ system_test_nns(
     name = "nr_local",
     env = ENV,
     flaky = True,
+    guestos_update = "test",
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
     deps = [
@@ -101,15 +100,16 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_no_bless_fix_like_np",
-    env = ENV,
-    flaky = True,
-    tags = ["long_test"],
-    test_timeout = "eternal",
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
+    data = [
         "//rs/tests:recovery/binaries",
     ],
+    env = ENV,
+    flaky = True,
+    guestos_update = "test",
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -120,15 +120,16 @@ system_test_nns(
 
 system_test_nns(
     name = "nr_seq_np_actions",
-    env = ENV,
-    flaky = True,
-    tags = ["long_test"],
-    test_timeout = "eternal",
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
-    runtime_deps = RUNTIME_DEPS + [
+    data = [
         "//rs/tests:recovery/binaries",
     ],
+    env = ENV,
+    flaky = True,
+    guestos_update = "test",
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",

@@ -28,6 +28,13 @@ pub(crate) const MIN_GUARD_REGION_SIZE: usize = 8 * 1024 * 1024 * 1024;
 /// The maximum Wasm stack size as configured by Wasmtime.
 pub(crate) const MAX_WASM_STACK_SIZE: usize = 5 * 1024 * 1024;
 
+/// The Wasm page size as defined in the Spec.
+pub const WASM_PAGE_SIZE: u32 = 64 * 1024;
+
+/// Maximum size of a 32-bit Wasm memory. Defined in the Spec and the maximum
+/// 32-bit addressable space.
+pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 1 << 32;
+
 pub struct WasmExecutionInput {
     pub api_type: ApiType,
     pub sandbox_safe_system_state: SandboxSafeSystemState,

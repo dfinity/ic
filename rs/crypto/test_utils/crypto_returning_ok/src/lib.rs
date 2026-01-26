@@ -1,7 +1,6 @@
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
-use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
+use ic_crypto_test_utils_ni_dkg::{dummy_dealing, dummy_transcript_for_tests_with_params};
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigner, CheckKeysWithRegistryError, CurrentNodePublicKeysError,
     IDkgDealingEncryptionKeyRotationError, IDkgKeyRotationResult, IDkgProtocol, KeyManager,
@@ -47,12 +46,7 @@ pub struct CryptoReturningOk {
 }
 
 impl<T: Signable> BasicSigner<T> for CryptoReturningOk {
-    fn sign_basic(
-        &self,
-        _message: &T,
-        _signer: NodeId,
-        _registry_version: RegistryVersion,
-    ) -> CryptoResult<BasicSigOf<T>> {
+    fn sign_basic(&self, _message: &T) -> CryptoResult<BasicSigOf<T>> {
         Ok(BasicSigOf::new(BasicSig(vec![])))
     }
 }
@@ -208,7 +202,7 @@ impl<T: Signable> CanisterSigVerifier<T> for CryptoReturningOk {
 
 impl NiDkgAlgorithm for CryptoReturningOk {
     fn create_dealing(&self, _config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
-        Ok(empty_ni_dkg_dealing())
+        Ok(dummy_dealing(0))
     }
 
     fn verify_dealing(
@@ -348,7 +342,7 @@ impl IDkgProtocol for CryptoReturningOk {
             registry_version: RegistryVersion::from(1),
             verified_dealings: Arc::new(dealings_by_index),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::Placeholder,
+            algorithm_id: AlgorithmId::Unspecified,
             internal_transcript_raw: vec![],
         })
     }
@@ -531,15 +525,5 @@ impl VetKdProtocol for CryptoReturningOk {
         _args: &VetKdArgs,
     ) -> Result<(), VetKdKeyVerificationError> {
         Ok(())
-    }
-}
-
-fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
-}
-
-fn empty_ni_dkg_dealing() -> NiDkgDealing {
-    NiDkgDealing {
-        internal_dealing: empty_ni_dkg_csp_dealing(),
     }
 }
