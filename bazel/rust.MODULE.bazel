@@ -1926,7 +1926,7 @@ crate.spec(
 )
 crate.spec(
     features = [
-        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library 
+        # By using the `static` feature the x2 crate configures the lzma-sys crate to use its embedded liblzma C library
         # instead of requiring liblzma to be installed in the environment.
         # See: https://github.com/alexcrichton/xz2-rs/blob/main/Cargo.toml#L33
         # See: https://github.com/alexcrichton/xz2-rs/blob/main/lzma-sys/build.rs
