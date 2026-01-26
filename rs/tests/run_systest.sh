@@ -50,10 +50,11 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
-# We want to ensure all runtime dependencies are specified using the `runtime_deps` argument of the system_test bazel macro.
-# Furthermore, we want to make it less likely tests reference their runtime dependencies using hard-coded paths.
-# Finally, in case of a colocated test, we want to ensure that all runtime dependencies can be easily copied to the colocated test-driver VM
-# and that the environment variables specified in runtime_deps keep working for the colocated test.
+# The folllowing accomplishes several goals:
+# * We want to ensure all runtime dependencies are specified using the `runtime_deps` argument of the system_test bazel macro.
+# * Furthermore, we want to make it less likely tests reference their runtime dependencies using hard-coded paths.
+# * Finally, in case of a colocated test, we want to ensure that all runtime dependencies can be easily copied to the colocated test-driver VM
+#   (for both bazel < 8 and >= 8) and that the environment variables specified in runtime_deps keep working for the colocated test.
 #
 # To implement the above we:
 # 1) Execute the test ($RUN_SCRIPT_TEST_EXECUTABLE) in a different directory than $PWD (we use $TEST_TMPDIR)
@@ -68,9 +69,12 @@ read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 #    So instead we create a flat directory under runfiles/ where the name of each symlink is
 #    the path to the dependency with `/` replaced by `-`. For example:
 #
-#    runfiles/external-_main~_repo_rules~btc_canister-file-ic-btc-canister.wasm.gz -> $RUNFILES_DIR/_main/external/_main~_repo_rules~btc_canister/file/ic-btc-canister.wasm.gz
 #    runfiles/ic-os-guestos-envs-dev-launch-measurements.json -> $RUNFILES_DIR/_main/ic-os/guestos/envs/dev/launch-measurements.json
 #    runfiles/rs-tests-cross_chain-btc_uvm_config_image.zst -> $RUNFILES_DIR/_main/rs/tests/cross_chain/btc_uvm_config_image.zst
+#    runfiles/external-_main~_repo_rules~btc_canister-file-ic-btc-canister.wasm.gz -> $RUNFILES_DIR/_main/external/_main~_repo_rules~btc_canister/file/ic-btc-canister.wasm.gz
+#
+#    With Bazel >= 8 that last symlink will be:
+#    runfiles/..-+_repo_rules2+btc_canister-file-ic-btc-canister.wasm.gz -> $RUNFILES_DIR/_main/../+_repo_rules2+btc_canister/file/ic-btc-canister.wasm.gz
 #
 RUNFILES="$TEST_TMPDIR/runfiles"
 mkdir "$RUNFILES"
