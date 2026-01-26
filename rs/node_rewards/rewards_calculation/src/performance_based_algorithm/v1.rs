@@ -33,6 +33,7 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const MAX_FAILURE_RATE: Decimal = dec!(0.6);
     const MIN_REWARDS_REDUCTION: Decimal = dec!(0);
     const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
+    const ALGORITHM_VERSION: u32 = 1;
 }
 
 impl AlgorithmVersion for RewardsCalculationV1 {

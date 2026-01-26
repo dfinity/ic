@@ -86,7 +86,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-trait PerformanceBasedAlgorithm: AlgorithmVersion {
+trait PerformanceBasedAlgorithm {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -103,6 +103,8 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
 
     /// The maximum rewards reduction for a node.
     const MAX_REWARDS_REDUCTION: Decimal;
+
+    const ALGORITHM_VERSION: u32;
 
     fn calculate_rewards(
         from_date: NaiveDate,
@@ -207,6 +209,18 @@ trait PerformanceBasedAlgorithm: AlgorithmVersion {
             &relative_nodes_failure_rate,
             &extrapolated_failure_rate,
         );
+
+        if Self::ALGORITHM_VERSION == 1 {
+            println!("Debug Info for Algorithm Version 2:");
+            println!("Rewardable Nodes: {:?}", rewardable_nodes);
+            println!(
+                "Relative Nodes Failure Rate: {:?}",
+                relative_nodes_failure_rate
+            );
+            println!("Extrapolated Failure Rate: {:?}", extrapolated_failure_rate);
+            println!("Reward Reduction: {:?}", reward_reduction);
+            println!("Performance Multiplier: {:?}", performance_multiplier);
+        }
 
         // Calculate base rewards for each node based on region and node type
         // Handles special logic for Type3 nodes (grouped by country, with reduction coefficients)
