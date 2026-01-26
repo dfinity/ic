@@ -8,7 +8,7 @@ then ic-crypto-csp.service will start before ic-replica.service, and ic-crypto-c
 Runbook::
 . Set up a subnet with a single node
 . Verify that ic-crypto-csp.service is listed in the After property of ic-replica.service using
-  systemctl show -p After
+  systemctl show ic-replica.service -p After
 
 Success:: The start ordering configuration is correct, ensuring proper start ordering (and implicitly,
 proper stop ordering as the reverse).
@@ -74,7 +74,7 @@ fn verify_crypto_vault_is_configured_to_start_after_ic_replica(
         "Verifying that {} is listed in the After property of {}", dependency, service
     );
 
-    let cmd = "systemctl show ic-replica.service -p After";
+    let cmd = format!("systemctl show {service} -p After");
     debug!(logger, "Executing via SSH: '{}'", cmd);
 
     let output = node
