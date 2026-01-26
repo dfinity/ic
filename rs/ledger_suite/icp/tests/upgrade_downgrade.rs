@@ -220,19 +220,21 @@ impl Setup {
     }
 
     fn upgrade_index_canister(&self, upgrade_to_version: UpgradeToVersion) {
-        let index_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => {
+        let (index_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (
                 std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
-                    .expect("Could not read mainnet index wasm")
-            }
-            UpgradeToVersion::Latest => {
+                    .expect("Could not read mainnet index wasm"),
+                vec![],
+            ),
+            UpgradeToVersion::Latest => (
                 std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
-                    .expect("Could not read index wasm")
-            }
+                    .expect("Could not read index wasm"),
+                Encode!(&None::<ic_icp_index::UpgradeArg>).unwrap(),
+            ),
         };
         let canister_id = candid::Principal::from(LEDGER_INDEX_CANISTER_ID);
         self.pocket_ic
-            .upgrade_canister(canister_id, index_wasm_bytes, vec![], None)
+            .upgrade_canister(canister_id, index_wasm_bytes, upgrade_arg, None)
             .unwrap();
         let expected_module_hash = mainnet_index_canister_sha256sum();
         self.assert_canister_module_hash(
