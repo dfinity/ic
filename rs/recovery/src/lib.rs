@@ -183,11 +183,11 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        let ic_admin = match env::var("IC_ADMIN_BIN").ok() {
+        let ic_admin = match env::var("IC_ADMIN_BIN") {
             // if IC_ADMIN_BIN is set, use that
-            Some(ic_admin_path) => PathBuf::from(ic_admin_path),
+            Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
             // Otherwise, either download ic-admin or use the one from 'binary_dir'
-            None => {
+            Err(std::env::VarError::NotPresent) => {
                 let local_ic_admin_path = binary_dir.join("ic-admin");
                 let local_ic_admin_exists = local_ic_admin_path.exists();
                 if !args.use_local_binaries {
@@ -217,6 +217,7 @@ impl Recovery {
                 }
                 local_ic_admin_path
             }
+            Err(e) => panic!("Could not read IC_ADMIN_BIN: {:?}", e),
         };
 
         let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
