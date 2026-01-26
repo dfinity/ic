@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use candid::{Nat, candid_method};
+use candid::Nat;
 use ic_cdk::api::call::{arg_data_raw, reply_raw};
 use ic_cdk::futures::internals::in_query_executor_context;
 use ic_cdk::{init, query, update};
@@ -27,7 +27,6 @@ fn next_block_id() -> u64 {
 }
 
 /// Add a decoded block to the ledger storage
-#[candid_method(update)]
 #[update]
 pub fn add_block(block: CandidBlock) -> AddBlockResult {
     let next_id = next_block_id();
@@ -42,7 +41,6 @@ pub fn add_block(block: CandidBlock) -> AddBlockResult {
 }
 
 /// Add a raw encoded block to the ledger storage
-#[candid_method(update)]
 #[update]
 pub fn add_raw_block(encoded_block: ByteBuf) -> AddBlockResult {
     let next_id = next_block_id();
@@ -54,7 +52,6 @@ pub fn add_raw_block(encoded_block: ByteBuf) -> AddBlockResult {
 }
 
 /// Query blocks in decoded form
-#[candid_method(query)]
 #[query]
 pub fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
     let chain_length = next_block_id();
@@ -89,7 +86,6 @@ pub fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBloc
 }
 
 /// Query blocks in encoded form
-#[candid_method(query)]
 #[query]
 pub fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
@@ -125,14 +121,12 @@ pub fn query_encoded_blocks(
 }
 
 /// Return archives (empty for test ledger)
-#[candid_method(query)]
 #[query]
 pub fn archives() -> icp_ledger::Archives {
     icp_ledger::Archives { archives: vec![] }
 }
 
 /// Return tip of chain (for compatibility with wait_until_sync_is_completed)
-#[candid_method(query)]
 #[query]
 pub fn tip_of_chain() -> icp_ledger::TipOfChainRes {
     let chain_length = next_block_id();
@@ -167,7 +161,7 @@ fn main() {}
 fn check_candid_interface() {
     use candid_parser::utils::{CandidSource, service_equal};
 
-    candid::export_service!();
+    ic_cdk::export_candid!();
 
     let new_interface = __export_service();
 
