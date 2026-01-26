@@ -417,7 +417,7 @@ fn split_inverted_routing_table(
 }
 
 /// Converts replicated state into a lazy tree.
-pub fn replicated_state_as_lazy_tree(height: Height, state: &ReplicatedState) -> LazyTree<'_> {
+pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
         MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version

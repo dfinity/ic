@@ -126,7 +126,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     let height = Height::new(0);
     assert_eq!(
         hash_state(height, &state).digest(),
-        hash_lazy_tree(&replicated_state_as_lazy_tree(height, &state))
+        hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height))
             .unwrap()
             .root_hash(),
     );
@@ -137,7 +137,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     c.bench_function("traverse/hash_tree_new", |b| {
         b.iter(|| {
-            black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(height, &state)).unwrap())
+            black_box(hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap())
         })
     });
 
@@ -225,7 +225,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/certify_response/100/new", |b| {
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(height, &state)).unwrap();
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
         b.iter(|| {
             black_box(
                 hash_tree
@@ -267,7 +267,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     group.bench_function(
         BenchmarkId::new("canonical_state::HashTree", NUM_STATUSES),
         |b| {
-            let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(height, &state)).unwrap();
+            let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height)).unwrap();
             b.iter_batched(|| hash_tree.clone(), std::mem::drop, BatchSize::LargeInput)
         },
     );

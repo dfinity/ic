@@ -33,7 +33,7 @@ fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::
 /// `state` for transmitting it over the network to another replica, compute a
 /// hash tree for certification or extract a specific value.
 pub fn traverse<V: Visitor>(height: Height, state: &ReplicatedState, mut v: V) -> V::Output {
-    let t = replicated_state_as_lazy_tree(height, state);
+    let t = replicated_state_as_lazy_tree(state, height);
     match traverse_lazy_tree(&t, &mut v) {
         Err(output) => output,
         _ => v.finish(),
