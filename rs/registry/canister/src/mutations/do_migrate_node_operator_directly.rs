@@ -106,6 +106,17 @@ impl Registry {
                 )
             })?;
 
+        // The caller must be the owner of both of the node operator
+        // records.
+        if caller.to_vec() != old_node_operator_record.node_provider_principal_id {
+            return Err(MigrateError::CallerMismatch {
+                caller,
+                expected: PrincipalId(Principal::from_slice(
+                    &old_node_operator_record.node_provider_principal_id,
+                )),
+            });
+        }
+
         // Check that the old operator was created at least MIGRATION_CAPACITY_INTERVAL ago
         // to prevent rapid empty operator migrations (spam prevention).
         let created_at = SystemTime::UNIX_EPOCH
@@ -166,17 +177,6 @@ impl Registry {
             return Err(MigrateError::DataCenterMismatch {
                 old: old_node_operator_record.dc_id.clone(),
                 new: new_node_operator_record.dc_id.clone(),
-            });
-        }
-
-        // The caller must be the owner of both of the node operator
-        // records.
-        if caller.to_vec() != old_node_operator_record.node_provider_principal_id {
-            return Err(MigrateError::CallerMismatch {
-                caller,
-                expected: PrincipalId(Principal::from_slice(
-                    &old_node_operator_record.node_provider_principal_id,
-                )),
             });
         }
 
@@ -511,7 +511,7 @@ mod tests {
 
         let resp = registry.migrate_node_operator_inner(
             payload,
-            PrincipalId::new_user_test_id(999),
+            old_node_provider_id,
             now_plus_13_hours(),
         );
 
@@ -563,11 +563,8 @@ mod tests {
         let expected_err: Result<(), MigrateError> =
             Err(MigrateError::DataCenterMismatch { old: dc1, new: dc2 });
 
-        let resp = registry.migrate_node_operator_inner(
-            payload,
-            PrincipalId::new_user_test_id(999),
-            now_plus_13_hours(),
-        );
+        let resp =
+            registry.migrate_node_operator_inner(payload, node_provider_id, now_plus_13_hours());
 
         assert_eq!(resp, expected_err)
     }
