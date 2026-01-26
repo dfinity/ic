@@ -180,11 +180,6 @@ uvm_config_image(
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
-filegroup(
-    name = "rosetta_workspace",
-    srcs = glob(["rosetta_workspace/*"]),
-)
-
 exports_files([
     "src/canister_http/universal_vm_activation.sh",
 ])
