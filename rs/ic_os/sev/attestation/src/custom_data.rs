@@ -1,5 +1,4 @@
 use der::Encode;
-use der::asn1::OctetStringRef;
 use sha2::{Digest, Sha256, Sha512};
 use std::error::Error;
 use std::fmt::Debug;
@@ -73,21 +72,6 @@ impl SevCustomData {
 impl PartialEq<[u8; 64]> for SevCustomData {
     fn eq(&self, other: &[u8; 64]) -> bool {
         self.verify(other)
-    }
-}
-
-/// Custom data for node registration attestation.
-///
-/// This struct binds the SEV attestation report to a specific node by including
-/// the node's signing public key.
-#[derive(der::Sequence, Debug, Eq, PartialEq, Clone)]
-pub struct NodeRegistrationAttestationCustomData<'a> {
-    pub node_signing_pk: OctetStringRef<'a>,
-}
-
-impl DerEncodedCustomData for NodeRegistrationAttestationCustomData<'_> {
-    fn namespace(&self) -> SevCustomDataNamespace {
-        SevCustomDataNamespace::NodeRegistration
     }
 }
 
@@ -211,24 +195,5 @@ mod test {
     fn test_equals() {
         let custom_data = SevCustomData::new(SevCustomDataNamespace::Test, [255; 32]);
         assert_eq!(custom_data, [255; 64]);
-    }
-
-    #[test]
-    fn test_node_registration_attestation_custom_data_is_stable() {
-        let node_signing_pk = OctetStringRef::new(&[1, 2, 3, 4]).unwrap();
-        let custom_data = NodeRegistrationAttestationCustomData { node_signing_pk };
-
-        assert_eq!(
-            &custom_data.encode_for_sev().unwrap().to_bytes(),
-            // These bytes must remain stable across versions.
-            &[
-                // namespace (NodeRegistration = 3)
-                3, 0, 0, 0, // padding (unused)
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                // SHA-256 hash of DER-encoded struct
-                208, 107, 21, 199, 109, 65, 223, 91, 162, 193, 177, 234, 169, 40, 88, 62, 244, 183,
-                111, 165, 157, 180, 157, 22, 132, 139, 138, 165, 242, 61, 38, 134,
-            ]
-        );
     }
 }

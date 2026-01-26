@@ -1,9 +1,6 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
-use attestation::{
-    attestation_package::{
-        AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
-    },
-    custom_data::NodeRegistrationAttestationCustomData,
+use attestation::attestation_package::{
+    AttestationPackageVerifier, ParsedSevAttestationPackage, SevRootCertificateVerification,
 };
 use der::asn1::OctetStringRef;
 #[cfg(target_arch = "wasm32")]
@@ -32,7 +29,7 @@ use crate::mutations::node_management::{
 };
 use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
-use ic_registry_canister_api::AddNodePayload;
+use ic_registry_canister_api::{AddNodePayload, NodeRegistrationAttestationCustomData};
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;

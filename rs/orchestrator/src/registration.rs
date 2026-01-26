@@ -5,7 +5,7 @@ use crate::{
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::http_endpoint_to_url,
 };
-use attestation::{SevAttestationPackage, custom_data::NodeRegistrationAttestationCustomData};
+use attestation::SevAttestationPackage;
 use candid::Encode;
 use ic_agent::{Agent, export::Principal};
 use ic_config::{
@@ -24,7 +24,9 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
+use ic_registry_canister_api::{
+    AddNodePayload, IPv4Config, NodeRegistrationAttestationCustomData, UpdateNodeDirectlyPayload,
+};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     subnet::{SubnetRegistry, SubnetTransportRegistry},
