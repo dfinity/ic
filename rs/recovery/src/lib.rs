@@ -193,11 +193,16 @@ impl Recovery {
 
                 if local_ic_admin_exists {
                     // env var not set, but local ic admin was found, so use that
-                    break 'no_var local_ic_admin_path
+                    break 'no_var local_ic_admin_path;
                 }
 
                 if let Some(version) = args.replica_version {
-                    block_on(download_binary( &logger, &version, String::from("ic-admin"), &binary_dir,))?;
+                    block_on(download_binary(
+                        &logger,
+                        &version,
+                        String::from("ic-admin"),
+                        &binary_dir,
+                    ))?;
 
                     // we expect 'download_binary' to download the binary to
                     // <binary_dir>/ic-admin
@@ -206,7 +211,10 @@ impl Recovery {
 
                 // the env var is not set, the binary does not exist locally and we have no version
                 // to download. We've exhausted all possibilities.
-                return Err(RecoveryError::UnexpectedError(format!( "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist", local_ic_admin_path)));
+                return Err(RecoveryError::UnexpectedError(format!(
+                    "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist",
+                    local_ic_admin_path
+                )));
             }
             Err(e) => panic!("Could not read IC_ADMIN_BIN: {:?}", e),
         };
