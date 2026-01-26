@@ -13,22 +13,16 @@ use serde_bytes::ByteBuf;
 use std::path::PathBuf;
 
 fn icp_test_ledger_wasm() -> Vec<u8> {
-    // In Bazel test environment, use the environment variable
-    if let Ok(wasm_path) = std::env::var("ICP_TEST_LEDGER_CANISTER_WASM_PATH") {
-        std::fs::read(wasm_path).expect("Failed to read test ledger WASM from environment variable")
-    } else {
-        // Fallback to load_wasm for local development
-        ic_test_utilities_load_wasm::load_wasm(
-            PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-                .parent()
-                .unwrap()
-                .parent()
-                .unwrap()
-                .join("test_utils/icp_test_ledger"),
-            "ic-icp-test-ledger",
-            &[],
-        )
-    }
+    ic_test_utilities_load_wasm::load_wasm(
+        PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("test_utils/icp_test_ledger"),
+        "ic-icp-test-ledger",
+        &[],
+    )
 }
 
 fn setup_icp_test_ledger() -> (StateMachine, CanisterId) {
