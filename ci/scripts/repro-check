@@ -966,12 +966,12 @@ class ReproducibilityVerifier:
             recovery_downloads = self.start_cdn_downloads_for_os("recovery-guestos", dirs) if self.verify_recovery else []
             build = self.download_executor.submit(self.build_locally, dirs)
 
+            # Environment checks can happen while downloads progress
+            self.check_environment()
+
             if dry_run:
                 logger.info("Dry-run mode enabled, exiting now.")
                 return
-
-            # Environment checks can happen while downloads progress
-            self.check_environment()
 
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
