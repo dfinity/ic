@@ -3848,7 +3848,6 @@ dependencies = [
  "rolling-file",
  "rsa",
  "rstest",
- "rusb",
  "rusqlite",
  "rust-ini",
  "rust_decimal",
@@ -7976,18 +7975,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libusb1-sys"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9d0e2afce4245f2c9a418511e5af8718bcaf2fa408aefb259504d1a9cb25f27"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "vcpkg",
-]
-
-[[package]]
 name = "libz-sys"
 version = "1.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11525,16 +11512,6 @@ dependencies = [
  "rustc_version",
  "syn 2.0.110",
  "unicode-ident",
-]
-
-[[package]]
-name = "rusb"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45fff149b6033f25e825cbb7b2c625a11ee8e6dac09264d49beb125e39aa97bf"
-dependencies = [
- "libc",
- "libusb1-sys",
 ]
 
 [[package]]

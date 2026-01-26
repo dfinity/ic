@@ -1,5 +1,5 @@
 {
-  "checksum": "d996fc64e0942cbf002d9c18dbec3cafb32d1c56fb3d3c54ebec17c258f70912",
+  "checksum": "41969968c7ddafe4e269a131fe149855398b2d49bdc474ba83e33f388b2b29b5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22208,10 +22208,6 @@
             {
               "id": "rstest 0.19.0",
               "target": "rstest"
-            },
-            {
-              "id": "rusb 0.9.3",
-              "target": "rusb"
             },
             {
               "id": "rusqlite 0.37.0",
@@ -45832,101 +45828,6 @@
       ],
       "license_file": null
     },
-    "libusb1-sys 0.6.4": {
-      "name": "libusb1-sys",
-      "version": "0.6.4",
-      "package_url": "https://github.com/a1ien/rusb.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/libusb1-sys/0.6.4/download",
-          "sha256": "f9d0e2afce4245f2c9a418511e5af8718bcaf2fa408aefb259504d1a9cb25f27"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "libusb1_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "libusb1_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.177",
-              "target": "libc"
-            },
-            {
-              "id": "libusb1-sys 0.6.4",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.6.4"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.2.48",
-              "target": "cc"
-            },
-            {
-              "id": "pkg-config 0.3.32",
-              "target": "pkg_config"
-            }
-          ],
-          "selects": {
-            "cfg(target_env = \"msvc\")": [
-              {
-                "id": "vcpkg 0.2.15",
-                "target": "vcpkg"
-              }
-            ]
-          }
-        },
-        "links": "usb-1.0"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "libz-sys 1.1.9": {
       "name": "libz-sys",
       "version": "1.1.9",
@@ -68163,93 +68064,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "rusb 0.9.3": {
-      "name": "rusb",
-      "version": "0.9.3",
-      "package_url": "https://github.com/a1ien/rusb.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/rusb/0.9.3/download",
-          "sha256": "45fff149b6033f25e825cbb7b2c625a11ee8e6dac09264d49beb125e39aa97bf"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rusb",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "rusb",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "libc 0.2.177",
-              "target": "libc"
-            },
-            {
-              "id": "libusb1-sys 0.6.4",
-              "target": "libusb1_sys"
-            },
-            {
-              "id": "rusb 0.9.3",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.9.3"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "link_deps": {
-          "common": [
-            {
-              "id": "libusb1-sys 0.6.4",
-              "target": "libusb1_sys"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "rusqlite 0.37.0": {
       "name": "rusqlite",
@@ -98674,7 +98488,6 @@
     "rolling-file 0.2.0",
     "rsa 0.9.10",
     "rstest 0.19.0",
-    "rusb 0.9.3",
     "rusqlite 0.37.0",
     "rust-ini 0.21.2",
     "rust_decimal 1.36.0",
