@@ -217,7 +217,6 @@ else
     eprintln "No ssh-agent to forward."
 fi
 
-
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
 # every byte of standard output to the journal, and that
