@@ -104,7 +104,7 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
         echo "Using hoststorage for podman root."
         CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
     else
-        CONTAINER_CMD=(sudo podman)
+        CONTAINER_CMD=(podman)
     fi
 fi
 
@@ -167,12 +167,7 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 
-# don't use IDMAP if running as root user
-if [ "$(id -u)" -eq 0 ]; then
-    IDMAP=""
-else
-    IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-fi
+IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
