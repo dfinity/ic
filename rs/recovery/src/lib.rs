@@ -187,16 +187,13 @@ impl Recovery {
             // if IC_ADMIN_BIN is set, use that
             Ok(ic_admin_path) => PathBuf::from(ic_admin_path),
             // Otherwise, either download ic-admin or use the one from 'binary_dir'
-            Err(std::env::VarError::NotPresent) => 'no_var: {
+            Err(std::env::VarError::NotPresent) => {
                 let local_ic_admin_path = binary_dir.join("ic-admin");
-                let local_ic_admin_exists = local_ic_admin_path.exists();
 
-                if local_ic_admin_exists {
+                if local_ic_admin_path.exists() {
                     // env var not set, but local ic admin was found, so use that
-                    break 'no_var local_ic_admin_path;
-                }
-
-                if let Some(version) = args.replica_version {
+                    local_ic_admin_path
+                } else if let Some(version) = args.replica_version {
                     block_on(download_binary(
                         &logger,
                         &version,
@@ -206,15 +203,15 @@ impl Recovery {
 
                     // we expect 'download_binary' to download the binary to
                     // <binary_dir>/ic-admin
-                    break 'no_var local_ic_admin_path;
-                }
-
-                // the env var is not set, the binary does not exist locally and we have no version
-                // to download. We've exhausted all possibilities.
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist",
                     local_ic_admin_path
-                )));
+                } else {
+                    // the env var is not set, the binary does not exist locally and we have no version
+                    // to download. We've exhausted all possibilities.
+                    return Err(RecoveryError::UnexpectedError(format!(
+                                "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist",
+                                local_ic_admin_path
+                    )));
+                }
             }
             Err(e) => panic!("Could not read IC_ADMIN_BIN: {:?}", e),
         };
