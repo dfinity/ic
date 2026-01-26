@@ -37,6 +37,7 @@ fn stream_encode_decode_roundtrip(
     ));
 
     let tree_encoding = encode_stream_slice(
+        Height::new(0),
         &state,
         subnet,
         stream_slice.header().begin(),
@@ -73,6 +74,7 @@ fn stream_encode_with_size_limit(
     state.metadata.certification_version = MAX_SUPPORTED_CERTIFICATION_VERSION;
 
     let tree_encoding = encode_stream_slice(
+        Height::new(0),
         &state,
         subnet,
         stream_slice.header().begin(),

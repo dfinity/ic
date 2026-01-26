@@ -208,7 +208,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (public_key, pop, key_set) = gen_dealing_encryption_key_pair_from_seed(node_id, seed);
         let key_id = KeyId::from(&public_key);
         let secret_key = CspSecretKey::FsEncryption(key_set);
-        let public_key_proto = dkg_dealing_encryption_pk_to_proto(public_key, pop);
+        let mut public_key_proto = dkg_dealing_encryption_pk_to_proto(public_key, pop);
+        self.set_timestamp(&mut public_key_proto);
         let valid_public_key = validate_dealing_encryption_public_key(node_id, public_key_proto)?;
         self.store_dealing_encryption_key_pair(key_id, secret_key, valid_public_key.get().clone())?;
         Ok((public_key, pop))
