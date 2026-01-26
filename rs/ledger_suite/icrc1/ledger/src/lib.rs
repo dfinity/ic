@@ -521,8 +521,6 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
-
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<AccountSpender, StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
@@ -542,21 +540,6 @@ thread_local! {
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
     static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerField {
-    Allowances,
-    AllowancesExpirations,
-    Balances,
-    Blocks,
-}
-
-#[derive(Copy, Clone, Serialize, Deserialize, Debug, Default)]
-pub enum LedgerState {
-    Migrating(LedgerField),
-    #[default]
-    Ready,
 }
 
 type StableLedgerBalances = Balances<StableBalances>;
