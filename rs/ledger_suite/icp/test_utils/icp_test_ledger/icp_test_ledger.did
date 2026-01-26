@@ -1,6 +1,7 @@
 // ICP Test Ledger Candid Interface
 
 // Reuse types from the ICP ledger interface - must match ledger.did exactly
+// (enforced by check_shared_types_match_ledger test in main.rs)
 type BlockIndex = nat64;
 type TimeStamp = record { timestamp_nanos : nat64 };
 type Tokens = record { e8s : nat64 };

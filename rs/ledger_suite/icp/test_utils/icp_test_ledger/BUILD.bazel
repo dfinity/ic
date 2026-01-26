@@ -43,6 +43,7 @@ rust_test(
     crate = ":_wasm_icp_test_ledger_canister",
     data = [
         ":icp_test_ledger.did",
+        "//rs/ledger_suite/icp:ledger.did",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/test_utils/icp_test_ledger",

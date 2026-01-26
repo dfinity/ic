@@ -185,3 +185,65 @@ fn check_candid_interface() {
         )
     });
 }
+
+#[test]
+fn check_shared_types_match_ledger() {
+    use candid::types::subtype::equal;
+    use candid_parser::utils::CandidSource;
+
+    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let ledger_did_file = manifest_dir.join("../../ledger.did");
+    let test_ledger_did_file = manifest_dir.join("icp_test_ledger.did");
+
+    let mut ledger_env = CandidSource::File(ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+    let test_ledger_env = CandidSource::File(test_ledger_did_file.as_path())
+        .load()
+        .unwrap()
+        .0;
+
+    // Types that must match exactly between icp_test_ledger.did and ledger.did
+    let shared_types = [
+        "BlockIndex",
+        "TimeStamp",
+        "Tokens",
+        "AccountIdentifier",
+        "SubAccount",
+        "Memo",
+        "Operation",
+        "Transaction",
+        "Block",
+        "GetBlocksArgs",
+        "QueryArchiveError",
+        "ArchivedBlocksRange",
+        "QueryBlocksResponse",
+        "ArchivedEncodedBlocksRange",
+        "QueryEncodedBlocksResponse",
+        "Archive",
+        "Archives",
+        "TipOfChainRes",
+    ];
+
+    for type_name in shared_types {
+        let ledger_type = ledger_env
+            .find_type(type_name)
+            .unwrap_or_else(|_| panic!("Type '{}' not found in ledger.did", type_name))
+            .to_owned();
+        let test_ledger_type = test_ledger_env
+            .find_type(type_name)
+            .unwrap_or_else(|_| panic!("Type '{}' not found in icp_test_ledger.did", type_name))
+            .to_owned();
+
+        let mut gamma = std::collections::HashSet::new();
+        let merged_type = ledger_env.merge_type(test_ledger_env.clone(), test_ledger_type);
+
+        equal(&mut gamma, &ledger_env, &ledger_type, &merged_type).unwrap_or_else(|e| {
+            panic!(
+                "Type '{}' in icp_test_ledger.did does not match ledger.did: {:?}",
+                type_name, e
+            )
+        });
+    }
+}
