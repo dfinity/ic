@@ -11,6 +11,7 @@ pub struct SevAttestationPackage {
     /// Opaque bytes containing the SEV attestation report. Can be parsed using
     /// sev::firmware::guest::AttestationReport::from_bytes.
     #[prost(bytes = "vec", optional, tag = "1")]
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub attestation_report: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(message, optional, tag = "2")]
     pub certificate_chain: ::core::option::Option<SevCertificateChain>,

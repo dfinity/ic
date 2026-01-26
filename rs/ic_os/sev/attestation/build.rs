@@ -10,6 +10,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ".",
         "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
+    // Speed up deserialization of `opt blob`/`Option<Vec<u8>>` fields.
+    config.field_attribute(
+        "attestation.SevAttestationPackage.attestation_report",
+        r#"#[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]"#,
+    );
     config.compile_protos(
         &[manifest_path.join("proto/attestation.proto")],
         &[manifest_path],

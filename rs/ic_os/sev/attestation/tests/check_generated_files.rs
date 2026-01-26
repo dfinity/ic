@@ -8,6 +8,11 @@ fn generate_prost_files(proto_dir: &std::path::Path, out_dir: &std::path::Path) 
         ".",
         "#[derive(candid::CandidType, candid::Deserialize, serde::Serialize)]",
     );
+    // Speed up deserialization of `opt blob`/`Option<Vec<u8>>` fields.
+    config.field_attribute(
+        "attestation.SevAttestationPackage.attestation_report",
+        r#"#[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]"#,
+    );
     config
         .compile_protos(&[proto_dir.join("attestation.proto")], &[proto_dir])
         .expect("Failed to compile protos");

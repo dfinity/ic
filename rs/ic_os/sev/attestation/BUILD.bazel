@@ -37,6 +37,7 @@ rust_library(
         "//rs/protobuf",
         "//rs/registry/helpers",
         "//rs/types/types",
+        "//rs/utils",
         "@crate_index//:candid",
         "@crate_index//:der",
         "@crate_index//:hex",
