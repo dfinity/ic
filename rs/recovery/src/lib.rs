@@ -183,26 +183,42 @@ impl Recovery {
             wait_for_confirmation(&logger);
         }
 
-        if !args.use_local_binaries && !binary_dir.join("ic-admin").exists() {
-            if let Some(version) = args.replica_version {
-                block_on(download_binary(
-                    &logger,
-                    &version,
-                    String::from("ic-admin"),
-                    &binary_dir,
-                ))?;
-            } else {
-                info!(logger, "No ic-admin version provided, skipping download.");
+        let ic_admin = match env::var("IC_ADMIN_BIN").ok() {
+            // if IC_ADMIN_BIN is set, use that
+            Some(ic_admin_path) => PathBuf::from(ic_admin_path),
+            // Otherwise, either download ic-admin or use the one from 'binary_dir'
+            None => {
+                let local_ic_admin_path = binary_dir.join("ic-admin");
+                let local_ic_admin_exists = local_ic_admin_path.exists();
+                if !args.use_local_binaries {
+                    if local_ic_admin_exists {
+                        return Err(RecoveryError::UnexpectedError(format!(
+                            "cannot download ic-admin, would overwrite {:?}",
+                            local_ic_admin_path
+                        )));
+                    }
+                    if let Some(version) = args.replica_version {
+                        block_on(download_binary(
+                            &logger,
+                            &version,
+                            String::from("ic-admin"),
+                            &binary_dir,
+                        ))?;
+                    } else {
+                        info!(logger, "No ic-admin version provided, skipping download.");
+                    }
+                } else if !local_ic_admin_exists {
+                    return Err(RecoveryError::UnexpectedError(format!(
+                        "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is false, and '{:?}' does not exist",
+                        local_ic_admin_path
+                    )));
+                } else {
+                    info!(logger, "using local ic admin '{:?}'", local_ic_admin_path);
+                }
+                local_ic_admin_path
             }
-        } else {
-            info!(logger, "ic-admin exists, skipping download.");
-        }
-
-        let ic_admin = if args.use_local_binaries {
-            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
-        } else {
-            binary_dir.join("ic-admin")
         };
+
         let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {

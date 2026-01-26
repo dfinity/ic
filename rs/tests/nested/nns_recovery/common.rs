@@ -253,9 +253,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ));
     }
 
-    let recovery_dir = get_dependency_path("rs/tests");
+    set_sandbox_env_vars();
+
     let output_dir = env.get_path("recovery_output");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
@@ -330,6 +330,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
