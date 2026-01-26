@@ -167,7 +167,12 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
 SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 
-IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
+# don't use IDMAP if running as root user
+if [ "$(id -u)" -eq 0 ]; then
+    IDMAP=""
+else
+    IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
+fi
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
