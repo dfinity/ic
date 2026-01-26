@@ -65,9 +65,9 @@ while test $# -gt 0; do
 done
 
 if [ $IMAGE_NAME == "ic-build" ]; then
-    BUILD_TARGET="--build"
+    BUILD_TARGET="build"
 elif [ $IMAGE_NAME == "ic-dev" ]; then
-    BUILD_TARGET="--dev"
+    BUILD_TARGET="dev"
 else
     echo "Unknown image name: $IMAGE_NAME" >&2
     usage >&2
