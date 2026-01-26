@@ -9,7 +9,8 @@ export -n \
     RUN_SCRIPT_UPLOAD_SYSTEST_DEP \
     RUN_SCRIPT_TEST_EXECUTABLE \
     RUN_SCRIPT_ENV_VAR_FILES \
-    RUN_SCRIPT_DRIVER_EXTRA_ARGS
+    RUN_SCRIPT_DRIVER_EXTRA_ARGS \
+    RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
 # RUN_SCRIPT_ICOS_IMAGES:
 # For every ic-os image specified, first ensure it's in remote
@@ -50,40 +51,22 @@ mkdir "$TEST_TMPDIR/root_env" # farm needs this directory to exist
 # prepare the args for the test driver
 read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 
-# The folllowing accomplishes several goals:
-# * We want to ensure all runtime dependencies are specified using the `runtime_deps` argument of the system_test bazel macro.
-# * Furthermore, we want to make it less likely tests reference their runtime dependencies using hard-coded paths.
-# * Finally, in case of a colocated test, we want to ensure that all runtime dependencies can be easily copied to the colocated test-driver VM
-#   (for both bazel < 8 and >= 8) and that the environment variables specified in runtime_deps keep working for the colocated test.
-#
-# To implement the above we:
-# 1) Execute the test ($RUN_SCRIPT_TEST_EXECUTABLE) in a different directory than $PWD (we use $TEST_TMPDIR)
-#    to ensure hard-coded relative path references to Bazel's standard runfiles don't work
-#    and have to be replaced by reading an environment variable specified in runtime_deps.
-# 2) Create a "runfiles" directory in $TEST_TMPDIR containing symlinks to all runtime dependencies specified via runtime_deps.
-# 3) Re-export the environment variables from runtime_deps to point to the new location under runfiles/.
-# 4) How to name the symlinks? We could have recreated the same directory hierarchy under runfiles/ as Bazel's runfiles tree.
-#    However, in bazel >= 8 runtime dependencies to external repos are not stored under $PWD anymore,
-#    as in $(rootpath @repo//target) yields a path containing `..`s.
-#    This would have made recreating the directory hierarchy impossible.
-#    So instead we create a flat directory under runfiles/ where the name of each symlink is
-#    the path to the dependency with `/` replaced by `-`. For example:
-#
-#    runfiles/ic-os-guestos-envs-dev-launch-measurements.json -> $RUNFILES_DIR/_main/ic-os/guestos/envs/dev/launch-measurements.json
-#    runfiles/rs-tests-cross_chain-btc_uvm_config_image.zst -> $RUNFILES_DIR/_main/rs/tests/cross_chain/btc_uvm_config_image.zst
-#    runfiles/external-_main~_repo_rules~btc_canister-file-ic-btc-canister.wasm.gz -> $RUNFILES_DIR/_main/external/_main~_repo_rules~btc_canister/file/ic-btc-canister.wasm.gz
-#
-#    With Bazel >= 8 that last symlink will be:
-#    runfiles/..-+_repo_rules2+btc_canister-file-ic-btc-canister.wasm.gz -> $RUNFILES_DIR/_main/../+_repo_rules2+btc_canister/file/ic-btc-canister.wasm.gz
-#
-RUNFILES="$TEST_TMPDIR/runfiles"
-mkdir "$RUNFILES"
-IFS=';' read -ra runtime_dep_env_vars <<<"$RUNTIME_DEP_ENV_VARS"
+# To force system-tests to specify all their runtime dependencies using the runtime_deps parameter
+# we execute the test in $TEST_TMPDIR such that relative paths to bazel's runfiles directory fail to work.
+# Instead we create a $TEST_TMPDIR/runtime_deps directory, symlink all runtime dependencies there
+# and reset the runtime_deps environment variables to point to the symlinks.
+RUNTIME_DEPS="$TEST_TMPDIR/runtime_deps"
+mkdir "$RUNTIME_DEPS"
+IFS=';' read -ra runtime_dep_env_vars <<<"$RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep="${!env_var}"
-    new_dep="$(sed 's|/|-|g' <<<"$old_dep")"
-    ln -sf "$PWD/$old_dep" "$RUNFILES/$new_dep"
-    export "$env_var=runfiles/$new_dep"
+    # The name of the symlink contains the hash of the $old_dep path to avoid name clashes.
+    old_dep_hash="$(sha256sum <<<"$old_dep" | cut -d' ' -f1)"
+    old_dep_name="$(basename "$old_dep")"
+    new_dep="$old_dep_hash-$old_dep_name"
+    echo "Linking runtime dependency for $env_var: runtime_deps/$new_dep -> $old_dep" >&2
+    ln -sf "$PWD/$old_dep" "$RUNTIME_DEPS/$new_dep"
+    export "$env_var=runtime_deps/$new_dep"
 done
 
 if [ -n "${COLOCATE_UVM_CONFIG_IMAGE_PATH:-}" ]; then

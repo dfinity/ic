@@ -1433,7 +1433,6 @@ impl HasIcName for IcNodeSnapshot {
     }
 }
 
-// TODO: remove this function and replace all remaining occurrences with get_dependency_path_from_env.
 pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
     p.as_ref().to_path_buf()
 }

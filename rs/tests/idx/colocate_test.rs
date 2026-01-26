@@ -28,7 +28,7 @@ use std::time::Duration;
 const UVM_NAME: &str = "colocated-test-driver";
 const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
 
-pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
+pub const RUNTIME_DEPS_TAR_ZST: &str = "runtime_deps.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
@@ -82,24 +82,24 @@ fn setup(env: TestEnv) {
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
-    // Create a tarball of the runfiles (runtime dependencies) such that they can be copied to the UVM.
-    let runfiles_tar_path = env.get_path(RUNFILES_TAR_ZST);
-    info!(log, "Creating {runfiles_tar_path:?} ...");
+    // Create a tarball of the runtime dependencies such that they can be copied to the UVM.
+    let runtime_deps_tar_path = env.get_path(RUNTIME_DEPS_TAR_ZST);
+    info!(log, "Creating {runtime_deps_tar_path:?} ...");
     let output = Command::new("tar")
         .arg("--create")
         .arg("--file")
-        .arg(&runfiles_tar_path)
+        .arg(&runtime_deps_tar_path)
         .arg("--auto-compress")
         .arg("--directory")
-        .arg("runfiles")
+        .arg("runtime_deps")
         .arg("--dereference")
         .arg(".")
         .output()
-        .unwrap_or_else(|e| panic!("Failed to tar the runfiles directory because: {e}"));
+        .unwrap_or_else(|e| panic!("Failed to tar the runtime_deps directory because: {e}"));
 
     if !output.status.success() {
         let err = str::from_utf8(&output.stderr).unwrap_or("");
-        panic!("Tarring the runfiles directory failed with error: {err}");
+        panic!("Tarring the runtime_deps directory failed with error: {err}");
     }
 
     // Create a tarball of some required files in the environment directory such that they can be copied to the UVM.
@@ -134,8 +134,8 @@ fn setup(env: TestEnv) {
     scp_send_to(
         log.clone(),
         &session,
-        &runfiles_tar_path,
-        &Path::new("/home/admin").join(RUNFILES_TAR_ZST),
+        &runtime_deps_tar_path,
+        &Path::new("/home/admin").join(RUNTIME_DEPS_TAR_ZST),
         0o644,
     );
     scp_send_to(
@@ -252,7 +252,7 @@ set -e
 
 # Unpack uploaded tarballs under /home/admin/test which will become the test's working directory:
 mkdir -p /home/admin/test
-tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/test/runfiles"
+tar -xf /home/admin/{RUNTIME_DEPS_TAR_ZST} --one-top-level="/home/admin/test/runtime_deps"
 tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level="/home/admin/test/root_env"
 chmod 700 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
 chmod 600 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
@@ -283,7 +283,7 @@ docker run \
   --env-file /home/admin/env_vars \
   "${{DOCKER_RUN_ARGS[@]}}" \
   ubuntu_test_runtime:image \
-  /home/root/test/{colocated_test_bin} \
+  '/home/root/test/{colocated_test_bin}' \
     --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
