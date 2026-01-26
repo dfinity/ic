@@ -508,7 +508,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
     // canister1 is created with `memory_used` memory allocation;
     // => SubnetAvailableMemory decreases by `memory_used`
     // after canister1 is created and then SubnetAvailableMemory is equal to
-    // `memory_capacity - memory_used`; we want this quantity to be `canister_history_memory + 10 * mb`
+    // `memory_capacity - memory_used`; we want this quantity to be `canister_history_memory + 10 * mib`
     // and derive the value of `memory_used` from there.
     let memory_used = memory_capacity - (canister_history_memory + 10 * mib);
 
