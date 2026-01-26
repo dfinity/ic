@@ -1327,7 +1327,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .global_timer
                 .to_nanos_since_unix_epoch(),
-            canister_version: canister_state.system_state.canister_version,
+            canister_version: canister_state.system_state.canister_version(),
             consumed_cycles_by_use_cases: canister_state
                 .system_state
                 .canister_metrics
@@ -1344,7 +1344,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
-            next_snapshot_id: canister_state.system_state.next_snapshot_id,
+            next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             environment_variables: canister_state
                 .system_state

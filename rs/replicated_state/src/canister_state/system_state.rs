@@ -323,7 +323,7 @@ pub struct SystemState {
     pub global_timer: CanisterTimer,
 
     /// Canister version.
-    pub canister_version: u64,
+    canister_version: u64,
 
     /// Canister history.
     #[validate_eq(CompareWithValidateEq)]
@@ -350,7 +350,7 @@ pub struct SystemState {
     pub wasm_memory_limit: Option<NumBytes>,
 
     /// Next local snapshot id.
-    pub next_snapshot_id: u64,
+    next_snapshot_id: u64,
 
     /// Cumulative memory usage of all snapshots that belong to this canister.
     ///
@@ -666,6 +666,14 @@ impl SystemState {
         self.canister_id
     }
 
+    pub fn canister_version(&self) -> u64 {
+        self.canister_version
+    }
+
+    pub fn bump_canister_version(&mut self) {
+        self.canister_version += 1;
+    }
+
     /// Returns the amount of cycles that the balance holds.
     pub fn balance(&self) -> Cycles {
         self.cycles_balance
@@ -703,6 +711,10 @@ impl SystemState {
         let local_snapshot_id = self.next_snapshot_id;
         self.next_snapshot_id += 1;
         local_snapshot_id
+    }
+
+    pub fn next_snapshot_id(&self) -> u64 {
+        self.next_snapshot_id
     }
 
     /// Records the given amount as debit that will be charged from the balance
