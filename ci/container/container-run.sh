@@ -160,7 +160,7 @@ trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}" "${BAZELRC_FILE}"' EXIT
 SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 BAZELRC_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=bazelrc)
-echo "common --color=yes" > "${BAZELRC_FILE}"
+echo "common --color=yes" >"${BAZELRC_FILE}"
 
 IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
 
