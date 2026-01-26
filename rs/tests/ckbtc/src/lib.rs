@@ -33,7 +33,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationBuilder, SshSession, SubnetSnapshot, get_dependency_path,
+            NnsInstallationBuilder, SshSession, SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -43,7 +43,6 @@ use ic_types::Height;
 use icp_ledger::ArchiveOptions;
 use slog::{Logger, info};
 use std::{
-    env,
     net::{IpAddr, Ipv6Addr, SocketAddr},
     str::FromStr,
     time::Duration,
@@ -173,9 +172,7 @@ fn adapter_test_config<Network: IcRpcClientType>(env: TestEnv) {
 
 fn setup_bitcoind_uvm<Network: IcRpcClientType>(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_img(get_dependency_path(
-            env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
-        ))
+        .with_config_img(get_dependency_path_from_env("CKBTC_UVM_CONFIG_PATH"))
         .enable_ipv4()
         .start(env)
         .expect("failed to setup universal VM");
@@ -414,6 +411,7 @@ pub async fn install_minter(
     let args = CkbtcMinterInitArgs {
         btc_network: ic_ckbtc_minter::Network::Regtest,
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
+        deposit_btc_min_amount: None,
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
         max_time_in_queue_nanos,
@@ -432,9 +430,7 @@ pub async fn install_minter(
 
     install_rust_canister_from_path(
         canister,
-        get_dependency_path(
-            env::var("IC_CKBTC_MINTER_WASM_PATH").expect("IC_CKBTC_MINTER_WASM_PATH not set"),
-        ),
+        get_dependency_path_from_env("IC_CKBTC_MINTER_WASM_PATH"),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
@@ -495,9 +491,7 @@ pub async fn install_btc_checker(
 
     install_rust_canister_from_path(
         btc_checker_canister,
-        get_dependency_path(
-            env::var("IC_BTC_CHECKER_WASM_PATH").expect("IC_BTC_CHECKER_WASM_PATH not set"),
-        ),
+        get_dependency_path_from_env("IC_BTC_CHECKER_WASM_PATH"),
         Some(Encode!(&init_args).unwrap()),
     )
     .await;
@@ -566,7 +560,7 @@ pub async fn install_bitcoin_canister_with_network(
 
     install_rust_canister_from_path(
         &mut bitcoin_canister,
-        get_dependency_path(env::var("BTC_WASM_PATH").expect("BTC_WASM_PATH not set")),
+        get_dependency_path_from_env("BTC_WASM_PATH"),
         Some(Encode!(&args).unwrap()),
     )
     .await;
@@ -630,7 +624,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
 pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {
     install_rust_canister_from_path(
         canister,
-        get_dependency_path(env::var("LEDGER_WASM_PATH").expect("LEDGER_WASM_PATH not set")),
+        get_dependency_path_from_env("LEDGER_WASM_PATH"),
         Some(Encode!(&args).unwrap()),
     )
     .await
