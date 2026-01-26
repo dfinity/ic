@@ -34,6 +34,9 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
       - name: Setup podman
         shell: bash
         run: |
@@ -80,6 +83,6 @@ jobs:
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           sudo -u ubuntu bash -c '
-            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
+            ci/scripts/repro-check |
             python3 - -c ${{ inputs.github_sha || github.sha }} $DRY_RUN
           '
