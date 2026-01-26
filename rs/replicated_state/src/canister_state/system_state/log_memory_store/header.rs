@@ -8,7 +8,7 @@ pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(super) struct Header {
     // Validation and compatibility.
     pub magic: [u8; 3],

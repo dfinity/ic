@@ -1149,8 +1149,8 @@ fn stable_grow_updates_subnet_available_memory() {
 
 #[test]
 fn stable_grow_returns_allocated_memory_on_error() {
-    const KIB: u64 = 1024;
-    const GIB: u64 = KIB * KIB * KIB;
+    const KB: u64 = 1024;
+    const GB: u64 = KB * KB * KB;
 
     // Create a canister which already has stable memory too big for the 32-bit
     // API.
@@ -1159,7 +1159,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         .universal_canister_with_cycles(Cycles::new(100_000_000_000_000))
         .unwrap();
     let payload = wasm()
-        .stable64_grow((4 * GIB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
+        .stable64_grow((4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
         .int64_to_blob()
         .append_and_reply()
         .build();

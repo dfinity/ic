@@ -10,6 +10,9 @@ use std::cell::Cell;
 
 pub(super) struct StructIO {
     buffer: Buffer,
+    /// Caches the header for the lifetime of the `StructIO` instance (typically
+    /// one high-level operation), avoiding repeated `PageMap` reads during
+    /// complex operations like `append_log`.
     cache_header: Cell<Option<Header>>,
 }
 
@@ -503,5 +506,25 @@ mod tests {
         // So we expect data at custom_offset + 20.
         let (content, _) = io.read_raw_bytes::<5>(custom_offset + MemorySize::new(20));
         assert_eq!(&content, b"hello");
+    }
+
+    #[test]
+    fn test_struct_io_cache_reused() {
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        // Initial state
+        let header = Header::new(MemorySize::new(1024));
+        io.save_header(&header);
+
+        // Load header - should populate cache
+        let loaded_header = io.load_header();
+        assert_eq!(loaded_header.data_capacity.get(), 1024);
+
+        // Manually overwrite cache with a fake header.
+        // This proves that load_header() uses the cache instead of reading from page map.
+        let header_fake = Header::new(MemorySize::new(9999));
+        io.cache_header.set(Some(header_fake));
+
+        let loaded = io.load_header();
+        assert_eq!(loaded.data_capacity.get(), 9999);
     }
 }

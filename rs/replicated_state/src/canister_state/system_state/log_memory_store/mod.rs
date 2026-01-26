@@ -5,15 +5,22 @@ mod memory;
 mod ring_buffer;
 mod struct_io;
 
+#[cfg(test)]
+use crate::canister_state::system_state::log_memory_store::ring_buffer::HEADER_SIZE;
 use crate::canister_state::system_state::log_memory_store::{
+    header::Header,
     memory::MemorySize,
     ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
 };
+
+#[cfg(test)]
+use crate::page_map::PAGE_SIZE;
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -26,6 +33,11 @@ const DELTA_LOG_SIZES_CAP: usize = 10_000;
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     page_map: PageMap,
+
+    /// Cache of the ring buffer header to avoid unnecessary PageMap reads.
+    /// It is invalid if `None`.
+    #[validate_eq(Ignore)]
+    cache_header: Cell<Option<Header>>,
 
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
@@ -51,6 +63,7 @@ impl LogMemoryStore {
     fn new_inner(page_map: PageMap) -> Self {
         Self {
             page_map,
+            cache_header: Cell::new(None),
             delta_log_sizes: VecDeque::new(),
         }
     }
@@ -58,6 +71,7 @@ impl LogMemoryStore {
     pub fn from_checkpoint(page_map: PageMap) -> Self {
         Self {
             page_map,
+            cache_header: Cell::new(None),
             delta_log_sizes: VecDeque::new(),
         }
     }
@@ -67,6 +81,8 @@ impl LogMemoryStore {
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
+        // Invalidate the cache as the underlying PageMap might change.
+        self.cache_header.set(None);
         &mut self.page_map
     }
 
@@ -74,6 +90,19 @@ impl LogMemoryStore {
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
+        // Invalidate the cache as the page map has changed.
+        self.cache_header.set(None);
+    }
+
+    /// Returns the header of the ring buffer, if it exists.
+    fn header(&self) -> Option<Header> {
+        if let Some(header) = self.cache_header.get() {
+            return Some(header);
+        }
+        let rb = self.load_ring_buffer()?;
+        let header = rb.header();
+        self.cache_header.set(Some(header));
+        Some(header)
     }
 
     /// Loads the ring buffer from the page map.
@@ -83,7 +112,7 @@ impl LogMemoryStore {
 
     /// Returns true if the ring buffer is allocated.
     pub fn is_allocated(&self) -> bool {
-        self.load_ring_buffer().is_some()
+        self.header().is_some()
     }
 
     // TODO: maybe remove this completely.
@@ -91,22 +120,26 @@ impl LogMemoryStore {
     /// including header, index table and data region.
     #[cfg(test)]
     pub fn total_allocated_bytes(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.total_allocated_bytes())
+        self.header()
+            .map(|h| {
+                HEADER_SIZE.get() as usize
+                    + h.index_table_pages as usize * PAGE_SIZE
+                    + h.data_capacity.get() as usize
+            })
             .unwrap_or(0)
     }
 
     /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.byte_capacity())
+        self.header()
+            .map(|h| h.data_capacity.get() as usize)
             .unwrap_or(0)
     }
 
     /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.bytes_used())
+        self.header()
+            .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)
     }
 
@@ -121,8 +154,8 @@ impl LogMemoryStore {
         let target_limit = limit.max(DATA_CAPACITY_MIN);
 
         // Only resize when the capacity actually changes.
-        if let Some(current_buffer) = self.load_ring_buffer()
-            && current_buffer.byte_capacity() == target_limit
+        if let Some(h) = self.header()
+            && h.data_capacity.get() as usize == target_limit
         {
             return;
         }
@@ -144,16 +177,18 @@ impl LogMemoryStore {
         }
         // Update the state.
         self.page_map = new_buffer.to_page_map();
+        // Invalidate the cache as the page map has changed.
+        self.cache_header.set(None);
     }
 
     /// Returns the next log record `idx`.
     pub fn next_idx(&self) -> u64 {
-        self.load_ring_buffer().map(|rb| rb.next_idx()).unwrap_or(0)
+        self.header().map(|h| h.next_idx).unwrap_or(0)
     }
 
     pub fn is_empty(&self) -> bool {
-        self.load_ring_buffer()
-            .map(|rb| rb.is_empty())
+        self.header()
+            .map(|h| h.data_size.get() == 0)
             .unwrap_or(true)
     }
 
@@ -185,6 +220,8 @@ impl LogMemoryStore {
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
         self.page_map = ring_buffer.to_page_map();
+        // Update cache with the new header.
+        self.cache_header.set(Some(ring_buffer.header()));
     }
 
     /// Records the size of the appended delta log.
@@ -677,5 +714,114 @@ mod tests {
         assert_eq!(records.len(), 5);
         assert_eq!(records[0].idx, 10);
         assert_eq!(records[4].idx, 14);
+    }
+
+    #[test]
+    fn test_log_memory_store_cache_init() {
+        // Cache should be None initially
+        let mut s = LogMemoryStore::new_for_testing();
+        assert!(s.cache_header.get().is_none());
+
+        // Operations on uninitialized store should result in None/0 and NOT populate cache (as there is no header)
+        let _ = s.byte_capacity();
+        assert!(s.cache_header.get().is_none());
+
+        // Initialize the store
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+
+        // Accessing it now should populate the cache
+        let _ = s.byte_capacity();
+        assert!(s.cache_header.get().is_some());
+    }
+
+    #[test]
+    fn test_log_memory_store_cache_update() {
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+
+        // Populate cache
+        assert_eq!(s.bytes_used(), 0);
+        let initial_header = s.cache_header.get().unwrap();
+        assert_eq!(initial_header.data_size.get(), 0);
+
+        // Append log - cache should be updated
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(100, b"a".to_vec());
+        s.append_delta_log(&mut delta);
+
+        assert!(s.cache_header.get().is_some());
+        let updated_header = s.cache_header.get().unwrap();
+        assert!(updated_header.data_size.get() > 0);
+        assert_ne!(initial_header, updated_header);
+    }
+
+    #[test]
+    fn test_log_memory_store_cache_invalidation() {
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+
+        // Populate cache
+        let _ = s.byte_capacity();
+        assert!(s.cache_header.get().is_some());
+
+        // page_map_mut should invalidate cache
+        let _ = s.page_map_mut();
+        assert!(s.cache_header.get().is_none());
+
+        // Repopulate
+        let _ = s.byte_capacity();
+        assert!(s.cache_header.get().is_some());
+
+        // set_log_memory_limit should invalidate cache (or update it, currently implementation invalidates)
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT * 2);
+        assert!(s.cache_header.get().is_none());
+    }
+
+    #[test]
+    fn test_log_memory_store_cache_clear() {
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+
+        // Populate cache
+        let _ = s.byte_capacity();
+        assert!(s.cache_header.get().is_some());
+
+        // Clear should allow cache to be invalid or cleared.
+        s.clear(Arc::new(
+            crate::page_map::TestPageAllocatorFileDescriptorImpl::new(),
+        ));
+        assert!(
+            s.cache_header.get().is_none(),
+            "Cache should be invalidated after clear()"
+        );
+    }
+    #[test]
+    fn test_allocations_optimization() {
+        let mut s = LogMemoryStore::new_for_testing();
+        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+
+        // Ensure cache is populated
+        assert!(s.header().is_some());
+        assert!(s.is_allocated());
+        let real_allocated = s.total_allocated_bytes();
+        assert!(real_allocated > 0);
+
+        // Manually overwrite cache with a FAKE header
+        // The fake header has a distinct capacity that wouldn't match the underlying PageMap
+        let mut fake_header = s.header().unwrap();
+        let fake_capacity = MemorySize::new(99999);
+        fake_header.data_capacity = fake_capacity;
+        s.cache_header.set(Some(fake_header));
+
+        // Verify `is_allocated` still uses the cache (should be true)
+        assert!(s.is_allocated());
+
+        // Verify `total_allocated_bytes` uses cache -> should reflect FAKE capacity
+        let expected_fake_total = HEADER_SIZE.get() as usize
+            + fake_header.index_table_pages as usize * PAGE_SIZE
+            + fake_capacity.get() as usize;
+
+        assert_eq!(s.total_allocated_bytes(), expected_fake_total);
+        assert_ne!(s.total_allocated_bytes(), real_allocated);
     }
 }
