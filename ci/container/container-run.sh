@@ -130,6 +130,7 @@ PODMAN_RUN_ARGS=(
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e TERM
     -e LANG=C.UTF-8
+    -e CARGO_TERM_COLOR=always
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
