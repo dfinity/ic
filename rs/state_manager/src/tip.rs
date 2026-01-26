@@ -1544,6 +1544,11 @@ fn handle_compute_manifest_request(
             .inc();
     }
 
+    let base_manifest = base_manifest_info
+        .as_ref()
+        .map(|base| base.base_manifest.clone());
+    drop(base_manifest_info);
+
     let mut states = states.write();
 
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
@@ -1581,12 +1586,8 @@ fn handle_compute_manifest_request(
     drop(timer);
 
     let timer = request_timer(metrics, "observe_file_sizes");
-    if let Some(base_manifest_info) = &base_manifest_info {
-        crate::manifest::observe_file_sizes(
-            &manifest,
-            &base_manifest_info.base_manifest,
-            &metrics.manifest_metrics,
-        );
+    if let Some(base_manifest) = &base_manifest {
+        crate::manifest::observe_file_sizes(&manifest, base_manifest, &metrics.manifest_metrics);
     }
     drop(timer);
 

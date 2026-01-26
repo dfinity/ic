@@ -30,6 +30,7 @@ use std::time::Duration;
 use criterion::{Criterion, criterion_group, criterion_main};
 use ic_state_machine_tests::StateMachine;
 use ic_types::{Cycles, PrincipalId};
+use more_asserts::assert_ge;
 
 const CANISTERS_PER_CREATOR: usize = 100;
 
@@ -42,7 +43,7 @@ fn bytes_to_str(bytes: &[u8]) -> String {
 }
 
 fn setup_env(total_canisters: usize) -> StateMachine {
-    assert!(total_canisters >= CANISTERS_PER_CREATOR);
+    assert_ge!(total_canisters, CANISTERS_PER_CREATOR);
     assert!(total_canisters.is_multiple_of(CANISTERS_PER_CREATOR));
 
     let env = StateMachine::new();
