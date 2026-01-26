@@ -188,7 +188,7 @@ impl RandomOracle {
         Ok(input)
     }
 
-    /// Consume the random oracle and generate a 32 bytes as output
+    /// Consume the random oracle and generate 32 bytes as output
     pub fn output_32_bytes(self) -> CanisterThresholdResult<[u8; 32]> {
         let ro_input = self.form_ro_input()?;
 
