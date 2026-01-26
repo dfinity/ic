@@ -74,6 +74,8 @@ pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 
+pub const DOGE_MIN_CONFIRMATIONS: u64 = 10;
+
 pub const CHECK_FEE: u64 = 1001;
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
@@ -451,7 +453,7 @@ pub async fn install_ckdoge_minter(
         retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
         ledger_id: ledger_id.into(),
         max_time_in_queue_nanos,
-        min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
+        min_confirmations: Some(DOGE_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
@@ -532,7 +534,7 @@ pub async fn install_bitcoin_canister_with_network(
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
     let args = Config {
-        stability_threshold: 6,
+        stability_threshold: BTC_MIN_CONFIRMATIONS as u128,
         network,
         blocks_source: Principal::management_canister(),
         syncing: Flag::Enabled,
@@ -580,7 +582,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
     let args = Config {
-        stability_threshold: 6,
+        stability_threshold: DOGE_MIN_CONFIRMATIONS as u128,
         network: Network::Regtest,
         blocks_source: Principal::management_canister(),
         syncing: Flag::Enabled,

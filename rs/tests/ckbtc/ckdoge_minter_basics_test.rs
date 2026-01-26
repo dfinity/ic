@@ -4,7 +4,10 @@ use bitcoin::{Amount, dogecoin, dogecoin::Address};
 use candid::Nat;
 use candid::{Decode, Encode, Principal};
 use ic_ckdoge_agent::CkDogeMinterAgent;
-use ic_ckdoge_minter::{UpdateBalanceArgs, UtxoStatus, candid_api::RetrieveDogeWithApprovalArgs};
+use ic_ckdoge_minter::{
+    UpdateBalanceArgs, UtxoStatus,
+    candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs, WithdrawalFee},
+};
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -15,9 +18,9 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    OVERALL_TIMEOUT, TIMEOUT_PER_TEST, adapter::fund_with_btc, ckdoge_setup, create_canister,
-    install_ckdoge_minter, install_dogecoin_canister, install_ledger, subnet_app, subnet_sys,
-    utils::get_rpc_client,
+    DOGE_MIN_CONFIRMATIONS, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, adapter::fund_with_btc,
+    ckdoge_setup, create_canister, install_ckdoge_minter, install_dogecoin_canister,
+    install_ledger, subnet_app, subnet_sys, utils::get_rpc_client,
 };
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::{icrc1::account::Account, icrc2::approve::ApproveArgs};
@@ -63,33 +66,51 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
         let address = test_get_doge_address(&minter_agent).await;
 
         info!(logger, "Send DOGE to the address {address}...");
-        let amount = Amount::from_btc(1.0).unwrap();
+        let amount = Amount::from_btc(100.0).unwrap();
         let tx_fee = Amount::from_btc(0.001).unwrap();
         let _txid = doge_rpc
             .send_to(&address, amount, tx_fee)
             .unwrap_or_else(|err| panic!("bug: could not send DOGE to address: {err:?}"));
 
         info!(logger, "Generate more blocks to finalize...");
-        doge_rpc.generate_to_address(10, default_address).unwrap();
+        doge_rpc
+            .generate_to_address(DOGE_MIN_CONFIRMATIONS, default_address)
+            .unwrap();
 
         info!(logger, "Get UTXOs from dogecoin canister...");
         let sys_agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         test_get_utxos(&sys_agent, &logger, &address).await;
 
-        info!(logger, "Testing update_balance endpoint...");
+        info!(logger, "Call update_balance...");
         let received = test_update_balance(&minter_agent, &ledger_agent).await;
+        info!(logger, "Receive {received} ckDOGE");
 
-        info!(logger, "Testing retrieve_doge_with_approval endpoint...");
-        let block_index = test_retrieve_doge_with_approval(
+        info!(logger, "Call retrieve_doge_with_approval...");
+        let to_retrieve = received / 2;
+        let original_balance = doge_rpc.get_balance(None).unwrap();
+        let (fee, block_index) = test_retrieve_doge_with_approval(
             &minter_agent,
             &ledger_agent,
             default_address,
-            received / 2,
+            to_retrieve,
         )
         .await;
         info!(
             logger,
             "Retrieve DOGE returns ledger block_index {block_index}"
+        );
+
+        info!(logger, "Call retrieve_doge_status...");
+        test_retrieve_doge_status(&minter_agent, &logger, block_index, || {
+            doge_rpc
+                .generate_to_address(DOGE_MIN_CONFIRMATIONS, default_address)
+                .unwrap();
+        })
+        .await;
+        let new_balance = doge_rpc.get_balance(None).unwrap();
+        assert_eq!(
+            new_balance,
+            original_balance + Amount::from_sat(fee.minter_fee + fee.dogecoin_fee)
         );
     });
 }
@@ -101,25 +122,29 @@ async fn test_get_utxos(sys_agent: &ic_agent::Agent, logger: &Logger, address: &
     let dogecoin_canister =
         Principal::from_str(ic_config::execution_environment::DOGECOIN_MAINNET_CANISTER_ID)
             .unwrap();
-    for i in 0..30 {
+    let retries = 30;
+    for i in 1..=30 {
         let res = sys_agent
             .update(&dogecoin_canister, "dogecoin_get_utxos")
             .with_arg(
                 Encode!(&GetUtxosRequest {
                     address: address.to_string(),
                     network: NetworkInRequest::Regtest,
-                    filter: Some(UtxosFilterInRequest::MinConfirmations(6)),
+                    filter: Some(UtxosFilterInRequest::MinConfirmations(
+                        DOGE_MIN_CONFIRMATIONS as u32
+                    )),
                 })
                 .expect("failed to encode GetUtxosRequest"),
             )
             .call_and_wait()
-            .await
-            .expect("Error while calling endpoint.");
-        let utxos =
-            Decode!(res.as_slice(), GetUtxosResponse).expect("Failed to decode GetUtxosResponse");
-        info!(logger, "tries {i}/30 utxos = {utxos:?}");
-        if !utxos.utxos.is_empty() {
-            break;
+            .await;
+        info!(logger, "[{i}/{retries}] get_utxos returns {res:?}");
+        if let Ok(res) = res {
+            let utxos = Decode!(res.as_slice(), GetUtxosResponse)
+                .expect("Failed to decode GetUtxosResponse");
+            if !utxos.utxos.is_empty() {
+                break;
+            }
         }
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
@@ -178,7 +203,7 @@ async fn test_retrieve_doge_with_approval(
     ledger_agent: &Icrc1Agent,
     address: &Address,
     amount: u64,
-) -> u64 {
+) -> (WithdrawalFee, u64) {
     use ic_tests_ckbtc::TRANSFER_FEE;
 
     let account = Account {
@@ -207,6 +232,14 @@ async fn test_retrieve_doge_with_approval(
         .approve(args)
         .await
         .expect("Error while decoding response.");
+
+    let res = minter_agent
+        .estimate_withdrawal_fee(amount)
+        .await
+        .expect("Error while decoding response.");
+    assert!(res.is_ok(), "estimate_withdrawal_fee failed: {res:?}");
+    let fee = res.unwrap();
+
     let args = RetrieveDogeWithApprovalArgs {
         amount,
         address: address.to_string(),
@@ -226,7 +259,37 @@ async fn test_retrieve_doge_with_approval(
     assert_eq!(new_balance, expected_balance);
 
     let retrieve_response = res.unwrap();
-    retrieve_response.block_index
+    (fee, retrieve_response.block_index)
+}
+
+async fn test_retrieve_doge_status<F: Fn()>(
+    minter_agent: &CkDogeMinterAgent,
+    logger: &Logger,
+    block_index: u64,
+    generate_blocks: F,
+) -> ic_btc_interface::Txid {
+    let retries = 30;
+    for i in 1..=retries {
+        let status = minter_agent
+            .retrieve_doge_status(block_index)
+            .await
+            .expect("failed to call retrieve_doge_status");
+        info!(
+            &logger,
+            "[{i}/{retries}] retrieve_doge_status returns {:?}", status
+        );
+        match status {
+            RetrieveDogeStatus::Confirmed { txid } => {
+                return txid;
+            }
+            RetrieveDogeStatus::Submitted { .. } => generate_blocks(),
+            RetrieveDogeStatus::AmountTooLow => break,
+            _ => {}
+        }
+        // Wait a bit to avoid spamming the logs
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    panic!("retrieve_doge_status failed");
 }
 
 fn main() -> Result<()> {

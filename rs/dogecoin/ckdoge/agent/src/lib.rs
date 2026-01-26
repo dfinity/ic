@@ -3,8 +3,9 @@ use ic_agent::Agent;
 use ic_ckdoge_minter::{
     EstimateFeeArg, GetEventsArg, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     candid_api::{
-        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
+        EstimateWithdrawalFeeError, GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus,
+        RetrieveDogeStatusRequest, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+        WithdrawalFee,
     },
     event::CkDogeMinterEvent,
 };
@@ -113,7 +114,7 @@ impl CkDogeMinterAgent {
     pub async fn estimate_withdrawal_fee(
         &self,
         amount: u64,
-    ) -> Result<WithdrawalFee, CkDogeMinterAgentError> {
+    ) -> Result<Result<WithdrawalFee, EstimateWithdrawalFeeError>, CkDogeMinterAgentError> {
         self.query(
             "estimate_withdrawal_fee",
             EstimateFeeArg {
