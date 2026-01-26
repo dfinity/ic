@@ -442,7 +442,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 )
             })
             .with("metadata", move || {
-                system_metadata_as_tree(height, &state.metadata, certification_version)
+                system_metadata_as_tree(&state.metadata, height, certification_version)
             })
             .with("streams", move || {
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
@@ -599,8 +599,8 @@ impl<'a> LazyFork<'a> for MetadataFork<'a> {
 }
 
 fn system_metadata_as_tree(
-    height: Height,
     metadata: &SystemMetadata,
+    height: Height,
     version: CertificationVersion,
 ) -> LazyTree<'_> {
     if version >= CertificationVersion::V24 {
