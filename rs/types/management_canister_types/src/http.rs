@@ -131,7 +131,7 @@ impl CanisterHttpRequestArgs {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
 ///     context : blob;
 ///   };
-///  requested_counts: opt record {
+///  replication: opt record {
 ///     min_responses: nat64;
 ///     max_responses: nat64;
 ///     total_requests: nat64;
@@ -146,7 +146,7 @@ pub struct FlexibleCanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
-    pub requested_counts: Option<RequestedCounts>,
+    pub replication: Option<ReplicationCounts>,
 }
 
 impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
@@ -160,7 +160,7 @@ impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
 ///   };
 /// ```
 #[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
-pub struct RequestedCounts {
+pub struct ReplicationCounts {
     pub total_requests: u64,
     pub min_responses: u64,
     pub max_responses: u64,

@@ -95,7 +95,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                                 context: context.as_bytes().to_vec(),
                             }),
                             method: HttpMethod::GET,
-                            requested_counts: None,
+                            replication: None,
                         },
                         cycles: 500_000_000_000,
                     },
