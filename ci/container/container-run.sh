@@ -27,6 +27,7 @@ fi
 if ! podman info >/dev/null 2>&1; then
     eprintln "Podman found but not responding (daemon/service not running or not reachable)."
     exit 1
+fi
 
 usage() {
     cat <<EOF
