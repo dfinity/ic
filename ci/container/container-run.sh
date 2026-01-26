@@ -170,7 +170,7 @@ SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
 UID_HOST=$(id -u)
 GID_HOST=$(id -g)
 
-IDMAP="uids=0-${UID_HOST}-1;gids=0-${GID_HOST}-1"
+IDMAP="uids=${UID_HOST}-1000-1;gids=${GID_HOST}-1000-1"
 
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
