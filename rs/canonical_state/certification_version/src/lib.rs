@@ -15,6 +15,9 @@ pub enum CertificationVersion {
     /// `Funds`) to encoding `cycles_payment` / `cycles_refund` (type `Cycles`).
     /// Make `Request::metadata` and the `RequestMetadata` fields non-optional.
     V23 = 23,
+    /// Refactored CBOR-encoded `/metadata` leaf into `/metadata/prev_state_hash` (type `Blob`)
+    /// and added `height` to the certified state at `/metadata/height`.
+    V24 = 24,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -58,7 +61,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V23;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V24;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

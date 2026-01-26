@@ -1844,10 +1844,11 @@ impl StateManagerImpl {
     fn compute_certification_metadata(
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
+        height: Height,
         state: &ReplicatedState,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state))?;
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(height, state))?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1884,7 +1885,7 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            let certification = Self::compute_certification_metadata(metrics, log, &state)
+            let certification = Self::compute_certification_metadata(metrics, log, height, &state)
                 .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
             info!(
                 log,
@@ -2018,7 +2019,7 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state))
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(height, &state))
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
@@ -2713,11 +2714,15 @@ impl StateManager for StateManagerImpl {
                 } else {
                     std::mem::drop(states);
 
-                    let mut tip_certification_metadata =
-                        Self::compute_certification_metadata(&self.metrics, &self.log, &tip)
-                            .unwrap_or_else(|err| {
-                                fatal!(self.log, "Failed to compute hash tree: {:?}", err)
-                            });
+                    let mut tip_certification_metadata = Self::compute_certification_metadata(
+                        &self.metrics,
+                        &self.log,
+                        tip_height,
+                        &tip,
+                    )
+                    .unwrap_or_else(|err| {
+                        fatal!(self.log, "Failed to compute hash tree: {:?}", err)
+                    });
                     let tip_certified_state_hash = tip_certification_metadata.certified_state_hash;
                     if let Some((hash_tree, _)) = tip_certification_metadata.hash_tree.take() {
                         self.deallocator_thread.send(Box::new(hash_tree));
@@ -3306,7 +3311,7 @@ impl StateManager for StateManagerImpl {
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &state)
+            Self::compute_certification_metadata(&self.metrics, &self.log, height, &state)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         if scope == CertificationScope::Full {
@@ -3496,7 +3501,7 @@ impl CertifiedStateSnapshot for CertifiedStateSnapshotImpl {
         let _timer = self.read_certified_state_duration_histogram.start_timer();
 
         let mixed_hash_tree = {
-            let lazy_tree = replicated_state_as_lazy_tree(self.get_state());
+            let lazy_tree = replicated_state_as_lazy_tree(self.get_height(), self.get_state());
             let partial_tree = materialize_partial(&lazy_tree, paths, exclusion.map(|v| &v[..]));
             self.hash_tree.witness::<MixedHashTree>(&partial_tree)
         }
@@ -3684,8 +3689,14 @@ impl CertifiedStreamStore for StateManagerImpl {
             .filter(|end| end <= &stream.messages_end())
             .unwrap_or_else(|| stream.messages_end());
 
-        let (slice_as_tree, to) =
-            stream_encoding::encode_stream_slice(&state, remote_subnet, msg_from, to, byte_limit);
+        let (slice_as_tree, to) = stream_encoding::encode_stream_slice(
+            certification.height,
+            &state,
+            remote_subnet,
+            msg_from,
+            to,
+            byte_limit,
+        );
 
         let witness_partial_tree =
             stream_encoding::stream_slice_partial_tree(remote_subnet, witness_from, to);
