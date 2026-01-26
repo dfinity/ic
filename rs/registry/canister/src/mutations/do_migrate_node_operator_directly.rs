@@ -2,13 +2,6 @@
 //!
 //! This module provides functionality for node providers to migrate node operator
 //! records from one principal to another within the same data center.
-//!
-//! ## Use Cases
-//!
-//! - **Lost Private Key**: When a node operator loses access to their private key,
-//!   they can migrate to a new node operator identity while preserving all associated data.
-//! - **Consolidation**: Merge multiple node operators into a single node operator within
-//!   the same data center.
 use std::{
     fmt::Display,
     time::{Duration, SystemTime},
@@ -115,12 +108,14 @@ impl Registry {
 
         // Check that the old operator was created at least MIGRATION_CAPACITY_INTERVAL ago
         // to prevent rapid empty operator migrations (spam prevention).
-        let timestamp_created = Duration::from_nanos(timestamp_created_nanos);
-        let now_duration = now
-            .duration_since(SystemTime::UNIX_EPOCH)
+        let created_at = SystemTime::UNIX_EPOCH
+            .checked_add(Duration::from_nanos(timestamp_created_nanos))
             .expect("SystemTime before UNIX EPOCH");
+        let age = now
+            .duration_since(created_at)
+            .expect("Record created in the future which is impossible");
 
-        if now_duration < timestamp_created + MIGRATION_CAPACITY_INTERVAL {
+        if age < MIGRATION_CAPACITY_INTERVAL {
             return Err(MigrateError::OldOperatorRateLimit {
                 principal: old_node_operator_id,
             });
@@ -1084,6 +1079,46 @@ mod tests {
         };
 
         let resp = registry.migrate_node_operator_inner(payload.clone(), caller, now_system_time());
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
+            principal: old_node_operator_id,
+        });
+
+        assert_eq!(resp, expected_err);
+
+        let resp = registry.migrate_node_operator_inner(payload, caller, now_plus_13_hours());
+
+        assert!(resp.is_ok());
+    }
+
+    #[test]
+    #[should_panic]
+    fn expect_panic_if_created_node_operator_from_future() {
+        let mut registry = invariant_compliant_registry(1);
+
+        let old_node_operator_id = PrincipalId::new_user_test_id(1);
+        let new_node_operator_id = PrincipalId::new_user_test_id(2);
+
+        let caller = PrincipalId::new_user_test_id(999);
+        registry.maybe_apply_mutation_internal(vec![upsert(
+            make_node_operator_record_key(old_node_operator_id).as_bytes(),
+            NodeOperatorRecord {
+                node_operator_principal_id: old_node_operator_id.to_vec(),
+                node_provider_principal_id: caller.to_vec(),
+                dc_id: "dc".to_string(),
+                ..Default::default()
+            }
+            .encode_to_vec(),
+        )]);
+
+        let payload = MigrateNodeOperatorPayload {
+            new_node_operator_id: Some(new_node_operator_id),
+            old_node_operator_id: Some(old_node_operator_id),
+        };
+
+        let now = now_system_time();
+        let past = now - Duration::from_secs(4 * 60 * 60);
+
+        let resp = registry.migrate_node_operator_inner(payload.clone(), caller, past);
         let expected_err: Result<(), MigrateError> = Err(MigrateError::OldOperatorRateLimit {
             principal: old_node_operator_id,
         });
