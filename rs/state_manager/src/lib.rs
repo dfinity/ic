@@ -1842,10 +1842,10 @@ impl StateManagerImpl {
     }
 
     fn compute_certification_metadata(
+        state: &ReplicatedState,
+        height: Height,
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
-        height: Height,
-        state: &ReplicatedState,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
         let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state, height))?;
@@ -1885,7 +1885,7 @@ impl StateManagerImpl {
 
         for (checkpoint_layout, state) in states {
             let height = checkpoint_layout.height();
-            let certification = Self::compute_certification_metadata(metrics, log, height, &state)
+            let certification = Self::compute_certification_metadata(&state, height, metrics, log)
                 .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err));
             info!(
                 log,
@@ -2715,10 +2715,10 @@ impl StateManager for StateManagerImpl {
                     std::mem::drop(states);
 
                     let mut tip_certification_metadata = Self::compute_certification_metadata(
+                        &tip,
+                        tip_height,
                         &self.metrics,
                         &self.log,
-                        tip_height,
-                        &tip,
                     )
                     .unwrap_or_else(|err| {
                         fatal!(self.log, "Failed to compute hash tree: {:?}", err)
@@ -3311,7 +3311,7 @@ impl StateManager for StateManagerImpl {
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, height, &state)
+            Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         if scope == CertificationScope::Full {
