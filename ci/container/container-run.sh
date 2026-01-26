@@ -206,6 +206,9 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
+        )
     fi
 fi
 
