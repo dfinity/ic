@@ -1241,9 +1241,9 @@ fn test_fee_collector() {
     let minter = minter_identity().sender().unwrap();
     let ledger_id = install_ledger(
         env,
-        vec![(account(1, 0), 10_000_000)], // txid: 0
+        vec![(account(1, 0), 10_000_000)], // txid: 1
         default_archive_options(),
-        Some(fee_collector),
+        Some(fee_collector), // txid: 0
         minter,
     );
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -1253,9 +1253,9 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 2
+    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 3
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 4
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1266,14 +1266,14 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 5u8.into())])],
     );
 
     // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None);
+    upgrade_ledger(env, ledger_id, None); // txid: 5
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 7
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1284,14 +1284,14 @@ fn test_fee_collector() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+        vec![(fee_collector, vec![(0u8.into(), 5u8.into())])],
     );
 
     // Add a new fee collector different from the first one.
     let new_fee_collector = account(42, 42);
-    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
+    upgrade_ledger(env, ledger_id, Some(new_fee_collector)); // txid: 8
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 9
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1305,16 +1305,16 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (fee_collector, vec![(0u8.into(), 4u8.into())]),
+            (new_fee_collector, vec![(8u8.into(), 10u8.into())]),
+            (fee_collector, vec![(0u8.into(), 5u8.into())]),
         ],
     );
 
     // Add back the original fee_collector and make a couple of transactions again.
-    upgrade_ledger(env, ledger_id, Some(fee_collector));
+    upgrade_ledger(env, ledger_id, Some(fee_collector)); // txid: 10
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 11
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 12
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1328,10 +1328,10 @@ fn test_fee_collector() {
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (new_fee_collector, vec![(8u8.into(), 10u8.into())]),
             (
                 fee_collector,
-                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
+                vec![(0u8.into(), 5u8.into()), (10u8.into(), 13u8.into())],
             ),
         ],
     );
