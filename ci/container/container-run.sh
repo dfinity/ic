@@ -104,16 +104,21 @@ while test $# -gt $CTR; do
     esac
 done
 
-# If no container command specified, detect environment
+# Detect environment
+if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
+    echo "Detected Devenv environment."
+    DEVENV=true
+else
+    DEVENV=false
+fi
+
+# If no container command specified, use based on environment
 if [ -z "${CONTAINER_CMD[*]:-}" ]; then
-    # Detect if we're running in a Devenv environment
-    if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
-        echo "Detected Devenv environment, using hoststorage for podman root."
+    if [ "$DEVENV" = true ]; then
+        echo "Using hoststorage for podman root."
         CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
-        DEVENV=true
     else
-        CONTAINER_CMD=(podman)
-        DEVENV=false
+        CONTAINER_CMD=(sudo podman)
     fi
 fi
 
@@ -144,6 +149,9 @@ PODMAN_RUN_ARGS=(
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+    -e TERM
+    -e LANG=C.UTF-8
+    -e CARGO_TERM_COLOR
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
@@ -151,11 +159,7 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-if [ "$DEVENV" = true ]; then
-    PODMAN_RUN_ARGS+=(
-        --hostuser="$USER"
-    )
-fi
+PODMAN_RUN_ARGS+=(--hostuser="$USER")
 
 if [ "$(id -u)" = "1000" ]; then
     CTR_HOME="/home/ubuntu"

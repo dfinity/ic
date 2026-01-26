@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "//rs/monitoring/adapter_metrics/client",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/registry/subnet_type",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "@crate_index//:candid",

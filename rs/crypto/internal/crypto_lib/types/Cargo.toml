@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-arrayvec = { workspace = true }
 hex = { workspace = true }
 ic-protobuf = { path = "../../../../protobuf" }
 phantom_newtype = { path = "../../../../phantom_newtype" }
