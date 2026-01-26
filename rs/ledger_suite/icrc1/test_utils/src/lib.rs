@@ -605,7 +605,7 @@ impl TransactionsAndBalances {
                 self.debit(from, fee);
             }
             Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
+                // We don't support transfers from the fee collector, we don't need to keep track of the account balance
             }
         };
         self.transactions.push(tx);
@@ -635,7 +635,7 @@ impl TransactionsAndBalances {
                 self.check_and_update_account_validity(*from, default_fee);
             }
             Operation::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
+                // We don't support transfers from the fee collector, we don't need to keep track of the account balance
             }
         }
     }
