@@ -14,6 +14,11 @@ on:
         description: Commit on which the repro check should be run
         required: true
         type: string
+  pull_request:
+    paths:
+      - 'ci/container/*'
+      - 'ci/scripts/repro-check'
+      - '.github/workflows/repro-check.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -21,7 +26,7 @@ concurrency:
 
 jobs:
   repro-check:
-    name: Run repro-check for ${{ inputs.github_sha }}
+    name: Run repro-check for ${{ inputs.github_sha || github.sha }}
     runs-on:
       labels: dind-large
     container:
@@ -68,11 +73,13 @@ jobs:
           mount -o loop /tmp/misc.img /tmp/misc
           chown -R ubuntu:ubuntu /tmp/misc
 
-      - name: Repro check for ${{ inputs.github_sha }}
+      - name: Repro check for ${{ inputs.github_sha || github.sha }}
         shell: bash
+        env:
+          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           sudo -u ubuntu bash -c '
             curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
-            python3 - -c ${{ inputs.github_sha }}
+            python3 - -c ${{ inputs.github_sha || github.sha }} $DRY_RUN
           '
