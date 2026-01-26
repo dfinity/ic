@@ -157,10 +157,6 @@ mkdir -p "${ICT_TESTNETS_DIR}"
 MISC_TMP_DIR="/tmp/misc"
 mkdir -p "${MISC_TMP_DIR}"
 
-trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 
@@ -221,15 +217,6 @@ else
     eprintln "No ssh-agent to forward."
 fi
 
-# Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
-chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
-chmod +r ${SUBGID_FILE}
-PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
-)
 
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
