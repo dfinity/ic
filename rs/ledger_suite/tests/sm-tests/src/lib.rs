@@ -5230,7 +5230,7 @@ fn set_fc_107(
     .expect("failed to decode set fee collector result")
 }
 
-fn set_fc_107_by_controller(
+pub fn set_fc_107_by_controller(
     env: &StateMachine,
     canister_id: CanisterId,
     fee_collector: Option<Account>,

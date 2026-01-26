@@ -26,7 +26,9 @@ use ic_ledger_core::block::BlockType;
 use ic_ledger_suite_state_machine_helpers::{
     add_block, archive_blocks, get_logs, set_icrc3_enabled,
 };
-use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
+use ic_ledger_suite_state_machine_tests::{
+    set_fc_107_by_controller, test_http_request_decoding_quota,
+};
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -240,6 +242,27 @@ fn transfer(
         memo: None,
     };
     icrc1_transfer(env, ledger_id, owner.into(), req)
+}
+
+fn transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    from: Account,
+    to: Account,
+    spender: Account,
+    amount: u64,
+) -> BlockIndex {
+    let Account { owner, subaccount } = spender;
+    let req = TransferFromArgs {
+        spender_subaccount: subaccount,
+        from,
+        to,
+        amount: amount.into(),
+        created_at_time: None,
+        fee: None,
+        memo: None,
+    };
+    icrc2_transfer_from(env, ledger_id, owner.into(), req)
 }
 
 fn icrc2_approve(
@@ -1254,8 +1277,15 @@ fn test_fee_collector() {
     );
 
     transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 2
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 3
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 4
+    approve(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 3
+    transfer_from(
+        env,
+        ledger_id,
+        account(1, 0),
+        account(2, 0),
+        account(3, 0),
+        150_000,
+    ); // txid: 4
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1314,7 +1344,7 @@ fn test_fee_collector() {
     upgrade_ledger(env, ledger_id, Some(fee_collector)); // txid: 10
 
     transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 11
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 12
+    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 12
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1329,6 +1359,34 @@ fn test_fee_collector() {
         get_fee_collectors_ranges(env, index_id).ranges,
         vec![
             (new_fee_collector, vec![(8u8.into(), 10u8.into())]),
+            (
+                fee_collector,
+                vec![(0u8.into(), 5u8.into()), (10u8.into(), 13u8.into())],
+            ),
+        ],
+    );
+
+    set_fc_107_by_controller(env, ledger_id, Some(new_fee_collector)); // txid: 13
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 14
+    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 15
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for fee_collector in &[fee_collector, new_fee_collector] {
+        assert_eq!(
+            icrc1_balance_of(env, ledger_id, *fee_collector),
+            icrc1_balance_of(env, index_id, *fee_collector)
+        );
+    }
+
+    assert_contain_same_elements(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![
+            (
+                new_fee_collector,
+                vec![(8u8.into(), 10u8.into()), (13u8.into(), 16u8.into())],
+            ),
             (
                 fee_collector,
                 vec![(0u8.into(), 5u8.into()), (10u8.into(), 13u8.into())],
