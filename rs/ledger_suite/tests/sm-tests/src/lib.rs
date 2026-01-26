@@ -5240,7 +5240,7 @@ fn set_fc_107_by_controller(
         .expect("ledger should have a controller");
     assert_eq!(controllers.len(), 1);
     let controller = controllers[0];
-    let result = set_fc_107(&env, canister_id, controller, fee_collector);
+    let result = set_fc_107(env, canister_id, controller, fee_collector);
     assert!(result.is_ok());
 }
 
@@ -5253,60 +5253,60 @@ fn send_tx_and_verify_fee_collection(
     let from = Account::from(PrincipalId::new_user_test_id(1001).0);
     let spender = Account::from(PrincipalId::new_user_test_id(1002).0);
     let to = Account::from(PrincipalId::new_user_test_id(1003).0);
-    let from_balance = balance_of(&env, canister_id, from);
+    let from_balance = balance_of(env, canister_id, from);
 
     let fc_balance = if let Some(fc) = active_fc {
         assert_ne!(from, fc);
         assert_ne!(spender, fc);
         assert_ne!(to, fc);
-        Some(balance_of(&env, canister_id, fc))
+        Some(balance_of(env, canister_id, fc))
     } else {
         None
     };
     let mut inactive_fcs_balances = vec![];
     for fc in &inactive_fcs {
-        inactive_fcs_balances.push(balance_of(&env, canister_id, *fc));
+        inactive_fcs_balances.push(balance_of(env, canister_id, *fc));
         assert_ne!(from, *fc);
         assert_ne!(spender, *fc);
         assert_ne!(to, *fc);
     }
-    let tot_supply = total_supply(&env, canister_id);
+    let tot_supply = total_supply(env, canister_id);
 
     const NUM_FEE_COLLECTED: u64 = 3;
     const MINT_AMOUNT: u64 = 1_000_000;
     const BURN_AMOUNT: u64 = 12_000;
 
-    transfer(&env, canister_id, MINTER, from, MINT_AMOUNT).expect("failed to mint funds");
-    transfer(&env, canister_id, from, to, 1).expect("failed to transfer funds");
+    transfer(env, canister_id, MINTER, from, MINT_AMOUNT).expect("failed to mint funds");
+    transfer(env, canister_id, from, to, 1).expect("failed to transfer funds");
     let approve_args = default_approve_args(spender.owner, u64::MAX);
-    send_approval(&env, canister_id, from.owner, &approve_args).expect("approval failed");
+    send_approval(env, canister_id, from.owner, &approve_args).expect("approval failed");
     let transfer_from_args = default_transfer_from_args(from.owner, to.owner, 1);
-    send_transfer_from(&env, canister_id, spender.owner, &transfer_from_args)
+    send_transfer_from(env, canister_id, spender.owner, &transfer_from_args)
         .expect("transfer from failed");
-    transfer(&env, canister_id, from, MINTER, BURN_AMOUNT).expect("failed to burn funds");
+    transfer(env, canister_id, from, MINTER, BURN_AMOUNT).expect("failed to burn funds");
 
     assert_eq!(
-        balance_of(&env, canister_id, from),
+        balance_of(env, canister_id, from),
         from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_COLLECTED * FEE
     );
     if let Some(fc) = active_fc {
         assert_eq!(
-            balance_of(&env, canister_id, fc),
+            balance_of(env, canister_id, fc),
             fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
         );
         assert_eq!(
-            total_supply(&env, canister_id),
+            total_supply(env, canister_id),
             tot_supply + MINT_AMOUNT - BURN_AMOUNT
         );
     } else {
         assert_eq!(
-            total_supply(&env, canister_id),
+            total_supply(env, canister_id),
             tot_supply + MINT_AMOUNT - BURN_AMOUNT - NUM_FEE_COLLECTED * FEE
         );
     }
 
     for (fc, balance) in inactive_fcs.iter().zip(inactive_fcs_balances.iter()) {
-        assert_eq!(balance_of(&env, canister_id, *fc), *balance);
+        assert_eq!(balance_of(env, canister_id, *fc), *balance);
     }
 }
 
