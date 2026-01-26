@@ -643,7 +643,7 @@ impl CanisterManager {
             );
         }
 
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
         let new_controllers = match validated_settings.controllers() {
             Some(_) => Some(canister.system_state.controllers.iter().copied().collect()),
             None => None,
@@ -1033,7 +1033,7 @@ impl CanisterManager {
             },
             None => StopCanisterResult::RequestAccepted,
         };
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
         result
     }
 
@@ -1056,7 +1056,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
 
         let stop_contexts = canister.system_state.start_canister();
-        canister.system_state.canister_version += 1;
+        canister.system_state.bump_canister_version();
 
         Ok(stop_contexts)
     }
@@ -1083,7 +1083,7 @@ impl CanisterManager {
             .copied()
             .collect::<Vec<PrincipalId>>();
 
-        let version = canister.system_state.canister_version;
+        let version = canister.system_state.canister_version();
 
         let canister_memory_usage = canister.memory_usage();
         let canister_wasm_memory_usage = canister.wasm_memory_usage();
@@ -1250,8 +1250,8 @@ impl CanisterManager {
         let consumed_cycles_by_canister_to_delete = leftover_cycles
             + canister_to_delete
                 .system_state
-                .canister_metrics
-                .consumed_cycles;
+                .canister_metrics()
+                .consumed_cycles();
 
         state
             .metadata
@@ -1268,8 +1268,8 @@ impl CanisterManager {
 
         for (use_case, cycles) in canister_to_delete
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .iter()
         {
             state
@@ -1582,7 +1582,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
     ) -> Result<UploadChunkResult, CanisterManagerError> {
         // Allow the canister itself to perform this operation.
-        if sender != canister.system_state.canister_id.into() {
+        if sender != canister.canister_id().into() {
             validate_controller(canister, &sender)?
         }
 
@@ -1688,7 +1688,7 @@ impl CanisterManager {
         resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // Allow the canister itself to perform this operation.
-        if sender != canister.system_state.canister_id.into() {
+        if sender != canister.canister_id().into() {
             validate_controller(canister, &sender)?
         }
 
@@ -1727,7 +1727,7 @@ impl CanisterManager {
         canister: &CanisterState,
     ) -> Result<StoredChunksReply, CanisterManagerError> {
         // Allow the canister itself to perform this operation.
-        if sender != canister.system_state.canister_id.into() {
+        if sender != canister.canister_id().into() {
             validate_controller(canister, &sender)?
         }
 
@@ -2448,7 +2448,7 @@ impl CanisterManager {
         };
 
         // Increment canister version.
-        new_canister.system_state.canister_version += 1;
+        new_canister.system_state.bump_canister_version();
         let available_execution_memory_change = new_canister.add_canister_change(
             state.time(),
             origin,
@@ -2800,7 +2800,7 @@ impl CanisterManager {
         let new_snapshot = CanisterSnapshot::from_metadata(
             &valid_args,
             state.time(),
-            canister.system_state.canister_version,
+            canister.system_state.canister_version(),
             Arc::clone(&self.fd_factory),
         );
 
@@ -3123,18 +3123,13 @@ impl CanisterManager {
             return Err(CanisterManagerError::RenameCanisterHasSnapshot(old_id));
         }
 
-        canister.system_state.canister_id = new_id;
         let old_total_num_changes = canister
             .system_state
             .get_canister_history()
             .get_total_num_changes();
-        // Renaming canisters overwrites the total length of the canister history to the original canister's value.
-        // The canister version is bumped to be monotone w.r.t. both the original and new values.
         canister
             .system_state
-            .set_canister_history_total_num_changes(to_total_num_changes);
-        let old_version = canister.system_state.canister_version;
-        canister.system_state.canister_version = std::cmp::max(old_version, to_version) + 1;
+            .rename_canister(new_id, to_version, to_total_num_changes);
         let available_execution_memory_change = canister.add_canister_change(
             state.time(),
             origin,
@@ -3213,7 +3208,7 @@ pub fn uninstall_canister(
     // Deactivate global timer.
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
-    canister.system_state.canister_version += 1;
+    canister.system_state.bump_canister_version();
 
     let new_allocated_bytes = canister.memory_allocated_bytes();
     debug_assert_le!(new_allocated_bytes, old_allocated_bytes);

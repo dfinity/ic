@@ -117,15 +117,15 @@ enum ConsumingCycles {
 
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
-// For semantics of the fields please check
-// protobuf/def/state/canister_state_bits/v1/canister_state_bits.proto:
-// CanisterStateBits
+///
+/// For the semantics of the fields, check
+/// `canister_state_bits.proto:CanisterStateBits`.
 pub struct CanisterMetrics {
-    pub scheduled_as_first: u64,
-    pub skipped_round_due_to_no_messages: u64,
-    pub executed: u64,
-    pub interrupted_during_execution: u64,
-    pub consumed_cycles: NominalCycles,
+    scheduled_as_first: u64,
+    skipped_round_due_to_no_messages: u64,
+    executed: u64,
+    interrupted_during_execution: u64,
+    consumed_cycles: NominalCycles,
     consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
@@ -148,8 +148,44 @@ impl CanisterMetrics {
         }
     }
 
-    pub fn get_consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+    pub fn scheduled_as_first(&self) -> u64 {
+        self.scheduled_as_first
+    }
+
+    pub fn skipped_round_due_to_no_messages(&self) -> u64 {
+        self.skipped_round_due_to_no_messages
+    }
+
+    pub fn executed(&self) -> u64 {
+        self.executed
+    }
+
+    pub fn interrupted_during_execution(&self) -> u64 {
+        self.interrupted_during_execution
+    }
+
+    pub fn consumed_cycles(&self) -> NominalCycles {
+        self.consumed_cycles
+    }
+
+    pub fn consumed_cycles_by_use_cases(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
         &self.consumed_cycles_by_use_cases
+    }
+
+    pub fn observe_scheduled_as_first(&mut self) {
+        self.scheduled_as_first += 1;
+    }
+
+    pub fn observe_skipped_round_due_to_no_messages(&mut self) {
+        self.skipped_round_due_to_no_messages += 1;
+    }
+
+    pub fn observe_executed(&mut self) {
+        self.executed += 1;
+    }
+
+    pub fn observe_interrupted_during_execution(&mut self) {
+        self.interrupted_during_execution += 1;
     }
 }
 
@@ -249,8 +285,8 @@ impl CanisterHistory {
 /// canister but can be indirectly via the SystemApi interface.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemState {
+    canister_id: CanisterId,
     pub controllers: BTreeSet<PrincipalId>,
-    pub canister_id: CanisterId,
     /// Input (canister and ingress) and output (canister) message queues.
     ///
     /// Must remain private, to ensure consistency with the `CallContextManager`; to
@@ -288,7 +324,7 @@ pub struct SystemState {
     ///   * https://internetcomputer.org/docs/current/references/ic-interface-spec#system-api-certified-data
     pub certified_data: Vec<u8>,
 
-    pub canister_metrics: CanisterMetrics,
+    canister_metrics: CanisterMetrics,
 
     /// Query statistics.
     ///
@@ -348,7 +384,7 @@ pub struct SystemState {
     pub global_timer: CanisterTimer,
 
     /// Canister version.
-    pub canister_version: u64,
+    canister_version: u64,
 
     /// Canister history.
     #[validate_eq(CompareWithValidateEq)]
@@ -375,7 +411,7 @@ pub struct SystemState {
     pub wasm_memory_limit: Option<NumBytes>,
 
     /// Next local snapshot id.
-    pub next_snapshot_id: u64,
+    next_snapshot_id: u64,
 
     /// Cumulative memory usage of all snapshots that belong to this canister.
     ///
@@ -704,6 +740,14 @@ impl SystemState {
         self.canister_id
     }
 
+    pub fn canister_version(&self) -> u64 {
+        self.canister_version
+    }
+
+    pub fn bump_canister_version(&mut self) {
+        self.canister_version += 1;
+    }
+
     /// Returns the amount of cycles that the balance holds.
     pub fn balance(&self) -> Cycles {
         self.cycles_balance
@@ -741,6 +785,10 @@ impl SystemState {
         let local_snapshot_id = self.next_snapshot_id;
         self.next_snapshot_id += 1;
         local_snapshot_id
+    }
+
+    pub fn next_snapshot_id(&self) -> u64 {
+        self.next_snapshot_id
     }
 
     /// Records the given amount as debit that will be charged from the balance
@@ -1833,6 +1881,14 @@ impl SystemState {
         }
     }
 
+    pub fn canister_metrics(&self) -> &CanisterMetrics {
+        &self.canister_metrics
+    }
+
+    pub fn canister_metrics_mut(&mut self) -> &mut CanisterMetrics {
+        &mut self.canister_metrics
+    }
+
     /// Clears all canister changes and their memory usage,
     /// but keeps the total number of changes recorded.
     pub fn clear_canister_history(&mut self) {
@@ -1857,10 +1913,21 @@ impl SystemState {
         self.canister_history.add_canister_change(new_change);
     }
 
-    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
-    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+    /// Renames the canister to the given `to_canister_id`.
+    ///
+    /// Overwrites the total length of the canister history with the original
+    /// canister's. Bumps the canister version to be monotone w.r.t. both the
+    /// original and new values.
+    pub fn rename_canister(
+        &mut self,
+        to_canister_id: CanisterId,
+        to_version: u64,
+        to_total_num_changes: u64,
+    ) {
+        self.canister_id = to_canister_id;
         self.canister_history
-            .set_total_num_changes(total_num_changes);
+            .set_total_num_changes(to_total_num_changes);
+        self.canister_version = std::cmp::max(self.canister_version, to_version) + 1;
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {

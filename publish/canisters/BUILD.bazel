@@ -40,6 +40,7 @@ CANISTERS = {
     "nns-ui-canister.wasm.gz": "//rs/nns/nns-ui:nns-ui-canister",
     "rate-limit-canister.wasm.gz": "//rs/boundary_node/rate_limits:rate_limit_canister",
     "registry-canister.wasm.gz": "//rs/registry/canister:registry-canister",
+    "registry-canister_test.wasm.gz": "//rs/registry/canister:registry-canister-test",
     "root-canister.wasm.gz": "//rs/nns/handlers/root/impl:root-canister",
     "salt-sharing-canister.wasm.gz": "//rs/boundary_node/salt_sharing:salt_sharing_canister",
     "sns-governance-canister.wasm.gz": "//rs/sns/governance:sns-governance-canister",
