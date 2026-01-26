@@ -27,6 +27,8 @@ use icrc_ledger_types::{icrc1::account::Account, icrc2::approve::ApproveArgs};
 use slog::{Logger, info};
 use std::str::FromStr;
 
+/// Run through the steps of DOGE -> ckDOGE -> DOGE conversions, and ensure correct amounts
+/// were transferred at each step.
 pub fn test_ckdoge_minter_agent(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
@@ -66,7 +68,7 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
         let address = test_get_doge_address(&minter_agent).await;
 
         info!(logger, "Send DOGE to the address {address}...");
-        let amount = Amount::from_btc(100.0).unwrap();
+        let amount = Amount::from_btc(200.0).unwrap();
         let tx_fee = Amount::from_btc(0.001).unwrap();
         let _txid = doge_rpc
             .send_to(&address, amount, tx_fee)
@@ -83,7 +85,6 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
 
         info!(logger, "Call update_balance...");
         let received = test_update_balance(&minter_agent, &ledger_agent).await;
-        info!(logger, "Receive {received} ckDOGE");
 
         info!(logger, "Call retrieve_doge_with_approval...");
         let to_retrieve = received / 2;
@@ -95,10 +96,6 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
             to_retrieve,
         )
         .await;
-        info!(
-            logger,
-            "Retrieve DOGE returns ledger block_index {block_index}"
-        );
 
         info!(logger, "Call retrieve_doge_status...");
         test_retrieve_doge_status(&minter_agent, &logger, block_index, || {

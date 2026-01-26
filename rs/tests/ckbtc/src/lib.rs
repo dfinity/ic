@@ -65,7 +65,8 @@ pub const TRANSFER_FEE: u64 = 1_000;
 
 pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
-pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 10000;
+/// For mainnet the recommended min amount to retrieve is 50 DOGE.
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 5_000_000_000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
