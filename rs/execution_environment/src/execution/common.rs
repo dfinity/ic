@@ -622,7 +622,6 @@ mod test {
     use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
     use ic_types::messages::{CallbackId, NO_DEADLINE};
-    use ic_types::time::UNIX_EPOCH;
     use ic_types::{Cycles, Time};
 
     #[test]
