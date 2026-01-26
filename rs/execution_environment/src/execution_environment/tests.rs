@@ -1,4 +1,4 @@
-use crate::units::{GIB, GIB as ONE_GIB};
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -332,7 +332,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
     assert_eq!(
         available_memory_after_create + test.state().memory_taken().execution().get() as i64,
-        GIB as i64,
+        ONE_GIB as i64,
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -362,7 +362,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
     assert_eq!(
         available_memory_after_create + test.state().memory_taken().execution().get() as i64,
-        GIB as i64
+        ONE_GIB as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -390,9 +390,9 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
 #[test]
 fn output_best_effort_requests_on_application_subnets_update_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(GIB)
+        .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
-        .with_subnet_guaranteed_response_message_memory(GIB)
+        .with_subnet_guaranteed_response_message_memory(ONE_GIB)
         .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
@@ -416,7 +416,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
     assert_eq!(1, system_state.queues().input_queues_reserved_slots());
     // Subnet available memory and message memory should be unchanged.
     assert_eq!(initia_available_memory, subnet_total_memory);
-    assert_eq!(GIB as i64, subnet_message_memory);
+    assert_eq!(ONE_GIB as i64, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
 
