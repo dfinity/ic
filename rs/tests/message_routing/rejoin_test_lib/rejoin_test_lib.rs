@@ -35,6 +35,7 @@ pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
+const NO_STATE_CLONE_COUNT: &str = "state_manager_no_state_clone_count";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
@@ -357,6 +358,11 @@ async fn deploy_canisters_for_long_rounds(
     join_all(create_busy_canisters_futs).await;
 }
 
+async fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+    let count = fetch_metrics::<u64>(logger, node, vec![NO_STATE_CLONE_COUNT]).await;
+    count[NO_STATE_CLONE_COUNT][0]
+}
+
 pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
@@ -447,6 +453,22 @@ pub async fn rejoin_test_long_rounds(
         .replica_health_status
         .expect("Failed to get replica health status of rejoin_node");
     assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
+
+    let reference_node_no_state_clone_count =
+        no_state_clone_count(rejoin_node.clone(), &logger).await;
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger).await;
+    info!(
+        logger,
+        "Reference node no state clone count: {reference_node_no_state_clone_count}"
+    );
+    info!(
+        logger,
+        "Restarted node no state clone count: {rejoin_node_no_state_clone_count}"
+    );
+    // the reference node should (almost) never be behind
+    assert!(reference_node_no_state_clone_count < 10);
+    // the restarted node should be behind for many rounds and not clone any state during that time
+    assert!(rejoin_node_no_state_clone_count > 100);
 }
 
 pub async fn assert_state_sync_has_happened(
