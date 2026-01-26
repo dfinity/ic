@@ -1996,10 +1996,9 @@ fn test_index_sync_with_invalid_block() {
 
     // Give the index some time to try syncing - wait for multiple sync attempts. The index will
     // successfully sync the first, valid block. For the second block, it will append it to the
-    // blockchain, but fail to decode it, and return an error. The failure guard will restart the
-    // timer, and on the next iteration, it will continue with the next block, and things will
-    // seemingly be ok. However, if someone tries to query the invalid block, the index will panic
-    // due to invalid decoding.
+    // blockchain, but fail to decode it, and return an error. Since decoding failed, the timer
+    // will be cleared. However, since the block was already appended to the blockchain, if someone
+    // tries to query the invalid block, the index will panic due to invalid decoding.
     for _ in 0..20 {
         env.advance_time(Duration::from_secs(1));
         env.tick();
@@ -2022,16 +2021,22 @@ fn test_index_sync_with_invalid_block() {
             .map(icp_ledger::Block::decode)
             .collect::<Result<Vec<icp_ledger::Block>, String>>()
             .unwrap();
-        assert_eq!(blocks.len(), 1);
-        blocks[0].to_owned()
+        match blocks.len() {
+            0 => None,
+            1 => Some(blocks[0].to_owned()),
+            _ => panic!("More than one block returned for index {}", block_index),
+        }
     };
 
-    let block0 = index_get_block(0);
+    let block0 = index_get_block(0).expect("Block 0 should be present");
     assert_eq!(block0, mint_block);
     // The second mint block at index 2 is retrievable, since the index timer was restarted by the
     // failure guard and the index could sync past the invalid block.
     let block2 = index_get_block(2);
-    assert_eq!(block2, second_mint_block);
+    assert_eq!(
+        block2, None,
+        "Block 2 should not be present, since the timer was canceled"
+    );
     // This panics due to invalid block decoding, but the index shouldn't insert this encoded bad block in the first place.
     index_get_block(1);
 }
