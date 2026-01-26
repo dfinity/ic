@@ -3,6 +3,7 @@ use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_execution_environment::util::{GIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,
@@ -343,7 +344,7 @@ fn canister_request_take_canister_snapshot_creates_new_snapshots() {
         canister_id,
         "update",
         wasm()
-            .memory_size_is_at_least(20 * 1024 * 1024) // 20 MiB
+            .memory_size_is_at_least(20 * MIB) // 20 MiB
             .reply_data(&[42])
             .build(),
     )
@@ -608,7 +609,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
             canister_id,
             "update",
             wasm()
-                .memory_size_is_at_least(100 * 1024 * 1024) // 100 MiB
+                .memory_size_is_at_least(100 * MIB) // 100 MiB
                 .reply_data(&[42])
                 .build(),
         )
@@ -637,7 +638,7 @@ fn take_canister_snapshot_works_when_enough_subnet_memory_after_replacing_old_sn
         canisters[0],
         "update",
         wasm()
-            .memory_size_is_at_least(120 * 1024 * 1024) // 120 MiB
+            .memory_size_is_at_least(120 * MIB) // 120 MiB
             .reply_data(&[42])
             .build(),
     )

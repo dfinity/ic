@@ -1,8 +1,5 @@
-use std::time::Duration;
-
+use crate::util::{GIB, KIB};
 use assert_matches::assert_matches;
-use more_asserts::assert_gt;
-
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
@@ -19,6 +16,8 @@ use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
 use ic_universal_canister::{call_args, wasm};
+use more_asserts::assert_gt;
+use std::time::Duration;
 
 use ic_config::embedders::StableMemoryPageLimit;
 use ic_test_utilities_execution_environment::{
@@ -1149,9 +1148,6 @@ fn stable_grow_updates_subnet_available_memory() {
 
 #[test]
 fn stable_grow_returns_allocated_memory_on_error() {
-    const KB: u64 = 1024;
-    const GB: u64 = KB * KB * KB;
-
     // Create a canister which already has stable memory too big for the 32-bit
     // API.
     let mut test = ExecutionTestBuilder::new().build();
@@ -1159,7 +1155,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         .universal_canister_with_cycles(Cycles::new(100_000_000_000_000))
         .unwrap();
     let payload = wasm()
-        .stable64_grow((4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
+        .stable64_grow((4 * GIB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
         .int64_to_blob()
         .append_and_reply()
         .build();

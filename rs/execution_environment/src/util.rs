@@ -9,6 +9,11 @@ use std::sync::Arc;
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 pub(crate) const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
+pub const KIB: u64 = 1024;
+pub const MIB: u64 = 1024 * KIB;
+pub const GIB: u64 = 1024 * MIB;
+pub const TIB: u64 = 1024 * GIB;
+
 /// Debug assert a condition, increase an error counter, and log the error.
 ///
 /// Example usage:
