@@ -455,7 +455,7 @@ pub async fn rejoin_test_long_rounds(
     assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 
     let reference_node_no_state_clone_count =
-        no_state_clone_count(rejoin_node.clone(), &logger).await;
+        no_state_clone_count(reference_node.clone(), &logger).await;
     let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger).await;
     info!(
         logger,
