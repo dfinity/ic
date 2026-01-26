@@ -1,3 +1,5 @@
+mod cloud_engine_endpoints;
+
 use candid::{Decode, candid_method};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
