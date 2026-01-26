@@ -8,6 +8,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_execution_environment::util::{GIB, KIB, MIB};
 use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
@@ -282,7 +283,7 @@ fn ic0_grow_handles_overflow() {
             (func (export "canister_update test")
                 ;; Grow the memory by 10 pages.
                 (drop (call $stable_grow (i32.const 10)))
-                ;; Grow the memory up to 64 * 1024 + 1 pages.
+                ;; Grow the memory up to 64 * KIB + 1 pages.
                 ;; This should fail since it's bigger than the maximum number of memory
                 ;; pages that can be used with the 32-bit API and return -1.
                 (if (i32.ne (call $stable_grow (i32.const 65527)) (i32.const -1))
@@ -307,7 +308,7 @@ fn ic0_grow_can_reach_max_number_of_pages() {
             (func (export "canister_update test")
                 ;; Grow the memory by 10 pages.
                 (drop (call $stable_grow (i32.const 10)))
-                ;; Grow the memory up to 64 * 1024 pages which is the maximum allowed.
+                ;; Grow the memory up to 64 * KIB pages which is the maximum allowed.
                 ;; The result should be the previous number of pages (10).
                 (if (i32.ne (call $stable_grow (i32.const 65526)) (i32.const 10))
                     (then (unreachable))

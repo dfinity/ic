@@ -110,17 +110,16 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
-const KIB: u64 = 1 << 10;
-const MIB: u64 = 1 << 20;
-const GIB: u64 = 1 << 30;
+use crate::util::{GIB, KIB, MIB};
+
 const T: u128 = 1_000_000_000_000;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
+const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * GIB); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
+const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * KIB; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 // The simplest valid Wasm binary: "(module)"
 const MINIMAL_WASM: [u8; 8] = [
@@ -141,7 +140,7 @@ fn test_slice() {
     }
     let x = S { x: slice };
     let encoded = Encode!(&x).unwrap();
-    assert_le!(encoded.len(), 2 * 1024 * 1024);
+    assert_le!(encoded.len(), 2 * MIB as usize);
 }
 
 lazy_static! {
@@ -327,7 +326,7 @@ fn canister_manager_config(
         100,
         FlagStatus::Enabled,
         // 10 MiB should be enough for all the tests.
-        NumBytes::from(10 * 1024 * 1024),
+        NumBytes::from(10 * MIB),
         SchedulerConfig::application_subnet().upload_wasm_chunk_instructions,
         ic_config::embedders::Config::default().wasm_max_size,
         SchedulerConfig::application_subnet().canister_snapshot_baseline_instructions,
@@ -503,7 +502,7 @@ fn upgrade_canister_with_no_wasm_fails() {
 #[test]
 fn install_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
-    let mb = 1 << 20;
+    let mb = MIB as usize;
     let memory_capacity = 1000 * mb;
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister1 is created with `memory_used` memory allocation;

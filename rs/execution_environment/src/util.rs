@@ -9,9 +9,36 @@ use std::sync::Arc;
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 pub(crate) const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
+/// One kibibyte (1024 bytes).
+///
+/// ```
+/// use ic_execution_environment::util::KIB;
+/// assert_eq!(KIB, 1024);
+/// ```
 pub const KIB: u64 = 1024;
+
+/// One mebibyte (1024 kibibytes).
+///
+/// ```
+/// use ic_execution_environment::util::{MIB, KIB};
+/// assert_eq!(MIB, 1024 * KIB);
+/// ```
 pub const MIB: u64 = 1024 * KIB;
+
+/// One gibibyte (1024 mebibytes).
+///
+/// ```
+/// use ic_execution_environment::util::{GIB, MIB};
+/// assert_eq!(GIB, 1024 * MIB);
+/// ```
 pub const GIB: u64 = 1024 * MIB;
+
+/// One tebibyte (1024 gibibytes).
+///
+/// ```
+/// use ic_execution_environment::util::{TIB, GIB};
+/// assert_eq!(TIB, 1024 * GIB);
+/// ```
 pub const TIB: u64 = 1024 * GIB;
 
 /// Debug assert a condition, increase an error counter, and log the error.

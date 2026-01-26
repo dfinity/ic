@@ -2539,9 +2539,9 @@ fn can_reject_all_ingress_messages() {
         )
         .unwrap();
     let expected_reply = [
-        b"Hello ",
+        b"Hello ".as_slice(),
         caller.get().as_slice(),
-        b" this is ",
+        b" this is ".as_slice(),
         canister.get().as_slice(),
     ]
     .concat();
