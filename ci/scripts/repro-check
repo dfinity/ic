@@ -955,6 +955,8 @@ class ReproducibilityVerifier:
         """Main entry point for reproducibility verification logic."""
         start_time = time.time()
 
+        logger.info("Dry run: %s", dry_run)
+
         with self.storage(self.keep_temp) as dirs:
             guest_os_hash, guest_os_measurements, host_os_hash = self.process_proposal()
             self.decide_git_hash()
