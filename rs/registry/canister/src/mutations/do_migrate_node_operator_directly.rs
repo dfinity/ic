@@ -9,7 +9,7 @@ use std::{
 
 use candid::{CandidType, Principal};
 use ic_nervous_system_time_helpers::now_system_time;
-use ic_protobuf::registry::{node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord};
+use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::{make_node_operator_record_key, make_node_record_key};
 use ic_registry_transport::{delete, pb::v1::RegistryMutation, upsert};
 use ic_types::PrincipalId;
@@ -109,7 +109,7 @@ impl Registry {
         // The caller must be the owner of both of the node operator
         // records.
         if caller.to_vec() != old_node_operator_record.node_provider_principal_id {
-            return Err(MigrateError::CallerMismatch {
+            return Err(MigrateError::NotAuthorized {
                 caller,
                 expected: PrincipalId(Principal::from_slice(
                     &old_node_operator_record.node_provider_principal_id,
@@ -233,15 +233,9 @@ impl Registry {
     ) -> Vec<RegistryMutation> {
         get_node_operator_nodes_with_id(self, old_node_operator_id)
             .into_iter()
-            .map(|(key, record)| {
-                upsert(
-                    make_node_record_key(key).as_bytes(),
-                    NodeRecord {
-                        node_operator_id: new_node_operator_id.to_vec(),
-                        ..record
-                    }
-                    .encode_to_vec(),
-                )
+            .map(|(key, mut record)| {
+                record.node_operator_id = new_node_operator_id.to_vec();
+                upsert(make_node_record_key(key).as_bytes(), record.encode_to_vec())
             })
             .collect()
     }
@@ -293,7 +287,7 @@ pub enum MigrateError {
     DataCenterMismatch { old: String, new: String },
 
     /// The caller is not the node provider that owns the operators.
-    CallerMismatch {
+    NotAuthorized {
         caller: PrincipalId,
         expected: PrincipalId,
     },
@@ -321,7 +315,7 @@ impl Display for MigrateError {
                 MigrateError::DataCenterMismatch { old, new } => format!(
                     "Node operator migration can take place only if both node operators are within the same data center. Instead got old data center: {old}, new data center: {new}"
                 ),
-                MigrateError::CallerMismatch { caller, expected } => format!(
+                MigrateError::NotAuthorized { caller, expected } => format!(
                     "Caller doesn't seem to be the node provider owning the operator records that are being changed. Expected {expected}, got {caller}"
                 ),
                 MigrateError::OldOperatorRateLimit { principal } => format!(
@@ -612,7 +606,7 @@ mod tests {
 
         let caller = PrincipalId::new_user_test_id(999);
 
-        let expected_err: Result<(), MigrateError> = Err(MigrateError::CallerMismatch {
+        let expected_err: Result<(), MigrateError> = Err(MigrateError::NotAuthorized {
             caller,
             expected: node_provider_id,
         });
