@@ -15,7 +15,8 @@ pub enum CertificationVersion {
     /// `Funds`) to encoding `cycles_payment` / `cycles_refund` (type `Cycles`).
     /// Make `Request::metadata` and the `RequestMetadata` fields non-optional.
     V23 = 23,
-    /// Added `height` to the certified state.
+    /// Refactored CBOR-encoded `/metadata` leaf into `/metadata/prev_state_hash` (type `Blob`)
+    /// and added `height` to the certified state at `/metadata/height`.
     V24 = 24,
 }
 
