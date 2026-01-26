@@ -514,7 +514,7 @@ async fn simulate_node_provider_action(
 
     // Note: keep in sync with the limited-console invocation in infogetty.cc.
     let script = format!(
-        r#"echo -e "rbash-console\n{}\nexit" | env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        r#"echo -e "rbash-console\n{}\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
         recovery_upgrader_cmd
     );
 
