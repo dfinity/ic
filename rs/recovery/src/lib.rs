@@ -209,7 +209,7 @@ impl Recovery {
                     }
                 } else if !local_ic_admin_exists {
                     return Err(RecoveryError::UnexpectedError(format!(
-                        "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is false, and '{:?}' does not exist",
+                        "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist",
                         local_ic_admin_path
                     )));
                 } else {
