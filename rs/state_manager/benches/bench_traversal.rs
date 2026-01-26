@@ -125,14 +125,14 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     let height = Height::new(0);
     assert_eq!(
-        hash_state(height, &state).digest(),
+        hash_state(&state, height).digest(),
         hash_lazy_tree(&replicated_state_as_lazy_tree(&state, height))
             .unwrap()
             .root_hash(),
     );
 
     c.bench_function("traverse/hash_tree", |b| {
-        b.iter(|| black_box(hash_state(height, &state)));
+        b.iter(|| black_box(hash_state(&state, height)));
     });
 
     c.bench_function("traverse/hash_tree_new", |b| {
@@ -261,7 +261,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     let mut group = c.benchmark_group("drop_tree");
     group.bench_function(BenchmarkId::new("crypto::HashTree", NUM_STATUSES), |b| {
-        let hash_tree = hash_state(height, &state);
+        let hash_tree = hash_state(&state, height);
         b.iter_batched(|| hash_tree.clone(), std::mem::drop, BatchSize::LargeInput)
     });
     group.bench_function(

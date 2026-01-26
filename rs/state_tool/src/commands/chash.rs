@@ -27,7 +27,7 @@ pub fn do_hash(height: Height, path: PathBuf) -> Result<(), String> {
 
     println!(
         "PARTIAL STATE HASH: {}",
-        hash_state(height, &state).digest()
+        hash_state(&state, height).digest()
     );
 
     Ok(())
