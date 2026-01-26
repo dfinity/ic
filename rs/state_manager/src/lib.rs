@@ -2121,7 +2121,7 @@ impl StateManagerImpl {
     /// if provided. If `last_checkpoint_to_keep` is None, all checkpoints are kept.
     ///
     /// Shared inner function of the public functions `remove_states_below`
-    /// and `remove_inmemory_states_below`.
+    /// and `remove_inmemory_states_below_latest_subnet_certified_height`.
     fn remove_states_below_impl(
         &self,
         requested_height: Height,
@@ -3144,7 +3144,7 @@ impl StateManager for StateManagerImpl {
     /// * The latest certified state
     /// * State 0
     /// * Specified extra heights to keep
-    fn remove_inmemory_states_below(
+    fn remove_inmemory_states_below_latest_subnet_certified_height(
         &self,
         requested_height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
@@ -3152,7 +3152,7 @@ impl StateManager for StateManagerImpl {
         let _timer = self
             .metrics
             .api_call_duration
-            .with_label_values(&["remove_inmemory_states_below"])
+            .with_label_values(&["remove_inmemory_states_below_latest_subnet_certified_height"])
             .start_timer();
 
         let latest_subnet_certified_height =

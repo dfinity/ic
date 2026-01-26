@@ -966,13 +966,16 @@ impl StateManager for StateMachineStateManager {
         self.deref().remove_states_below(height)
     }
 
-    fn remove_inmemory_states_below(
+    fn remove_inmemory_states_below_latest_subnet_certified_height(
         &self,
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
     ) {
         self.deref()
-            .remove_inmemory_states_below(height, extra_heights_to_keep)
+            .remove_inmemory_states_below_latest_subnet_certified_height(
+                height,
+                extra_heights_to_keep,
+            )
     }
 
     fn commit_and_certify(

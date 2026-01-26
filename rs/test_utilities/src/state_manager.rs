@@ -210,7 +210,7 @@ impl StateManager for FakeStateManager {
             .retain(|snap| snap.height == Height::new(0) || snap.height >= height)
     }
 
-    fn remove_inmemory_states_below(
+    fn remove_inmemory_states_below_latest_subnet_certified_height(
         &self,
         _height: Height,
         _extra_heights_to_keep: &BTreeSet<Height>,
@@ -701,7 +701,7 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn remove_inmemory_states_below(
+    fn remove_inmemory_states_below_latest_subnet_certified_height(
         &self,
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,
@@ -709,7 +709,10 @@ impl StateManager for RefMockStateManager {
         self.mock
             .read()
             .unwrap()
-            .remove_inmemory_states_below(height, extra_heights_to_keep)
+            .remove_inmemory_states_below_latest_subnet_certified_height(
+                height,
+                extra_heights_to_keep,
+            )
     }
 
     fn commit_and_certify(

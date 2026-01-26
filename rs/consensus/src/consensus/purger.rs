@@ -320,7 +320,10 @@ impl Purger {
 
         let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
-            .remove_inmemory_states_below(height, &extra_heights_to_keep);
+            .remove_inmemory_states_below_latest_subnet_certified_height(
+                height,
+                &extra_heights_to_keep,
+            );
         trace!(
             self.log,
             "Purge replicated states below [memory] {:?}, height to keep: {:?}",
@@ -525,7 +528,7 @@ mod tests {
 
             state_manager
                 .get_mut()
-                .expect_remove_inmemory_states_below()
+                .expect_remove_inmemory_states_below_latest_subnet_certified_height()
                 .withf(move |height, _extra_heights| {
                     *height == *inmemory_purge_height_clone.read().unwrap()
                 })
@@ -763,7 +766,7 @@ mod tests {
                 .return_const(Height::from(0));
             state_manager
                 .get_mut()
-                .expect_remove_inmemory_states_below()
+                .expect_remove_inmemory_states_below_latest_subnet_certified_height()
                 .withf(move |_, extra| *extra == *extra_heights_clone.read().unwrap())
                 .return_const(());
 

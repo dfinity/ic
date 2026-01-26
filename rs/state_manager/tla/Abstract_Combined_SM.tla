@@ -126,7 +126,7 @@ Accept_CUP_Heights ==
 \* accepting certifications:
 \* https://sourcegraph.com/github.com/dfinity/ic@50f45debb8f9409f98940c3914dbc4b45eb5c485/-/blob/rs/consensus/src/consensus/purger.rs?L94:13
 \*
-\* Note: this is a slight underapproximation of GC. In reality, we don't trigger it only on CUPs, but we also have remove_inmemory_states_below
+\* Note: this is a slight underapproximation of GC. In reality, we don't trigger it only on CUPs, but we also have remove_inmemory_states_below_latest_subnet_certified_height
 \*       in the state manager:
 \*       https://sourcegraph.com/github.com/dfinity/ic@5281b55657a01273d8ec236d2838669eb6198cc5/-/blob/rs/consensus/src/consensus/purger.rs?L274 
 \* However, in the analysis that we performed, this shouldn't matter much

@@ -239,7 +239,7 @@ pub trait StateManager: StateReader {
     ///    example, the last fully persisted state might be preserved to
     ///    optimize future operations.
     ///  * No checkpoints are removed, see also `remove_states_below()`
-    fn remove_inmemory_states_below(
+    fn remove_inmemory_states_below_latest_subnet_certified_height(
         &self,
         height: Height,
         extra_heights_to_keep: &BTreeSet<Height>,

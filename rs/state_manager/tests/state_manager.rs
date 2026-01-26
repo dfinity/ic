@@ -1581,7 +1581,10 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(0),
+            &BTreeSet::new(),
+        );
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), vec![height(0),],);
 
@@ -1595,7 +1598,10 @@ fn cannot_remove_height_zero() {
 
         state_manager.remove_states_below(height(0));
         state_manager.flush_deallocation_channel();
-        state_manager.remove_inmemory_states_below(height(0), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(0),
+            &BTreeSet::new(),
+        );
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
@@ -1628,7 +1634,10 @@ fn cannot_remove_latest_height_or_checkpoint() {
         // checkpoint can be retained until the hashing is complete.
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(11));
-        state_manager.remove_inmemory_states_below(height(11), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(11),
+            &BTreeSet::new(),
+        );
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1649,7 +1658,10 @@ fn cannot_remove_latest_height_or_checkpoint() {
 
         state_manager.flush_tip_channel();
         state_manager.remove_states_below(height(20));
-        state_manager.remove_inmemory_states_below(height(20), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(20),
+            &BTreeSet::new(),
+        );
         state_manager.flush_deallocation_channel();
 
         assert_eq!(
@@ -1682,7 +1694,10 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
         state_manager.flush_tip_channel();
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
-        state_manager.remove_inmemory_states_below(height(6), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(6),
+            &BTreeSet::new(),
+        );
 
         // Snapshots from @1 to @5 are purged are removed while no checkpoints are removed.
         assert_eq!(
@@ -1717,7 +1732,7 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
 }
 
 #[test]
-fn remove_inmemory_states_below_can_keep_extra_states() {
+fn remove_inmemory_states_below_latest_subnet_certified_height_can_keep_extra_states() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let mut heights = vec![height(0)];
         for i in 1..10 {
@@ -1738,7 +1753,7 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
-        // Tests the behavior of `remove_inmemory_states_below` for various scenarios involving extra heights to keep.
+        // Tests the behavior of `remove_inmemory_states_below_latest_subnet_certified_height` for various scenarios involving extra heights to keep.
         // This call covers another two cases:
         // Case 1:
         //   Extra heights to keep exist in memory and are below the requested height to remove.
@@ -1746,8 +1761,10 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
         // Case 2:
         //   Extra heights to keep exist in memory and are at or above the requested height to remove.
         //   Expected: No effect.
-        state_manager
-            .remove_inmemory_states_below(height(5), &btreeset![height(1), height(4), height(7)]);
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(5),
+            &btreeset![height(1), height(4), height(7)],
+        );
 
         // State at height 1 is kept because of it is included in `extra_heights_to_keep`.
         // State at 2 is removed because it is below the requested height and are not asked to keep in addition.
@@ -1775,7 +1792,7 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
         // Case 4:
         //   Extra heights to keep do not exist in memory, and are at or above the requested height to remove.
         //   Expected: No effect.
-        state_manager.remove_inmemory_states_below(
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
             height(9),
             &btreeset![height(2), height(7), height(8), height(10)],
         );
@@ -1789,7 +1806,10 @@ fn remove_inmemory_states_below_can_keep_extra_states() {
 
         certify_height(&state_manager, height(8));
 
-        state_manager.remove_inmemory_states_below(height(10), &BTreeSet::new());
+        state_manager.remove_inmemory_states_below_latest_subnet_certified_height(
+            height(10),
+            &BTreeSet::new(),
+        );
 
         // There remain only the latest state, the latest certified height and the initial state.
         assert_eq!(
@@ -8954,7 +8974,10 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(42),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
         // optimization has not triggered yet
@@ -8987,7 +9010,10 @@ fn commit_and_certify_optimization_conditions() {
 fn commit_and_certify_optimization_semantics() {
     state_manager_test(|metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(42),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
         // optimization has not triggered yet
@@ -9044,13 +9070,19 @@ fn latest_subnet_certified_height() {
         // initial value
         assert_eq!(sm.latest_subnet_certified_height(), 0);
 
-        // `remove_inmemory_states_below` updates `latest_subnet_certified_height`
-        sm.remove_inmemory_states_below(Height::new(100), &BTreeSet::new());
+        // `remove_inmemory_states_below_latest_subnet_certified_height` updates `latest_subnet_certified_height`
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(100),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 100);
 
-        // `remove_inmemory_states_below` does not update `latest_subnet_certified_height`
+        // `remove_inmemory_states_below_latest_subnet_certified_height` does not update `latest_subnet_certified_height`
         // to a lower value
-        sm.remove_inmemory_states_below(Height::new(10), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(10),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 100);
 
         // `remove_states_below` never updates `latest_subnet_certified_height`
@@ -9079,7 +9111,10 @@ fn commit_and_certify_tip_set_panic() {
 fn commit_and_certify_optimization_tip_set_panic() {
     state_manager_test(|_metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(42),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
         // optimization triggers
@@ -9123,7 +9158,10 @@ fn take_tip_does_not_hash_without_optimization() {
 fn take_tip_hashes_with_optimization() {
     state_manager_test(|metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(42),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
         // optimization has not triggered yet
@@ -9157,7 +9195,10 @@ fn take_tip_hashes_with_optimization() {
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(500), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(500),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 500);
 
         // optimization has not triggered yet
@@ -9245,7 +9286,10 @@ fn get_state_hash_at() {
 fn flush_with_optimization() {
     state_manager_test(|metrics, sm| {
         // update `latest_subnet_certified_height` to enable optimization
-        sm.remove_inmemory_states_below(Height::new(42), &BTreeSet::new());
+        sm.remove_inmemory_states_below_latest_subnet_certified_height(
+            Height::new(42),
+            &BTreeSet::new(),
+        );
         assert_eq!(sm.latest_subnet_certified_height(), 42);
 
         // optimization has not triggered yet
