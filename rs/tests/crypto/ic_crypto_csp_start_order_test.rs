@@ -71,35 +71,34 @@ fn verify_crypto_vault_is_configured_to_start_after_ic_replica(
 
     info!(
         logger,
-        "Verifying that {} is listed in the After property of {}", dependency, service
+        "Verifying that {dependency} is listed in the After property of {service}"
     );
 
     let cmd = format!("systemctl show {service} -p After");
-    debug!(logger, "Executing via SSH: '{}'", cmd);
+    debug!(logger, "Executing via SSH: '{cmd}'");
 
     let output = node
-        .block_on_bash_script(cmd)
+        .block_on_bash_script(&cmd)
         .expect("run systemctl show command");
-    debug!(logger, "Output: '{}'", output);
+    debug!(logger, "Output: '{output}'");
 
     // Parse the output which is in format: "After=service1.service service2.service ..."
     let after_value = match output.strip_prefix("After=") {
         Some(value) => value,
-        None => panic!("Unexpected output format: {}", output),
+        None => panic!("Unexpected output format: {output}"),
     };
 
     let after_services: Vec<&str> = after_value.split_whitespace().collect();
-    debug!(logger, "After services: {:?}", after_services);
+    debug!(logger, "After services: {after_services:?}");
 
     if !after_services.contains(&dependency) {
         panic!(
-            "{} is not listed in the After property of {}. After services found: {:?}",
-            dependency, service, after_services
+            "{dependency} is not listed in the After property of {service}. After services found: {after_services:?}",
         );
     }
 
     info!(
         logger,
-        "Successfully verified that {} is listed in the After property of {}", dependency, service
+        "Successfully verified that {dependency} is listed in the After property of {service}"
     );
 }
