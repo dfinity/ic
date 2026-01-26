@@ -7,7 +7,7 @@ use ic_types::{
     NodeId, RegistryVersion, SubnetId,
     consensus::{
         Block,
-        dkg::{DkgPayloadCreationError, DkgSummary},
+        dkg::{DkgPayloadCreationError, DkgSummary, Message},
     },
     crypto::{
         AlgorithmId,
@@ -86,7 +86,7 @@ pub(super) fn get_dealers_from_chain(
     pool_reader: &PoolReader<'_>,
     block: &Block,
 ) -> HashSet<(NiDkgId, NodeId)> {
-    let (dkg_dealings, _) = get_dkg_dealings(pool_reader, block, false);
+    let (dkg_dealings, _) = extract_from_dkg_dealing_messages(pool_reader, block, false, |_| ());
     dkg_dealings
         .into_iter()
         .flat_map(|(dkg_id, dealings)| {
@@ -101,7 +101,7 @@ pub(super) fn get_dealers_from_chain(
 /// the node Id to the dealing. This function panics if multiple dealings
 /// from one dealer are discovered, hence, we assume a valid block chain.
 /// It also excludes dealings for ni_dkg ids, which already have a transcript in the
-/// blockchain.
+/// blockchain, and returns these exlcuded ni_dkg ids.
 pub(super) fn get_dkg_dealings(
     pool_reader: &PoolReader<'_>,
     block: &Block,
@@ -110,7 +110,18 @@ pub(super) fn get_dkg_dealings(
     BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>>,
     BTreeSet<NiDkgId>,
 ) {
-    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, NiDkgDealing>> = BTreeMap::new();
+    extract_from_dkg_dealing_messages(pool_reader, block, exclude_used, |message| {
+        message.content.dealing.clone()
+    })
+}
+
+fn extract_from_dkg_dealing_messages<T>(
+    pool_reader: &PoolReader<'_>,
+    block: &Block,
+    exclude_used: bool,
+    extractor: impl Fn(&Message) -> T,
+) -> (BTreeMap<NiDkgId, BTreeMap<NodeId, T>>, BTreeSet<NiDkgId>) {
+    let mut dealings: BTreeMap<NiDkgId, BTreeMap<NodeId, T>> = BTreeMap::new();
     let mut excluded: BTreeSet<NiDkgId> = BTreeSet::new();
 
     for block in pool_reader
@@ -136,7 +147,7 @@ pub(super) fn get_dkg_dealings(
             let old_dealing = dealings
                 .entry(message.content.dkg_id.clone())
                 .or_default()
-                .insert(message.signature.signer, message.content.dealing.clone());
+                .insert(message.signature.signer, extractor(message));
 
             assert!(
                 old_dealing.is_none(),

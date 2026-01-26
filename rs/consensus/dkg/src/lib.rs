@@ -42,14 +42,18 @@ mod utils;
 pub use dkg_key_manager::DkgKeyManager;
 pub use payload_builder::{create_payload, get_dkg_summary_from_cup_contents};
 
-// The maximal number of DKGs for other subnets we want to run in one interval.
+/// The maximal number of DKGs for other subnets we want to run in one interval.
 const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 
-// The maximum number of intervals during which an initial DKG request is
-// attempted.
+/// The maximum number of early remote transcript responses we want to include in a data payload.
+/// Note that responses for `SetupInitialDKG` requests contain two transcripts.
+const MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES: usize = 1;
+
+/// The maximum number of intervals during which an initial DKG request is
+/// attempted.
 const MAX_REMOTE_DKG_ATTEMPTS: u32 = 5;
 
-// Generic error string for failed remote DKG requests.
+/// Generic error string for failed remote DKG requests.
 const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeatedly failed";
 
 struct Metrics {
@@ -1630,14 +1634,12 @@ mod tests {
             );
 
             let target_id = NiDkgTargetId::new([0u8; 32]);
-            let target_id_mutex = Arc::new(Mutex::new(Some(target_id)));
-
             complement_state_manager_with_remote_dkg_requests(
                 state_manager.clone(),
                 registry.get_latest_version(),
                 vec![10, 11, 12, 13],
                 None,
-                target_id_mutex.clone(),
+                target_id,
             );
 
             // Verify that the next summary block contains the configs and no transcripts.
@@ -1648,7 +1650,7 @@ mod tests {
             assert_eq!(extract_dkg_configs_from_highest_block(&pool).len(), 4);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
-            // Put a dealing in the pool and check that it gets included
+            // Put three dealing in the pool and check that they get included
             // Additionally check that there are no remote transcripts
             let dealings = (0..3)
                 .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[0].clone())))
@@ -1659,13 +1661,13 @@ mod tests {
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // For the next round, we put nothing into the pool
-            // Since there are no dealings, we will try to build a remote transcript
-            // This will fail, however, since we need two dealings (one high one low)
+            // We will try to build a remote transcript, his will fail, however,
+            // since we don't have enought dealings to build both transcripts (one high one low)
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
-            // Now we put the other dealing into the pool
+            // Now we put the other dealings into the pool
             // The payload builder will include the dealing
             let dealings = (0..3)
                 .map(|i| ChangeAction::AddToValidated(create_dealing(i, remote_dkg_ids[1].clone())))
@@ -1676,8 +1678,6 @@ mod tests {
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 0);
 
             // Now sufficient dealings are in the pool, check that payload contains early remote transcripts
-            // NOTE: We only need one dealing each, since we are using `CryptoReturningOk`. We should consider
-            // using real crypto for these tests, to make them more realistic
             pool.advance_round_normal_operation();
             assert_eq!(extract_dealings_from_highest_block(&pool).len(), 0);
             assert_eq!(extract_remote_dkgs_from_highest_block(&pool).len(), 2);
@@ -1719,9 +1719,6 @@ mod tests {
                 )
                 .is_ok()
             );
-
-            // Simulate the delivery of the block, which removes to context from the state
-            // target_id_mutex.lock().unwrap().take();
 
             // Advance the pool a until the next DKG, check that the early remote transcripts are not generated multiple times
             // including that they are not included in the summary

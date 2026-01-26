@@ -1,5 +1,6 @@
 use crate::{
-    MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL, REMOTE_DKG_REPEATED_FAILURE_ERROR,
+    MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES, MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL,
+    REMOTE_DKG_REPEATED_FAILURE_ERROR,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -127,7 +128,6 @@ fn create_data_payload(
         pool_reader,
         crypto,
         parent,
-        1,
         last_dkg_summary,
         state_manager,
         validation_context,
@@ -150,20 +150,17 @@ fn create_data_payload(
     ))
 }
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn create_early_remote_transcripts(
     pool_reader: &PoolReader<'_>,
     crypto: &dyn ConsensusCrypto,
     parent: &Block,
-    num_transcripts: usize,
     last_dkg_summary: &DkgSummary,
     state_manager: &dyn StateManager<State = ReplicatedState>,
     validation_context: &ValidationContext,
     logger: ReplicaLogger,
 ) -> Result<Vec<(NiDkgId, CallbackId, Result<NiDkgTranscript, String>)>, DkgPayloadCreationError> {
-    // If we cannot access the state manager, we don't return an error.
-    // This is because the early remote transcripts are an optimization.
-    // If we don't return any transcripts here, the protocol will continue anyway
-    // and return the transcripts (or their errors) in the summary block
+    // Return an error on transient state manager errors
     let state = state_manager
         .get_state_at(validation_context.certified_height)
         .map_err(DkgPayloadCreationError::StateManagerError)?;
@@ -177,27 +174,24 @@ pub(crate) fn create_early_remote_transcripts(
     let (all_dealings, completed) = utils::get_dkg_dealings(pool_reader, parent, true);
 
     // Collect map of remote target_ids to dkg configs
-    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<(&NiDkgId, &NiDkgConfig)>> =
-        BTreeMap::new();
-    for (dkg_id, config) in last_dkg_summary.configs.iter() {
+    let mut remote_contexts: BTreeMap<NiDkgTargetId, Vec<&NiDkgConfig>> = BTreeMap::new();
+    for config in last_dkg_summary.configs.values() {
+        let dkg_id = config.dkg_id();
         if completed.contains(dkg_id) {
             continue;
         }
         if let NiDkgTargetSubnet::Remote(target_id) = dkg_id.target_subnet {
-            remote_contexts
-                .entry(target_id)
-                .or_default()
-                .push((dkg_id, config));
+            remote_contexts.entry(target_id).or_default().push(config);
         }
     }
 
     let state_ref = state.get_ref();
     let mut selected_transcripts = vec![];
-    for (_, configs) in remote_contexts {
+    for (_target_id, configs) in remote_contexts {
         // If any of the configs has less dealings than the threshold, we skip this target_id
-        if configs.iter().any(|(dkg_id, config)| {
+        if configs.iter().any(|config| {
             let dealings_count = all_dealings
-                .get(dkg_id)
+                .get(config.dkg_id())
                 .map_or(0, |dealings| dealings.len());
             dealings_count < config.threshold().get().get() as usize
         }) {
@@ -206,9 +200,9 @@ pub(crate) fn create_early_remote_transcripts(
 
         // For each config, try to build the necessary (dkg_id, callback_id, transcript) triple
         let mut transcripts = vec![];
-        for (dkg_id, config) in configs.iter() {
+        for config in configs.iter() {
             // Lookup the callback id
-            let Some(callback_id) = get_callback_id_from_id(state_ref, dkg_id) else {
+            let Some(callback_id) = get_callback_id_from_id(state_ref, config.dkg_id()) else {
                 continue;
             };
             // Generate the transcript. We just skip reproducible errors, they will
@@ -218,39 +212,52 @@ pub(crate) fn create_early_remote_transcripts(
                 Err(err) if err.is_reproducible() => {
                     warn!(
                         logger,
-                        "Failed to create transcript for dkg id {:?}: {:?}", dkg_id, err
+                        "Failed to create early remote transcript for dkg id {:?}: {:?}",
+                        config.dkg_id(),
+                        err
                     );
                     continue;
                 }
                 Err(err) => {
+                    // Return on transient crypto errors
                     return Err(DkgPayloadCreationError::DkgCreateTranscriptError(err));
                 }
             };
-            transcripts.push(((*dkg_id).clone(), callback_id, Ok::<_, String>(transcript)));
+            transcripts.push((
+                config.dkg_id().clone(),
+                callback_id,
+                Ok::<_, String>(transcript),
+            ));
         }
 
-        // For initial DKG transcripts, we need a pair of values while for VetKD we need a single config
-        // Here we do some matching, to check that we have the right number of configs
+        // For initial DKG transcripts, we need a pair of values while for VetKD we need a single transcript.
+        // Here we do some matching, to check that we have the right number of transcripts.
         let is_valid = match transcripts.len() {
             1 => {
-                // For VetKD, we need to check that these have a HighThresholdForKey tag
+                // For VetKD, we need to check that it has a HighThresholdForKey tag
                 matches!(transcripts[0].0.dkg_tag, NiDkgTag::HighThresholdForKey(_))
             }
             2 => {
                 // If we have two transcripts for the same ID, we check that it is
-                // one low and one high threshold transcript
+                // one low and one high threshold transcript.
                 let tags: BTreeSet<_> = transcripts
                     .iter()
                     .map(|(dkg_id, _, _)| dkg_id.dkg_tag.clone())
                     .collect();
                 tags.contains(&NiDkgTag::LowThreshold) && tags.contains(&NiDkgTag::HighThreshold)
             }
-            _ => false, // Other combinations are not supported
+            other => {
+                warn!(
+                    logger,
+                    "Produced unexpected number of early remote NiDKG transcripts: {other}"
+                );
+                false
+            }
         };
 
         if is_valid {
             selected_transcripts.append(&mut transcripts);
-            if selected_transcripts.len() >= num_transcripts {
+            if selected_transcripts.len() >= MAX_EARLY_REMOTE_TRANSCRIPT_RESPONSES {
                 break;
             }
         }
@@ -434,8 +441,6 @@ fn create_transcript(
 ) -> Result<NiDkgTranscript, DkgCreateTranscriptError> {
     let no_dealings = BTreeMap::new();
     let dealings = all_dealings.get(config.dkg_id()).unwrap_or(&no_dealings);
-
-    // TODO: We need to check that we are not erroring on insufficient dealings here
 
     ic_interfaces::crypto::NiDkgAlgorithm::create_transcript(crypto, config, dealings)
 }

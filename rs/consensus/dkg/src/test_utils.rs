@@ -22,7 +22,7 @@ use ic_types::{
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 pub(super) fn complement_state_manager_with_setup_initial_dkg_request(
@@ -98,30 +98,29 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
     registry_version: RegistryVersion,
     node_ids: Vec<u64>,
     times: Option<usize>,
-    target: Arc<Mutex<Option<NiDkgTargetId>>>,
+    target_id: NiDkgTargetId,
 ) {
     // Add the context into state_manager.
     let nodes_in_target_subnet: BTreeSet<_> = node_ids.into_iter().map(node_test_id).collect();
+    let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+    state
+        .metadata
+        .subnet_call_context_manager
+        .push_context(SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
+            request: RequestBuilder::new().build(),
+            nodes_in_target_subnet: nodes_in_target_subnet.clone(),
+            target_id,
+            registry_version,
+            time: state.time(),
+        }));
 
     let mut mock = state_manager.get_mut();
-    let expectation = mock.expect_get_state_at().returning(move |_| {
-        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
-        if let Some(target_id) = target.lock().unwrap().as_ref() {
-            state.metadata.subnet_call_context_manager.push_context(
-                SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
-                    request: RequestBuilder::new().build(),
-                    nodes_in_target_subnet: nodes_in_target_subnet.clone(),
-                    target_id: *target_id,
-                    registry_version,
-                    time: state.time(),
-                }),
-            );
-        }
-        Ok(ic_interfaces_state_manager::Labeled::new(
-            Height::new(0),
-            Arc::new(state),
-        ))
-    });
+    let expectation =
+        mock.expect_get_state_at()
+            .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                Height::new(0),
+                Arc::new(state),
+            )));
     if let Some(times) = times {
         expectation.times(times);
     }
@@ -129,8 +128,6 @@ pub(super) fn complement_state_manager_with_remote_dkg_requests(
 
 /// Create a dealing from the node `node_idx`
 pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<DealingContent> {
-    let node_id = node_test_id(node_idx);
-
     BasicSigned {
         content: DealingContent {
             version: ReplicaVersion::default(),
@@ -141,7 +138,7 @@ pub(super) fn create_dealing(node_idx: u64, dkg_id: NiDkgId) -> BasicSigned<Deal
         },
         signature: BasicSignature {
             signature: BasicSig(vec![]).into(),
-            signer: node_id,
+            signer: node_test_id(node_idx),
         },
     }
 }
@@ -206,6 +203,7 @@ pub(super) fn extract_remote_dkg_ids_from_highest_block(
         .collect()
 }
 
+/// Extract the DKG configs from the current highest validated block
 pub(super) fn extract_dkg_configs_from_highest_block(
     pool: &TestConsensusPool,
 ) -> BTreeMap<NiDkgId, NiDkgConfig> {
