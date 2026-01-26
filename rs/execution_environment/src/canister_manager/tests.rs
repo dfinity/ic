@@ -2230,9 +2230,9 @@ fn add_cycles_sender_not_in_whitelist() {
 #[test]
 fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
-    let mb = 1 << 20;
-    let memory_capacity = 1000 * mb;
-    let memory_used = memory_capacity - 10 * mb;
+    let mib = MIB as usize;
+    let memory_capacity = 1000 * mib;
+    let memory_used = memory_capacity - 10 * mib;
 
     let wat = r#"
         (module
@@ -3008,7 +3008,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             .system_state
             .wasm_chunk_store
             .memory_usage(),
-        NumBytes::from(1024 * 1024)
+        NumBytes::from(MIB)
     );
 
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
@@ -3618,7 +3618,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
-        .with_subnet_execution_memory(100 * 1024 * 1024) // 100 MiB
+        .with_subnet_execution_memory(100 * MIB) // 100 MiB
         .with_subnet_memory_reservation(0)
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
@@ -3667,7 +3667,7 @@ fn update_settings_makes_subnet_oversubscribed() {
         canister_id: c1.get(),
         settings: CanisterSettingsArgsBuilder::new()
             .with_freezing_threshold(1)
-            .with_memory_allocation(10 * 1024 * 1024)
+            .with_memory_allocation(10 * MIB)
             .build(),
         sender_canister_version: None,
     };
@@ -3678,7 +3678,7 @@ fn update_settings_makes_subnet_oversubscribed() {
         canister_id: c2.get(),
         settings: CanisterSettingsArgsBuilder::new()
             .with_freezing_threshold(1)
-            .with_memory_allocation(30 * 1024 * 1024)
+            .with_memory_allocation(30 * MIB)
             .build(),
         sender_canister_version: None,
     };
@@ -3690,7 +3690,7 @@ fn update_settings_makes_subnet_oversubscribed() {
         canister_id: c3.get(),
         settings: CanisterSettingsArgsBuilder::new()
             .with_freezing_threshold(1)
-            .with_memory_allocation(65 * 1024 * 1024)
+            .with_memory_allocation(65 * MIB)
             .build(),
         sender_canister_version: None,
     };
@@ -4330,7 +4330,7 @@ fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
         .create_canister_with_allocation(
             Cycles::new(1_000_000_000_000),
             None,
-            Some(10 * 1024 * 1024 * 1024),
+            Some(10 * GIB),
         )
         .unwrap();
     test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
@@ -4343,7 +4343,7 @@ fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
         .unwrap();
 
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    test.canister_update_allocations_settings(canister_id, None, Some(10 * 1024 * 1024 * 1024))
+    test.canister_update_allocations_settings(canister_id, None, Some(10 * GIB))
         .unwrap();
     test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
         .unwrap();
@@ -5450,7 +5450,7 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     // Uploading one chunk is ok.
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: vec![0x42; 1024 * 1024],
+        chunk: vec![0x42; MIB as usize],
     }
     .encode();
     env.execute_ingress(CanisterId::ic_00(), "upload_chunk", payload)
@@ -5463,7 +5463,7 @@ fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     // a second.
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
-        chunk: vec![0x43; 1024 * 1024],
+        chunk: vec![0x43; MIB as usize],
     }
     .encode();
     let error = env
@@ -6990,7 +6990,7 @@ fn create_canister_sets_correct_allocations() {
         .build();
 
     let compute_allocation = 50;
-    let memory_allocation = 1024 * 1024 * 1024;
+    let memory_allocation = GIB;
     let canister_id = test
         .create_canister_with_settings(
             Cycles::from(u64::MAX),
@@ -7452,7 +7452,7 @@ fn create_canister_checks_freezing_threshold_for_memory_allocation() {
         .create_canister_with_allocation(
             Cycles::new(1_000_000_000_000),
             None,
-            Some(10 * 1024 * 1024 * 1024),
+            Some(10 * GIB),
         )
         .unwrap_err();
 
@@ -7490,7 +7490,7 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
         .with_subnet_memory_threshold(0)
         .build();
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    let excessive_memory = 1024 * 1024 * 1024; // 1 GiB
+    let excessive_memory = GIB; // 1 GiB
 
     let uc = test
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
