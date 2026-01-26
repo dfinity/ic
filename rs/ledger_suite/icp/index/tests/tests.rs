@@ -1994,17 +1994,12 @@ fn test_index_sync_with_invalid_block() {
     // Install index canister pointing to test ledger
     let index_id = install_index(env, test_ledger_id);
 
-    // The index should handle the invalid block gracefully
-    // It will try to decode it and fail, which should cause an error in build_index
-    // The index's decode_encoded_block function will return an error, which will cause
-    // build_index to fail and retry. The index should not be able to sync past the invalid block.
-    // We verify that the index can at least sync the first valid block before hitting the invalid one.
-
-    // Give the index some time to try syncing - wait for multiple sync attempts
-    // The index will try to sync, hit the invalid block, and either:
-    // 1. Trap (in which case we can't query it)
-    // 2. Skip the invalid block and continue (unlikely but possible)
-    // 3. Stop syncing at the invalid block (most likely)
+    // Give the index some time to try syncing - wait for multiple sync attempts. The index will
+    // successfully sync the first, valid block. For the second block, it will append it to the
+    // blockchain, but fail to decode it, and return an error. The failure guard will restart the
+    // timer, and on the next iteration, it will continue with the next block, and things will
+    // seemingly be ok. However, if someone tries to query the invalid block, the index will panic
+    // due to invalid decoding.
     for _ in 0..20 {
         env.advance_time(Duration::from_secs(1));
         env.tick();
