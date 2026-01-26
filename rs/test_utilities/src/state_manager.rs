@@ -706,7 +706,10 @@ impl StateManager for RefMockStateManager {
     }
 
     fn update_latest_subnet_certified_height(&self, height: Height) {
-        self.mock.read().unwrap().update_latest_subnet_certified_height(height)
+        self.mock
+            .read()
+            .unwrap()
+            .update_latest_subnet_certified_height(height)
     }
 
     fn remove_inmemory_states_below(

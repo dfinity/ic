@@ -321,7 +321,8 @@ impl Purger {
         let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
             .remove_inmemory_states_below(height, &extra_heights_to_keep);
-        self.state_manager.update_latest_subnet_certified_height(height);
+        self.state_manager
+            .update_latest_subnet_certified_height(height);
         trace!(
             self.log,
             "Purge replicated states below [memory] {:?}, height to keep: {:?}",
