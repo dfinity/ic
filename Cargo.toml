@@ -38,10 +38,6 @@ members = [
     "rs/bitcoin/replica_types",
     "rs/bitcoin/service",
     "rs/bitcoin/validation",
-    "rs/boundary_node/certificate_issuance/certificate_issuer",
-    "rs/boundary_node/certificate_issuance/certificate_orchestrator",
-    "rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "rs/boundary_node/certificate_issuance/create_acme_account",
     "rs/boundary_node/ic_boundary",
     "rs/boundary_node/rate_limits",
     "rs/boundary_node/rate_limits/api",
@@ -88,7 +84,6 @@ members = [
     "rs/crypto/internal/crypto_lib/hmac",
     "rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/seed",
-    "rs/crypto/internal/crypto_lib/sha2",
     "rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
     "rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig/fe-derive",
@@ -161,8 +156,8 @@ members = [
     "rs/https_outcalls/consensus",
     "rs/https_outcalls/service",
     "rs/http_utils",
-    "rs/ic_os/attestation",
-    "rs/ic_os/attestation/testing",
+    "rs/ic_os/sev/attestation",
+    "rs/ic_os/sev/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
@@ -190,7 +185,9 @@ members = [
     "rs/ic_os/os_tools/guest_vm_runner",
     "rs/ic_os/os_tools/hostos_tool",
     "rs/ic_os/os_tools/setupos_tool",
-    "rs/ic_os/sev",
+    "rs/ic_os/sev/guest",
+    "rs/ic_os/sev/guest/testing",
+    "rs/ic_os/sev/host",
     "rs/ic_os/utils",
     "rs/ic_os/vsock/guest",
     "rs/ic_os/vsock/host",
@@ -213,6 +210,7 @@ members = [
     "rs/ledger_suite/icp/ledger",
     "rs/ledger_suite/icp/protobuf_generator",
     "rs/ledger_suite/icp/test_utils",
+    "rs/ledger_suite/icp/test_utils/icp_test_ledger",
     "rs/ledger_suite/icrc1",
     "rs/ledger_suite/icrc1/archive",
     "rs/ledger_suite/icrc1/index-ng",
@@ -587,7 +585,7 @@ aide = { version = "^0.14.2", features = ["axum", "axum-json"] }
 anyhow = "1.0.93"
 arbitrary = { version = "1.3.2", features = ["derive"] }
 arrayvec = "0.7.4"
-askama = { version = "0.12.1", features = ["serde-json"] }
+askama = { version = "0.15", features = ["serde_json"] }
 assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
@@ -599,7 +597,7 @@ axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { package = "bitcoin-dogecoin", version = "0.32.5-doge.1", features = [
+bitcoin = { package = "bitcoin-dogecoin", version = "0.32.7-doge.0", features = [
     "default",
     "rand",
     "serde",

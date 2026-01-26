@@ -44,7 +44,7 @@ use ic_types::{
     messages::{CanisterMessage, Ingress, MessageId, NO_DEADLINE, Response},
 };
 use ic_types::{NumMessages, nominal_cycles::NominalCycles};
-use more_asserts::{debug_assert_ge, debug_assert_le};
+use more_asserts::{debug_assert_ge, debug_assert_le, debug_assert_lt};
 use num_rational::Ratio;
 use prometheus::Histogram;
 use std::{
@@ -1432,7 +1432,7 @@ impl Scheduler for SchedulerImpl {
                 .raw_rand_contexts
                 .pop_front()
             {
-                debug_assert!(raw_rand_context.execution_round_id < current_round);
+                debug_assert_lt!(raw_rand_context.execution_round_id, current_round);
                 let (new_state, _) = self.execute_subnet_message(
                     CanisterMessage::Request(raw_rand_context.request.into()),
                     state,
@@ -2205,7 +2205,7 @@ fn can_execute_subnet_msg(
         CanisterMessage::Request(request) => {
             Ic00Method::from_str(request.method_name.as_str()).ok()
         }
-        CanisterMessage::Response(_) => None,
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => None,
     };
     let Some(method) = maybe_method else {
         // If there is no method name, we can execute the subnet message.
@@ -2255,7 +2255,7 @@ fn get_instructions_limits_for_subnet_message(
     // for install code in which case the default limits are overriden.
     let default_limits = InstructionLimits::new(NumInstructions::from(0), NumInstructions::from(0));
     let method_name = match &msg {
-        CanisterMessage::Response(_) => {
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => {
             return default_limits;
         }
         CanisterMessage::Ingress(ingress) => &ingress.method_name,

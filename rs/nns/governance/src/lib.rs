@@ -211,11 +211,11 @@ thread_local! {
         = const { Cell::new(false) };
 
     static ENABLE_BLESS_ALTERNATIVE_GUEST_OS_VERSION_PROPOSALS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 
     // This covers both taking and loading canister snapshots.
     static ENABLE_CANISTER_SNAPSHOT_PROPOSALS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {

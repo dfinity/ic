@@ -1489,6 +1489,7 @@ type SelfDescribingProposalAction = record {
 type SelfDescribingValue = variant {
   Blob : blob;
   Text : text;
+  Bool : bool;
   Nat : nat;
   Int : int;
   Array : vec SelfDescribingValue;
