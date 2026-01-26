@@ -146,7 +146,7 @@ where
         if self.fee_collector_107 != other.fee_collector_107 {
             println!(
                 "Mismatch in fee collector 107: {:?} vs {:?}",
-                self.fee_collector_107, other.fee_collfee_collector_107ector
+                self.fee_collector_107, other.fee_collector_107
             );
             return false;
         }
@@ -232,7 +232,7 @@ where
         fee: &Option<Self::Tokens>,
         now: TimeStamp,
     ) {
-        let fee_collector = self.fee_collector_107.unwrap_or(None);
+        let fee_collector = &self.fee_collector_107.clone().unwrap_or(None);
         self.collect_fee(from, fee, fee_collector);
         self.set_allowance(from, spender, amount, expected_allowance, expires_at, now);
         self.transactions += 1;
@@ -281,7 +281,10 @@ where
         fee: &Option<Self::Tokens>,
     ) {
         self.decrease_balance(from, amount);
-        let fee_collector = self.fee_collector_107.unwrap_or(self.fee_collector);
+        let fee_collector = &self
+            .fee_collector_107
+            .clone()
+            .unwrap_or(self.fee_collector.clone());
         self.collect_fee(from, fee, fee_collector);
         if let Some(fee) = fee
             && let Some(spender) = spender
@@ -306,7 +309,7 @@ where
     }
 
     fn process_fee_collector_107(&mut self, fee_collector: &Option<Self::AccountId>) {
-        self.fee_collector_107 = Some(*fee_collector);
+        self.fee_collector_107 = Some(fee_collector.clone());
         self.transactions += 1;
     }
 }
@@ -470,22 +473,15 @@ where
         &mut self,
         from: &AccountId,
         amount: &Option<Tokens>,
-        fee_collector: Option<AccountId>,
+        fee_collector: &Option<AccountId>,
     ) {
         if let Some(amount) = amount {
             self.decrease_balance(from, amount);
             if let Some(fee_collector) = fee_collector {
-                self.increase_balance(&fee_collector.clone(), amount);
+                self.increase_balance(fee_collector, amount);
             } else {
                 self.decrease_total_supply(amount);
             }
-        }
-    }
-
-    fn burn_fee(&mut self, from: &AccountId, amount: &Option<Tokens>) {
-        if let Some(amount) = amount {
-            self.decrease_balance(from, amount);
-            self.decrease_total_supply(amount);
         }
     }
 
