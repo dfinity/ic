@@ -20,7 +20,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:afc0bf45ddde113dc9cfe04b51dab7124dab1f3751b86827cec01cd2945e5f32
+      image: ghcr.io/dfinity/ic-build@sha256:b8774aa1a574580b258dcdb5a304fea2c328e35a30912e27aceeb1f1c9698459
       options: >-
         -e NODE_NAME --privileged --cgroupns host --mount type=tmpfs,target="/home/buildifier/.local/share/containers"
     timeout-minutes: 720 # 12 hours
