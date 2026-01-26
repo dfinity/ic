@@ -383,6 +383,7 @@ rust_ic_bench(
     ]),
     deps = [
         # Keep sorted.
+        ":execution_environment",
         "//rs/config",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
