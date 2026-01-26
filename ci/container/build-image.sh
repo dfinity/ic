@@ -25,13 +25,14 @@ while test $# -gt 0; do
             exit 0
             ;;
         -i | --image)
-            if [[ $# -gt "$CTR + 1" ]]; then
-                IMAGE_NAME="$2"
-            else
-                eprintln "Missing argument for -i | --image!"
-                usage && exit 1
-            fi
             shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --image requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            # Split the argument into an array (supports "sudo podman")
+            read -ra IMAGE_NAME <<<"$1"
             shift
             ;;
         --container-cmd)
@@ -80,8 +81,7 @@ DOCKER_IMG_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 pushd "$REPO_ROOT"
 
 if [ "${CONTAINER_CMD[*]:-}" ]; then
-    echo "Using user-specified container command: ${CONTAINER_CMD[*]}"
-    ARGS=()
+    :
 # Detect if we're running in a Devenv environment
 elif [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
     echo "Detected Devenv environment, using hoststorage for podman root."
@@ -90,6 +90,7 @@ else
     CONTAINER_CMD=(docker)
 fi
 
+echo "Using container command: ${CONTAINER_CMD[*]}"
 echo "Building $IMAGE_NAME:$DOCKER_IMG_TAG"
 
 DOCKER_BUILDKIT=1 "${CONTAINER_CMD[@]}" build "${BUILD_ARGS[@]}" \
