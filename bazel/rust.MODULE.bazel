@@ -78,10 +78,10 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "serde-json",
+        "serde_json",
     ],
     package = "askama",
-    version = "^0.12.1",
+    version = "0.15",
 )
 crate.spec(
     package = "assert-json-diff",
@@ -172,7 +172,7 @@ crate.spec(
         "serde",
     ],
     package = "bitcoin-dogecoin",
-    version = "^0.32.5-doge.1",
+    version = "^0.32.7-doge.0",
 )
 crate.spec(
     features = [
@@ -1312,7 +1312,7 @@ crate.spec(
         "getrandom",
     ],
     package = "rsa",
-    version = "^0.9.6",
+    version = "^0.9.10",
 )
 crate.spec(
     package = "rstest",
@@ -1323,7 +1323,10 @@ crate.spec(
     version = "0.9",
 )
 crate.spec(
-    features = ["bundled"],
+    features = [
+        "bundled",
+        "hooks",
+    ],
     package = "rusqlite",
     version = "^0.37.0",
 )
@@ -1867,7 +1870,7 @@ crate.spec(
         "runtime",
     ],
     package = "wasmtime",
-    version = "^40.0.0",
+    version = "^40.0.2",
 )
 crate.spec(
     package = "wast",

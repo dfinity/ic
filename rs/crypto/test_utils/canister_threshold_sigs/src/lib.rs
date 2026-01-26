@@ -2863,9 +2863,37 @@ pub fn corrupt_dealings_and_generate_complaints_for_random_complainer<
     env: &'a CanisterThresholdSigTestEnvironment,
     rng: &mut R,
 ) -> (&'a Node, Vec<NodeIndex>, Vec<IDkgComplaint>) {
-    let complainer = env
-        .nodes
-        .random_filtered_by_receivers(params.receivers().clone(), rng);
+    // For reshare operations, dealers have already loaded the previous transcript.
+    // If reconstruction_threshold is small (e.g., 1), the reshared transcript may have
+    // the same commitment (and thus same KeyId) as the original, causing the complainer
+    // to skip loading if they were a dealer. So we prefer receivers who are not dealers.
+    let receiver_ids_not_dealers: Vec<_> = params
+        .receivers()
+        .get()
+        .iter()
+        .filter(|node_id| !params.dealers().contains(**node_id))
+        .copied()
+        .collect();
+
+    let complainer = if receiver_ids_not_dealers.is_empty() {
+        // All receivers are also dealers - just pick any receiver
+        // (This may fail if KeyId collides, but it's the best we can do)
+        println!(
+            "WARNING: All receivers are also dealers, may hit KeyId collision with reconstruction_threshold={}",
+            params.reconstruction_threshold().get()
+        );
+        env.nodes
+            .random_filtered_by_receivers(params.receivers().clone(), rng)
+    } else {
+        let chosen_id = receiver_ids_not_dealers
+            .choose(rng)
+            .expect("receiver_ids_not_dealers should not be empty");
+        env.nodes
+            .iter()
+            .find(|node| node.id() == *chosen_id)
+            .expect("Node should exist for receiver ID")
+    };
+
     let (dealing_indices_to_corrupt, complaints) = corrupt_dealings_and_generate_complaints(
         params,
         transcript,
@@ -2904,6 +2932,7 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
     let complainer_index = params
         .receiver_index(complainer.id())
         .unwrap_or_else(|| panic!("Missing receiver {complainer:?}"));
+
     dealing_indices_to_corrupt
         .iter()
         .for_each(|index_to_corrupt| {
@@ -2920,7 +2949,12 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
         let complaints = complainer
             .load_transcript(transcript)
             .expect("expected complaints");
-        assert_eq!(complaints.len(), number_of_complaints);
+
+        assert_eq!(
+            complaints.len(),
+            number_of_complaints,
+            "Got an unexpected number of complaints"
+        );
         complaints
     };
 

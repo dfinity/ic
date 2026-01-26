@@ -1531,7 +1531,11 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Signature share validation(permanent error)"
+                ));
             })
         });
     }
@@ -1677,7 +1681,11 @@ mod tests {
 
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Duplicate signature share:"
+                ));
             })
         })
     }
@@ -1741,9 +1749,17 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 3);
                 let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
-                    && is_handle_invalid(&change_set, &msg_id_2);
+                    && is_handle_invalid(
+                        &change_set,
+                        &msg_id_2,
+                        "Duplicate share in unvalidated batch",
+                    );
                 let msg_2_valid = is_moved_to_validated(&change_set, &msg_id_2)
-                    && is_handle_invalid(&change_set, &msg_id_1);
+                    && is_handle_invalid(
+                        &change_set,
+                        &msg_id_1,
+                        "Duplicate share in unvalidated batch",
+                    );
 
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);

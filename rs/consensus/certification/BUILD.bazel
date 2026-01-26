@@ -32,7 +32,6 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:strum_macros",
 ]
 
 rust_library(

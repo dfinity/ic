@@ -2431,6 +2431,18 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -2516,7 +2528,9 @@ impl ExecutionTestBuilder {
                 key_id.clone(),
                 ChainKeySettings {
                     max_queue_size: 20,
-                    pre_signatures_to_create_in_advance: 5,
+                    pre_signatures_to_create_in_advance: key_id
+                        .requires_pre_signatures()
+                        .then_some(5),
                 },
             );
 
@@ -2779,7 +2793,7 @@ pub fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, Requ
 
 fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterId> {
     let message = match message {
-        CanisterMessage::Response(_) => return None,
+        CanisterMessage::Response(_) | CanisterMessage::NewResponse { .. } => return None,
         CanisterMessage::Request(request) => CanisterCall::Request(request),
         CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };

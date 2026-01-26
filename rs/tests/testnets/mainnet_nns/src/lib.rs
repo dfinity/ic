@@ -277,7 +277,7 @@ fn setup_recovered_nns(
 fn fetch_mainnet_ic_replay(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-replay
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_REPLAY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_REPLAY_PATH"),
         env.get_path(PATH_IC_REPLAY),
     )
     .unwrap();
@@ -286,7 +286,7 @@ fn fetch_mainnet_ic_replay(env: &TestEnv) {
 fn fetch_mainnet_ic_recovery(env: &TestEnv) {
     // TODO (CON-1624): fetch the mainnet version of ic-recovery
     std::fs::copy(
-        get_dependency_path(std::env::var("IC_RECOVERY_PATH").unwrap()),
+        get_dependency_path_from_env("IC_RECOVERY_PATH"),
         env.get_path(PATH_IC_RECOVERY),
     )
     .unwrap();
