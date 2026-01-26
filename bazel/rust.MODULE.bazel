@@ -904,7 +904,7 @@ crate.spec(
 )
 crate.spec(
     features = [
-        "static",
+        "static",  # By using the `static` feature the lzma-sys crate uses its embedded liblzma C library
     ],
     package = "lzma-sys",
     version = "^0.1.20",
