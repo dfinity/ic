@@ -10091,6 +10091,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "num-traits",
+ "proptest",
  "scopeguard",
  "serde",
  "serde_bytes",
