@@ -31,7 +31,7 @@ use ic_types::messages::{
 };
 use ic_types::methods::{Callback, WasmClosure};
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{CountBytes, Cycles, Time};
 use ic_wasm_types::CanisterModule;
 use prometheus::IntCounter;
@@ -89,6 +89,7 @@ impl CanisterStateFixture {
             CANISTER_ID,
             user_test_id(24).get(),
             Cycles::new(1 << 36),
+            UNIX_EPOCH,
             NumSeconds::from(100_000),
         );
 

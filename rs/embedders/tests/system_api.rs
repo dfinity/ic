@@ -54,6 +54,7 @@ fn get_system_state_with_cycles(cycles_amount: Cycles) -> SystemState {
         canister_test_id(42),
         user_test_id(24).get(),
         cycles_amount,
+        UNIX_EPOCH,
         NumSeconds::from(100_000),
     )
 }
@@ -1285,6 +1286,7 @@ fn canister_status() {
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,
+        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
     let api = get_system_api(
@@ -1298,6 +1300,7 @@ fn canister_status() {
         canister_test_id(42),
         user_test_id(24).get(),
         INITIAL_CYCLES,
+        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
     let api = get_system_api(

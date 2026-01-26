@@ -4,6 +4,7 @@ use ic_config::flag_status::FlagStatus;
 use ic_execution_environment::RoundSchedule;
 use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
 use ic_types::Cycles;
+use ic_types::time::UNIX_EPOCH;
 use ic_types_test_utils::ids::{canister_test_id, user_test_id};
 use std::collections::BTreeMap;
 
@@ -18,6 +19,7 @@ fn main() {
             canister_id,
             user_test_id(24).get(),
             Cycles::from_parts(1, 2),
+            UNIX_EPOCH,
             NumSeconds::from(100_000),
         );
         canisters.insert(

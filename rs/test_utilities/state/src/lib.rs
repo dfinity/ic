@@ -33,16 +33,13 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
     SubnetId, Time,
-    batch::RawQueryStats,
+    batch::{CanisterCyclesCostSchedule, RawQueryStats},
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
+    methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -324,24 +321,29 @@ impl CanisterStateBuilder {
                 self.canister_id,
                 self.controller,
                 self.cycles,
+                self.time_of_last_allocation_charge,
                 self.freeze_threshold,
             ),
             CanisterStatusType::Stopping => SystemState::new_stopping_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
+                self.time_of_last_allocation_charge,
                 self.freeze_threshold,
             ),
             CanisterStatusType::Stopped => SystemState::new_stopped_for_testing(
                 self.canister_id,
                 self.controller,
                 self.cycles,
+                self.time_of_last_allocation_charge,
                 self.freeze_threshold,
             ),
         };
 
         system_state.memory_allocation = self.memory_allocation;
+        system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
+        system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -383,11 +385,7 @@ impl CanisterStateBuilder {
         CanisterState {
             system_state,
             execution_state,
-            scheduler_state: SchedulerState {
-                compute_allocation: self.compute_allocation,
-                time_of_last_allocation_charge: self.time_of_last_allocation_charge,
-                ..SchedulerState::default()
-            },
+            scheduler_state: SchedulerState::default(),
         }
     }
 }
@@ -426,6 +424,7 @@ impl Default for SystemStateBuilder {
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
+                UNIX_EPOCH,
                 DEFAULT_FREEZE_THRESHOLD,
             ),
         }
@@ -439,6 +438,7 @@ impl SystemStateBuilder {
                 canister_test_id(42),
                 user_test_id(24).get(),
                 INITIAL_CYCLES,
+                UNIX_EPOCH,
                 DEFAULT_FREEZE_THRESHOLD,
             ),
         }
@@ -653,6 +653,7 @@ pub fn get_running_canister_with_args(
             canister_id,
             controller,
             initial_cycles,
+            UNIX_EPOCH,
             DEFAULT_FREEZE_THRESHOLD,
         ),
         execution_state: None,
@@ -677,6 +678,7 @@ pub fn get_stopping_canister_with_controller(
             canister_id,
             controller,
             INITIAL_CYCLES,
+            UNIX_EPOCH,
             DEFAULT_FREEZE_THRESHOLD,
         ),
         execution_state: None,
@@ -701,6 +703,7 @@ pub fn get_stopped_canister_with_controller(
             canister_id,
             controller,
             INITIAL_CYCLES,
+            UNIX_EPOCH,
             DEFAULT_FREEZE_THRESHOLD,
         ),
         execution_state: None,
@@ -796,6 +799,7 @@ pub fn new_canister_state(
         canister_id,
         controller,
         initial_cycles,
+        UNIX_EPOCH,
         freeze_threshold,
     );
     CanisterState::new(system_state, None, scheduler_state)
@@ -812,6 +816,7 @@ pub fn new_canister_state_with_execution(
         canister_id,
         controller,
         initial_cycles,
+        UNIX_EPOCH,
         freeze_threshold,
     );
     let execution_state = ExecutionStateBuilder::default()

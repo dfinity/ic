@@ -527,7 +527,7 @@ impl IngressManager {
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
                         canister.message_memory_usage(),
-                        canister.scheduler_state.compute_allocation,
+                        canister.compute_allocation(),
                         subnet_size,
                         state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance

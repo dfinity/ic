@@ -406,7 +406,7 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
-    execution_parameters.compute_allocation = old_canister.scheduler_state.compute_allocation;
+    execution_parameters.compute_allocation = old_canister.compute_allocation();
     execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
@@ -3711,7 +3711,7 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     // Manually set the compute allocation higher to emulate the state after
     // replica upgrade that decreased compute capacity.
     test.canister_state_mut(canister_id)
-        .scheduler_state
+        .system_state
         .compute_allocation = ComputeAllocation::try_from(60).unwrap();
 
     // Updating the compute allocation to a higher value fails.
@@ -3744,7 +3744,7 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     assert_eq!(
         ComputeAllocation::try_from(60).unwrap(),
         test.canister_state(canister_id)
-            .scheduler_state
+            .system_state
             .compute_allocation
     );
 
@@ -3761,7 +3761,7 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     assert_eq!(
         ComputeAllocation::try_from(59).unwrap(),
         test.canister_state(canister_id)
-            .scheduler_state
+            .system_state
             .compute_allocation
     );
 }
@@ -7374,9 +7374,8 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
 
     // Manually set the compute allocation higher to emulate the state after
     // replica upgrade that decreased compute capacity.
-    test.canister_state_mut(uc)
-        .scheduler_state
-        .compute_allocation = ComputeAllocation::try_from(60).unwrap();
+    test.canister_state_mut(uc).system_state.compute_allocation =
+        ComputeAllocation::try_from(60).unwrap();
     test.canister_state_mut(uc)
         .system_state
         .set_balance(Cycles::new(2_000_000_000_000_000));

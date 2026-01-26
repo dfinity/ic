@@ -1332,10 +1332,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 
     for (_, canister) in test.state().canister_states.iter() {
         assert!(canister.execution_state.is_none());
-        assert_eq!(
-            canister.scheduler_state.compute_allocation,
-            ComputeAllocation::zero()
-        );
+        assert_eq!(canister.compute_allocation(), ComputeAllocation::zero());
         assert_eq!(
             canister.system_state.memory_allocation,
             MemoryAllocation::default()
@@ -2782,8 +2779,7 @@ fn can_record_metrics_for_a_round() {
     }
 
     for canister in test.state_mut().canister_states.values_mut() {
-        canister.scheduler_state.time_of_last_allocation_charge =
-            UNIX_EPOCH + Duration::from_secs(1);
+        canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
@@ -4772,7 +4768,7 @@ fn scheduler_respects_compute_allocation(
 
     // Check that the compute allocations of the canisters are respected.
     for (canister_id, canister) in test.state().canister_states.iter() {
-        let compute_allocation = canister.scheduler_state.compute_allocation.as_percent() as usize;
+        let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
 
