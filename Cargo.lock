@@ -1122,7 +1122,7 @@ name = "bare_metal_deployment"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "deterministic_ips",
  "http 1.3.1",
  "macaddr",
@@ -2316,19 +2316,19 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.27"
+version = "4.5.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "769b0145982b4b48713e01ec42d61614425f27b7058bda7180a3a41f30104796"
+checksum = "4c26d721170e0295f191a69bd9a1f93efcdb0aff38684b61ab5750468972e5f5"
 dependencies = [
  "clap_builder",
- "clap_derive 4.5.24",
+ "clap_derive 4.5.49",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.5.27"
+version = "4.5.51"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b26884eb4b57140e4d2d93652abfa49498b938b3c9179f9fc487b0acc3edad7"
+checksum = "75835f0c7bf681bfd05abe44e965760fea999a5286c6eb2d59883634fd02011a"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2351,9 +2351,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.24"
+version = "4.5.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54b755194d6389280185988721fffba69495eed5ee9feeee9a599b53db80318c"
+checksum = "2a0b5487afeab2deb2ff4e03a807ad1a03ac532ff5a2cee5d86884440c7f7671"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2541,7 +2541,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_types",
  "deterministic_ips",
  "fs_extra",
@@ -3023,7 +3023,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion-plot",
  "futures",
  "is-terminal",
@@ -3727,7 +3727,7 @@ name = "deterministic_ips"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_types",
  "ic-crypto-sha2",
  "macaddr",
@@ -3766,7 +3766,7 @@ name = "dflate"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "libc",
  "tar",
 ]
@@ -3847,7 +3847,7 @@ dependencies = [
  "byte-unit",
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "dialoguer",
  "directories-next",
  "dunce",
@@ -3940,7 +3940,7 @@ name = "diroid"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "walkdir",
 ]
 
@@ -5331,7 +5331,7 @@ name = "guest_disk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "ic-sys",
@@ -5443,7 +5443,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "askama",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
@@ -5476,7 +5476,7 @@ name = "guestos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "indoc 1.0.9",
@@ -5868,7 +5868,7 @@ name = "hostos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
@@ -5990,7 +5990,7 @@ name = "httpbin-rs"
 version = "0.9.0"
 dependencies = [
  "axum 0.8.4",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hyper 1.8.1",
  "hyper-util",
  "rand 0.8.5",
@@ -6214,7 +6214,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cycles-minting-canister",
  "futures",
  "hex",
@@ -6444,7 +6444,7 @@ version = "0.9.0"
 dependencies = [
  "bincode",
  "byteorder",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "ic-config",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -6488,7 +6488,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces-registry",
@@ -6588,7 +6588,7 @@ dependencies = [
  "bytes",
  "candid",
  "chacha20poly1305",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare",
  "derive-new",
  "flate2",
@@ -6666,7 +6666,7 @@ dependencies = [
  "async-trait",
  "axum 0.8.4",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare",
  "derive-new",
  "fqdn 0.4.6",
@@ -6706,7 +6706,7 @@ dependencies = [
  "axum-extra",
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "dashmap",
  "derive-new",
  "ethnum",
@@ -6845,7 +6845,7 @@ name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
  "bitcoin-dogecoin",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "flate2",
  "futures",
@@ -7993,7 +7993,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "bincode",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "hex",
  "ic-adapter-metrics-server",
@@ -9153,7 +9153,7 @@ dependencies = [
 name = "ic-cup-explorer"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-base-types",
  "ic-canister-client",
@@ -9188,7 +9188,7 @@ dependencies = [
  "base64 0.22.1",
  "candid",
  "chacha20poly1305",
- "clap 4.5.27",
+ "clap 4.5.51",
  "derive-new",
  "fqdn 0.4.6",
  "ic-bn-lib",
@@ -9219,7 +9219,7 @@ dependencies = [
  "candid",
  "chacha20poly1305",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "derive-new",
  "fqdn 0.4.6",
  "hickory-resolver",
@@ -9395,7 +9395,7 @@ dependencies = [
  "bincode",
  "candid",
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "embedders_bench",
  "ic-base-types",
@@ -9594,7 +9594,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "assert_matches",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-sys",
  "maplit",
@@ -9617,7 +9617,7 @@ dependencies = [
  "axum-extra",
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cloudflare",
  "ctrlc",
  "derive-new",
@@ -9936,7 +9936,7 @@ version = "0.9.0"
 dependencies = [
  "async-stream",
  "bytes",
- "clap 4.5.27",
+ "clap 4.5.51",
  "futures",
  "http 1.3.1",
  "http-body-util",
@@ -10168,7 +10168,7 @@ dependencies = [
  "axum 0.8.4",
  "candid",
  "ciborium",
- "clap 4.5.27",
+ "clap 4.5.51",
  "futures",
  "hex",
  "ic-agent 0.40.1",
@@ -10228,7 +10228,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-agent 0.40.1",
  "ic-ed25519 0.6.0",
@@ -10943,7 +10943,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "candid_parser",
- "clap 4.5.27",
+ "clap 4.5.51",
  "futures",
  "hex",
  "maplit",
@@ -11124,7 +11124,7 @@ name = "ic-metrics-tool"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
 ]
 
 [[package]]
@@ -11626,7 +11626,7 @@ name = "ic-nervous-system-submit-motion-proposal"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
  "ic-identity-hsm",
@@ -11692,7 +11692,7 @@ dependencies = [
 name = "ic-nervous-system-tools-neuron-subaccount"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-base-types",
  "ic-nervous-system-common",
@@ -11707,7 +11707,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-agent 0.40.1",
  "ic-certification 3.0.3",
@@ -12145,7 +12145,7 @@ name = "ic-nns-init"
 version = "0.9.0"
 dependencies = [
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-base-types",
  "ic-canister-client",
  "ic-interfaces-registry",
@@ -12357,7 +12357,7 @@ dependencies = [
 name = "ic-nns-test-utils-prepare-golden-state"
 version = "0.0.1"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "tempfile",
 ]
 
@@ -12512,7 +12512,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "clap 4.5.27",
+ "clap 4.5.51",
  "fs_extra",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -12690,7 +12690,7 @@ dependencies = [
 name = "ic-recovery"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "futures",
  "hex",
  "ic-artifact-pool",
@@ -12737,7 +12737,7 @@ name = "ic-regedit"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
@@ -13013,7 +13013,7 @@ name = "ic-registry-replicator"
 version = "0.9.0"
 dependencies = [
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-test-utils-reproducible-rng",
@@ -13120,7 +13120,7 @@ version = "0.9.0"
 dependencies = [
  "async-trait",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-agent 0.40.1",
  "ic-artifact-pool",
@@ -13187,7 +13187,7 @@ version = "0.9.0"
 dependencies = [
  "assert_cmd",
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "criterion",
  "hex",
  "ic-artifact-pool",
@@ -13444,7 +13444,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.1",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "dfn_protobuf",
  "futures",
  "hex",
@@ -13662,7 +13662,7 @@ dependencies = [
  "base64 0.13.1",
  "candid",
  "candid-utils",
- "clap 4.5.27",
+ "clap 4.5.51",
  "cycles-minting-canister",
  "dfx-core",
  "futures",
@@ -13712,7 +13712,7 @@ dependencies = [
  "candid",
  "candid-utils",
  "candid_parser",
- "clap 4.5.27",
+ "clap 4.5.51",
  "comparable",
  "futures",
  "hex",
@@ -13791,7 +13791,7 @@ version = "0.9.0"
 dependencies = [
  "bytes",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "comparable",
  "ic-base-types",
  "ic-nervous-system-proto",
@@ -14148,7 +14148,7 @@ dependencies = [
  "anyhow",
  "candid",
  "canister-test",
- "clap 4.5.27",
+ "clap 4.5.51",
  "dfx-core",
  "futures",
  "hex",
@@ -14307,7 +14307,7 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ciborium",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ed25519-dalek",
  "fs_extra",
  "hex",
@@ -14479,7 +14479,7 @@ dependencies = [
 name = "ic-state-tool"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-config",
  "ic-logger",
@@ -14502,7 +14502,7 @@ dependencies = [
 name = "ic-subnet-splitting"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "hex",
  "ic-agent 0.40.1",
  "ic-base-types",
@@ -14556,7 +14556,7 @@ dependencies = [
  "candid",
  "canister-test",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "crossbeam-channel",
@@ -15462,7 +15462,7 @@ checksum = "19fabaeecfe37f24b433c62489242fc54503d98d4cc8d0f9ef7544dfdfc0ddcb"
 dependencies = [
  "anyhow",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "libflate",
  "rustc-demangle",
  "serde",
@@ -15935,7 +15935,7 @@ dependencies = [
 name = "icp-config"
 version = "0.9.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "eyre",
  "ic-config",
  "ic-embedders",
@@ -16388,7 +16388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "692eda1cc790750b9f5a5e3921ef9c117fd5498b97cfacbc910693e5b29002dc"
 dependencies = [
  "ahash 0.8.11",
- "clap 4.5.27",
+ "clap 4.5.51",
  "crossbeam-channel",
  "crossbeam-utils",
  "dashmap",
@@ -18056,7 +18056,7 @@ name = "nft_exporter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "serde",
  "serde_json",
 ]
@@ -18822,7 +18822,7 @@ dependencies = [
  "async-trait",
  "backoff",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "env-file-reader",
  "exec",
@@ -19074,7 +19074,7 @@ name = "partition_tools"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "gpt",
  "indoc 1.0.9",
  "itertools 0.12.1",
@@ -19565,7 +19565,7 @@ dependencies = [
  "bytes",
  "candid",
  "candid_parser",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ctrlc",
  "cycles-minting-canister",
  "flate2",
@@ -20615,7 +20615,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "candid",
- "clap 4.5.27",
+ "clap 4.5.51",
  "ic-agent 0.40.1",
  "k256 0.13.4",
  "rate-limits-api",
@@ -21016,7 +21016,7 @@ dependencies = [
  "anyhow",
  "candid",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "colored",
  "futures",
  "ic-agent 0.40.1",
@@ -22380,7 +22380,7 @@ name = "setupos-disable-checks"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "indoc 1.0.9",
  "linux_kernel_command_line",
  "partition_tools",
@@ -22394,7 +22394,7 @@ name = "setupos-image-config"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "partition_tools",
@@ -22409,7 +22409,7 @@ name = "setupos_tool"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "clap 4.5.27",
+ "clap 4.5.51",
  "config_tool",
  "config_types",
  "deterministic_ips",
@@ -24761,7 +24761,7 @@ dependencies = [
  "bytes",
  "cfg-if",
  "chrono",
- "clap 4.5.27",
+ "clap 4.5.51",
  "jsonschema",
  "lalrpop 0.22.1",
  "lz4_flex",
@@ -24798,7 +24798,7 @@ dependencies = [
 name = "vsock_guest"
 version = "1.0.0"
 dependencies = [
- "clap 4.5.27",
+ "clap 4.5.51",
  "vsock_lib",
 ]
 

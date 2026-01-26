@@ -1,0 +1,24 @@
+[package]
+name = "system_stats_tui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+crossterm = { workspace = true }
+duration-string = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+humansize = { workspace = true }
+lazy_static = { workspace = true }
+prometheus-parse = { workspace = true }
+ratatui = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+[[bin]]
+name = "system_stats_tui"
+path = "src/main.rs"

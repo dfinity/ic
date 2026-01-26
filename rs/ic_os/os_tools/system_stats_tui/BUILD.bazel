@@ -1,0 +1,47 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+rust_library(
+    name = "lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = {},
+    crate_name = "system_stats_tui",
+    proc_macro_deps = [],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = [
+        "@crate_index//:anyhow",
+        "@crate_index//:chrono",
+        "@crate_index//:crossterm",
+        "@crate_index//:futures",
+        "@crate_index//:futures-util",
+        "@crate_index//:humansize",
+        "@crate_index//:lazy_static",
+        "@crate_index//:prometheus-parse",
+        "@crate_index//:ratatui",
+        "@crate_index//:regex",
+        "@crate_index//:reqwest",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_test(
+    name = "tests",
+    crate = ":lib",
+)
+
+rust_binary(
+    name = "system_stats_tui",
+    srcs = ["src/main.rs"],
+    visibility = ["//rs/ic_os/release:__pkg__"],
+    deps = [
+        ":lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:duration-string",
+        "@crate_index//:ratatui",
+        "@crate_index//:tokio",
+    ],
+)
