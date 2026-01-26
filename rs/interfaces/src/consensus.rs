@@ -29,7 +29,7 @@ pub mod errors;
 
 #[derive(Debug)]
 /// Contains a payload together with an estimate how many bytes the payload would take when sent
-/// over wire. This is not necessarily the same, or even close to, as the the size of the structure
+/// over wire. This is not necessarily the same as, or even close to, the size of the structure
 /// in the memory.
 pub struct PayloadWithSizeEstimate<T> {
     pub payload: T,
