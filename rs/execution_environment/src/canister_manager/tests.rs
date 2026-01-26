@@ -502,15 +502,15 @@ fn upgrade_canister_with_no_wasm_fails() {
 #[test]
 fn install_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
-    let mb = MIB as usize;
-    let memory_capacity = 1000 * mb;
+    let mib = MIB as usize;
+    let memory_capacity = 1000 * mib;
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister1 is created with `memory_used` memory allocation;
     // => SubnetAvailableMemory decreases by `memory_used`
     // after canister1 is created and then SubnetAvailableMemory is equal to
     // `memory_capacity - memory_used`; we want this quantity to be `canister_history_memory + 10 * mb`
     // and derive the value of `memory_used` from there.
-    let memory_used = memory_capacity - (canister_history_memory + 10 * mb);
+    let memory_used = memory_capacity - (canister_history_memory + 10 * mib);
 
     let wat = r#"
         (module
