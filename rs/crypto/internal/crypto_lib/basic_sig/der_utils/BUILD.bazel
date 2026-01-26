@@ -6,7 +6,7 @@ rust_library(
     crate_name = "ic_crypto_internal_basic_sig_der_utils",
     version = "0.9.0",
     visibility = [
-        "//rs/crypto/internal/crypto_lib/basic_sig:iccsa:__subpackages__",
+        "//rs/crypto/internal/crypto_lib/basic_sig/iccsa:__subpackages__",
         "//rs/crypto/standalone-sig-verifier:__subpackages__",
         "//rs/tests/crypto:__subpackages__",
         "//rs/validator/http_request_test_utils:__subpackages__",
