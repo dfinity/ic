@@ -37,6 +37,9 @@ RUN cd /tmp/ && \
     echo "fbadb376afa7c883f87f70795700a8a200f7fd45412532cc1938a24d41078011  node_exporter-1.8.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     sha256sum -c node_exporter.sha256
 
+# Download pre-built QEMU 10.1 (newer than what is available in apt for Ubuntu 24.04)
+RUN cd /tmp/ && \
+    curl -L -O https://github.com/dfinity/sev-snp-deps/releases/download/qemu-c0d07d0/qemu_10-1_amd64.deb
 
 #
 # Second build stage:
@@ -52,6 +55,9 @@ ARG CPU_SUPPORT
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 ENV DEBIAN_FRONTEND=noninteractive
+
+COPY --from=download /tmp/qemu_10-1_amd64.deb /tmp/
+RUN dpkg -i /tmp/qemu_10-1_amd64.deb && rm /tmp/qemu_10-1_amd64.deb
 
 # Add future release, as opt-in targets
 RUN echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted multiverse" >> /etc/apt/sources.list.d/future.list && \
