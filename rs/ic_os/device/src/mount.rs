@@ -17,8 +17,8 @@ pub enum PartitionSelector {
 }
 
 // There are two traits here:
-// 1. PartitionProvider (high level): provides access to partitions by UUID
-//    Real implementation: GptPartitionProvider
+// 1. PartitionProvider (high level): provides access to partitions by UUID and label
+//    Real implementations: GptPartitionProvider and UdevPartitionProvider
 //    Mock implementation: MockPartitionProvider
 // 2. Mounter (low level): mounts raw device ranges (offset + length) to filesystem paths
 //    Real implementation: LoopDeviceMounter
@@ -175,7 +175,7 @@ impl PartitionProvider for UdevPartitionProvider {
     fn mount_partition(
         &self,
         selector: PartitionSelector,
-        _options: MountOptions,
+        options: MountOptions,
     ) -> Result<Box<dyn MountedPartition>> {
         let device_path = match selector {
             PartitionSelector::ByUuid(uuid) => format!("/dev/disk/by-partuuid/{uuid}"),
@@ -187,29 +187,33 @@ impl PartitionProvider for UdevPartitionProvider {
         );
 
         let tempdir = TempDir::new()?;
-        Ok(Box::new(LoopDeviceMount {
-            mount: Mount::new(device_path, &tempdir)?,
+        Ok(Box::new(TempDeviceMount {
+            mount: Mount::builder()
+                .fstype(FilesystemType::Manual(options.file_system.as_str()))
+                .mount(device_path, &tempdir)?,
             _loop_device: None,
             _tempdir: tempdir,
         }))
     }
 }
 
-/// Real filesystem mount using system mount with loop device
+/// Real filesystem mount that is cleaned up when dropped
 #[cfg(target_os = "linux")]
-struct LoopDeviceMount {
+struct TempDeviceMount {
     // mount must be cleaned up before tempdir!
     //
     // We follow this in our Drop impl, but still stick to the Rust spec for
     // drop order as well. According to the spec, fields are dropped in the
     // order of declaration.
     mount: Mount,
+    /// If the mount is backed by a loop device, this holds the device.
     _loop_device: Option<LoopDeviceWrapper>,
+    /// Temporary directory where the filesystem is mounted.
     _tempdir: TempDir,
 }
 
 #[cfg(target_os = "linux")]
-impl Drop for LoopDeviceMount {
+impl Drop for TempDeviceMount {
     fn drop(&mut self) {
         if let Err(e) = retry_if_io_error(nix::Error::EBUSY, || {
             self.mount.unmount(UnmountFlags::empty())
@@ -223,7 +227,7 @@ impl Drop for LoopDeviceMount {
 }
 
 #[cfg(target_os = "linux")]
-impl MountedPartition for LoopDeviceMount {
+impl MountedPartition for TempDeviceMount {
     fn mount_point(&self) -> &Path {
         self.mount.target_path()
     }
@@ -231,7 +235,7 @@ impl MountedPartition for LoopDeviceMount {
 
 /// Production filesystem mounter using real system mounts
 #[cfg(target_os = "linux")]
-pub struct LoopDeviceMounter;
+struct LoopDeviceMounter;
 
 #[cfg(target_os = "linux")]
 impl Mounter for LoopDeviceMounter {
@@ -250,7 +254,6 @@ impl Mounter for LoopDeviceMounter {
         let mount = retry_if_io_error(nix::Error::EIO, || {
             Mount::builder()
                 .fstype(FilesystemType::Manual(options.file_system.as_str()))
-                .flags(MountFlags::empty())
                 .mount(
                     loop_device
                         .path()
@@ -260,7 +263,7 @@ impl Mounter for LoopDeviceMounter {
         })
         .context("Failed to create mount")?;
 
-        Ok(Box::new(LoopDeviceMount {
+        Ok(Box::new(TempDeviceMount {
             mount,
             _loop_device: Some(loop_device),
             _tempdir: tempdir,
