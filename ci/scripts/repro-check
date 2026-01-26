@@ -388,7 +388,6 @@ class ReproducibilityVerifier:
         base_cache_dir: Path | None,
         clean_base_cache_dir: bool,
         keep_temp: bool,
-        dry_run: bool,
     ):
         self.verify_guestos = verify_guestos
         self.verify_hostos = verify_hostos
