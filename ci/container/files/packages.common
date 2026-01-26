@@ -32,7 +32,6 @@ gcc
 pkg-config
 libclang-18-dev
 libunwind-dev # required for the cargo build of ic-canister-sandbox-backend-lib crate (see: rs/canister_sandbox/src/backtrace.c)  
-libusb-1.0-0-dev
 lld # required for ovmf_sev genrule
 protobuf-compiler
 llvm
