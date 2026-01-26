@@ -870,7 +870,6 @@ class ReproducibilityVerifier:
     def build_locally(
         self,
         storage: Dirs,
-        dry_run: bool=False,
     ) -> None:
         """Builds the OS images locally, then compares their hashes to the remote (CDN) artifacts."""
         global progress_hidden
@@ -885,10 +884,6 @@ class ReproducibilityVerifier:
             logger.info("IC-OS build complete.")
         finally:
             progress_hidden.popleft()
-
-        if dry_run:
-            logger.info("Dry-run mode enabled and local build finished; exiting.")
-            return
 
         artifacts_path = ic_clone_path / "artifacts" / "icos"
 
@@ -973,6 +968,11 @@ class ReproducibilityVerifier:
 
             # Environment checks can happen while downloads progress
             self.check_environment()
+
+            if dry_run:
+                build.result()
+                logger.info("Dry-run mode enabled and local build finished; exiting.")
+                return
 
             # Verifications after downloads.  They take futures and await for them to be finished.
             self.verify_proposal_artifacts(downloads_for_proposal)
