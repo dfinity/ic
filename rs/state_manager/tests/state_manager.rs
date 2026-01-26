@@ -20,6 +20,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::{ReplicatedStateTesting, StreamTesting, SystemStateTesting};
 use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
@@ -27,7 +28,6 @@ use ic_replicated_state::{
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
-    testing::ReplicatedStateTesting,
 };
 use ic_state_layout::{
     CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
@@ -8209,7 +8209,7 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
 
-    canister.system_state.canister_id = new_id;
+    canister.system_state.set_canister_id(new_id);
     state
         .metadata
         .unflushed_checkpoint_ops

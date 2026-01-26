@@ -151,7 +151,6 @@ symlink_dir(
     testonly = True,
     targets = {
         "//rs/registry/admin:ic-admin": "ic-admin",
-        "//rs/state_tool:state-tool": "state-tool",
         "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
         "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
         "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
@@ -179,11 +178,6 @@ uvm_config_image(
         "jaeger_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-filegroup(
-    name = "rosetta_workspace",
-    srcs = glob(["rosetta_workspace/*"]),
 )
 
 exports_files([

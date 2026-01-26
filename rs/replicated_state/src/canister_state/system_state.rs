@@ -248,8 +248,8 @@ impl CanisterHistory {
 /// canister but can be indirectly via the SystemApi interface.
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct SystemState {
+    canister_id: CanisterId,
     pub controllers: BTreeSet<PrincipalId>,
-    pub canister_id: CanisterId,
     /// Input (canister and ingress) and output (canister) message queues.
     ///
     /// Must remain private, to ensure consistency with the `CallContextManager`; to
@@ -1819,10 +1819,21 @@ impl SystemState {
         self.canister_history.add_canister_change(new_change);
     }
 
-    /// Overwrite the `total_num_changes` of the canister history. This can happen in the context of canister migration.
-    pub fn set_canister_history_total_num_changes(&mut self, total_num_changes: u64) {
+    /// Renames the canister to the given `to_canister_id`.
+    ///
+    /// Overwrites the total length of the canister history with the original
+    /// canister's. Bumps the canister version to be monotone w.r.t. both the
+    /// original and new values.
+    pub fn rename_canister(
+        &mut self,
+        to_canister_id: CanisterId,
+        to_version: u64,
+        to_total_num_changes: u64,
+    ) {
+        self.canister_id = to_canister_id;
         self.canister_history
-            .set_total_num_changes(total_num_changes);
+            .set_total_num_changes(to_total_num_changes);
+        self.canister_version = std::cmp::max(self.canister_version, to_version) + 1;
     }
 
     pub fn get_canister_history(&self) -> &CanisterHistory {

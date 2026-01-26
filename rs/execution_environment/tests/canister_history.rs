@@ -23,6 +23,7 @@ use ic00::{
     CanisterSettingsArgsBuilder, CanisterSnapshotResponse, LoadCanisterSnapshotArgs,
     TakeCanisterSnapshotArgs,
 };
+use more_asserts::{assert_gt, assert_lt};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
@@ -1654,14 +1655,14 @@ fn subnet_available_memory() {
             initial_subnet_available_memory.get_execution_memory()
         );
         if memory_usage_increase {
-            assert!(
-                test.subnet_available_memory().get_execution_memory()
-                    < current_subnet_available_memory.get_execution_memory()
+            assert_lt!(
+                test.subnet_available_memory().get_execution_memory(),
+                current_subnet_available_memory.get_execution_memory()
             );
         } else {
-            assert!(
-                test.subnet_available_memory().get_execution_memory()
-                    > current_subnet_available_memory.get_execution_memory()
+            assert_gt!(
+                test.subnet_available_memory().get_execution_memory(),
+                current_subnet_available_memory.get_execution_memory()
             );
         }
         current_subnet_available_memory = test.subnet_available_memory();
