@@ -78,15 +78,6 @@ impl Default for SchedulerState {
     }
 }
 
-// impl SchedulerState {
-//     pub fn new(time: Time) -> Self {
-//         Self {
-//             time_of_last_allocation_charge: time,
-//             ..Default::default()
-//         }
-//     }
-// }
-
 /// The full state of a single canister.
 #[derive(Clone, PartialEq, Debug, ValidateEq)]
 pub struct CanisterState {
