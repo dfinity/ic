@@ -568,7 +568,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
+        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
+        // IC_ADMIN_BIN to a dummy value.
+        r#"IC_ADMIN_BIN="/dev/false" /opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );
