@@ -7,13 +7,14 @@ use ic_btc_adapter_test_utils::rpc_client::RpcClientType;
 use ic_btc_checker::{
     CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
-use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE,
     lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg, Mode},
 };
 use ic_config::{
-    execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
+    execution_environment::{
+        BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, DOGECOIN_MAINNET_CANISTER_ID,
+    },
     subnet_config::ECDSA_SIGNATURE_FEE,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -520,14 +521,15 @@ pub async fn upgrade_btc_checker(
 }
 
 pub async fn install_bitcoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
-    install_bitcoin_canister_with_network(runtime, logger, Network::Regtest).await
+    install_bitcoin_canister_with_network(runtime, logger, ic_btc_interface::Network::Regtest).await
 }
 
 pub async fn install_bitcoin_canister_with_network(
     runtime: &Runtime,
     logger: &Logger,
-    network: Network,
+    network: ic_btc_interface::Network,
 ) -> CanisterId {
+    use ic_btc_interface::{Config, Fees, Flag, Network};
     info!(&logger, "Installing bitcoin canister ...");
     let canister_id = match network {
         Network::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
@@ -575,6 +577,54 @@ pub async fn install_bitcoin_canister_with_network(
         .unwrap();
 
     bitcoin_canister.canister_id()
+}
+
+pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
+    use ic_doge_interface::{Config, Fees, Flag, Network};
+    info!(&logger, "Installing bitcoin canister ...");
+    let canister_id = DOGECOIN_MAINNET_CANISTER_ID;
+    let mut dogecoin_canister =
+        create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
+
+    let args = Config {
+        stability_threshold: 6,
+        network: Network::Regtest,
+        blocks_source: Principal::management_canister(),
+        syncing: Flag::Enabled,
+        fees: Fees {
+            get_utxos_base: 0,
+            get_utxos_cycles_per_ten_instructions: 0,
+            get_utxos_maximum: 0,
+            get_balance: 0,
+            get_balance_maximum: 0,
+            get_current_fee_percentiles: 0,
+            get_current_fee_percentiles_maximum: 0,
+            send_transaction_base: 0,
+            send_transaction_per_byte: 0,
+            get_block_headers_base: 0,
+            get_block_headers_cycles_per_ten_instructions: 0,
+            get_block_headers_maximum: 0,
+        },
+        api_access: Flag::Enabled,
+        disable_api_if_not_fully_synced: Flag::Disabled,
+        watchdog_canister: None,
+        burn_cycles: Flag::Enabled,
+        lazily_evaluate_fee_percentiles: Flag::Enabled,
+    };
+
+    install_rust_canister_from_path(
+        &mut dogecoin_canister,
+        get_dependency_path(env::var("DOGE_WASM_PATH").expect("DOGE_WASM_PATH not set")),
+        Some(Encode!(&args).unwrap()),
+    )
+    .await;
+
+    dogecoin_canister
+        .set_controller_with_retries(ROOT_CANISTER_ID.get())
+        .await
+        .unwrap();
+
+    dogecoin_canister.canister_id()
 }
 
 pub async fn install_icrc1_ledger(canister: &mut Canister<'_>, args: &LedgerArgument) {

@@ -42,6 +42,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-utils",
     "@crate_index//:k256",
@@ -163,7 +164,7 @@ system_test_nns(
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
-        "BTC_WASM_PATH": "@btc_canister//file",
+        "DOGE_WASM_PATH": "@doge_canister//file",
         "CKBTC_UVM_CONFIG_PATH": "//rs/tests:ckbtc_uvm_config_image",
         "IC_CKDOGE_MINTER_WASM_PATH": "//rs/dogecoin/ckdoge/minter:ckdoge_minter_debug",
         "LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
