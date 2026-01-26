@@ -236,4 +236,5 @@ jobs:
       - name: Test Container Run
         id: test-container-run
         if: steps.filter.outputs.container-run == 'true'
+        shell: bash
         run: ./ci/scripts/container-run.sh
