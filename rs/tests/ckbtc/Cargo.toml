@@ -81,5 +81,3 @@ path = "ckbtc_minter_update_balance.rs"
 [[bin]]
 name = "ic-systest-ckdoge-minter-basics-test"
 path = "ckdoge_minter_basics_test.rs"
-
-
