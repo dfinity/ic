@@ -390,7 +390,9 @@ impl BlockMaker {
 
                     self.metrics.report_byte_estimate_metrics(
                         batch_payload.xnet.size_bytes(),
-                        batch_payload.ingress.total_messages_size_estimate().get() as usize,
+                        (batch_payload.ingress.total_messages_size_estimate()
+                            + batch_payload.ingress.total_ids_size_estimate())
+                        .get() as usize,
                     );
 
                     BlockPayload::Data(DataPayload {
