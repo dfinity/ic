@@ -61,13 +61,13 @@ while test $# -gt $CTR; do
             shift
             ;;
         -i | --image)
-            if [[ $# -gt "$CTR + 1" ]]; then
-                IMAGE_NAME="$2"
-            else
-                eprintln "Missing argument for -i | --image!"
-                usage && exit 1
-            fi
             shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --image requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            IMAGE_NAME="$1"
             shift
             ;;
         --container-cmd)
@@ -79,6 +79,7 @@ while test $# -gt $CTR; do
             fi
             # Split the argument into an array (supports "sudo podman")
             read -ra CONTAINER_CMD <<<"$1"
+            shift
             ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
@@ -95,7 +96,11 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
-        *) let CTR=CTR+1 ;;
+        *)
+            echo "unknown argument: $1" >&2
+            usage >&2
+            exit 1
+            ;;
     esac
 done
 
