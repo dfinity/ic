@@ -8,7 +8,7 @@ use ic_config::{
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_execution_environment::{
-    units::{GIB, KIB, MIB},
+    units::{GIB, MIB},
     util::MIGRATION_CANISTER_ID,
 };
 use ic_management_canister_types_private::{

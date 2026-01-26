@@ -2230,7 +2230,7 @@ fn add_cycles_sender_not_in_whitelist() {
 #[test]
 fn upgrading_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
-    let mib = MIB as usize;
+    let mib = MIB;
     let memory_capacity = 1000 * mib;
     let memory_used = memory_capacity - 10 * mib;
 
