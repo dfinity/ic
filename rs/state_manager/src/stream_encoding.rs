@@ -12,7 +12,7 @@ use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    SubnetId,
+    Height, SubnetId,
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
 };
 use serde::Deserialize;
@@ -71,6 +71,7 @@ fn find_path<'a>(
 /// See `ic_replicated_state::canonical::traversal` for more details on the tree
 /// structure.
 pub fn encode_stream_slice(
+    height: Height,
     state: &ReplicatedState,
     subnet: SubnetId,
     from: StreamIndex,
@@ -115,7 +116,7 @@ pub fn encode_stream_slice(
         ),
     );
 
-    let mut tree = traverse(state, SubtreeVisitor::new(&pattern, visitor));
+    let mut tree = traverse(height, state, SubtreeVisitor::new(&pattern, visitor));
     let mut actual_to = from;
 
     // The crypto library that constructs witnesses doesn't like empty subtrees as
