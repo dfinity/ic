@@ -31,8 +31,7 @@ while test $# -gt 0; do
                 usage >&2
                 exit 1
             fi
-            # Split the argument into an array (supports "sudo podman")
-            read -ra IMAGE_NAME <<<"$1"
+            IMAGE_NAME="$1"
             shift
             ;;
         --container-cmd)
