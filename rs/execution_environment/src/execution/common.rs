@@ -632,7 +632,6 @@ mod test {
             CanisterId::from_u64(42),
             CanisterId::from(100u64).into(),
             Cycles::new(1 << 36),
-            UNIX_EPOCH,
             NumSeconds::from(100_000),
         );
 

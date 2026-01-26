@@ -1239,13 +1239,8 @@ fn test_split_input_schedules() {
     assert_eq!(vec![other_4, other_5], fixture.remote_schedule());
 
     // After the split we only have `other_1` (and `this`) on the subnet.
-    let system_state = SystemState::new_running_for_testing(
-        other_1,
-        other_1.get(),
-        Cycles::zero(),
-        UNIX_EPOCH,
-        0.into(),
-    );
+    let system_state =
+        SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
     let local_canisters = btreemap! {
         other_1 => CanisterState::new(system_state, None, SchedulerState::default())
     };
@@ -3525,7 +3520,6 @@ fn time_out_messages_pushes_correct_reject_responses() {
                 CanisterId::from_u64(42),
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),
-                UNIX_EPOCH,
                 NumSeconds::from(100_000),
             );
             CanisterState::new(system_state, None, scheduler_state)

@@ -133,7 +133,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
-            UNIX_EPOCH,
             NumSeconds::from(0),
         );
         let mut new_balance = system_state.balance();
@@ -174,7 +173,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
-            UNIX_EPOCH,
             NumSeconds::from(60),
         );
         let mut new_balance = system_state.balance();
@@ -215,7 +213,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
-            UNIX_EPOCH,
             NumSeconds::from(0),
         );
         let mut new_balance = system_state.balance();
@@ -258,7 +255,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             canister_test_id(1),
             canister_test_id(2).get(),
             initial_cycles,
-            UNIX_EPOCH,
             NumSeconds::from(30),
         );
         let mut balance = system_state.balance();
@@ -863,7 +859,6 @@ fn cycles_withdraw_for_execution() {
         canister_id,
         canister_test_id(2).get(),
         initial_cycles,
-        UNIX_EPOCH,
         freeze_threshold,
     );
     system_state.compute_allocation = ComputeAllocation::try_from(90).unwrap();
@@ -1037,7 +1032,6 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         canister_id,
         canister_test_id(2).get(),
         initial_cycles,
-        UNIX_EPOCH,
         freeze_threshold,
     );
     system_state.compute_allocation = ComputeAllocation::try_from(90).unwrap();
@@ -1277,7 +1271,6 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
         canister_test_id(1),
         canister_test_id(2).get(),
         Cycles::new(2_000_000),
-        UNIX_EPOCH,
         NumSeconds::from(1_000),
     );
     system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();

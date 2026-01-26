@@ -638,14 +638,12 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
-        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
     ) -> Self {
         Self::new_for_testing(
             canister_id,
             controller,
             initial_cycles,
-            time_of_last_allocation_charge,
             freeze_threshold,
             CanisterStatus::new_running(),
         )
@@ -655,14 +653,12 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
-        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
     ) -> Self {
         Self::new_for_testing(
             canister_id,
             controller,
             initial_cycles,
-            time_of_last_allocation_charge,
             freeze_threshold,
             CanisterStatus::Stopping {
                 call_context_manager: CallContextManager::default(),
@@ -675,14 +671,12 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
-        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
     ) -> Self {
         Self::new_for_testing(
             canister_id,
             controller,
             initial_cycles,
-            time_of_last_allocation_charge,
             freeze_threshold,
             CanisterStatus::Stopped,
         )
@@ -692,7 +686,6 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
-        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
     ) -> Self {
@@ -700,7 +693,7 @@ impl SystemState {
             canister_id,
             controller,
             initial_cycles,
-            time_of_last_allocation_charge,
+            UNIX_EPOCH,
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),

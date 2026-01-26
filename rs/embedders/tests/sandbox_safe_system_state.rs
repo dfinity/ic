@@ -64,7 +64,6 @@ fn push_output_request_fails_not_enough_cycles_for_request() {
         canister_test_id(0),
         user_test_id(1).get(),
         request_payload_cost - Cycles::new(10),
-        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
 
@@ -134,7 +133,6 @@ fn push_output_request_fails_not_enough_cycles_for_response() {
         canister_test_id(0),
         user_test_id(1).get(),
         total_cost - Cycles::new(10),
-        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
 
@@ -174,7 +172,6 @@ fn push_output_request_succeeds_with_enough_cycles() {
         canister_test_id(0),
         user_test_id(1).get(),
         INITIAL_CYCLES,
-        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
 
@@ -227,7 +224,6 @@ fn correct_charging_source_canister_for_a_request() {
         canister_test_id(0),
         user_test_id(1).get(),
         INITIAL_CYCLES,
-        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
 
@@ -554,7 +550,6 @@ fn test_inter_canister_call(
         sender,
         sender_controller,
         INITIAL_CYCLES,
-        UNIX_EPOCH,
         NumSeconds::from(100_000),
     );
 

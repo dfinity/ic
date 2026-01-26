@@ -1476,7 +1476,7 @@ mod tests {
         NumBytes, NumInstructions, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{NO_DEADLINE, RequestMetadata},
-        time::{CoarseTime, UNIX_EPOCH},
+        time::CoarseTime,
     };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
@@ -1488,7 +1488,6 @@ mod tests {
             canister_test_id(0),
             user_test_id(1).get(),
             Cycles::new(1_000_000_000),
-            UNIX_EPOCH,
             NumSeconds::from(100_000),
         );
 

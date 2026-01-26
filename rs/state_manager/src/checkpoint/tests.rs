@@ -29,7 +29,6 @@ use ic_types::{
     CanisterId, Cycles, Height,
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
-    time::UNIX_EPOCH,
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
@@ -401,7 +400,6 @@ fn can_recover_a_stopping_canister() {
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
-                UNIX_EPOCH,
                 NumSeconds::from(100_000),
             ),
             execution_state: None,
@@ -460,7 +458,6 @@ fn can_recover_a_stopped_canister() {
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
-                UNIX_EPOCH,
                 NumSeconds::from(100_000),
             ),
             execution_state: None,
@@ -504,7 +501,6 @@ fn can_recover_a_running_canister() {
                 canister_id,
                 controller,
                 INITIAL_CYCLES,
-                UNIX_EPOCH,
                 NumSeconds::from(100_000),
             ),
             execution_state: None,

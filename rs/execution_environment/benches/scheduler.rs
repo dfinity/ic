@@ -19,7 +19,6 @@ fn main() {
             canister_id,
             user_test_id(24).get(),
             Cycles::from_parts(1, 2),
-            UNIX_EPOCH,
             NumSeconds::from(100_000),
         );
         canisters.insert(

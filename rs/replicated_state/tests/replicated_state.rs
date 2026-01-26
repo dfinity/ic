@@ -139,7 +139,6 @@ impl ReplicatedStateFixture {
                 *canister_id,
                 user_test_id(24).get(),
                 Cycles::new(1 << 36),
-                UNIX_EPOCH,
                 NumSeconds::from(100_000),
             );
             let execution_state = ExecutionStateBuilder::default()

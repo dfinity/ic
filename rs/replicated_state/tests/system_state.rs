@@ -75,7 +75,6 @@ impl SystemStateFixture {
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
-                UNIX_EPOCH,
                 NumSeconds::new(0),
             ),
         }
@@ -87,7 +86,6 @@ impl SystemStateFixture {
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
-                UNIX_EPOCH,
                 NumSeconds::new(0),
             ),
         }
@@ -99,7 +97,6 @@ impl SystemStateFixture {
                 CANISTER_ID,
                 user_test_id(1).get(),
                 Cycles::new(5_000_000_000_000),
-                UNIX_EPOCH,
                 NumSeconds::new(0),
             ),
         }
@@ -200,7 +197,6 @@ fn correct_charging_target_canister_for_a_response() {
             canister_test_id(0),
             user_test_id(1).get(),
             initial_cycles,
-            UNIX_EPOCH,
             freeze_threshold,
         ),
     };
