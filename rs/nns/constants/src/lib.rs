@@ -59,7 +59,7 @@ pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
 /// are spawned by ledger.) Thus, they are not included.
 pub const NNS_CANISTER_WASMS: [&str; 15] = [
     "registry-canister",
-    "registry-canister-test",
+    "registry-canister_test",
     "governance-canister",
     "governance-canister_test",
     "ledger-canister",
