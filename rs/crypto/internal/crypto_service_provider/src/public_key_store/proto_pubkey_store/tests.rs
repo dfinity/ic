@@ -52,14 +52,17 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
 
     let store = public_key_store(&crypto_root);
 
-    assert_eq!(store.node_signing_pubkey(), generated_keys.node_signing_pk);
-    assert_eq!(
-        store.committee_signing_pubkey(),
-        generated_keys.committee_signing_pk
+    assert_pubkey_eq_ignoring_timestamp(
+        store.node_signing_pubkey(),
+        generated_keys.node_signing_pk,
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
+        store.committee_signing_pubkey(),
+        generated_keys.committee_signing_pk,
+    );
+    assert_pubkey_eq_ignoring_timestamp(
         store.ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk
+        generated_keys.dkg_dealing_encryption_pk,
     );
     assert!(equal_ignoring_timestamp(
         &store.idkg_dealing_encryption_pubkeys(),
@@ -79,7 +82,10 @@ fn should_set_pubkeys_if_not_set() {
         store.set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap()),
         Ok(())
     );
-    assert_eq!(store.node_signing_pubkey(), generated_keys.node_signing_pk);
+    assert_pubkey_eq_ignoring_timestamp(
+        store.node_signing_pubkey(),
+        generated_keys.node_signing_pk,
+    );
 
     assert!(store.committee_signing_pubkey().is_none());
     assert_matches!(
@@ -88,9 +94,9 @@ fn should_set_pubkeys_if_not_set() {
         ),
         Ok(())
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
         store.committee_signing_pubkey(),
-        generated_keys.committee_signing_pk
+        generated_keys.committee_signing_pk,
     );
 
     assert!(store.ni_dkg_dealing_encryption_pubkey().is_none());
@@ -100,9 +106,9 @@ fn should_set_pubkeys_if_not_set() {
         ),
         Ok(())
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
         store.ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk
+        generated_keys.dkg_dealing_encryption_pk,
     );
 
     assert!(store.tls_certificate().is_none());
@@ -194,9 +200,9 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
             .set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap())
             .is_ok()
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
         public_key_store(&temp_dir).node_signing_pubkey(),
-        generated_keys.node_signing_pk
+        generated_keys.node_signing_pk,
     );
 
     assert!(
@@ -204,9 +210,9 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
             .set_once_committee_signing_pubkey(generated_keys.committee_signing_pk.clone().unwrap())
             .is_ok()
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
         public_key_store(&temp_dir).committee_signing_pubkey(),
-        generated_keys.committee_signing_pk
+        generated_keys.committee_signing_pk,
     );
 
     assert!(
@@ -216,9 +222,9 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
             )
             .is_ok()
     );
-    assert_eq!(
+    assert_pubkey_eq_ignoring_timestamp(
         public_key_store(&temp_dir).ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk
+        generated_keys.dkg_dealing_encryption_pk,
     );
 
     assert!(
@@ -358,6 +364,14 @@ fn equal_ignoring_timestamp(left: &[PublicKey], right: &[PublicKey]) -> bool {
             .iter()
             .zip(right.iter())
             .all(|(left_pk, right_pk)| left_pk.equal_ignoring_timestamp(right_pk))
+}
+
+fn assert_pubkey_eq_ignoring_timestamp(actual: Option<PublicKey>, expected: Option<PublicKey>) {
+    match (actual.as_ref(), expected.as_ref()) {
+        (Some(actual), Some(expected)) => assert!(actual.equal_ignoring_timestamp(expected)),
+        (None, None) => (),
+        (a, e) => panic!("public keys are not equal: actual={a:?}, expected={e:?}",),
+    }
 }
 
 mod timestamps {
