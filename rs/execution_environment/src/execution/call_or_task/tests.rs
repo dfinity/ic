@@ -1,4 +1,4 @@
-use crate::util::{GIB, KIB};
+use crate::units::{GIB, KIB};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;

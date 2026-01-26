@@ -2,7 +2,7 @@
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
-use ic_execution_environment::util::{GIB, MIB};
+use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,

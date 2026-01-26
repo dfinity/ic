@@ -3,7 +3,7 @@ use candid::{Decode, Encode, Reserved};
 use ic_base_types::NumBytes;
 use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_execution_environment::util::{GIB, MIB};
+use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterSettingsArgsBuilder,
     CanisterSnapshotDataKind, CanisterSnapshotDataOffset, CanisterSnapshotResponse, ChunkHash,

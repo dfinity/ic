@@ -110,7 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
-use crate::util::{GIB, KIB, MIB};
+use crate::units::{GIB, KIB, MIB};
 
 const T: u128 = 1_000_000_000_000;
 
@@ -4327,11 +4327,7 @@ fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
         .unwrap();
 
     let canister_id = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000_000),
-            None,
-            Some(10 * GIB),
-        )
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), None, Some(10 * GIB))
         .unwrap();
     test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
         .unwrap();
@@ -7449,11 +7445,7 @@ fn create_canister_checks_freezing_threshold_for_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
 
     let err = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000_000),
-            None,
-            Some(10 * GIB),
-        )
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), None, Some(10 * GIB))
         .unwrap_err();
 
     assert!(

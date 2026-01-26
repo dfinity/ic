@@ -19,7 +19,7 @@ use crate::{
         unique_sorted_buckets,
     },
     scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
-    util::{KIB, MIB},
+    units::{KIB, MIB},
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";

@@ -1,4 +1,4 @@
-use crate::util::{GIB, KIB, MIB};
+use crate::units::{GIB, KIB, MIB};
 use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::RequestMetadataStats;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;

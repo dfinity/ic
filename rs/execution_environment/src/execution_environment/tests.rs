@@ -1,4 +1,4 @@
-use crate::util::GIB;
+use crate::units::GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;

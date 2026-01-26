@@ -37,7 +37,7 @@ The scenarios cover the following:
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
-use ic_execution_environment::util::{GIB, KIB};
+use ic_execution_environment::units::{GIB, KIB};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
