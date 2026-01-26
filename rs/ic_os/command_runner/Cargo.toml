@@ -5,5 +5,5 @@ edition.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 mockall = { workspace = true }
-tokio = "1.49.0"
+tokio = { workspace = true }
 
