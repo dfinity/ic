@@ -456,15 +456,14 @@ pub async fn install_ckdoge_minter(
         get_utxos_cache_expiration_seconds: None,
         utxo_consolidation_threshold: None,
         max_num_inputs_in_transaction: None,
+        deposit_doge_min_amount: None,
     };
 
     let minter_arg = ic_ckdoge_minter::lifecycle::MinterArg::Init(args);
 
     install_rust_canister_from_path(
         canister,
-        get_dependency_path(
-            env::var("IC_CKDOGE_MINTER_WASM_PATH").expect("IC_CKDOGE_MINTER_WASM_PATH not set"),
-        ),
+        get_dependency_path_from_env("IC_CKDOGE_MINTER_WASM_PATH"),
         Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
@@ -608,7 +607,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
 
     install_rust_canister_from_path(
         &mut dogecoin_canister,
-        get_dependency_path(env::var("DOGE_WASM_PATH").expect("DOGE_WASM_PATH not set")),
+        get_dependency_path_from_env("DOGE_WASM_PATH"),
         Some(Encode!(&args).unwrap()),
     )
     .await;
