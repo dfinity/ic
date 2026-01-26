@@ -71,8 +71,8 @@ fn find_path<'a>(
 /// See `ic_replicated_state::canonical::traversal` for more details on the tree
 /// structure.
 pub fn encode_stream_slice(
-    height: Height,
     state: &ReplicatedState,
+    height: Height,
     subnet: SubnetId,
     from: StreamIndex,
     to: StreamIndex,

@@ -152,8 +152,8 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/encode_streams", |b| {
         b.iter(|| {
             black_box(encode_stream_slice(
-                height,
                 &state,
+                height,
                 subnet_test_id(2),
                 StreamIndex::from(0),
                 StreamIndex::from(100),

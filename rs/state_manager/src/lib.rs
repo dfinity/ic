@@ -3690,8 +3690,8 @@ impl CertifiedStreamStore for StateManagerImpl {
             .unwrap_or_else(|| stream.messages_end());
 
         let (slice_as_tree, to) = stream_encoding::encode_stream_slice(
-            certification.height,
             &state,
+            certification.height,
             remote_subnet,
             msg_from,
             to,
