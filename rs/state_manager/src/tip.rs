@@ -1296,14 +1296,14 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             reserved_balance_limit: canister_state.system_state.reserved_balance_limit(),
             execution_state_bits,
             status: canister_state.system_state.get_status().clone(),
+            rounds_scheduled: canister_state
+                .system_state
+                .canister_metrics()
+                .rounds_scheduled(),
             scheduled_as_first: canister_state
                 .system_state
                 .canister_metrics()
                 .scheduled_as_first(),
-            skipped_round_due_to_no_messages: canister_state
-                .system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
             executed: canister_state.system_state.canister_metrics().executed(),
             interrupted_during_execution: canister_state
                 .system_state

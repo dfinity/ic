@@ -445,11 +445,11 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
-            if !canister.has_input() {
+            if canister.has_input() {
                 canister
                     .system_state
                     .canister_metrics_mut()
-                    .observe_skipped_round_due_to_no_messages();
+                    .observe_round_scheduled();
             }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.

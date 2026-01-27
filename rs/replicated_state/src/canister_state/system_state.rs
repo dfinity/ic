@@ -120,8 +120,8 @@ enum ConsumingCycles {
 /// For the semantics of the fields, check
 /// `canister_state_bits.proto:CanisterStateBits`.
 pub struct CanisterMetrics {
+    rounds_scheduled: u64,
     scheduled_as_first: u64,
-    skipped_round_due_to_no_messages: u64,
     executed: u64,
     interrupted_during_execution: u64,
     consumed_cycles: NominalCycles,
@@ -130,16 +130,16 @@ pub struct CanisterMetrics {
 
 impl CanisterMetrics {
     pub fn new(
+        rounds_scheduled: u64,
         scheduled_as_first: u64,
-        skipped_round_due_to_no_messages: u64,
         executed: u64,
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
         Self {
+            rounds_scheduled,
             scheduled_as_first,
-            skipped_round_due_to_no_messages,
             executed,
             interrupted_during_execution,
             consumed_cycles,
@@ -147,12 +147,12 @@ impl CanisterMetrics {
         }
     }
 
-    pub fn scheduled_as_first(&self) -> u64 {
-        self.scheduled_as_first
+    pub fn rounds_scheduled(&self) -> u64 {
+        self.rounds_scheduled
     }
 
-    pub fn skipped_round_due_to_no_messages(&self) -> u64 {
-        self.skipped_round_due_to_no_messages
+    pub fn scheduled_as_first(&self) -> u64 {
+        self.scheduled_as_first
     }
 
     pub fn executed(&self) -> u64 {
@@ -171,12 +171,12 @@ impl CanisterMetrics {
         &self.consumed_cycles_by_use_cases
     }
 
-    pub fn observe_scheduled_as_first(&mut self) {
-        self.scheduled_as_first += 1;
+    pub fn observe_round_scheduled(&mut self) {
+        self.rounds_scheduled += 1;
     }
 
-    pub fn observe_skipped_round_due_to_no_messages(&mut self) {
-        self.skipped_round_due_to_no_messages += 1;
+    pub fn observe_scheduled_as_first(&mut self) {
+        self.scheduled_as_first += 1;
     }
 
     pub fn observe_executed(&mut self) {

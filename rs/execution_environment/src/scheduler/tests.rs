@@ -99,7 +99,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             test.last_round()
         );
         let canister_metrics = canister.system_state.canister_metrics();
-        assert_eq!(canister_metrics.skipped_round_due_to_no_messages(), 0);
+        assert_eq!(canister_metrics.rounds_scheduled(), 1);
         assert_eq!(canister_metrics.executed(), 1);
         assert_eq!(canister_metrics.interrupted_during_execution(), 0);
     }
@@ -1289,12 +1289,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(0)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 0);
         assert_eq!(
             system_state
@@ -1686,12 +1681,7 @@ fn can_execute_messages_with_just_enough_instructions() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(1)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
             system_state
@@ -1746,12 +1736,7 @@ fn execute_idle_and_canisters_with_messages() {
         idle.scheduler_state.last_full_execution_round,
         test.last_round()
     );
-    assert_eq!(
-        idle.system_state
-            .canister_metrics()
-            .skipped_round_due_to_no_messages(),
-        1
-    );
+    assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
 
     let active = test.canister_state(active);
     let system_state = &active.system_state;
@@ -1759,12 +1744,7 @@ fn execute_idle_and_canisters_with_messages() {
         active.scheduler_state.last_full_execution_round,
         ExecutionRound::from(1)
     );
-    assert_eq!(
-        system_state
-            .canister_metrics()
-            .skipped_round_due_to_no_messages(),
-        0
-    );
+    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
         system_state
@@ -1812,12 +1792,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::new(1)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
             system_state
