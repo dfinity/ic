@@ -33,6 +33,7 @@ use ic_sns_swap::pb::v1::{
 use icp_ledger::Subaccount;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc::metadata_key::MetadataKey,
     icrc1::{
         account::Account,
         transfer::{TransferArg, TransferError},
@@ -566,7 +567,7 @@ pub struct Icrc1MetadataRequest {
     icrc1_canister: Principal,
 }
 
-pub type Icrc1MetadataResponse = Vec<(String, Value)>;
+pub type Icrc1MetadataResponse = Vec<(MetadataKey, Value)>;
 
 impl Request<Icrc1MetadataResponse> for Icrc1MetadataRequest {
     fn mode(&self) -> CallMode {

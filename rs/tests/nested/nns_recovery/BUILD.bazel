@@ -32,6 +32,7 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
+        "@crate_index//:serde_json",
         "@crate_index//:slog",
         "@crate_index//:tokio",
     ],
@@ -68,7 +69,6 @@ system_test_nns(
     guestos_update = "test",
     setupos = True,
     tags = [
-        "manual",
         "system_test_large",
     ],
     test_timeout = "eternal",
