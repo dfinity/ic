@@ -89,6 +89,10 @@ thread_local! {
     static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
+fn default_last_wait_time() -> Duration {
+    DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
@@ -99,6 +103,9 @@ struct State {
 
     // Last wait time in nanoseconds.
     #[deprecated]
+    #[serde(default = "default_last_wait_time")]
+    // TODO(DEFI-1144): Also add `#[serde(skip_serializing)]` annotation once the above `default` annotation has been deployed to mainnet.
+    // TODO(DEFI-1144): Remove the `last_wait_time` field once the above `skip_serializing` annotation has been deployed to mainnet.
     pub last_wait_time: Duration,
 
     /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
