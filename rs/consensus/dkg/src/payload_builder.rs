@@ -193,7 +193,7 @@ pub(crate) fn create_early_remote_transcripts(
             let dealings_count = all_dealings
                 .get(config.dkg_id())
                 .map_or(0, |dealings| dealings.len());
-            dealings_count < config.threshold().get().get() as usize
+            dealings_count < config.collection_threshold().get() as usize
         }) {
             continue;
         }
