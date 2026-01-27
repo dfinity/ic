@@ -12,6 +12,7 @@ use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
 use ic_replicated_state::{ExecutionTask, ReplicatedState};
+use ic_sys::PAGE_SIZE;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
@@ -33,7 +34,8 @@ const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
 
 const KIB: u64 = 1024;
 const MIB: u64 = 1024 * KIB;
-const DEFAULT_LOG_MEMORY_STORE_USAGE: u64 = 4 * KIB;
+
+const DEFAULT_LOG_MEMORY_STORE_USAGE: u64 = PAGE_SIZE as u64;
 
 const DTS_INSTALL_WAT: &str = r#"
     (module
