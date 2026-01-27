@@ -1,5 +1,5 @@
-use attestation::custom_data::{DerEncodedCustomData, SevCustomDataNamespace};
 use attestation::SevAttestationPackage;
+use attestation::custom_data::{DerEncodedCustomData, SevCustomDataNamespace};
 use candid::{CandidType, Deserialize};
 use der::asn1::OctetStringRef;
 use ic_base_types::NodeId;
