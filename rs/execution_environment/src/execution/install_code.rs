@@ -487,7 +487,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.canister_id();
 
         validate_controller(&self.canister, &original.sender)?;
 
