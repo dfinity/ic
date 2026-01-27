@@ -157,7 +157,6 @@ fn setup(env: TestEnv) {
 
     // Create an environment file that we SCP into the UVM. These environment
     // variables are then forward to the docker container with --env-file.
-    // (scoped to delete tempfile asap)
     {
         let filepath = env.get_path("env_vars");
         let mut file = File::create(filepath.clone()).expect("Could not create tempfile");
