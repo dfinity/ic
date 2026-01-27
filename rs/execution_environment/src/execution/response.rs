@@ -239,7 +239,7 @@ impl ResponseHelper {
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
-                    self.canister.system_state.canister_id,
+                    self.canister.canister_id(),
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
@@ -265,7 +265,7 @@ impl ResponseHelper {
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
             return Err(self.early_finish(result, original, round, round_limits));
@@ -585,7 +585,7 @@ impl ResponseHelper {
             info!(
                 round.log,
                 "Canister {} received unaccepted {} cycles as refund from canister {}.",
-                self.canister.system_state.canister_id,
+                self.canister.canister_id(),
                 self.refund_for_sent_cycles,
                 self.response_sender,
             );

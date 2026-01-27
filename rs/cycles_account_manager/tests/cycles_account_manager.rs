@@ -138,7 +138,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         let mut new_balance = system_state.balance();
         assert_eq!(
             cycles_account_manager.withdraw_cycles_for_transfer(
-                system_state.canister_id,
+                system_state.canister_id(),
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 NumBytes::from(0),
@@ -178,7 +178,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         let mut new_balance = system_state.balance();
         assert_eq!(
             cycles_account_manager.withdraw_cycles_for_transfer(
-                system_state.canister_id,
+                system_state.canister_id(),
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 NumBytes::from(0),
@@ -220,7 +220,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             CyclesAccountManagerBuilder::new()
                 .build()
                 .withdraw_cycles_for_transfer(
-                    system_state.canister_id,
+                    system_state.canister_id(),
                     system_state.freeze_threshold,
                     system_state.memory_allocation,
                     memory_usage,
@@ -260,7 +260,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
         let mut balance = system_state.balance();
         assert_eq!(
             cycles_account_manager.withdraw_cycles_for_transfer(
-                system_state.canister_id,
+                system_state.canister_id(),
                 system_state.freeze_threshold,
                 system_state.memory_allocation,
                 memory_usage,
@@ -673,7 +673,7 @@ fn cycles_withdraw_no_threshold() {
     assert!(
         cycles_account_manager
             .withdraw_with_threshold(
-                system_state.canister_id,
+                system_state.canister_id(),
                 &mut balance,
                 Cycles::zero(),
                 threshold,
@@ -690,7 +690,7 @@ fn cycles_withdraw_no_threshold() {
     assert!(
         cycles_account_manager
             .withdraw_with_threshold(
-                system_state.canister_id,
+                system_state.canister_id(),
                 &mut balance,
                 amount,
                 threshold,
@@ -704,7 +704,7 @@ fn cycles_withdraw_no_threshold() {
     assert!(
         cycles_account_manager
             .withdraw_with_threshold(
-                system_state.canister_id,
+                system_state.canister_id(),
                 &mut balance,
                 amount,
                 threshold,
@@ -719,7 +719,7 @@ fn cycles_withdraw_no_threshold() {
     assert!(
         cycles_account_manager
             .withdraw_with_threshold(
-                system_state.canister_id,
+                system_state.canister_id(),
                 &mut balance,
                 amount,
                 threshold,
@@ -733,7 +733,7 @@ fn cycles_withdraw_no_threshold() {
     assert!(
         cycles_account_manager
             .withdraw_with_threshold(
-                system_state.canister_id,
+                system_state.canister_id(),
                 &mut balance,
                 amount,
                 threshold,
@@ -1100,7 +1100,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
     cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
@@ -1114,7 +1114,7 @@ fn withdraw_execution_cycles_consumes_cycles() {
             WASM_EXECUTION_MODE,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
     assert!(consumed_cycles_before < consumed_cycles_after);
 }
 
@@ -1126,10 +1126,10 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
     let mut balance = Cycles::new(5_000_000_000_000);
-    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            system_state.canister_id,
+            system_state.canister_id(),
             system_state.freeze_threshold,
             system_state.memory_allocation,
             NumBytes::from(0),
@@ -1143,7 +1143,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
 
     // Cycles are not consumed
     assert_eq!(consumed_cycles_before, consumed_cycles_after);
@@ -1157,7 +1157,7 @@ fn consume_cycles_updates_consumed_cycles() {
         .with_subnet_type(SubnetType::Application)
         .build();
 
-    let consumed_cycles_before = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_before = system_state.canister_metrics().consumed_cycles();
     cycles_account_manager
         .consume_cycles(
             &mut system_state,
@@ -1171,7 +1171,7 @@ fn consume_cycles_updates_consumed_cycles() {
             false,
         )
         .unwrap();
-    let consumed_cycles_after = system_state.canister_metrics.consumed_cycles;
+    let consumed_cycles_after = system_state.canister_metrics().consumed_cycles();
 
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
@@ -1289,7 +1289,7 @@ fn withdraw_cycles_for_transfer_checks_reserved_balance() {
     let mut new_balance = system_state.balance();
     cycles_account_manager
         .withdraw_cycles_for_transfer(
-            system_state.canister_id,
+            system_state.canister_id(),
             system_state.freeze_threshold,
             system_state.memory_allocation,
             NumBytes::from(1_000_000),

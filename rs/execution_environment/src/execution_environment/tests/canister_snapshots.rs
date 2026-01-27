@@ -1439,7 +1439,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     assert_eq!(canister_version_before, 1u64);
 
     let canister_history = test
@@ -1493,7 +1493,7 @@ fn load_canister_snapshot_succeeds() {
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     // Canister version should be bumped after loading a snapshot.
     assert_gt!(canister_version_after, canister_version_before);
     assert_eq!(canister_version_after, 2u64);
