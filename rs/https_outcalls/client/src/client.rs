@@ -183,7 +183,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
             // Build future that sends and transforms request.
             let adapter_canister_http_response = async move {
-                let (result, elapsed) = timeout_with_metric(
+                let (result, elapsed) = timeout_with_capped_metric(
                     max_response_duration,
                     http_adapter_client.https_outcall(HttpsOutcallRequest {
                         url: request_url,
@@ -205,7 +205,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     }),
                 )
                 .await
-                .map_err(|_| tonic::Status::new(Code::DeadlineExceeded, "Deadline Exceeded"))?;
+                .map_err(|_: tokio::time::error::Elapsed| {
+                    tonic::Status::new(Code::DeadlineExceeded, "Deadline Exceeded")
+                })?;
 
                 result.map(|res| (res, elapsed))
             }
@@ -216,7 +218,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 )
             })
             .and_then(|(adapter_response, elapsed)| async move {
-                //TODO(next): use alapsed and the adapter_metrics to use in teh budget.
                 let HttpsOutcallResult {
                     metrics: adapter_metrics,
                     result,
@@ -272,10 +273,9 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     body,
                 };
 
-                let status_str = status.to_string();
                 metrics
                     .http_request_duration
-                    .with_label_values(&[status_str.as_str(), request_http_method.as_str()])
+                    .with_label_values(&[status.to_string().as_str(), request_http_method.as_str()])
                     .observe(elapsed.as_secs_f64());
 
                 validate_http_headers_and_body(
@@ -469,7 +469,9 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
     }
 }
 
-async fn timeout_with_metric<F>(
+/// Wraps a future in a timeout and caps the elapsed time to the limit.
+/// The returned duration is always less than or equal to the limit.
+async fn timeout_with_capped_metric<F>(
     limit: Duration,
     future: F,
 ) -> Result<(F::Output, Duration), tokio::time::error::Elapsed>

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs/https_outcalls:__subpackages__"])
 
@@ -10,4 +10,10 @@ rust_library(
     deps = [
         "//rs/types/types",
     ],
+)
+
+rust_test(
+    name = "pricing_test",
+    crate = ":pricing",
+    deps = [],
 )
