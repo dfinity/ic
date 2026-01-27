@@ -15158,6 +15158,7 @@ dependencies = [
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rstest",
  "rusty-fork",
  "serde",
  "serde_bytes",

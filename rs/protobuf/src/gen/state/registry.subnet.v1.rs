@@ -129,6 +129,21 @@ pub struct CatchUpPackageContents {
     /// / The initial IDkg dealings for boot strapping target chain key subnets.
     #[prost(message, repeated, tag = "8")]
     pub chain_key_initializations: ::prost::alloc::vec::Vec<ChainKeyInitialization>,
+    #[prost(oneof = "catch_up_package_contents::CupType", tags = "9")]
+    pub cup_type: ::core::option::Option<catch_up_package_contents::CupType>,
+}
+/// Nested message and enum types in `CatchUpPackageContents`.
+pub mod catch_up_package_contents {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CupType {
+        #[prost(message, tag = "9")]
+        SubnetSplitting(super::SubnetSplittingParams),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SubnetSplittingParams {
+    #[prost(message, optional, tag = "1")]
+    pub destination_subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RegistryStoreUri {
