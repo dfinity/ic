@@ -325,7 +325,7 @@ fn test_get_node_providers_rewards() {
         NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
 
     let expected = NodeProvidersRewards {
-        algorithm_version: RewardsCalculationAlgorithmVersion{ version: 2 },
+        algorithm_version: RewardsCalculationAlgorithmVersion { version: 2 },
         rewards_xdr_permyriad: btreemap! {
             test_provider_id(1).0 => 135200,
             test_provider_id(2).0 => 10000,
