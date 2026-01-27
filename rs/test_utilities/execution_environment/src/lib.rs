@@ -2117,6 +2117,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_scheduler_cores(mut self, scheduler_cores: usize) -> Self {
+        self.subnet_config.scheduler_config.scheduler_cores = scheduler_cores;
+        self
+    }
+
     pub fn with_instruction_limit(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
