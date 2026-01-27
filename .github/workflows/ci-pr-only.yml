@@ -219,7 +219,7 @@ jobs:
             cov_html.zip
 
   test-container-run:
-    name: Test Container Run
+    name: Test Container Run ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -240,7 +240,7 @@ jobs:
             container-run:
               - '.github/workflows/ci-pr-only.yml'
               - 'ci/container/**'
-      - name: Container Run ${{ matrix.name }}
+      - name: Test Container Run
         if: steps.filter.outputs.container-run == 'true'
         run: |
           ./ci/container/container-run.sh ${{ matrix.command }}
