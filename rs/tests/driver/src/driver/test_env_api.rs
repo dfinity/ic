@@ -1137,10 +1137,17 @@ impl IcNodeSnapshot {
                 std::iter::once(self.clone()),
                 vec![replica_metric_name_prefix.to_string()],
             );
-            let replica_metrics = replica_metrics_fetcher
-                .fetch::<u64>()
-                .await
-                .expect("Failed to fetch replica metrics");
+            let replica_metrics_result = replica_metrics_fetcher.fetch::<u64>().await;
+            let replica_metrics = match replica_metrics_result {
+                Ok(replica_metrics) => replica_metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
             assert!(
                 !replica_metrics.is_empty(),
                 "No critical error counters were found for node {}",
