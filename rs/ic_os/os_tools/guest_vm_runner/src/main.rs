@@ -534,7 +534,7 @@ impl GuestVmService {
         VirtualMachine::try_destroy_existing_vm(
             &self.libvirt_connection,
             vm_domain_name(self.guest_vm_type),
-            self.command_runner.as_ref()
+            self.command_runner.as_ref(),
         )
         .await?;
 
