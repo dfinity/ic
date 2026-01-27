@@ -849,7 +849,6 @@ impl ExecutionEnvironment {
                                     &mut canister.system_state,
                                     memory_usage,
                                     message_memory_usage,
-                                    canister.scheduler_state.compute_allocation,
                                     induction_cost,
                                     registry_settings.subnet_size,
                                     cost_schedule,
@@ -3010,7 +3009,6 @@ impl ExecutionEnvironment {
                     cost,
                     paying_canister.memory_usage(),
                     paying_canister.message_memory_usage(),
-                    paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
                     state.get_own_cost_schedule(),
                     reveal_top_up,
@@ -4245,7 +4243,7 @@ impl ExecutionEnvironment {
                     }
                 });
             if stopped {
-                canister.system_state.canister_version += 1;
+                canister.system_state.bump_canister_version();
             }
             for stop_context in stop_contexts.iter() {
                 self.reply_to_stop_context(

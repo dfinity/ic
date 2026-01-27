@@ -4801,7 +4801,7 @@ impl StateMachine {
         state
             .canister_state(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
-            .scheduler_state
+            .system_state
             .total_query_stats
             .clone()
     }
@@ -4816,7 +4816,7 @@ impl StateMachine {
         state
             .canister_state_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
-            .scheduler_state
+            .system_state
             .total_query_stats = total_query_stats;
 
         self.state_manager.commit_and_certify(
@@ -4879,8 +4879,8 @@ impl StateMachine {
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .clone()
     }
 
