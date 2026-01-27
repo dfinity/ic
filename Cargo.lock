@@ -13378,6 +13378,7 @@ dependencies = [
  "maplit",
  "more-asserts",
  "nix 0.24.3",
+ "parking_lot",
  "phantom_newtype",
  "prometheus",
  "proptest",

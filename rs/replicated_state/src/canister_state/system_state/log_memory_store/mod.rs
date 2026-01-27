@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use std::cell::Cell;
+use parking_lot::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ pub struct LogMemoryStore {
     delta_log_sizes: VecDeque<usize>,
 
     #[validate_eq(Ignore)]
-    cache_header: Cell<HeaderCache>,
+    cache_header: RwLock<HeaderCache>,
 }
 
 impl LogMemoryStore {
@@ -64,7 +64,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            cache_header: Cell::new(HeaderCache::Uninitialized),
+            cache_header: RwLock::new(HeaderCache::Uninitialized),
         }
     }
 
@@ -72,7 +72,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            cache_header: Cell::new(HeaderCache::Uninitialized),
+            cache_header: RwLock::new(HeaderCache::Uninitialized),
         }
     }
 
@@ -81,7 +81,7 @@ impl LogMemoryStore {
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
-        self.cache_header.set(HeaderCache::Uninitialized);
+        *self.cache_header.get_mut() = HeaderCache::Uninitialized;
         &mut self.page_map
     }
 
@@ -89,7 +89,7 @@ impl LogMemoryStore {
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
-        self.cache_header.set(HeaderCache::Empty);
+        *self.cache_header.get_mut() = HeaderCache::Empty;
     }
 
     /// Loads the ring buffer from the page map.
@@ -98,19 +98,26 @@ impl LogMemoryStore {
     }
 
     fn get_header(&self) -> Option<Header> {
-        match self.cache_header.get() {
-            HeaderCache::Initialized(h) => Some(h),
-            HeaderCache::Empty => None,
-            HeaderCache::Uninitialized => {
-                if let Some(rb) = self.load_ring_buffer() {
-                    let h = rb.get_header();
-                    self.cache_header.set(HeaderCache::Initialized(h));
-                    Some(h)
-                } else {
-                    self.cache_header.set(HeaderCache::Empty);
-                    None
-                }
-            }
+        if let HeaderCache::Initialized(h) = *self.cache_header.read() {
+            return Some(h);
+        }
+        if let HeaderCache::Empty = *self.cache_header.read() {
+            return None;
+        }
+        let mut cache = self.cache_header.write();
+        match *cache {
+            HeaderCache::Initialized(h) => return Some(h),
+            HeaderCache::Empty => return None,
+            HeaderCache::Uninitialized => {}
+        }
+
+        if let Some(rb) = self.load_ring_buffer() {
+            let h = rb.get_header();
+            *cache = HeaderCache::Initialized(h);
+            Some(h)
+        } else {
+            *cache = HeaderCache::Empty;
+            None
         }
     }
 
@@ -174,8 +181,7 @@ impl LogMemoryStore {
         }
         // Update the state.
         self.page_map = new_buffer.to_page_map();
-        self.cache_header
-            .set(HeaderCache::Initialized(new_buffer.get_header()));
+        *self.cache_header.get_mut() = HeaderCache::Initialized(new_buffer.get_header());
     }
 
     /// Returns the next log record `idx`.
@@ -215,8 +221,7 @@ impl LogMemoryStore {
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
         self.page_map = ring_buffer.to_page_map();
-        self.cache_header
-            .set(HeaderCache::Initialized(ring_buffer.get_header()));
+        *self.cache_header.get_mut() = HeaderCache::Initialized(ring_buffer.get_header());
     }
 
     /// Records the size of the appended delta log.
@@ -735,21 +740,21 @@ mod tests {
             let mut s = LogMemoryStore::new_for_testing();
 
             // 1. Initial state: Uninitialized
-            match s.cache_header.get() {
+            match *s.cache_header.read() {
                 HeaderCache::Uninitialized => (),
                 state => panic!("Expected Uninitialized, got {:?}", state),
             }
 
             // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
             assert_eq!(s.byte_capacity(), 0);
-            match s.cache_header.get() {
+            match *s.cache_header.read() {
                 HeaderCache::Empty => (),
                 state => panic!("Expected Empty, got {:?}", state),
             }
 
             // 3. Set limit: Empty -> Initialized
             s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
-            match s.cache_header.get() {
+            match *s.cache_header.read() {
                 HeaderCache::Initialized(h) => {
                     assert_eq!(h.data_capacity.get() as usize, DEFAULT_LOG_MEMORY_LIMIT);
                 }
@@ -761,7 +766,7 @@ mod tests {
             delta.add_record(1, b"test".to_vec());
             s.append_delta_log(&mut delta);
 
-            match s.cache_header.get() {
+            match *s.cache_header.read() {
                 HeaderCache::Initialized(h) => {
                     assert_gt!(h.data_size.get(), 0);
                 }
@@ -770,7 +775,7 @@ mod tests {
 
             // 5. Invalidate: Initialized -> Uninitialized
             s.page_map_mut();
-            match s.cache_header.get() {
+            match *s.cache_header.read() {
                 HeaderCache::Uninitialized => (),
                 state => panic!("Expected Uninitialized after page_map_mut, got {:?}", state),
             }
