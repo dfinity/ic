@@ -238,7 +238,6 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
-    use ic_types::DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT;
 
     const DEFAULT_LOG_MEMORY_LIMIT: usize = 4096;
 
@@ -330,16 +329,16 @@ mod tests {
         delta.add_record(300, b"ccc".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
-        s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+        s.set_log_memory_limit(1); // Set a small limit.
         s.append_delta_log(&mut delta);
 
         // Assert memory usage.
         assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
         assert!(s.bytes_used() > 0);
-        assert!(s.bytes_used() < DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
-        assert_eq!(s.byte_capacity(), DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
-        assert!(s.total_allocated_bytes() > DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT);
+        assert!(s.bytes_used() < DEFAULT_LOG_MEMORY_LIMIT);
+        assert_eq!(s.byte_capacity(), DEFAULT_LOG_MEMORY_LIMIT);
+        assert!(s.total_allocated_bytes() > DEFAULT_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
     }
 
@@ -748,10 +747,7 @@ mod tests {
             s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
             match s.cache_header.get() {
                 HeaderCache::Initialized(h) => {
-                    assert_eq!(
-                        h.data_capacity.get() as usize,
-                        DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT
-                    );
+                    assert_eq!(h.data_capacity.get() as usize, DEFAULT_LOG_MEMORY_LIMIT);
                 }
                 state => panic!("Expected Initialized, got {:?}", state),
             }
