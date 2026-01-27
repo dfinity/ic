@@ -258,6 +258,20 @@ mod tests {
     }
 
     #[test]
+    fn test_appending_to_uninitialized_store_is_no_op() {
+        let mut s = LogMemoryStore::new_for_testing();
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(1, b"data".to_vec());
+
+        // Append without setting limit
+        s.append_delta_log(&mut delta);
+
+        // Should still be empty
+        assert!(s.is_empty());
+        assert_eq!(s.total_allocated_bytes(), 0);
+    }
+
+    #[test]
     fn test_memory_usage_after_appending_logs() {
         let s = LogMemoryStore::new_for_testing();
 
