@@ -403,7 +403,7 @@ impl<'a> QueryContext<'a> {
             canister.system_state.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
-            canister.scheduler_state.compute_allocation,
+            canister.compute_allocation(),
             subnet_size,
             self.get_cost_schedule(),
             canister.system_state.reserved_balance(),

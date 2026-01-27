@@ -33,16 +33,13 @@ use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
     SubnetId, Time,
-    batch::RawQueryStats,
+    batch::{CanisterCyclesCostSchedule, RawQueryStats},
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
+    methods::{Callback, WasmClosure},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-};
-use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;
@@ -341,7 +338,9 @@ impl CanisterStateBuilder {
         };
 
         system_state.memory_allocation = self.memory_allocation;
+        system_state.compute_allocation = self.compute_allocation;
         system_state.certified_data = self.certified_data;
+        system_state.time_of_last_allocation_charge = self.time_of_last_allocation_charge;
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -383,11 +382,7 @@ impl CanisterStateBuilder {
         CanisterState {
             system_state,
             execution_state,
-            scheduler_state: SchedulerState {
-                compute_allocation: self.compute_allocation,
-                time_of_last_allocation_charge: self.time_of_last_allocation_charge,
-                ..SchedulerState::default()
-            },
+            scheduler_state: SchedulerState::default(),
         }
     }
 }

@@ -52,12 +52,12 @@ impl LogMemoryStore {
     /// Creates a new store with an empty ring buffer to avoid unnecessary log-memory charges.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         // This creates a new empty page map with invalid ring buffer header.
-        Self::new_inner(RingBuffer::load_raw(PageMap::new(fd_factory)).to_page_map())
+        Self::new_inner(PageMap::new(fd_factory))
     }
 
     /// Creates a new store that will use the temp file system for allocating new pages.
     pub fn new_for_testing() -> Self {
-        Self::new_inner(RingBuffer::load_raw(PageMap::new_for_testing()).to_page_map())
+        Self::new_inner(PageMap::new_for_testing())
     }
 
     fn new_inner(page_map: PageMap) -> Self {
@@ -320,6 +320,20 @@ mod tests {
         assert_eq!(s.byte_capacity(), 0);
         assert_eq!(s.total_allocated_bytes(), 0);
         assert_eq!(s.records(None).len(), 0);
+    }
+
+    #[test]
+    fn test_appending_to_uninitialized_store_is_no_op() {
+        let mut s = LogMemoryStore::new_for_testing();
+        let mut delta = CanisterLog::default_delta();
+        delta.add_record(1, b"data".to_vec());
+
+        // Append without setting limit
+        s.append_delta_log(&mut delta);
+
+        // Should still be empty
+        assert!(s.is_empty());
+        assert_eq!(s.total_allocated_bytes(), 0);
     }
 
     #[test]
