@@ -110,6 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const KIB: u64 = 1 << 10;
 const MIB: u64 = 1 << 20;
 const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
@@ -644,14 +645,14 @@ fn provisional_create_canister_has_no_creation_fee() {
 
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles,
+        canister.system_state.canister_metrics().consumed_cycles(),
         NominalCycles::default(),
     );
     assert_eq!(
         canister
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation),
         None
     );
@@ -2849,7 +2850,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .clone();
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -2894,7 +2895,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .clone();
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -2947,7 +2948,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .system_state
         .clone();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
+    original_canister.system_state.bump_canister_version();
     original_canister.system_state.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
@@ -5302,31 +5303,51 @@ fn upload_chunk_charges_canister_cycles() {
 
 #[test]
 fn upload_chunk_charges_if_failing() {
+    const SCHEDULER_CORES: usize = 2;
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
+
+    // We restrict the subnet memory to be slightly less than the max chunk size (1MiB).
+    // This ensures `upload_chunk` fails with `SubnetOversubscribed`, allowing us to verify charging.
+    let max_chunk_size = wasm_chunk_store::chunk_size(); // 1024 KiB
+    let restricted_capacity = max_chunk_size - NumBytes::from(2 * KIB); // 1022 KiB
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_memory_reservation(0)
-        .with_subnet_execution_memory(10)
+        .with_scheduler_cores(SCHEDULER_CORES)
+        .with_subnet_execution_memory(
+            SCHEDULER_CORES as u64 * (EMPTY_CANISTER_MEMORY_USAGE + restricted_capacity).get(),
+        )
         .build();
     let canister_id = test.create_canister(CYCLES);
     let initial_balance = test.canister_state(canister_id).system_state.balance();
-    // Expected charge is the same as if the upload succeeds.
+    let instructions = SchedulerConfig::application_subnet().upload_wasm_chunk_instructions;
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
         test.subnet_size(),
         CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
+    // Verify we are in the expected restricted state (1022 KiB available).
+    assert_eq!(
+        test.subnet_available_memory().get_execution_memory(),
+        restricted_capacity.get() as i64
+    );
 
+    // Attempt to upload a small chunk. This requires `max_chunk_size` (1024 KiB) availability,
+    // but we only have `restricted_capacity` (1022 KiB).
     let payload = UploadChunkArgs {
         canister_id: canister_id.into(),
         chunk: vec![42; 10],
     }
     .encode();
-    // Upload will fail because subnet does not have space.
-    let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
+    let err = test.subnet_message("upload_chunk", payload).unwrap_err();
 
+    // Verify the error is SubnetOversubscribed and contains the expected values.
+    assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
+    let msg = err.description();
+    assert!(msg.contains(&format!("{}", max_chunk_size.get() / KIB)));
+    assert!(msg.contains(&format!("{}", restricted_capacity.get() / KIB)));
+    // Verify the canister was charged despite the failure.
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         initial_balance - expected_charge,
@@ -6448,7 +6469,7 @@ fn rename_canister(
         .canister_state(&sender_canister)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
@@ -6594,7 +6615,7 @@ fn can_rename_canister() {
                 .canister_state(&new_canister_id)
                 .unwrap()
                 .system_state
-                .canister_version
+                .canister_version()
         );
         assert_eq!(
             expected_num_changes,
@@ -6649,7 +6670,7 @@ fn can_rename_canister() {
         .canister_state(&new_canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     let third_version = version_before_rename - 10;
     let third_num_changes = 10;
     assert_lt!(third_version, version_before_rename);
@@ -7030,14 +7051,18 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
         creation_fee.get()
     );
     assert_eq!(
         canister
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation)
             .unwrap()
             .get(),
@@ -7086,7 +7111,11 @@ fn create_canister_free() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .canister_metrics()
+            .consumed_cycles()
+            .get(),
         0
     );
     assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);

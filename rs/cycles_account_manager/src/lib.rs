@@ -1090,7 +1090,7 @@ impl CyclesAccountManager {
                 };
 
                 self.verify_cycles_balance_with_threshold(
-                    system_state.canister_id,
+                    system_state.canister_id(),
                     effective_cycles_balance,
                     cycles,
                     threshold,
