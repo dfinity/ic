@@ -29,7 +29,7 @@ fn get_canister_version(
         .canister_state(&canister_id)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
     assert_eq!(returned_version, system_version);
     system_version
 }

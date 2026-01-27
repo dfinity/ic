@@ -32,8 +32,8 @@ fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::
 /// By supplying different visitors, one can use `traverse` to serialize the
 /// `state` for transmitting it over the network to another replica, compute a
 /// hash tree for certification or extract a specific value.
-pub fn traverse<V: Visitor>(height: Height, state: &ReplicatedState, mut v: V) -> V::Output {
-    let t = replicated_state_as_lazy_tree(height, state);
+pub fn traverse<V: Visitor>(state: &ReplicatedState, height: Height, mut v: V) -> V::Output {
+    let t = replicated_state_as_lazy_tree(state, height);
     match traverse_lazy_tree(&t, &mut v) {
         Err(output) => output,
         _ => v.finish(),
@@ -190,7 +190,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -240,7 +240,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -314,7 +314,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -427,7 +427,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -525,7 +525,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -698,7 +698,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(0), &state, visitor).0,
+                traverse(&state, Height::new(0), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -751,7 +751,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -923,7 +923,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -1149,7 +1149,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
@@ -1239,7 +1239,7 @@ mod tests {
 
             assert_eq!(
                 expected_traversal,
-                traverse(Height::new(height), &state, visitor).0,
+                traverse(&state, Height::new(height), visitor).0,
                 "unexpected traversal for certification_version: {certification_version:?}"
             );
         }

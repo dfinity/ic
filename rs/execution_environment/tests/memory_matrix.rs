@@ -37,6 +37,7 @@ The scenarios cover the following:
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
+use ic_execution_environment::units::{GIB, KIB};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
@@ -55,9 +56,6 @@ use num_traits::ops::saturating::SaturatingSub;
 use std::cmp::max;
 
 const T: u128 = 1_000_000_000_000;
-
-const KIB: u64 = 1 << 10;
-const GIB: u64 = 1 << 30;
 
 /// High amount of cycles that a canister under test is created with
 /// to ensure that it has enough cycles for any setup.

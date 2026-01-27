@@ -926,7 +926,7 @@ fn load_canister_snapshot_works_on_another_canister() {
         .canister_state(&canister_id_1)
         .unwrap()
         .system_state
-        .canister_version;
+        .canister_version();
 
     let snapshot_1 = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(

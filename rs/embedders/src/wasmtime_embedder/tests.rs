@@ -112,7 +112,6 @@ fn test_wasmtime_system_api() {
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
-            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
 

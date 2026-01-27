@@ -6,22 +6,12 @@
 //!
 //! See RFC 8017 (https://www.rfc-editor.org/rfc/rfc8017.txt)
 //! for information about the signature format
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
 use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
 use rsa::traits::PublicKeyParts;
 use rsa::{Pkcs1v15Sign, pkcs8};
 use serde::{Deserialize, Deserializer, Serialize};
-
-/// The object identifier for RSA public keys
-///
-/// See [RFC 8017](https://tools.ietf.org/html/rfc8017).
-pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
-    der_utils::PkixAlgorithmIdentifier::new_with_null_param(simple_asn1::oid!(
-        1, 2, 840, 113549, 1, 1, 1
-    ))
-}
 
 /// A RSA public key usable for signature verification
 #[derive(Clone, Eq, PartialEq, Debug, Serialize)]

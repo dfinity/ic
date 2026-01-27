@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Computes and prints partial state hash used for certification.
-pub fn do_hash(height: Height, path: PathBuf) -> Result<(), String> {
+pub fn do_hash(path: PathBuf, height: Height) -> Result<(), String> {
     let cp_layout = CompleteCheckpointLayout::new_untracked(path.clone(), height)
         .map_err(|e| format!("failed to create checkpoint layout: {e}"))?;
 
@@ -27,7 +27,7 @@ pub fn do_hash(height: Height, path: PathBuf) -> Result<(), String> {
 
     println!(
         "PARTIAL STATE HASH: {}",
-        hash_state(height, &state).digest()
+        hash_state(&state, height).digest()
     );
 
     Ok(())

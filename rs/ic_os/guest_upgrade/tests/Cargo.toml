@@ -5,6 +5,7 @@ edition = "2021"
 [lib]
 
 [dependencies]
+anyhow = { workspace = true }
 attestation = { path = "../../sev/attestation" }
 attestation_testing = { path = "../../sev/attestation/testing" }
 futures = { workspace = true }
@@ -20,4 +21,3 @@ sev_guest_testing = { path = "../../sev/guest/testing" }
 ic-interfaces-registry = { path = "../../../interfaces/registry" }
 tempfile = { workspace = true }
 rustls = { workspace = true }
-anyhow = "1.0.95"

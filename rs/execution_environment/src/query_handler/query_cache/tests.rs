@@ -253,7 +253,9 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
     );
 
     // Bump up the version
-    test.canister_state_mut(a_id).system_state.canister_version += 1;
+    test.canister_state_mut(a_id)
+        .system_state
+        .bump_canister_version();
 
     // Invalidate and pop the result.
     let query_cache = &query_handler(&test).query_cache;
@@ -686,7 +688,9 @@ fn query_cache_returns_different_results_for_different_canister_versions() {
         assert_eq!(res_1, Ok(WasmResult::Reply(vec![42])));
 
         // Bump up the version
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .bump_canister_version();
 
         let res_2 = test.non_replicated_query(a_id, method, q);
         let m = query_cache_metrics(&test);
@@ -778,7 +782,9 @@ fn query_cache_returns_different_results_on_combined_invalidation() {
 
         // Change the batch time more than the max expiry time.
         test.state_mut().metadata.batch_time += MORE_THAN_MAX_EXPIRY_TIME;
-        test.canister_state_mut(b_id).system_state.canister_version += 1;
+        test.canister_state_mut(b_id)
+            .system_state
+            .bump_canister_version();
         test.canister_state_mut(b_id)
             .system_state
             .remove_cycles(1_u64.into(), CyclesUseCase::Memory);

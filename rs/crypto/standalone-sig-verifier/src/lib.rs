@@ -1,5 +1,6 @@
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, threshold_sig::IcRootOfTrust};
 
+mod algorithm_identifiers;
 mod sign_utils;
 
 pub use sign_utils::{

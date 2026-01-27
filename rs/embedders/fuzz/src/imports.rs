@@ -57,7 +57,6 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
             num_instructions_global: None,
             log: no_op_logger(),
             limits: StoreLimits::default(),
-            canister_backtrace: config.feature_flags.canister_backtrace,
         },
     );
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);

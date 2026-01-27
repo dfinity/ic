@@ -1,0 +1,166 @@
+// ICP Test Ledger Candid Interface
+
+// Reuse types from the ICP ledger interface - must match ledger.did exactly
+// (enforced by check_shared_types_match_ledger test in main.rs)
+type BlockIndex = nat64;
+type TimeStamp = record { timestamp_nanos : nat64 };
+type Tokens = record { e8s : nat64 };
+type AccountIdentifier = blob;
+type SubAccount = blob;
+type Memo = nat64;
+
+type Operation = variant {
+  Mint : record { to : AccountIdentifier; amount : Tokens };
+  Burn : record { from : AccountIdentifier; spender : opt AccountIdentifier; amount : Tokens };
+  Transfer : record {
+    from : AccountIdentifier;
+    to : AccountIdentifier;
+    amount : Tokens;
+    fee : Tokens;
+    spender : opt vec nat8
+  };
+  Approve : record {
+    from : AccountIdentifier;
+    spender : AccountIdentifier;
+    allowance_e8s : int;
+    allowance : Tokens;
+    fee : Tokens;
+    expires_at : opt TimeStamp;
+    expected_allowance : opt Tokens
+  }
+};
+
+type Transaction = record {
+  memo : Memo;
+  icrc1_memo : opt blob;
+  operation : opt Operation;
+  created_at_time : TimeStamp
+};
+
+type Block = record {
+  parent_hash : opt blob;
+  transaction : Transaction;
+  timestamp : TimeStamp
+};
+
+type GetBlocksArgs = record {
+  start : BlockIndex;
+  length : nat64
+};
+
+type QueryArchiveError = variant {
+  BadFirstBlockIndex : record {
+    requested_index : BlockIndex;
+    first_valid_index : BlockIndex
+  };
+  Other : record {
+    error_code : nat64;
+    error_message : text
+  }
+};
+
+type ArchivedBlocksRange = record {
+  start : BlockIndex;
+  length : nat64;
+  callback : func(GetBlocksArgs) -> (variant { Ok : record { blocks : vec Block }; Err : QueryArchiveError }) query;
+};
+
+type QueryBlocksResponse = record {
+  chain_length : nat64;
+  certificate : opt blob;
+  blocks : vec Block;
+  first_block_index : BlockIndex;
+  archived_blocks : vec ArchivedBlocksRange
+};
+
+type ArchivedEncodedBlocksRange = record {
+  callback : func(GetBlocksArgs) -> (variant { Ok : vec blob; Err : QueryArchiveError }) query;
+  start : nat64;
+  length : nat64
+};
+
+type QueryEncodedBlocksResponse = record {
+  certificate : opt blob;
+  blocks : vec blob;
+  chain_length : nat64;
+  first_block_index : nat64;
+  archived_blocks : vec ArchivedEncodedBlocksRange
+};
+
+type Archive = record {
+  canister_id : principal
+};
+
+type Archives = record {
+  archives : vec Archive
+};
+
+type TipOfChainRes = record {
+  certification : opt blob;
+  tip_index : BlockIndex
+};
+
+type AddBlockResult = variant {
+  Ok : nat;
+  Err : text
+};
+
+// CandidBlock matches the Rust CandidBlock type
+// parent_hash is Option<[u8; 32]> which Candid represents as opt vec nat8
+// But we need to match the exact structure from the Rust code
+type CandidBlock = record {
+  parent_hash : opt vec nat8;
+  transaction : CandidTransaction;
+  timestamp : TimeStamp
+};
+
+type CandidTransaction = record {
+  memo : Memo;
+  icrc1_memo : opt blob;
+  operation : opt CandidOperation;
+  created_at_time : TimeStamp
+};
+
+// AccountIdBlob is [u8; 32] which Candid represents as vec nat8
+type AccountIdBlob = vec nat8;
+
+type CandidOperation = variant {
+  Mint : record { to : AccountIdBlob; amount : Tokens };
+  Burn : record { from : AccountIdBlob; spender : opt AccountIdBlob; amount : Tokens };
+  Transfer : record {
+    from : AccountIdBlob;
+    to : AccountIdBlob;
+    amount : Tokens;
+    fee : Tokens;
+    spender : opt AccountIdBlob
+  };
+  Approve : record {
+    from : AccountIdBlob;
+    spender : AccountIdBlob;
+    allowance_e8s : int;
+    allowance : Tokens;
+    fee : Tokens;
+    expires_at : opt TimeStamp;
+    expected_allowance : opt Tokens
+  }
+};
+
+service : () -> {
+  // Add a decoded block to the test ledger
+  add_block : (CandidBlock) -> (AddBlockResult);
+
+  // Add a raw encoded block (as blob) to the test ledger
+  add_raw_block : (blob) -> (AddBlockResult);
+
+  // Query blocks in decoded form
+  query_blocks : (GetBlocksArgs) -> (QueryBlocksResponse) query;
+
+  // Query blocks in encoded form
+  query_encoded_blocks : (GetBlocksArgs) -> (QueryEncodedBlocksResponse) query;
+
+  // Return archives (empty for test ledger)
+  archives : () -> (Archives) query;
+
+  // Return tip of chain (for compatibility)
+  tip_of_chain : () -> (TipOfChainRes) query;
+}

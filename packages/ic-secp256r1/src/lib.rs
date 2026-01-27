@@ -501,6 +501,26 @@ impl PublicKey {
         Ok(Self { key })
     }
 
+    /// Deserialize a public key from (x,y) coordinates
+    ///
+    /// The x and y values must be exactly equal to the field length
+    pub fn deserialize_from_xy(x: &[u8], y: &[u8]) -> Result<Self, KeyDecodingError> {
+        const FIELD_BYTES: usize = 32;
+
+        if x.len() != FIELD_BYTES || y.len() != FIELD_BYTES {
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "ECDSA x/y coordinates of invalid length".to_string(),
+            ));
+        }
+
+        let mut sec1 = [0u8; 1 + FIELD_BYTES * 2];
+        sec1[0] = 0x04;
+        sec1[1..(1 + FIELD_BYTES)].copy_from_slice(x);
+        sec1[(1 + FIELD_BYTES)..(1 + 2 * FIELD_BYTES)].copy_from_slice(y);
+
+        Self::deserialize_sec1(&sec1)
+    }
+
     /// Deserialize a public key stored in DER SubjectPublicKeyInfo format
     pub fn deserialize_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         use p256::pkcs8::DecodePublicKey;
@@ -556,6 +576,20 @@ impl PublicKey {
     pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
         use p256::ecdsa::signature::Verifier;
         let signature = match p256::ecdsa::Signature::try_from(signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        self.key.verify(message, &signature).is_ok()
+    }
+
+    /// Verify a (message,signature) pair
+    ///
+    /// This is a variant of verify_signature which requires that the signature
+    /// be in the DER encoded form which is used by certain protocols
+    pub fn verify_signature_with_der_encoded_sig(&self, message: &[u8], signature: &[u8]) -> bool {
+        use p256::ecdsa::signature::Verifier;
+        let signature = match p256::ecdsa::Signature::from_der(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };

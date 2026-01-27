@@ -7,6 +7,7 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
+use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
@@ -27,11 +28,6 @@ use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
-
-/// One megabyte for better readability.
-const MIB: u64 = 1024 * 1024;
-/// One gigabyte for better readability.
-const GIB: u64 = 1024 * MIB;
 
 /// One billion for better cycles readability.
 const B: u128 = 1e9 as u128;
@@ -1835,7 +1831,6 @@ fn current_interval_length_works_on_system_subnets() {
 #[test]
 #[ignore]
 fn system_subnets_are_not_rate_limited() {
-    const GIB: u64 = 1024 * MIB;
     const WASM_PAGE_SIZE: u64 = 65_536;
     const SUBNET_HEAP_DELTA_CAPACITY: u64 = 140 * GIB;
     // It's a bit less than 2GiB, otherwise the vector allocation in canister traps.

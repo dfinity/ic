@@ -67,6 +67,8 @@ fn should_correctly_parse_der_encoded_ecdsa_secp256k1_pk() {
     assert_eq!(bytes_type, KeyBytesContentType::EcdsaSecp256k1PublicKeyDer);
 }
 
+const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX: &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
+
 #[test]
 fn should_fail_parse_raw_ed25519_pk() {
     let pk_raw = hex::decode(test_data::ED25519_PK_1_RFC8032_HEX).unwrap();
@@ -99,6 +101,21 @@ fn should_fail_parsing_corrupted_der_encoded_ecdsa_p256_sig() {
     let (_, sig_der) = new_p256_pk_and_sig_der(rng);
     let sig_result = ecdsa_p256_signature_from_der_bytes(&sig_der[1..]);
     assert!(sig_result.is_err());
+}
+
+#[test]
+fn should_correctly_parse_der_encoded_signature() {
+    let sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+    let _sig = ecdsa_p256_signature_from_der_bytes(&sig_der).unwrap();
+}
+
+#[test]
+fn should_fail_parsing_a_corrupted_der_encoded_signature() {
+    let mut sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+    sig_der[0] += 1;
+    let sig_result = ecdsa_p256_signature_from_der_bytes(&sig_der);
+    assert!(sig_result.is_err());
+    assert!(sig_result.unwrap_err().is_malformed_signature());
 }
 
 #[test]
@@ -138,11 +155,6 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
 fn new_p256_pk_and_sig_der<R: Rng + CryptoRng>(rng: &mut R) -> (Vec<u8>, Vec<u8>) {
     let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
     let pk_der = sk.public_key().serialize_der();
-    let sig_raw = sk.sign_message(MESSAGE.as_bytes());
-    let sig_der = p256::ecdsa::Signature::from_slice(&sig_raw)
-        .expect("invalid P256 signature")
-        .to_der()
-        .as_bytes()
-        .to_vec();
+    let sig_der = sk.sign_message_with_der_encoded_sig(MESSAGE.as_bytes());
     (pk_der, sig_der)
 }

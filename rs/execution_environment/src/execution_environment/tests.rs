@@ -1,3 +1,4 @@
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -54,7 +55,6 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -3787,8 +3787,8 @@ fn replicated_query_can_burn_cycles() {
     let burned_cycles = *test
         .canister_state(canister_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
@@ -3827,8 +3827,8 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     assert!(
         test.canister_state(canister_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -3887,15 +3887,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3940,8 +3940,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(a_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3949,15 +3949,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3993,8 +3993,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -4003,8 +4003,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         *test
             .canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))
