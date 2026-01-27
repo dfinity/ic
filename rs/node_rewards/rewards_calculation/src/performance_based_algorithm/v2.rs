@@ -7,35 +7,6 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
-//
-// V2 Algorithm Differences from V1:
-//
-// The main difference is in how Type3 and Type3.1 node rewards are calculated:
-//
-// V1: Type3 and Type3.1 nodes are grouped together by country. The average of base rewards
-//     and coefficients is computed FIRST, then the running coefficient reduction is applied
-//     using these averaged values.
-//
-// V2: Type3 and Type3.1 nodes are grouped together by country, SORTED by (base_reward desc,
-//     coefficient desc), then the running coefficient reduction is applied sequentially
-//     using each node's actual coefficient. All nodes in the group get the same average reward.
-//
-// Example:
-//   DATA: type3 base_rewards: 10000/day, coeff: 0.95, N: 2
-//         type3.1 base_rewards: 10000/day, coeff: 0.80, N: 2
-//
-//   V1: avg_rate = 10000, avg_coeff = 0.875
-//       rewards = 10000 * 0.875^0 + 10000 * 0.875^1 + 10000 * 0.875^2 + 10000 * 0.875^3
-//               = 10000 + 8750 + 7656.25 + 6699.22 = 33105.47
-//       avg = 8276.37
-//
-//   V2: sorted: (10000, 0.95), (10000, 0.95), (10000, 0.80), (10000, 0.80)
-//       rewards = 10000 * 1 + 10000 * 0.95 + 10000 * 0.9025 + 10000 * 0.722
-//               = 10000 + 9500 + 9025 + 7220 = 35745
-//       avg = 8936.25
-//
-// ================================================================================================
-
 pub struct RewardsCalculationV2;
 
 impl PerformanceBasedAlgorithm for RewardsCalculationV2 {
@@ -129,31 +100,31 @@ mod tests {
         let rewards_table = NodeRewardsTable { table };
 
         let rewardable_nodes = vec![
-            // 2 Type3 nodes in California
-            RewardableNode {
-                node_id: test_node_id(1),
-                node_reward_type: NodeRewardType::Type3,
-                region: "North America,USA,California".into(),
-                dc_id: "dc1".into(),
-            },
-            RewardableNode {
-                node_id: test_node_id(2),
-                node_reward_type: NodeRewardType::Type3,
-                region: "North America,USA,California".into(),
-                dc_id: "dc2".into(),
-            },
             // 2 Type3.1 nodes in Nevada (same country as California)
             RewardableNode {
-                node_id: test_node_id(3),
+                node_id: test_node_id(1),
                 node_reward_type: NodeRewardType::Type3dot1,
                 region: "North America,USA,Nevada".into(),
                 dc_id: "dc3".into(),
             },
             RewardableNode {
-                node_id: test_node_id(4),
+                node_id: test_node_id(2),
                 node_reward_type: NodeRewardType::Type3dot1,
                 region: "North America,USA,Nevada".into(),
                 dc_id: "dc4".into(),
+            },
+            // 2 Type3 nodes in California
+            RewardableNode {
+                node_id: test_node_id(3),
+                node_reward_type: NodeRewardType::Type3,
+                region: "North America,USA,California".into(),
+                dc_id: "dc1".into(),
+            },
+            RewardableNode {
+                node_id: test_node_id(4),
+                node_reward_type: NodeRewardType::Type3,
+                region: "North America,USA,California".into(),
+                dc_id: "dc2".into(),
             },
         ];
 
@@ -331,7 +302,7 @@ mod tests {
                 rates: btreemap! {
                     NodeRewardType::Type3.to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 608750, // -> 20000 / day
-                        reward_coefficient_percent: Some(90),
+                        reward_coefficient_percent: Some(80),
                     },
                 },
             },
@@ -343,7 +314,7 @@ mod tests {
                 rates: btreemap! {
                     NodeRewardType::Type3dot1.to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 304375, // -> 10000 / day
-                        reward_coefficient_percent: Some(80),
+                        reward_coefficient_percent: Some(90),
                     },
                 },
             },
@@ -351,19 +322,19 @@ mod tests {
         let rewards_table = NodeRewardsTable { table };
 
         let rewardable_nodes = vec![
-            // Higher rate Type3 node
-            RewardableNode {
-                node_id: test_node_id(1),
-                node_reward_type: NodeRewardType::Type3,
-                region: "North America,USA,California".into(),
-                dc_id: "dc1".into(),
-            },
             // Lower rate Type3.1 node
             RewardableNode {
-                node_id: test_node_id(2),
+                node_id: test_node_id(1),
                 node_reward_type: NodeRewardType::Type3dot1,
                 region: "North America,USA,Nevada".into(),
                 dc_id: "dc2".into(),
+            },
+            // Higher rate Type3 node
+            RewardableNode {
+                node_id: test_node_id(2),
+                node_reward_type: NodeRewardType::Type3,
+                region: "North America,USA,California".into(),
+                dc_id: "dc1".into(),
             },
         ];
 
@@ -377,15 +348,15 @@ mod tests {
         );
 
         // V2 sorts by rate desc, then coeff desc:
-        // Entry 1: (20000, 0.90) - processed first
-        // Entry 2: (10000, 0.80) - processed second
+        // Entry 1: (20000, 0.80) - processed first
+        // Entry 2: (10000, 0.90) - processed second
         //
         // Calculation:
-        // 1. 20000 * 1.0 = 20000, running_coeff = 0.90
-        // 2. 10000 * 0.90 = 9000, running_coeff = 0.72
+        // 1. 20000 * 1.0 = 20000, running_coeff = 0.80
+        // 2. 10000 * 0.80 = 8000, running_coeff = 0.72
         //
-        // Total = 29000, Avg = 14500
-        let expected_avg = dec!(14500);
+        // Total = 28000, Avg = 14000
+        let expected_avg = dec!(14000);
 
         for i in 1..=2 {
             let reward = base_rewards_per_node.get(&test_node_id(i)).unwrap();

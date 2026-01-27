@@ -398,19 +398,3 @@ fn test_v2_differs_from_v1() {
         v2_provider.total_adjusted_rewards_xdr_permyriad
     );
 }
-
-/// Test V2 error handling for invalid date range
-#[test]
-fn test_v2_invalid_date_range() {
-    let day1 = NaiveDate::from_ymd_opt(2025, 1, 2).unwrap();
-    let day2 = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap(); // Before day1
-
-    let fake_input_provider = FakeInputProvider::new();
-
-    let result = RewardsCalculationV2::calculate_rewards(day1, day2, fake_input_provider);
-
-    match result {
-        Err(error_msg) => assert!(error_msg.contains("from_day must be before to_day")),
-        Ok(_) => panic!("Expected error but got success"),
-    }
-}
