@@ -46,7 +46,7 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
         let sys_runtime =
             runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
         let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
-        install_dogecoin_canister(&sys_runtime, &logger).await;
+        let _dogecoin_canister = install_dogecoin_canister(&sys_runtime, &logger).await;
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();
@@ -109,11 +109,15 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
             new_balance,
             Amount::from_sat(to_retrieve - fee.minter_fee - fee.dogecoin_fee)
         );
+
+        info!(logger, "Ensure dogecoin canister height is in sync...");
+        let info = doge_rpc.get_blockchain_info().unwrap();
+        test_dogecoin_canister_block_height(&sys_agent, &address, info.blocks as u32).await;
     });
 }
 
 async fn test_get_utxos(sys_agent: &ic_agent::Agent, logger: &Logger, address: &Address) {
-    use ic_btc_interface::{
+    use ic_doge_interface::{
         GetUtxosRequest, GetUtxosResponse, NetworkInRequest, UtxosFilterInRequest,
     };
     let dogecoin_canister =
@@ -265,6 +269,7 @@ async fn test_retrieve_doge_status<F: Fn()>(
     block_index: u64,
     generate_blocks: F,
 ) -> ic_btc_interface::Txid {
+    let mut blocks_generated = false;
     let retries = 30;
     for i in 1..=retries {
         let status = minter_agent
@@ -279,7 +284,12 @@ async fn test_retrieve_doge_status<F: Fn()>(
             RetrieveDogeStatus::Confirmed { txid } => {
                 return txid;
             }
-            RetrieveDogeStatus::Submitted { .. } => generate_blocks(),
+            RetrieveDogeStatus::Submitted { .. } => {
+                if !blocks_generated {
+                    generate_blocks();
+                    blocks_generated = true;
+                }
+            }
             RetrieveDogeStatus::AmountTooLow => break,
             _ => {}
         }
@@ -287,6 +297,37 @@ async fn test_retrieve_doge_status<F: Fn()>(
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
     panic!("retrieve_doge_status failed");
+}
+
+async fn test_dogecoin_canister_block_height(
+    sys_agent: &ic_agent::Agent,
+    address: &Address,
+    expected_height: u32,
+) {
+    use ic_doge_interface::{GetUtxosRequest, GetUtxosResponse, NetworkInRequest};
+    let dogecoin_canister =
+        Principal::from_str(ic_config::execution_environment::DOGECOIN_MAINNET_CANISTER_ID)
+            .unwrap();
+    let res = sys_agent
+        .update(&dogecoin_canister, "dogecoin_get_utxos")
+        .with_arg(
+            Encode!(&GetUtxosRequest {
+                address: address.to_string(),
+                network: NetworkInRequest::Regtest,
+                filter: None,
+            })
+            .expect("failed to encode GetUtxosRequest"),
+        )
+        .call_and_wait()
+        .await;
+    assert!(res.is_ok(), "get_utxos returns error: {:?}", res);
+    let response = Decode!(res.unwrap().as_slice(), GetUtxosResponse)
+        .expect("Failed to decode GetUtxosResponse");
+    let height = response.tip_height;
+    assert_eq!(
+        height, expected_height,
+        "dogecoin_canister reaches height {height}, not the expected height {expected_height}"
+    );
 }
 
 fn main() -> Result<()> {
