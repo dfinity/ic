@@ -126,7 +126,7 @@ async fn test_get_utxos(sys_agent: &ic_agent::Agent, logger: &Logger, address: &
     let retries = 30;
     for i in 1..=30 {
         let res = sys_agent
-            .update(&dogecoin_canister, "dogecoin_get_utxos")
+            .query(&dogecoin_canister, "dogecoin_get_utxos_query")
             .with_arg(
                 Encode!(&GetUtxosRequest {
                     address: address.to_string(),
@@ -137,7 +137,7 @@ async fn test_get_utxos(sys_agent: &ic_agent::Agent, logger: &Logger, address: &
                 })
                 .expect("failed to encode GetUtxosRequest"),
             )
-            .call_and_wait()
+            .call()
             .await;
         info!(logger, "[{i}/{retries}] get_utxos returns {res:?}");
         if let Ok(res) = res {
@@ -309,7 +309,7 @@ async fn test_dogecoin_canister_block_height(
         Principal::from_str(ic_config::execution_environment::DOGECOIN_MAINNET_CANISTER_ID)
             .unwrap();
     let res = sys_agent
-        .update(&dogecoin_canister, "dogecoin_get_utxos")
+        .query(&dogecoin_canister, "dogecoin_get_utxos_query")
         .with_arg(
             Encode!(&GetUtxosRequest {
                 address: address.to_string(),
@@ -318,7 +318,7 @@ async fn test_dogecoin_canister_block_height(
             })
             .expect("failed to encode GetUtxosRequest"),
         )
-        .call_and_wait()
+        .call()
         .await;
     assert!(res.is_ok(), "get_utxos returns error: {:?}", res);
     let response = Decode!(res.unwrap().as_slice(), GetUtxosResponse)
