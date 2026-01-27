@@ -380,7 +380,7 @@ pub async fn rejoin_test_long_rounds(
     }
     let mut paired: Vec<_> = average_process_batch_durations
         .into_iter()
-        .zip(nodes.into_iter())
+        .zip(nodes.iter())
         .collect();
     paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
     let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
@@ -454,20 +454,28 @@ pub async fn rejoin_test_long_rounds(
         .expect("Failed to get replica health status of rejoin_node");
     assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 
-    let reference_node_no_state_clone_count =
-        no_state_clone_count(reference_node.clone(), &logger).await;
+    let mut no_state_clone_counts = vec![];
+    for node in nodes {
+        let count = no_state_clone_count(node, &logger).await;
+        no_state_clone_counts.push(count);
+    }
+    no_state_clone_counts.sort();
+    let n = no_state_clone_counts.len();
+    let median_no_state_clone_count = no_state_clone_counts[n / 2];
+    info!(
+        logger,
+        "Median no state clone count: {median_no_state_clone_count}"
+    );
+
     let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger).await;
     info!(
         logger,
-        "Reference node no state clone count: {reference_node_no_state_clone_count}"
+        "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
     );
-    info!(
-        logger,
-        "Restarted node no state clone count: {rejoin_node_no_state_clone_count}"
-    );
-    // the reference node should (almost) never be behind
-    assert!(reference_node_no_state_clone_count < 10);
-    // the restarted node should be behind for many rounds and not clone any state during that time
+
+    // a median node should (almost) never be behind
+    assert!(median_no_state_clone_count < 10);
+    // the restarted node should be behind for many rounds and only clone every 10th state during that time
     assert!(rejoin_node_no_state_clone_count > 100);
 }
 

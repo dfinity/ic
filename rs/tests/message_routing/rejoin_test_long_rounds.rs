@@ -13,6 +13,7 @@ Runbook::
 
 Success::
 .. if the restarted node catches up w.r.t. its certified height and becomes healthy until the next CUP
+.. if the metrics confirm that the restarted node skipped cloning many states to speed up its catch-up
 
 end::catalog[] */
 
