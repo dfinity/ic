@@ -1170,10 +1170,7 @@ impl IcNodeSnapshot {
                 vec![orchestrator_metric_name.to_string()],
                 9091,
             );
-            let orchestrator_metrics_result
-              = orchestrator_metrics_fetcher
-                .fetch::<u64>()
-                .await;
+            let orchestrator_metrics_result = orchestrator_metrics_fetcher.fetch::<u64>().await;
             let orchestrator_metrics = match orchestrator_metrics_result {
                 Ok(orchestrator_metrics) => orchestrator_metrics,
                 Err(e) => {
