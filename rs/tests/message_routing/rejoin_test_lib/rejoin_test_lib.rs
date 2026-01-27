@@ -75,7 +75,7 @@ pub async fn rejoin_test(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().await.kill().await;
+    rejoin_node.vm().kill();
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -90,14 +90,14 @@ pub async fn rejoin_test(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().await.kill().await;
+        node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().await.start().await;
+    rejoin_node.vm().start();
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -169,7 +169,7 @@ pub async fn rejoin_test_large_state(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().await.kill().await;
+    rejoin_node.vm().kill();
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -206,14 +206,14 @@ pub async fn rejoin_test_large_state(
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
         info!(logger, "Killing node {} ...", node_to_kill.get_public_url());
-        node_to_kill.vm().await.kill().await;
+        node_to_kill.vm().kill();
         node_to_kill
             .await_status_is_unavailable()
             .expect("Node still healthy");
     }
 
     info!(logger, "Start the first killed node again...");
-    rejoin_node.vm().await.start().await;
+    rejoin_node.vm().start();
     rejoin_node
         .await_status_is_healthy()
         .expect("Started node did not report healthy status");
@@ -399,7 +399,7 @@ pub async fn rejoin_test_long_rounds(
         "Killing a node: {} ...",
         rejoin_node.get_public_url()
     );
-    rejoin_node.vm().await.kill().await;
+    rejoin_node.vm().kill();
     rejoin_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -419,7 +419,7 @@ pub async fn rejoin_test_long_rounds(
     wait_for_cup(&logger, latest_certified_height, reference_node.clone()).await;
 
     info!(logger, "Start the killed node again ...");
-    rejoin_node.vm().await.start().await;
+    rejoin_node.vm().start();
 
     info!(logger, "Waiting for the next CUP ...");
     let last_cup_height = wait_for_cup(

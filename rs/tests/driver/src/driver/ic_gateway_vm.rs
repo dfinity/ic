@@ -127,7 +127,7 @@ impl IcGatewayVm {
 
         let playnet = self.load_or_create_playnet(env, vm_ipv6, vm_ipv4)?;
         let ic_gateway_fqdn = playnet.playnet_cert.playnet.clone();
-        block_on(self.configure_dns_records(env, &playnet, &ic_gateway_fqdn))?;
+        self.configure_dns_records(env, &playnet, &ic_gateway_fqdn)?;
 
         // Emit log events for A and AAAA records
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
@@ -199,7 +199,7 @@ impl IcGatewayVm {
     }
 
     /// Configures DNS records based on infrastructure provider.
-    async fn configure_dns_records(
+    fn configure_dns_records(
         &self,
         env: &TestEnv,
         playnet: &Playnet,
@@ -235,10 +235,10 @@ impl IcGatewayVm {
             })
         }
 
-        let base_domain = env.create_playnet_dns_records(records).await;
+        let base_domain = env.create_playnet_dns_records(records);
 
         // Wait for DNS propagation by checking a random subdomain
-        await_dns_propagation(&env.logger(), &base_domain).await?;
+        block_on(await_dns_propagation(&env.logger(), &base_domain))?;
 
         Ok(())
     }
