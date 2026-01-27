@@ -238,6 +238,7 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
+    use more_asserts::{assert_gt, assert_le, assert_lt};
 
     const DEFAULT_LOG_MEMORY_LIMIT: usize = 4096;
 
@@ -335,10 +336,10 @@ mod tests {
         // Assert memory usage.
         assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
-        assert!(s.bytes_used() > 0);
-        assert!(s.bytes_used() < DEFAULT_LOG_MEMORY_LIMIT);
+        assert_gt!(s.bytes_used(), 0);
+        assert_lt!(s.bytes_used(), DEFAULT_LOG_MEMORY_LIMIT);
         assert_eq!(s.byte_capacity(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert!(s.total_allocated_bytes() > DEFAULT_LOG_MEMORY_LIMIT);
+        assert_gt!(s.total_allocated_bytes(), DEFAULT_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
     }
 
@@ -356,7 +357,7 @@ mod tests {
 
         assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
-        assert!(s.bytes_used() > 0);
+        assert_gt!(s.bytes_used(), 0);
         assert_eq!(
             s.records(None),
             vec![
@@ -406,7 +407,7 @@ mod tests {
         append_deltas(&mut s, start_idx, 100_000, 10_000, 1_000);
 
         let used = s.bytes_used();
-        assert!(used <= s.byte_capacity());
+        assert_le!(used, s.byte_capacity());
         // If store is non-empty, at least one record should remain and next_id advances.
         let records = s.records(None);
         assert!(!records.is_empty());
@@ -427,8 +428,9 @@ mod tests {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
         let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
-        assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+        assert_gt!(
+            aggregate_capacity,
+            RESULT_MAX_SIZE.get() as usize,
             "large enough capacity"
         );
 
@@ -439,7 +441,7 @@ mod tests {
 
         // Without filters — returned bytes must not exceed RESULT_MAX_SIZE.
         let result = s.records(None);
-        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
         // And recent records (tail) must be present.
         assert_eq!(result.last().unwrap().idx + 1, s.next_idx());
     }
@@ -449,8 +451,9 @@ mod tests {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
         let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
-        assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+        assert_gt!(
+            aggregate_capacity,
+            RESULT_MAX_SIZE.get() as usize,
             "large enough capacity"
         );
 
@@ -466,7 +469,7 @@ mod tests {
                 end: u64::MAX,
             },
         )));
-        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
         // Oldest records (head) must be present.
         assert_eq!(result.first().unwrap().idx, start_idx);
 
@@ -478,7 +481,7 @@ mod tests {
                 end: partial_start + 300,
             },
         )));
-        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
         // Oldest records (head) must be present.
         assert_eq!(result.first().unwrap().idx, partial_start);
     }
@@ -488,8 +491,9 @@ mod tests {
         // Ensure results are trimmed to RESULT_MAX_SIZE — both for full range and for range-filtered queries.
         let aggregate_capacity = 10_000_000;
         let start_idx = 1_000;
-        assert!(
-            aggregate_capacity > RESULT_MAX_SIZE.get() as usize,
+        assert_gt!(
+            aggregate_capacity,
+            RESULT_MAX_SIZE.get() as usize,
             "large enough capacity"
         );
 
@@ -505,7 +509,7 @@ mod tests {
                 end: u64::MAX,
             },
         )));
-        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
         // Oldest records (head) must be present.
         assert_eq!(result.first().unwrap().timestamp_nanos, start_idx * 1_000);
 
@@ -517,7 +521,7 @@ mod tests {
                 end: partial_start_ts + 300_000,
             },
         )));
-        assert!(total_size(&result) <= RESULT_MAX_SIZE.get() as usize);
+        assert_le!(total_size(&result), RESULT_MAX_SIZE.get() as usize);
         // Oldest records (head) must be present.
         assert_eq!(result.first().unwrap().timestamp_nanos, partial_start_ts);
     }
@@ -563,8 +567,8 @@ mod tests {
         let bytes_used_after = s.bytes_used();
 
         // Verify some records are dropped.
-        assert!(records_after.len() < records_before.len());
-        assert!(bytes_used_after < bytes_used_before);
+        assert_lt!(records_after.len(), records_before.len());
+        assert_lt!(bytes_used_after, bytes_used_before);
         // Verify recent records are preserved.
         assert_eq!(next_idx_before, s.next_idx());
     }
@@ -759,7 +763,7 @@ mod tests {
 
             match s.cache_header.get() {
                 HeaderCache::Initialized(h) => {
-                    assert!(h.data_size.get() > 0);
+                    assert_gt!(h.data_size.get(), 0);
                 }
                 state => panic!("Expected Initialized, got {:?}", state),
             }

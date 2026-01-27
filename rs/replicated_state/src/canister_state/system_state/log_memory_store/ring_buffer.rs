@@ -6,6 +6,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PAGE_SIZE, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use more_asserts::assert_le;
 
 // PageMap file layout.
 // Header layout constants.
@@ -47,8 +48,9 @@ pub(super) struct RingBuffer {
 impl RingBuffer {
     /// Creates a new ring buffer with the given data capacity.
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        assert!(
-            data_capacity <= DATA_CAPACITY_MAX,
+        assert_le!(
+            data_capacity,
+            DATA_CAPACITY_MAX,
             "data capacity exceeds maximum"
         );
         let mut io = StructIO::new(page_map);
