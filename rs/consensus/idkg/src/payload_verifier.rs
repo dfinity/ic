@@ -982,15 +982,11 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(&key_id, false);
-            test_validate_new_signature_agreements(&key_id, true);
+            test_validate_new_signature_agreements(&key_id);
         }
     }
 
-    fn test_validate_new_signature_agreements(
-        key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: bool,
-    ) {
+    fn test_validate_new_signature_agreements(key_id: &IDkgMasterPublicKeyId) {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let height = Height::from(1);
@@ -1044,7 +1040,6 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
         );
         // First signature should now be in "unreported" agreement
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -1071,7 +1066,6 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
-            store_pre_signatures_in_state,
         );
         // First signature should now be reported, second unreported.
         assert_eq!(idkg_payload.signature_agreements.len(), 2);
