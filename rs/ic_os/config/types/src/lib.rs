@@ -132,7 +132,7 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
-    pub use_node_operator_private_key: bool,
+    pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
@@ -226,11 +226,13 @@ pub struct GuestOSDevSettings {
     pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
-    // An optional hostname to override the deterministically generated hostname
+    /// An optional hostname to override the deterministically generated hostname
     pub hostname: Option<String>,
-    // Generate and inject a self-signed TLS certificate and key for ic-boundary
-    // for the given domain name. To be used in system tests only.
+    /// Generate and inject a self-signed TLS certificate and key for ic-boundary
+    /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
+    /// Overrides the hardcoded NNS public key
+    pub nns_pub_key_override: Option<String>,
 }
 
 /// GuestOS recovery configuration used in the event of a manual recovery.
@@ -342,7 +344,7 @@ mod tests {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
                 "nns_urls": [],
-                "use_node_operator_private_key": false,
+                "node_operator_private_key": null,
                 "use_ssh_authorized_keys": false,
                 "icos_dev_settings": {}
             },

@@ -39,17 +39,12 @@ function copy_config_files() {
     fi
 
     echo "* Copying node operator private key..."
-    use_node_operator_private_key=$(get_config_value '.icos_settings.use_node_operator_private_key')
-    if [[ "${use_node_operator_private_key,,}" == "true" ]]; then
-        if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
-            cp "${CONFIG_DIR}/node_operator_private_key.pem" "${CONFIG_PARTITION_PATH}/"
-            log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
-            # Set restrictive permissions: owner read/write only (600) to prevent limited-console user from reading
-            chmod 600 "${CONFIG_PARTITION_PATH}/node_operator_private_key.pem"
-            log_and_halt_installation_on_error "${?}" "Unable to set permissions on node operator private key."
-        else
-            log_and_halt_installation_on_error "1" "use_node_operator_private_key set to true but not found"
-        fi
+    if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+        cp "${CONFIG_DIR}/node_operator_private_key.pem" "${CONFIG_PARTITION_PATH}/"
+        log_and_halt_installation_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
+        # Set restrictive permissions: owner read/write only (600) to prevent limited-console user from reading
+        chmod 600 "${CONFIG_PARTITION_PATH}/node_operator_private_key.pem"
+        log_and_halt_installation_on_error "${?}" "Unable to set permissions on node operator private key."
     else
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
     fi

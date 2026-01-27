@@ -1,6 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use config_tool::guestos::bootstrap_ic_node::{bootstrap_ic_node, populate_nns_public_key};
+use config_tool::guestos::bootstrap_ic_node::bootstrap_ic_node;
 use config_tool::guestos::generate_ic_config;
 use config_tool::serialize_and_write_config;
 use config_tool::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
@@ -9,6 +9,7 @@ use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
 use regex::Regex;
+use std::fs;
 use std::path::{Path, PathBuf};
 use url::Url;
 
@@ -33,8 +34,10 @@ pub enum Commands {
         #[arg(long, default_value = config_tool::DEFAULT_SETUPOS_HOSTOS_CONFIG_OBJECT_PATH, value_name = "config-hostos.json")]
         hostos_config_json_path: PathBuf,
     },
-    /// Bootstrap IC Node from a bootstrap package
+    /// Bootstrap IC Node from a bootstrap package & guestos config
     BootstrapICNode {
+        #[arg(long, default_value = config_tool::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config_tool::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
         bootstrap_dir: PathBuf,
     },
@@ -44,10 +47,6 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config_tool::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
-    },
-    PopulateNnsPublicKey {
-        #[arg(long, default_value = config_tool::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
-        bootstrap_dir: PathBuf,
     },
 }
 
@@ -127,8 +126,17 @@ pub fn main() -> Result<()> {
                 println!("Node reward type is not set. Skipping validation.");
             }
 
-            let use_node_operator_private_key =
-                Path::new("/config/node_operator_private_key.pem").exists();
+            // Read the node operator private key if it exists
+            let node_operator_private_key_path = Path::new("/config/node_operator_private_key.pem");
+            let node_operator_private_key = if node_operator_private_key_path.exists() {
+                Some(
+                    fs::read_to_string(node_operator_private_key_path)
+                        .context("unable to read node operator private key")?,
+                )
+            } else {
+                None
+            };
+
             let use_ssh_authorized_keys = Path::new("/config/ssh_authorized_keys").exists();
 
             let setupos_config = assemble_setupos_config(
@@ -138,14 +146,11 @@ pub fn main() -> Result<()> {
                 &deployment_json_settings.nns.urls,
                 deployment_json_settings.dev_vm_resources,
                 enable_trusted_execution_environment,
-                use_node_operator_private_key,
+                node_operator_private_key,
                 use_ssh_authorized_keys,
                 verbose,
                 network_settings,
             );
-
-            // SetupOSConfig is safe to log; it does not contain any secret material
-            println!("SetupOSConfig: {setupos_config:?}");
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;
@@ -184,13 +189,19 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::BootstrapICNode { bootstrap_dir }) => {
-            println!("Bootstrap IC Node from: {}", bootstrap_dir.display());
-            bootstrap_ic_node(&bootstrap_dir)
-        }
-        Some(Commands::PopulateNnsPublicKey { bootstrap_dir }) => {
-            println!("Populating NNS key from: {}", bootstrap_dir.display());
-            populate_nns_public_key(&bootstrap_dir)
+        Some(Commands::BootstrapICNode {
+            bootstrap_dir,
+            guestos_config_json_path,
+        }) => {
+            println!(
+                "Bootstrap IC Node from bootstrap dir: '{}' and config file: '{}'",
+                bootstrap_dir.display(),
+                guestos_config_json_path.display()
+            );
+            let guestos_config: GuestOSConfig =
+                config_tool::deserialize_config(&guestos_config_json_path)?;
+
+            bootstrap_ic_node(&bootstrap_dir, guestos_config)
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,
@@ -216,7 +227,7 @@ pub fn assemble_setupos_config(
     nns_urls: &[Url],
     dev_vm_resources: VmResources,
     enable_trusted_execution_environment: bool,
-    use_node_operator_private_key: bool,
+    node_operator_private_key: Option<String>,
     use_ssh_authorized_keys: bool,
     verbose: bool,
     network_settings: NetworkSettings,
@@ -226,7 +237,7 @@ pub fn assemble_setupos_config(
         mgmt_mac,
         deployment_environment,
         nns_urls: nns_urls.to_vec(),
-        use_node_operator_private_key,
+        node_operator_private_key,
         enable_trusted_execution_environment,
         use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
