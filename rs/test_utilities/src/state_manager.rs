@@ -218,7 +218,7 @@ impl StateManager for FakeStateManager {
         // All heights are checkpoints
     }
 
-    fn set_fast_forward_hint(&self, _height: Height) {
+    fn update_fast_forward_height(&self, _height: Height) {
         // `FakeStateManager` does not implement fast-forwarding.
     }
 
@@ -705,8 +705,8 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn set_fast_forward_hint(&self, height: Height) {
-        self.mock.read().unwrap().set_fast_forward_hint(height)
+    fn update_fast_forward_height(&self, height: Height) {
+        self.mock.read().unwrap().update_fast_forward_height(height)
     }
 
     fn remove_inmemory_states_below(

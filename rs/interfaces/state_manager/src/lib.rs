@@ -244,7 +244,7 @@ pub trait StateManager: StateReader {
 
     /// Notify the state manager that it could skip cloning and hashing the state
     /// up until and including the specified `height`.
-    fn set_fast_forward_hint(&self, height: Height);
+    fn update_fast_forward_height(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to

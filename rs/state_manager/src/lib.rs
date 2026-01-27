@@ -3200,7 +3200,7 @@ impl StateManager for StateManagerImpl {
 
     /// Notify the state manager that it could skip cloning and hashing the state
     /// up until and including the specified `height`.
-    fn set_fast_forward_hint(&self, height: Height) {
+    fn update_fast_forward_height(&self, height: Height) {
         let fast_forward_height = update_latest_height(&self.fast_forward_height, height);
         self.metrics
             .fast_forward_height

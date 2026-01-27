@@ -318,7 +318,7 @@ impl Purger {
     fn purge_replicated_state_by_finalized_certified_height(&self, pool: &PoolReader<'_>) {
         let height = pool.get_finalized_tip().context.certified_height;
 
-        self.state_manager.set_fast_forward_hint(height);
+        self.state_manager.update_fast_forward_height(height);
 
         let extra_heights_to_keep = get_pending_idkg_cup_heights(pool);
         self.state_manager
@@ -522,7 +522,7 @@ mod tests {
             // Checkpoint purge height depends on certified height of highest checkpoint
             let checkpoint_purge_height = Arc::new(RwLock::new(Height::from(0)));
 
-            let inmemory_purge_height_clone_for_set_fast_forward_hint =
+            let inmemory_purge_height_clone_for_update_fast_forward_height =
                 Arc::clone(&inmemory_purge_height);
             let inmemory_purge_height_clone_for_remove_inmemory_states_below =
                 Arc::clone(&inmemory_purge_height);
@@ -530,10 +530,10 @@ mod tests {
 
             state_manager
                 .get_mut()
-                .expect_set_fast_forward_hint()
+                .expect_update_fast_forward_height()
                 .withf(move |height| {
                     *height
-                        == *inmemory_purge_height_clone_for_set_fast_forward_hint
+                        == *inmemory_purge_height_clone_for_update_fast_forward_height
                             .read()
                             .unwrap()
                 })
@@ -781,7 +781,7 @@ mod tests {
                 .return_const(Height::from(0));
             state_manager
                 .get_mut()
-                .expect_set_fast_forward_hint()
+                .expect_update_fast_forward_height()
                 .return_const(());
             state_manager
                 .get_mut()

@@ -975,8 +975,8 @@ impl StateManager for StateMachineStateManager {
             .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
-    fn set_fast_forward_hint(&self, height: Height) {
-        self.deref().set_fast_forward_hint(height);
+    fn update_fast_forward_height(&self, height: Height) {
+        self.deref().update_fast_forward_height(height);
     }
 
     fn commit_and_certify(
