@@ -212,6 +212,11 @@ impl CanisterLog {
         self.records.clear();
     }
 
+    /// Returns true if the canister log is empty.
+    pub fn is_empty(&self) -> bool {
+        self.records.records.is_empty()
+    }
+
     /// Returns the maximum allowed size of a canister log buffer.
     pub fn byte_capacity(&self) -> usize {
         self.records.byte_capacity
