@@ -207,7 +207,11 @@ impl Recovery {
                 } else {
                     // the env var is not set, the binary does not exist locally and we have no version
                     // to download.
-                    info!(logger, "No ic-admin version provided, file may not exist: '{:?}'", local_ic_admin_path);
+                    info!(
+                        logger,
+                        "No ic-admin version provided, file may not exist: '{:?}'",
+                        local_ic_admin_path
+                    );
                     local_ic_admin_path
                 }
             }
