@@ -99,17 +99,18 @@ impl LogMemoryStore {
 
     /// Returns the ring buffer header.
     fn get_header(&self) -> Option<Header> {
-        if let HeaderCache::Initialized(h) = *self.cache_header.read() {
-            return Some(h);
-        }
-        if let HeaderCache::Empty = *self.cache_header.read() {
-            return None;
+        // Read cache.
+        match *self.cache_header.read() {
+            HeaderCache::Initialized(h) => return Some(h),
+            HeaderCache::Empty => return None,
+            HeaderCache::Uninitialized => {} // Fall through to write logic
         }
         let mut cache = self.cache_header.write();
         match *cache {
             HeaderCache::Initialized(h) => return Some(h),
             HeaderCache::Empty => return None,
             HeaderCache::Uninitialized => {
+                // Write cache.
                 if let Some(rb) = self.load_ring_buffer() {
                     let h = rb.get_header();
                     *cache = HeaderCache::Initialized(h);
