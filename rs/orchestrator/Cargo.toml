@@ -7,7 +7,6 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-assert_matches = { workspace = true }
 async-trait = { workspace = true }
 backoff = { workspace = true }
 candid = { workspace = true }
@@ -52,6 +51,7 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 idna = { workspace = true }
 indoc = "1.0.9"
+mockall = { workspace = true }
 nix = { workspace = true }
 prometheus = { workspace = true }
 prost = { workspace = true }
@@ -71,10 +71,12 @@ qrcode = { workspace = true }
 
 [dev-dependencies]
 async-stream = { workspace = true }
+assert_matches = { workspace = true }
 hyper-util = { workspace = true }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
+ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-test-utils-tls = { path = "../crypto/test_utils/tls" }
@@ -88,7 +90,6 @@ ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
-mockall = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
 tokio-rustls = { workspace = true }
