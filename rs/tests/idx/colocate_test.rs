@@ -47,6 +47,7 @@ fn main() -> Result<()> {
 fn setup(env: TestEnv) {
     let colocated_test_name = env::var("COLOCATED_TEST_NAME").unwrap();
 
+    // Rebase the runtime dependency paths to the paths inside the container in the UVM.
     let test_tmpdir = env::var("TEST_TMPDIR").unwrap();
     let runtime_deps_dir = format!("{test_tmpdir}/runtime_deps/");
     let rebase_runtime_dep = |value: &str| -> String {
