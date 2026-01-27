@@ -2,7 +2,6 @@
 // bazel run //rs/execution_environment:management_canister_bench -- canister_snapshot
 use crate::utils::env;
 use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
-use ic_execution_environment::units::{GIB, MIB};
 use ic_management_canister_types_private::{
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     LoadCanisterSnapshotArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
@@ -12,6 +11,9 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{CanisterId, Cycles, SnapshotId};
 use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use rand::Rng;
+
+const MIB: u64 = 1024 * 1024;
+const GIB: u64 = 1024 * MIB;
 
 fn env_and_canister(canister_size: u64) -> (StateMachine, CanisterId) {
     let env = env();
