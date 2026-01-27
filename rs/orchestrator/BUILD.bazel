@@ -124,6 +124,7 @@ rust_test(
         "@crate_index//:async-stream",
         "@crate_index//:hyper-util",
         "@crate_index//:rcgen",
+        "@crate_index//:rstest",
         "@crate_index//:rustls",
         "@crate_index//:tokio-rustls",
     ],

@@ -1080,6 +1080,7 @@ mod tests {
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use prost::Message;
     use rand::RngCore;
+    use rstest::rstest;
     use slog::Level;
     use std::collections::BTreeSet;
     use std::{collections::BTreeMap, path::Path};
@@ -2258,32 +2259,31 @@ mod tests {
         }
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn test_upgrade_scenarios_without_errors() {
-        let node_id = NODE_1;
-        let subnet_id = SUBNET_1;
-        let current_replica_version = ReplicaVersion::try_from("replica_version_0.1").unwrap();
-        let upgrade_replica_version = ReplicaVersion::try_from("replica_version_0.2").unwrap();
-
-        let local_cup_scenarios = [
+    async fn test_upgrade_scenarios_without_errors(
+        #[values(NODE_1)] node_id: NodeId,
+        #[values(ReplicaVersion::try_from("replica_version_0.1").unwrap())] current_replica_version: ReplicaVersion,
+        #[values(
             None,
             Some(CUPScenario {
                 height: Height::from(100),
-                subnet_id,
+                subnet_id: SUBNET_1,
                 registry_version: RegistryVersion::from(10),
             }),
             Some(CUPScenario {
                 height: Height::from(1000),
-                subnet_id,
+                subnet_id: SUBNET_1,
                 registry_version: RegistryVersion::from(100),
             }),
-        ];
-        let registry_cup_scenarios = [
+        )]
+        has_local_cup: Option<CUPScenario>,
+        #[values(
             None,
             Some((
                 CUPScenario {
                     height: Height::from(101),
-                    subnet_id,
+                    subnet_id: SUBNET_1,
                     registry_version: RegistryVersion::from(51),
                 },
                 RegistryVersion::from(52),
@@ -2291,190 +2291,176 @@ mod tests {
             Some((
                 CUPScenario {
                     height: Height::from(1001),
-                    subnet_id,
+                    subnet_id: SUBNET_1,
                     registry_version: RegistryVersion::from(100),
                 },
                 RegistryVersion::from(101),
             )),
-        ];
+        )]
+        has_registry_cup: Option<(CUPScenario, RegistryVersion)>,
         // Note: the initial subnet assignment should normally not be `Assigned` if the node has
         // no local CUP and vice versa. However, we still test these combinations to verify that
         // the code behaves correctly even if such invalid states occur.
         // For example, if the node left the subnet and thus set to `Unassigned` but failed to
         // delete the local CUP because of an IO error in the previous upgrade loop, then they would
         // start the loop with a local CUP but with an `Unassigned` initial subnet assignment.
-        let initial_subnet_assignment_scenarios = [
+        #[values(
             SubnetAssignment::Unknown,
             SubnetAssignment::Unassigned,
-            SubnetAssignment::Assigned(subnet_id),
-        ];
-        let is_leaving_scenarios = [
+            SubnetAssignment::Assigned(SUBNET_1)
+        )]
+        initial_subnet_assignment: SubnetAssignment,
+        #[values(
             None,
             Some(RegistryVersion::from(5)),
             Some(RegistryVersion::from(10)),
             Some(RegistryVersion::from(50)),
             Some(RegistryVersion::from(100)),
-            Some(RegistryVersion::from(150)),
-        ];
-        let upgrade_to_scenarios = [
+            Some(RegistryVersion::from(150))
+        )]
+        is_leaving: Option<RegistryVersion>,
+        #[values(
             None,
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(3))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(5))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(10))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(75))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(100))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(150))),
-            Some((upgrade_replica_version.clone(), RegistryVersion::from(175))),
-        ];
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(3))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(5))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(10))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(75))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(100))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(150))),
+            Some((ReplicaVersion::try_from("replica_version_0.2").unwrap(), RegistryVersion::from(175))),
+        )]
+        upgrade_to: Option<(ReplicaVersion, RegistryVersion)>,
+    ) {
+        let test_scenario = UpgradeTestScenario {
+            node_id,
+            current_replica_version,
+            has_local_cup,
+            has_registry_cup,
+            initial_subnet_assignment,
+            is_leaving,
+            upgrade_to,
+        };
 
-        for has_local_cup in &local_cup_scenarios {
-            for has_registry_cup in &registry_cup_scenarios {
-                for initial_subnet_assignment in &initial_subnet_assignment_scenarios {
-                    for is_leaving in &is_leaving_scenarios {
-                        for upgrade_to in &upgrade_to_scenarios {
-                            let test_scenario = UpgradeTestScenario {
-                                node_id,
-                                current_replica_version: current_replica_version.clone(),
-                                has_local_cup: has_local_cup.clone(),
-                                has_registry_cup: has_registry_cup.clone(),
-                                initial_subnet_assignment: *initial_subnet_assignment,
-                                is_leaving: *is_leaving,
-                                upgrade_to: upgrade_to.clone(),
-                            };
+        if test_scenario.has_local_cup.is_none()
+            && test_scenario.has_registry_cup.is_none()
+            && matches!(
+                test_scenario.initial_subnet_assignment,
+                SubnetAssignment::Assigned(_)
+            )
+        {
+            // Invalid scenario: having an `Assigned` initial subnet assignment
+            // means that the node previously had a local or registry CUP
+            return;
+        }
 
-                            if has_local_cup.is_none()
-                                && has_registry_cup.is_none()
-                                && matches!(
-                                    initial_subnet_assignment,
-                                    SubnetAssignment::Assigned(_)
-                                )
-                            {
-                                // Invalid scenario: having an `Assigned` initial subnet assignment
-                                // means that the node previously had a local or registry CUP
-                                continue;
-                            }
+        if test_scenario.has_local_cup.is_none()
+            && test_scenario.has_registry_cup.is_some()
+            && test_scenario.is_leaving.is_some()
+        {
+            // Untested scenario: being unassigned, seeing a genesis CUP but
+            // instantly having to leave (unlikely in practice and complex to
+            // test)
+            return;
+        }
 
-                            if has_local_cup.is_none()
-                                && has_registry_cup.is_some()
-                                && is_leaving.is_some()
-                            {
-                                // Untested scenario: being unassigned, seeing a genesis CUP but
-                                // instantly having to leave (unlikely in practice and complex to
-                                // test)
-                                continue;
-                            }
+        if let Some(highest_cup) = test_scenario.highest_cup()
+            && let Some(leaving_registry_version) = test_scenario.is_leaving
+            && highest_cup.registry_version >= leaving_registry_version
+        {
+            // TODO(CON-1630): leaving scenario is untested for now as it involves
+            // mocking state removal and process (replica) management
+            return;
+        }
 
-                            if let Some(highest_cup) = test_scenario.highest_cup()
-                                && let Some(leaving_registry_version) = is_leaving
-                                && &highest_cup.registry_version >= leaving_registry_version
-                            {
-                                // TODO(CON-1630): leaving scenario is untested for now as it involves
-                                // mocking state removal and process (replica) management
-                                continue;
-                            }
+        let data_provider = test_scenario.setup_registry();
 
-                            println!("Running test scenario: {:?}", test_scenario);
+        let tmp_dir = tempdir().unwrap();
+        let tmp_path = tmp_dir.path();
+        let logger = InMemoryReplicaLogger::new();
+        let mut upgrade = create_upgrade_for_test(
+            tmp_path,
+            ReplicaLogger::from(&logger),
+            test_scenario.clone(),
+            Arc::new(data_provider),
+        )
+        .await;
 
-                            let data_provider = test_scenario.setup_registry();
+        let flow_result = upgrade.check().await;
+        let logs = logger.drain_logs();
 
-                            let tmp_dir = tempdir().unwrap().keep();
-                            let logger = InMemoryReplicaLogger::new();
-                            let mut upgrade = create_upgrade_for_test(
-                                &tmp_dir,
-                                ReplicaLogger::from(&logger),
-                                test_scenario.clone(),
-                                Arc::new(data_provider),
-                            )
-                            .await;
+        // Check orchestrator control flow
+        assert_matches!(&flow_result, Ok(flow) if *flow == test_scenario.expected_flow(logs.clone(), &upgrade));
 
-                            let flow_result = upgrade.check().await;
-                            let logs = logger.drain_logs();
+        // Check new subnet assignment
+        let new_subnet_assignment = upgrade.subnet_assignment();
+        assert_eq!(
+            new_subnet_assignment,
+            test_scenario.expected_subnet_assignment(logs.clone()),
+        );
 
-                            // Check orchestrator control flow
-                            assert_matches!(&flow_result, Ok(flow) if *flow == test_scenario.expected_flow(logs.clone(), &upgrade));
+        // Check presence/absence of local CUP, including its height, which
+        // tests the recovery case where the recovery CUP would overwrite the
+        // local CUP
+        let cup_file = tmp_path.join("cups").join("cup.types.v1.CatchUpPackage.pb");
+        let local_cup_height = std::fs::read(cup_file)
+            .map(|bytes| {
+                CatchUpPackage::try_from(&pb::CatchUpPackage::decode(&bytes[..]).unwrap())
+                    .unwrap()
+                    .height()
+            })
+            .ok();
+        assert_eq!(
+            local_cup_height,
+            test_scenario.expected_local_cup_height(logs.clone())
+        );
 
-                            // Check new subnet assignment
-                            let new_subnet_assignment = upgrade.subnet_assignment();
-                            assert_eq!(
-                                new_subnet_assignment,
-                                test_scenario.expected_subnet_assignment(logs.clone()),
-                            );
+        // Check that the state was removed if necessary
+        test_scenario.assert_removed_state_if_necessary(logs.clone());
 
-                            // Check presence/absence of local CUP, including its height, which
-                            // tests the recovery case where the recovery CUP would overwrite the
-                            // local CUP
-                            let cup_file =
-                                tmp_dir.join("cups").join("cup.types.v1.CatchUpPackage.pb");
-                            let local_cup_height = std::fs::read(cup_file)
-                                .map(|bytes| {
-                                    CatchUpPackage::try_from(
-                                        &pb::CatchUpPackage::decode(&bytes[..]).unwrap(),
-                                    )
-                                    .unwrap()
-                                    .height()
-                                })
-                                .ok();
-                            assert_eq!(
-                                local_cup_height,
-                                test_scenario.expected_local_cup_height(logs.clone())
-                            );
+        // Check whether the replica process is running or not
+        assert_eq!(
+            upgrade.replica_process.lock().unwrap().is_running(),
+            test_scenario.should_replica_process_be_running(logs),
+        );
 
-                            // Check that the state was removed if necessary
-                            test_scenario.assert_removed_state_if_necessary(logs.clone());
-
-                            // Check whether the replica process is running or not
-                            assert_eq!(
-                                upgrade.replica_process.lock().unwrap().is_running(),
-                                test_scenario.should_replica_process_be_running(logs),
-                            );
-
-                            // Asserting further invariants:
-                            // - Consistent flow/subnet assignment:
-                            match flow_result {
-                                Ok(OrchestratorControlFlow::Assigned(flow_subnet_id))
-                                | Ok(OrchestratorControlFlow::Leaving(flow_subnet_id)) => {
-                                    assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(assigned_subnet_id) if assigned_subnet_id == flow_subnet_id);
-                                }
-                                Ok(OrchestratorControlFlow::Unassigned) => {
-                                    assert_matches!(
-                                        new_subnet_assignment,
-                                        SubnetAssignment::Unassigned
-                                    );
-                                }
-                                Ok(OrchestratorControlFlow::Stop) => {
-                                    assert_matches!(
-                                        new_subnet_assignment,
-                                        SubnetAssignment::Assigned(_)
-                                            | SubnetAssignment::Unassigned
-                                    )
-                                }
-                                Err(_) => {
-                                    panic!("Upgrade loop is supposed to succeed in this test")
-                                }
-                            }
-                            // - A successful upgrade loop means the subnet assignment cannot be
-                            // `Unknown`
-                            assert_ne!(new_subnet_assignment, SubnetAssignment::Unknown);
-                            // - There is a local CUP after the upgrade loop <=> the subnet assignment
-                            // must be `Assigned`
-                            assert_eq!(
-                                local_cup_height.is_some(),
-                                matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
-                            );
-                            // - The replica process is running <=> the new subnet assignment is
-                            // `Assigned` AND (EITHER we are not upgrading OR the replica was
-                            // already started beforehand)
-                            assert_eq!(
-                                upgrade.replica_process.lock().unwrap().is_running(),
-                                matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
-                                    && (!matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
-                                        || test_scenario.was_replica_process_started_previously())
-                            );
-                        }
-                    }
-                }
+        // Asserting further invariants:
+        // - Consistent flow/subnet assignment:
+        match flow_result {
+            Ok(OrchestratorControlFlow::Assigned(flow_subnet_id))
+            | Ok(OrchestratorControlFlow::Leaving(flow_subnet_id)) => {
+                assert_matches!(new_subnet_assignment, SubnetAssignment::Assigned(assigned_subnet_id) if assigned_subnet_id == flow_subnet_id);
+            }
+            Ok(OrchestratorControlFlow::Unassigned) => {
+                assert_matches!(new_subnet_assignment, SubnetAssignment::Unassigned);
+            }
+            Ok(OrchestratorControlFlow::Stop) => {
+                assert_matches!(
+                    new_subnet_assignment,
+                    SubnetAssignment::Assigned(_) | SubnetAssignment::Unassigned
+                )
+            }
+            Err(_) => {
+                panic!("Upgrade loop is supposed to succeed in this test")
             }
         }
+        // - A successful upgrade loop means the subnet assignment cannot be
+        // `Unknown`
+        assert_ne!(new_subnet_assignment, SubnetAssignment::Unknown);
+        // - There is a local CUP after the upgrade loop <=> the subnet assignment
+        // must be `Assigned`
+        assert_eq!(
+            local_cup_height.is_some(),
+            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
+        );
+        // - The replica process is running <=> the new subnet assignment is
+        // `Assigned` AND (EITHER we are not upgrading OR the replica was
+        // already started beforehand)
+        assert_eq!(
+            upgrade.replica_process.lock().unwrap().is_running(),
+            matches!(new_subnet_assignment, SubnetAssignment::Assigned(_))
+                && (!matches!(flow_result, Ok(OrchestratorControlFlow::Stop))
+                    || test_scenario.was_replica_process_started_previously())
+        );
     }
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
