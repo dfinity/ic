@@ -6,14 +6,16 @@ mod ring_buffer;
 mod struct_io;
 
 use crate::canister_state::system_state::log_memory_store::{
+    header::Header,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, RingBuffer},
+    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer},
 };
-use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
+use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::cell::Cell;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -21,6 +23,13 @@ use std::sync::Arc;
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
+
+#[derive(Clone, Copy, Debug)]
+enum HeaderCache {
+    Uninitialized,
+    Empty,
+    Initialized(Header),
+}
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
@@ -34,6 +43,9 @@ pub struct LogMemoryStore {
     /// and the record is cleared at the end of the round.
     #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
+
+    #[validate_eq(Ignore)]
+    cache_header: Cell<HeaderCache>,
 }
 
 impl LogMemoryStore {
@@ -52,6 +64,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
+            cache_header: Cell::new(HeaderCache::Uninitialized),
         }
     }
 
@@ -59,6 +72,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
+            cache_header: Cell::new(HeaderCache::Uninitialized),
         }
     }
 
@@ -67,6 +81,7 @@ impl LogMemoryStore {
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
+        self.cache_header.set(HeaderCache::Uninitialized);
         &mut self.page_map
     }
 
@@ -74,6 +89,7 @@ impl LogMemoryStore {
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
+        self.cache_header.set(HeaderCache::Empty);
     }
 
     /// Loads the ring buffer from the page map.
@@ -81,25 +97,46 @@ impl LogMemoryStore {
         RingBuffer::load_checked(self.page_map.clone())
     }
 
+    fn get_header(&self) -> Option<Header> {
+        match self.cache_header.get() {
+            HeaderCache::Initialized(h) => Some(h),
+            HeaderCache::Empty => None,
+            HeaderCache::Uninitialized => {
+                if let Some(rb) = self.load_ring_buffer() {
+                    let h = rb.get_header();
+                    self.cache_header.set(HeaderCache::Initialized(h));
+                    Some(h)
+                } else {
+                    self.cache_header.set(HeaderCache::Empty);
+                    None
+                }
+            }
+        }
+    }
+
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
     pub fn total_allocated_bytes(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.total_allocated_bytes())
+        self.get_header()
+            .map(|h| {
+                HEADER_SIZE.get() as usize
+                    + h.index_table_pages as usize * PAGE_SIZE
+                    + h.data_capacity.get() as usize
+            })
             .unwrap_or(0)
     }
 
     /// Returns the data capacity of the ring buffer.
     pub fn byte_capacity(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.byte_capacity())
+        self.get_header()
+            .map(|h| h.data_capacity.get() as usize)
             .unwrap_or(0)
     }
 
     /// Returns the data size of the ring buffer.
     pub fn bytes_used(&self) -> usize {
-        self.load_ring_buffer()
-            .map(|rb| rb.bytes_used())
+        self.get_header()
+            .map(|h| h.data_size.get() as usize)
             .unwrap_or(0)
     }
 
@@ -114,8 +151,8 @@ impl LogMemoryStore {
         let target_limit = limit.max(DATA_CAPACITY_MIN);
 
         // Only resize when the capacity actually changes.
-        if let Some(rb) = self.load_ring_buffer()
-            && rb.byte_capacity() == target_limit
+        if let Some(h) = self.get_header()
+            && h.data_capacity.get() as usize == target_limit
         {
             return;
         }
@@ -137,17 +174,18 @@ impl LogMemoryStore {
         }
         // Update the state.
         self.page_map = new_buffer.to_page_map();
+        self.cache_header
+            .set(HeaderCache::Initialized(new_buffer.get_header()));
     }
 
     /// Returns the next log record `idx`.
     pub fn next_idx(&self) -> u64 {
-        self.load_ring_buffer().map(|rb| rb.next_idx()).unwrap_or(0)
+        self.get_header().map(|h| h.next_idx).unwrap_or(0)
     }
 
+    /// Returns true if the ring buffer is empty.
     pub fn is_empty(&self) -> bool {
-        self.load_ring_buffer()
-            .map(|rb| rb.is_empty())
-            .unwrap_or(true)
+        self.bytes_used() == 0
     }
 
     /// Returns the canister log records, optionally filtered.
@@ -177,6 +215,8 @@ impl LogMemoryStore {
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
         self.page_map = ring_buffer.to_page_map();
+        self.cache_header
+            .set(HeaderCache::Initialized(ring_buffer.get_header()));
     }
 
     /// Records the size of the appended delta log.
@@ -683,5 +723,57 @@ mod tests {
         assert_eq!(records.len(), 5);
         assert_eq!(records[0].idx, 10);
         assert_eq!(records[4].idx, 14);
+    }
+    mod cache_tests {
+        use super::*;
+
+        #[test]
+        fn test_cache_lifecycle() {
+            let mut s = LogMemoryStore::new_for_testing();
+
+            // 1. Initial state: Uninitialized
+            match s.cache_header.get() {
+                HeaderCache::Uninitialized => (),
+                state => panic!("Expected Uninitialized, got {:?}", state),
+            }
+
+            // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
+            assert_eq!(s.byte_capacity(), 0);
+            match s.cache_header.get() {
+                HeaderCache::Empty => (),
+                state => panic!("Expected Empty, got {:?}", state),
+            }
+
+            // 3. Set limit: Empty -> Initialized
+            s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
+            match s.cache_header.get() {
+                HeaderCache::Initialized(h) => {
+                    assert_eq!(
+                        h.data_capacity.get() as usize,
+                        DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT
+                    );
+                }
+                state => panic!("Expected Initialized, got {:?}", state),
+            }
+
+            // 4. Append: Initialized -> Initialized (updated)
+            let mut delta = CanisterLog::default_delta();
+            delta.add_record(1, b"test".to_vec());
+            s.append_delta_log(&mut delta);
+
+            match s.cache_header.get() {
+                HeaderCache::Initialized(h) => {
+                    assert!(h.data_size.get() > 0);
+                }
+                state => panic!("Expected Initialized, got {:?}", state),
+            }
+
+            // 5. Invalidate: Initialized -> Uninitialized
+            s.page_map_mut();
+            match s.cache_header.get() {
+                HeaderCache::Uninitialized => (),
+                state => panic!("Expected Uninitialized after page_map_mut, got {:?}", state),
+            }
+        }
     }
 }
