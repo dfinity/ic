@@ -6,7 +6,7 @@ use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
-use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
+use sys_mount::{FilesystemType, Mount, Unmount, UnmountFlags};
 use tempfile::TempDir;
 use uuid::Uuid;
 
