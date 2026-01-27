@@ -203,7 +203,8 @@ def system_test(
         if dep not in data:
             data.append(dep)
 
-    env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = ";".join(_runtime_deps.keys())
+    RUN_SCRIPT_RUNTIME_DEP_ENV_VARS = ";".join(_runtime_deps.keys())
+    env["RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"] = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
 
     tags = tags + ["requires-network", "system_test"]
 
@@ -223,6 +224,8 @@ def system_test(
         visibility = visibility,
     )
 
+    COLOCATED_RUNTIME_DEP_ENV_VARS = RUN_SCRIPT_RUNTIME_DEP_ENV_VARS
+
     # create a colocated version of the test (marked as manual _unless_ the test is tagged with "colocate")
     sh_test(
         srcs = ["//rs/tests:run_systest.sh"],
@@ -233,9 +236,10 @@ def system_test(
         ],
         env_inherit = env_inherit,
         env = env | {
-                  "COLOCATE_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "RUN_SCRIPT_TEST_EXECUTABLE": "$(rootpath //rs/tests/idx:colocate_test_bin)",
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
+                  "COLOCATED_RUNTIME_DEP_ENV_VARS": COLOCATED_RUNTIME_DEP_ENV_VARS,
+                  "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
                   "COLOCATED_TEST": test_name,
                   "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),

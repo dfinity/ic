@@ -64,14 +64,16 @@ for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep_hash="$(sha256sum <<<"$old_dep" | cut -d' ' -f1)"
     old_dep_name="$(basename "$old_dep")"
     new_dep="$old_dep_hash-$old_dep_name"
-    echo "Linking runtime dependency for $env_var: runtime_deps/$new_dep -> $old_dep" >&2
+    echo "Linking runtime dependency for $env_var: $RUNTIME_DEPS/$new_dep -> $PWD/$old_dep" >&2
     ln -sf "$PWD/$old_dep" "$RUNTIME_DEPS/$new_dep"
-    export "$env_var=runtime_deps/$new_dep"
+    export "$env_var=$RUNTIME_DEPS/$new_dep"
 done
 
-if [ -n "${COLOCATE_UVM_CONFIG_IMAGE_PATH:-}" ]; then
-    export COLOCATE_UVM_CONFIG_IMAGE_PATH="$PWD/$COLOCATE_UVM_CONFIG_IMAGE_PATH"
+if [ -n "${COLOCATED_UVM_CONFIG_IMAGE_PATH:-}" ]; then
+    export COLOCATED_UVM_CONFIG_IMAGE_PATH="$PWD/$COLOCATED_UVM_CONFIG_IMAGE_PATH"
 fi
+
+env
 
 exec \
     env -C "$TEST_TMPDIR" \

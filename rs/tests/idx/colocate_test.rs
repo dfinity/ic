@@ -46,7 +46,16 @@ fn main() -> Result<()> {
 
 fn setup(env: TestEnv) {
     let colocated_test = env::var("COLOCATED_TEST").unwrap();
-    let colocated_test_bin = env::var("TEST_BIN").unwrap();
+
+    let test_tmpdir = env::var("TEST_TMPDIR").unwrap();
+    let runtime_deps_dir = format!("{test_tmpdir}/runtime_deps/");
+    let rebase_runtime_dep = |value: &str| -> String {
+        let dep = value.strip_prefix(&runtime_deps_dir).unwrap();
+        format!("/home/root/test/runtime_deps/{dep}")
+    };
+
+    let colocated_test_bin = rebase_runtime_dep(&env::var("TEST_BIN").unwrap());
+
     let log = env.logger();
 
     info!(
@@ -69,7 +78,7 @@ fn setup(env: TestEnv) {
         .with_required_host_features(host_features)
         .with_vm_resources(vm_resources)
         .with_config_img(
-            Path::new(&env::var("COLOCATE_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
+            Path::new(&env::var("COLOCATED_UVM_CONFIG_IMAGE_PATH").unwrap()).to_path_buf(),
         );
 
     let uvm = if env::var("COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4").is_ok() {
@@ -146,12 +155,11 @@ fn setup(env: TestEnv) {
         0o644,
     );
 
-    // Create a temporary environment file that we SCP into the UVM. These environment
+    // Create an environment file that we SCP into the UVM. These environment
     // variables are then forward to the docker container with --env-file.
     // (scoped to delete tempfile asap)
     {
-        let tmpdir = tempfile::tempdir().expect("Could not create tempdir");
-        let filepath = tmpdir.path().join("env");
+        let filepath = env.get_path("env_vars");
         let mut file = File::create(filepath.clone()).expect("Could not create tempfile");
 
         // We remove some problematic (and unnecessary) environment variables
@@ -169,6 +177,31 @@ fn setup(env: TestEnv) {
             &session,
             &filepath,
             Path::new("/home/admin/env_vars"),
+            0o644,
+        );
+    };
+
+    // Create and scp another environment file which will override the
+    // runtime dep variables of the previous env file with rebased values.
+    {
+        let filepath = env.get_path("runtime_deps_env_vars");
+        let mut file =
+            File::create(&filepath).expect("Could not create runtime_deps_env_vars file");
+
+        for env_var in env::var("COLOCATED_RUNTIME_DEP_ENV_VARS")
+            .unwrap()
+            .split(";")
+        {
+            let value = rebase_runtime_dep(&env::var(env_var).unwrap());
+
+            writeln!(file, "{env_var}={value}")
+                .expect("Could not write to runtime_deps_env_vars file");
+        }
+        scp_send_to(
+            log.clone(),
+            &session,
+            &filepath,
+            Path::new("/home/admin/runtime_deps_env_vars"),
             0o644,
         );
     };
@@ -281,9 +314,10 @@ docker run \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
   --workdir /home/root/test \
   --env-file /home/admin/env_vars \
+  --env-file /home/admin/runtime_deps_env_vars \
   "${{DOCKER_RUN_ARGS[@]}}" \
   ubuntu_test_runtime:image \
-  '/home/root/test/{colocated_test_bin}' \
+  '{colocated_test_bin}' \
     --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
