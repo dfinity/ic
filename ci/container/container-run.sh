@@ -36,15 +36,10 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
     -r | --rebuild          Rebuild the container image
     -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
+    -s | --shell            Custom shell to use - otherwise will use USHELL,
+                                if no USHELL is set, defaults to /usr/bin/bash
     --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
                                 otherwise will choose based on detected environment)
-
-If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
-To run a different shell or command, pass it as arguments, e.g.:
-
-    $0 /usr/bin/zsh
-    $0 bash -l
-
 EOF
 }
 
@@ -96,6 +91,16 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
+        -s | --shell)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --shell requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            USHELL="$1"
+            shift
+            ;;
         *)
             echo "unknown argument: $1" >&2
             usage >&2
@@ -110,6 +115,11 @@ if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
     DEVENV=true
 else
     DEVENV=false
+fi
+
+# Set Shell
+if [ -z "${USHELL:-}" ]; then
+    USHELL=${USHELL:-/usr/bin/bash}
 fi
 
 # If no container command specified, use based on environment
@@ -272,12 +282,5 @@ fi
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
 
-# option to pass in another shell if desired
-if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
-else
-    cmd=("$@")
-fi
-
 set -x
-exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
+exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" $USHELL
