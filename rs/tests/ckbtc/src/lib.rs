@@ -586,7 +586,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
     let args = InitConfig {
-        stability_threshold: Some(DOGE_MIN_CONFIRMATIONS as u128),
+        stability_threshold: Some(1440 as u128), //Proposal 139760
         network: Some(Network::Regtest),
         blocks_source: Some(Principal::management_canister()),
         syncing: Some(Flag::Enabled),
