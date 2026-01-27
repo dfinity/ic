@@ -8953,9 +8953,9 @@ fn flush_unflushed_delta_count(metrics: &MetricsRegistry) -> u64 {
 #[test]
 fn commit_and_certify_optimization_conditions() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(42));
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -8975,8 +8975,8 @@ fn commit_and_certify_optimization_conditions() {
         sm.commit_and_certify(state, Height::new(20), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
 
-        // height of 42 is not less than `latest_subnet_certified_height` => optimization does not trigger
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        // height of 42 is not less than `fast_forward_height` => optimization does not trigger
+        assert_eq!(sm.fast_forward_height(), 42);
         let state = sm.take_tip().1;
         sm.commit_and_certify(state, Height::new(42), CertificationScope::Metadata, None);
         assert_eq!(no_state_clone_count(metrics), 1);
@@ -8986,9 +8986,9 @@ fn commit_and_certify_optimization_conditions() {
 #[test]
 fn commit_and_certify_optimization_semantics() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(42));
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9039,19 +9039,19 @@ fn commit_and_certify_optimization_semantics() {
 }
 
 #[test]
-fn latest_subnet_certified_height() {
+fn fast_forward_height() {
     state_manager_test(|_metrics, sm| {
         // initial value
-        assert_eq!(sm.latest_subnet_certified_height(), 0);
+        assert_eq!(sm.fast_forward_height(), 0);
 
-        // `set_fast_forward_hint` updates `latest_subnet_certified_height`
+        // `set_fast_forward_hint` updates `fast_forward_height`
         sm.set_fast_forward_hint(Height::new(100));
-        assert_eq!(sm.latest_subnet_certified_height(), 100);
+        assert_eq!(sm.fast_forward_height(), 100);
 
-        // `set_fast_forward_hint` does not update `latest_subnet_certified_height`
+        // `set_fast_forward_hint` does not update `fast_forward_height`
         // to a lower value
         sm.set_fast_forward_hint(Height::new(10));
-        assert_eq!(sm.latest_subnet_certified_height(), 100);
+        assert_eq!(sm.fast_forward_height(), 100);
     });
 }
 
@@ -9074,9 +9074,9 @@ fn commit_and_certify_tip_set_panic() {
 )]
 fn commit_and_certify_optimization_tip_set_panic() {
     state_manager_test(|_metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(42));
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization triggers
         let state = ReplicatedState::new(subnet_test_id(42), SubnetType::Application);
@@ -9118,9 +9118,9 @@ fn take_tip_does_not_hash_without_optimization() {
 #[test]
 fn take_tip_hashes_with_optimization() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(42));
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9152,9 +9152,9 @@ fn take_tip_hashes_with_optimization() {
 #[test]
 fn get_state_hash_at() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(500));
-        assert_eq!(sm.latest_subnet_certified_height(), 500);
+        assert_eq!(sm.fast_forward_height(), 500);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);
@@ -9240,9 +9240,9 @@ fn get_state_hash_at() {
 #[test]
 fn flush_with_optimization() {
     state_manager_test(|metrics, sm| {
-        // update `latest_subnet_certified_height` to enable optimization
+        // update `fast_forward_height` to enable optimization
         sm.set_fast_forward_hint(Height::new(42));
-        assert_eq!(sm.latest_subnet_certified_height(), 42);
+        assert_eq!(sm.fast_forward_height(), 42);
 
         // optimization has not triggered yet
         assert_eq!(no_state_clone_count(metrics), 0);

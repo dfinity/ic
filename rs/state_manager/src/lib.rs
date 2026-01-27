@@ -178,7 +178,7 @@ pub struct StateManagerMetrics {
     merge_metrics: MergeMetrics,
     latest_hash_tree_size: IntGauge,
     latest_hash_tree_max_index: IntGauge,
-    latest_subnet_certified_height: IntGauge,
+    fast_forward_height: IntGauge,
     no_state_clone_count: IntCounter,
     tip_hash_count: IntCounter,
 }
@@ -466,8 +466,8 @@ impl StateManagerMetrics {
             "Largest index in the latest hash tree.",
         );
 
-        let latest_subnet_certified_height = metrics_registry.int_gauge(
-            "state_manager_latest_subnet_certified_height",
+        let fast_forward_height = metrics_registry.int_gauge(
+            "state_manager_fast_forward_height",
             "Height of the latest validated certification.",
         );
 
@@ -506,7 +506,7 @@ impl StateManagerMetrics {
             merge_metrics: MergeMetrics::new(metrics_registry),
             latest_hash_tree_size,
             latest_hash_tree_max_index,
-            latest_subnet_certified_height,
+            fast_forward_height,
             no_state_clone_count,
             tip_hash_count,
         }
@@ -936,7 +936,7 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    latest_subnet_certified_height: AtomicU64,
+    fast_forward_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
@@ -1499,7 +1499,7 @@ impl StateManagerImpl {
 
         let latest_state_height = AtomicU64::new(0);
         let latest_certified_height = AtomicU64::new(0);
-        let latest_subnet_certified_height = AtomicU64::new(0);
+        let fast_forward_height = AtomicU64::new(0);
 
         let initial_snapshot = Snapshot {
             height: Self::INITIAL_STATE_HEIGHT,
@@ -1615,7 +1615,7 @@ impl StateManagerImpl {
             deallocator_thread,
             latest_state_height,
             latest_certified_height,
-            latest_subnet_certified_height,
+            fast_forward_height,
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
@@ -3201,11 +3201,10 @@ impl StateManager for StateManagerImpl {
     /// Notify the state manager that it could skip cloning and hashing the state
     /// up until and including the specified `height`.
     fn set_fast_forward_hint(&self, height: Height) {
-        let latest_subnet_certified_height =
-            update_latest_height(&self.latest_subnet_certified_height, height);
+        let fast_forward_height = update_latest_height(&self.fast_forward_height, height);
         self.metrics
-            .latest_subnet_certified_height
-            .set(latest_subnet_certified_height as i64);
+            .fast_forward_height
+            .set(fast_forward_height as i64);
     }
 
     fn commit_and_certify(
@@ -3253,16 +3252,15 @@ impl StateManager for StateManagerImpl {
             }
         };
 
-        // If the node is catching up (`height.get() < latest_subnet_certified_height`)
+        // If the node is catching up (`height.get() < fast_forward_height`)
         // and this is not a checkpoint height (`matches!(scope, CertificationScope::Metadata)`),
         // then we do not clone, do not hash, and do not store the state and certification metadata.
         // This optimization is skipped every `MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING` heights
         // so that we always have a reasonably "recent" state snapshot and
         // its certification metadata available.
-        let latest_subnet_certified_height =
-            self.latest_subnet_certified_height.load(Ordering::Relaxed);
+        let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
-            && height.get() < latest_subnet_certified_height
+            && height.get() < fast_forward_height
             && !height
                 .get()
                 .is_multiple_of(MAX_CONSECUTIVE_ROUNDS_WITHOUT_STATE_CLONING)
@@ -4084,8 +4082,8 @@ pub mod testing {
         /// Testing only: Returns certification at a given height in `states.certifications_metadata`.
         fn certifications_metadata_certification(&self, height: Height) -> Option<Certification>;
 
-        /// Testing only: Returns `latest_subnet_certified_height`.
-        fn latest_subnet_certified_height(&self) -> u64;
+        /// Testing only: Returns `fast_forward_height`.
+        fn fast_forward_height(&self) -> u64;
     }
 
     impl StateManagerTesting for StateManagerImpl {
@@ -4166,8 +4164,8 @@ pub mod testing {
                 .clone()
         }
 
-        fn latest_subnet_certified_height(&self) -> u64 {
-            self.latest_subnet_certified_height.load(Ordering::Relaxed)
+        fn fast_forward_height(&self) -> u64 {
+            self.fast_forward_height.load(Ordering::Relaxed)
         }
     }
 }
