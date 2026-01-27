@@ -579,7 +579,7 @@ pub async fn install_bitcoin_canister_with_network(
 }
 
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
-    use ic_doge_interface::{Flag, InitConfig, Network};
+    use ic_doge_interface::{Fees, Flag, InitConfig, Network};
     info!(&logger, "Installing dogecoin canister ...");
     let canister_id = DOGECOIN_MAINNET_CANISTER_ID;
     let mut dogecoin_canister =
@@ -590,7 +590,20 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         network: Some(Network::Regtest),
         blocks_source: Some(Principal::management_canister()),
         syncing: Some(Flag::Enabled),
-        fees: None,
+        fees: Some(Fees {
+            get_current_fee_percentiles: 10_000_000,
+            get_utxos_maximum: 10_000_000_000,
+            get_block_headers_cycles_per_ten_instructions: 10,
+            get_current_fee_percentiles_maximum: 100_000_000,
+            send_transaction_per_byte: 20_000_000,
+            get_balance: 10_000_000,
+            get_utxos_cycles_per_ten_instructions: 10,
+            get_block_headers_base: 50_000_000,
+            get_utxos_base: 50_000_000,
+            get_balance_maximum: 100_000_000,
+            send_transaction_base: 5_000_000_000,
+            get_block_headers_maximum: 10_000_000_000,
+        }),
         api_access: Some(Flag::Enabled),
         disable_api_if_not_fully_synced: Some(Flag::Enabled),
         watchdog_canister: None,
