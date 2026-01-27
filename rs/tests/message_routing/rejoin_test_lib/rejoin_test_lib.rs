@@ -6,7 +6,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path_from_env;
 use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
-use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
+use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, block_on, runtime_from_url};
 use ic_types::PrincipalId;
 use ic_types::messages::ReplicaHealthStatus;
 use ic_universal_canister::wasm;
@@ -42,7 +42,7 @@ const GIB: u64 = 1 << 30;
 
 const BACKOFF_TIME_MILLIS: u64 = 1000;
 
-pub async fn rejoin_test(
+pub fn rejoin_test(
     env: &TestEnv,
     allowed_failures: usize,
     dkg_interval: u64,
@@ -57,17 +57,18 @@ pub async fn rejoin_test(
         agent_node.get_public_url()
     );
 
-    let agent = agent_node.build_default_agent_async().await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
-            .await;
+    let agent = agent_node.build_default_agent();
+    let universal_canister = block_on(UniversalCanister::new_with_retries(
+        &agent,
+        agent_node.effective_canister_id(),
+        &logger,
+    ));
 
-    let res = fetch_metrics::<u64>(
+    let res = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node.clone(),
         vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
+    ));
     let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
 
     info!(
@@ -84,7 +85,11 @@ pub async fn rejoin_test(
     let canister_update_calls = 3 * dkg_interval;
     for i in 0..canister_update_calls {
         info!(logger, "Performing canister update call {i}");
-        store_and_read_stable(&logger, i.to_le_bytes().as_slice(), &universal_canister).await;
+        block_on(store_and_read_stable(
+            &logger,
+            i.to_le_bytes().as_slice(),
+            &universal_canister,
+        ));
     }
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
@@ -104,12 +109,16 @@ pub async fn rejoin_test(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(&logger, message, &universal_canister).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
 
-    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+    block_on(assert_state_sync_has_happened(
+        &logger,
+        rejoin_node,
+        base_count,
+    ));
 }
 
-pub async fn rejoin_test_large_state(
+pub fn rejoin_test_large_state(
     env: TestEnv,
     allowed_failures: usize,
     canister_size_gib: u64,
@@ -125,16 +134,22 @@ pub async fn rejoin_test_large_state(
         "Installing universal canister on a node {} ...",
         agent_node.get_public_url()
     );
-    let agent = agent_node.build_default_agent_async().await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, agent_node.effective_canister_id(), &logger)
-            .await;
+    let agent = agent_node.build_default_agent();
+    let universal_canister = block_on(UniversalCanister::new_with_retries(
+        &agent,
+        agent_node.effective_canister_id(),
+        &logger,
+    ));
 
     let endpoint_runtime = runtime_from_url(
         agent_node.get_public_url(),
         agent_node.effective_canister_id(),
     );
-    let canisters = install_statesync_test_canisters(&env, &endpoint_runtime, num_canisters).await;
+    let canisters = block_on(install_statesync_test_canisters(
+        &env,
+        &endpoint_runtime,
+        num_canisters,
+    ));
 
     info!(
         logger,
@@ -142,26 +157,28 @@ pub async fn rejoin_test_large_state(
         num_canisters as u64 * canister_size_gib,
     );
 
-    write_random_data_to_stable_memory(
+    block_on(write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
         false,
         0,
         canister_size_gib,
         0,
-    )
-    .await;
+    ));
 
     // Kill the rejoin node after it has a checkpoint so that we can test both `copy_chunks` and `fetch_chunks` in the state sync.
     info!(logger, "Waiting for the rejoin_node to have a checkpoint");
-    wait_for_manifest(&logger, dkg_interval + 1, rejoin_node.clone()).await;
+    block_on(wait_for_manifest(
+        &logger,
+        dkg_interval + 1,
+        rejoin_node.clone(),
+    ));
 
-    let res = fetch_metrics::<u64>(
+    let res = block_on(fetch_metrics::<u64>(
         &logger,
         rejoin_node.clone(),
         vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-    )
-    .await;
+    ));
     let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
 
     info!(
@@ -182,26 +199,32 @@ pub async fn rejoin_test_large_state(
         "Start modifying canister stable memory by new random data"
     );
 
-    write_random_data_to_stable_memory(
+    block_on(write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
         true,
         0,
         canister_size_gib,
         1,
-    )
-    .await;
+    ));
 
     info!(logger, "Get the latest certified height of an active node");
     let message = b"Are you actively making progress?";
-    store_and_read_stable(&logger, message, &universal_canister).await;
-    let res =
-        fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
+    let res = block_on(fetch_metrics::<u64>(
+        &logger,
+        agent_node.clone(),
+        vec![LATEST_CERTIFIED_HEIGHT],
+    ));
     let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
 
     // Wait for the next CUP to make sure the second round of state modification is persisted to a new checkpoint.
     info!(logger, "Waiting for the next CUP");
-    wait_for_cup(&logger, latest_certified_height, agent_node.clone()).await;
+    block_on(wait_for_cup(
+        &logger,
+        latest_certified_height,
+        agent_node.clone(),
+    ));
 
     info!(logger, "Killing {} nodes ...", allowed_failures);
     for node_to_kill in nodes_to_kill {
@@ -220,9 +243,13 @@ pub async fn rejoin_test_large_state(
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(&logger, message, &universal_canister).await;
+    block_on(store_and_read_stable(&logger, message, &universal_canister));
 
-    assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
+    block_on(assert_state_sync_has_happened(
+        &logger,
+        rejoin_node,
+        base_count,
+    ));
 }
 
 async fn deploy_seed_canister(
