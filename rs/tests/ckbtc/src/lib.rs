@@ -592,7 +592,7 @@ pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> Ca
         syncing: Some(Flag::Enabled),
         fees: None,
         api_access: Some(Flag::Enabled),
-        disable_api_if_not_fully_synced: Some(Flag::Disabled),
+        disable_api_if_not_fully_synced: Some(Flag::Enabled),
         watchdog_canister: None,
         burn_cycles: Some(Flag::Enabled),
         lazily_evaluate_fee_percentiles: Some(Flag::Enabled),
