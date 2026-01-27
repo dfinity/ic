@@ -101,8 +101,8 @@ impl<P: Process> ProcessManager<P> {
     }
 
     fn kill(&mut self) -> Result<()> {
-        let mut pid_guard = self.pid_cell.lock().unwrap();
-        if let Some(pid) = *pid_guard {
+        let pid = self.pid_cell.lock().unwrap();
+        if let Some(pid) = *pid {
             let mut gpid = pid;
             // We want to signal the whole process group.
             if gpid > Pid::from_raw(0) {
@@ -110,18 +110,14 @@ impl<P: Process> ProcessManager<P> {
                 let t_gpid = -t_gpid;
                 gpid = Pid::from_raw(t_gpid);
             }
-            signal::kill(gpid, Signal::SIGTERM).map_err(|err| {
+            return signal::kill(gpid, Signal::SIGTERM).map_err(|err| {
                 std::io::Error::other(format!(
                     "Failed to kill {} process with gpid {gpid}: {err}",
                     P::NAME
                 ))
-            })?;
-        } else {
-            info!(self.log, "no {} process running", P::NAME);
+            });
         }
-
-        // On success, always clear the pid to indicate that no process is running.
-        *pid_guard = None;
+        info!(self.log, "no {} process running", P::NAME);
         Ok(())
     }
 
