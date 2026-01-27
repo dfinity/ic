@@ -378,9 +378,7 @@ impl CanisterSigner {
         use ic_certification_test_utils::CertificateBuilder;
         use ic_certification_test_utils::CertificateData;
         use ic_crypto_iccsa::types::Signature;
-        use ic_crypto_internal_iccsa_test_utils::{
-            new_canister_state_tree, witness_from_tree,
-        };
+        use ic_crypto_internal_iccsa_test_utils::{new_canister_state_tree, witness_from_tree};
 
         let canister_state = {
             let message_to_sign = message.as_signed_bytes();
