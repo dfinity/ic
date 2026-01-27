@@ -16,7 +16,9 @@ use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::{
+    ArchivedBlocks, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc::metadata_key::MetadataKey,
     icrc3::blocks::BlockRange,
@@ -275,6 +277,35 @@ impl Icrc1Agent {
         .ok_or(Icrc1AgentError::VerificationFailed(
             "ICRC3DataCertificate not found".to_string(),
         ))
+    }
+
+    pub async fn icrc3_get_blocks(
+        &self,
+        args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, Icrc1AgentError> {
+        Ok(Decode!(
+            &self.query("icrc3_get_blocks", &Encode!(&args)?).await?,
+            GetBlocksResult
+        )?)
+    }
+
+    pub async fn icrc3_get_blocks_from_archive(
+        &self,
+        archived_blocks: ArchivedBlocks,
+    ) -> Result<GetBlocksResult, Icrc1AgentError> {
+        Ok(Decode!(
+            &self
+                .agent
+                .query(
+                    &archived_blocks.callback.canister_id,
+                    &archived_blocks.callback.method
+                )
+                .with_arg(Encode!(&archived_blocks.args)?)
+                .call()
+                .await
+                .map_err(Icrc1AgentError::AgentError)?,
+            GetBlocksResult
+        )?)
     }
 
     /// The function performs the following checks:
