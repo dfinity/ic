@@ -934,7 +934,7 @@ pub struct StateManagerImpl {
     deallocator_thread: DeallocatorThread,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
-    latest_state_height: AtomicU64,
+    latest_state_height: Arc<AtomicU64>,
     latest_certified_height: AtomicU64,
     latest_subnet_certified_height: AtomicU64,
     persist_metadata_guard: Arc<Mutex<()>>,
@@ -1613,7 +1613,7 @@ impl StateManagerImpl {
             own_subnet_id,
             own_subnet_type,
             deallocator_thread,
-            latest_state_height,
+            latest_state_height: Arc::new(latest_state_height),
             latest_certified_height,
             latest_subnet_certified_height,
             persist_metadata_guard,
