@@ -55,8 +55,15 @@ read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 # we execute the test in $TEST_TMPDIR such that relative paths to bazel's runfiles directory fail to work.
 # Instead we create a $TEST_TMPDIR/runtime_deps directory, symlink all runtime dependencies there
 # and reset the runtime_deps environment variables to point (absolutely) to the symlinks.
-RUNTIME_DEPS="$TEST_TMPDIR/runtime_deps"
-mkdir "$RUNTIME_DEPS"
+runtime_deps="$TEST_TMPDIR/runtime_deps"
+mkdir "$runtime_deps"
+runtime_dep_base="$runtime_deps"
+# In colocated tests the runtime deps exists in the container on the UVM
+# so we need to adjust the base path accordingly.
+if [ -n "${COLOCATED_UVM_CONFIG_IMAGE_PATH:-}" ]; then
+    export COLOCATED_UVM_CONFIG_IMAGE_PATH="$(realpath $COLOCATED_UVM_CONFIG_IMAGE_PATH)"
+    runtime_dep_base="/home/root/test/runtime_deps"
+fi
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"
 for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep="${!env_var}"
@@ -64,20 +71,15 @@ for env_var in "${runtime_dep_env_vars[@]}"; do
     old_dep_hash="$(sha256sum <<<"$old_dep" | cut -d' ' -f1)"
     old_dep_name="$(basename "$old_dep")"
     new_dep="$old_dep_hash-$old_dep_name"
-    echo "Linking runtime dependency for $env_var: $RUNTIME_DEPS/$new_dep -> $PWD/$old_dep" >&2
-    ln -sf "$PWD/$old_dep" "$RUNTIME_DEPS/$new_dep"
-    export "$env_var=$RUNTIME_DEPS/$new_dep"
+    old_dep_abs="$(realpath $old_dep)"
+    echo "Linking runtime dependency for $env_var: $runtime_dep_base/$new_dep -> $old_dep_abs" >&2
+    ln -sf "$old_dep_abs" "$runtime_deps/$new_dep"
+    export "$env_var=$runtime_dep_base/$new_dep"
 done
-
-if [ -n "${COLOCATED_UVM_CONFIG_IMAGE_PATH:-}" ]; then
-    export COLOCATED_UVM_CONFIG_IMAGE_PATH="$PWD/$COLOCATED_UVM_CONFIG_IMAGE_PATH"
-fi
-
-env
 
 exec \
     env -C "$TEST_TMPDIR" \
-    "$PWD/$RUN_SCRIPT_TEST_EXECUTABLE" \
+    "$(realpath $RUN_SCRIPT_TEST_EXECUTABLE)" \
     --working-dir "$TEST_TMPDIR" \
     "${test_driver_extra_args[@]}" \
     "$@" run

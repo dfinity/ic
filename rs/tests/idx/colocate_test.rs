@@ -46,16 +46,7 @@ fn main() -> Result<()> {
 
 fn setup(env: TestEnv) {
     let colocated_test_name = env::var("COLOCATED_TEST_NAME").unwrap();
-
-    // Rebase the runtime dependency paths to the paths inside the container in the UVM.
-    let test_tmpdir = env::var("TEST_TMPDIR").unwrap();
-    let runtime_deps_dir = format!("{test_tmpdir}/runtime_deps/");
-    let rebase_runtime_dep = |value: &str| -> String {
-        let dep = value.strip_prefix(&runtime_deps_dir).unwrap();
-        format!("/home/root/test/runtime_deps/{dep}")
-    };
-
-    let colocated_test_bin = rebase_runtime_dep(&env::var("TEST_BIN").unwrap());
+    let colocated_test_bin = env::var("TEST_BIN").unwrap();
 
     let log = env.logger();
 
@@ -181,31 +172,6 @@ fn setup(env: TestEnv) {
         );
     };
 
-    // Create and scp another environment file which will override the
-    // runtime dep variables of the previous env file with rebased values.
-    {
-        let filepath = env.get_path("runtime_deps_env_vars");
-        let mut file =
-            File::create(&filepath).expect("Could not create runtime_deps_env_vars file");
-
-        for env_var in env::var("COLOCATED_RUNTIME_DEP_ENV_VARS")
-            .unwrap()
-            .split(";")
-        {
-            let value = rebase_runtime_dep(&env::var(env_var).unwrap());
-
-            writeln!(file, "{env_var}={value}")
-                .expect("Could not write to runtime_deps_env_vars file");
-        }
-        scp_send_to(
-            log.clone(),
-            &session,
-            &filepath,
-            Path::new("/home/admin/runtime_deps_env_vars"),
-            0o644,
-        );
-    };
-
     let required_host_features = {
         if let Some(host_features) = env.read_host_features("colocated") {
             let features = host_features
@@ -314,7 +280,6 @@ docker run \
   -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
   --workdir /home/root/test \
   --env-file /home/admin/env_vars \
-  --env-file /home/admin/runtime_deps_env_vars \
   "${{DOCKER_RUN_ARGS[@]}}" \
   ubuntu_test_runtime:image \
   '{colocated_test_bin}' \
