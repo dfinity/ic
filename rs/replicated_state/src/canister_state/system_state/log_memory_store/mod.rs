@@ -81,11 +81,6 @@ impl LogMemoryStore {
         RingBuffer::load_checked(self.page_map.clone())
     }
 
-    /// Returns true if the ring buffer is allocated.
-    pub fn is_allocated(&self) -> bool {
-        self.load_ring_buffer().is_some()
-    }
-
     // TODO: maybe remove this completely.
     /// Returns the total allocated bytes for the ring buffer
     /// including header, index table and data region.
