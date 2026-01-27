@@ -460,11 +460,10 @@ pub async fn rejoin_test_long_rounds(
         no_state_clone_counts.push(count);
     }
     no_state_clone_counts.sort();
-    let n = no_state_clone_counts.len();
-    let median_no_state_clone_count = no_state_clone_counts[n / 2];
+    let minimum_no_state_clone_count = no_state_clone_counts[0];
     info!(
         logger,
-        "Median no state clone count: {median_no_state_clone_count}"
+        "Minimum no state clone count: {minimum_no_state_clone_count}"
     );
 
     let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger).await;
@@ -473,9 +472,9 @@ pub async fn rejoin_test_long_rounds(
         "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
     );
 
-    // a median node should (almost) never be behind
-    assert!(median_no_state_clone_count < 10);
-    // the restarted node should be behind for many rounds and only clone every 10th state during that time
+    // there should be a node that is (almost) never behind and thus (almost) never skips state cloning
+    assert!(minimum_no_state_clone_count < 10);
+    // the restarted node should be behind for many rounds and skip only cloning the majority of states during that time
     assert!(rejoin_node_no_state_clone_count > 100);
 }
 
