@@ -34,8 +34,7 @@ fn main() -> Result<()> {
 pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
-    // The original GuestOS version is the deployed version (i.e., the SetupOS image version).
-    let original_version = get_setupos_img_version();
+    let original_version = get_guestos_version();
     let target_version = get_guestos_update_img_version();
     let upgrade_url = get_guestos_update_img_url().to_string();
     let sha256 = get_guestos_update_img_sha256();

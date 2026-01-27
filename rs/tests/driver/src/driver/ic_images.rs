@@ -11,6 +11,23 @@ pub fn get_guestos_img_version() -> ReplicaVersion {
     try_get_guestos_img_version().expect("Invalid ReplicaVersion")
 }
 
+/// Pull the version of the GuestOS from either the GuestOS or the SetupOS image (whichever is
+/// available). Panic if no version is found or GuestOS and SetupOS versions do not match.
+pub fn get_guestos_version() -> ReplicaVersion {
+    match (try_get_guestos_img_version(), try_get_setupos_img_version()) {
+        (Ok(guest), Ok(setupos)) => {
+            if guest == setupos {
+                guest
+            } else {
+                panic!("Mismatched GuestOS versions")
+            }
+        }
+        (Ok(guestos), _) => guestos,
+        (_, Ok(setupos)) => setupos,
+        _ => panic!("No GuestOS version found"),
+    }
+}
+
 /// Pull the version of the initial GuestOS image from the environment,
 /// allowing failure.
 pub fn try_get_guestos_img_version() -> Result<ReplicaVersion> {
@@ -96,11 +113,8 @@ pub fn get_guestos_update_launch_measurements() -> GuestLaunchMeasurements {
         .expect("Could not deserialize guest launch measurements")
 }
 
-/// Pull the version of the initial SetupOS image from the environment.
-pub fn get_setupos_img_version() -> ReplicaVersion {
-    try_get_setupos_img_version().unwrap()
-}
-
+/// Pull the version of the initial SetupOS image from the environment, returning an error if not
+/// found.
 pub fn try_get_setupos_img_version() -> Result<ReplicaVersion> {
     let env = "ENV_DEPS__SETUPOS_DISK_IMG_VERSION";
 
@@ -121,6 +135,32 @@ pub fn get_setupos_img_sha256() -> String {
     let env = "ENV_DEPS__SETUPOS_DISK_IMG_HASH";
 
     std::env::var(env).unwrap_or_else(|_| panic!("Failed to read '{env}'"))
+}
+
+/// Pull the version of the HostOS from either the HostOS or the SetupOS image (whichever is
+/// available). Panic if no version is found or HostOS and SetupOS versions do not match.
+pub fn get_hostos_version() -> HostosVersion {
+    match (try_get_hostos_img_version(), try_get_setupos_img_version()) {
+        (Ok(hostos), Ok(setupos)) => {
+            if hostos.as_ref() == setupos.as_ref() {
+                hostos
+            } else {
+                panic!("Mismatched HostOS versions")
+            }
+        }
+        (Ok(hostos), _) => hostos,
+        (_, Ok(setupos)) => setupos.as_ref().try_into().unwrap(),
+        _ => panic!("No HostOS version found"),
+    }
+}
+
+/// Pull the version of the initial HostOS image from the environment, returning an error if not
+/// found.
+pub fn try_get_hostos_img_version() -> Result<HostosVersion> {
+    let env = "ENV_DEPS__HOSTOS_DISK_IMG_VERSION";
+
+    HostosVersion::try_from(std::env::var(env).with_context(|| format!("Failed to read {env}"))?)
+        .context("Invalid HostosVersion")
 }
 
 /// Pull the version of the target HostOS update image from the environment.

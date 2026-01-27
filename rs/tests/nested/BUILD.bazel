@@ -113,21 +113,19 @@ system_test_nns(
 # zh2-dll01.ini can be retrieved from our 1password
 system_test_nns(
     name = "guestos_upgrade_from_latest_release_to_current_sev",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-        "TRUSTED_EXECUTION_ENVIRONMENT": "true",
-    },
+    env = MAINNET_ENV | {"TRUSTED_EXECUTION_ENVIRONMENT": "true"},
     guestos = "mainnet_latest_dev",  # necessary for configuring NNS public key
     guestos_update = True,
+    hostos = "mainnet_latest_dev",
     tags = [
         "long_test",
         "manual",
     ],
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
-    uses_bare_metal = True,
-    uses_setupos_mainnet_latest_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
+    runtime_deps = IC_GATEWAY_RUNTIME_DEPS | {
+        "NODE_OPERATOR_PRIV_KEY_PATH": "//ic-os/setupos:config/node_operator_private_key.pem",
+    },
 )
 
 rust_binary(

@@ -1,11 +1,10 @@
 use crate::driver::ic_gateway_vm::HasIcGatewayVm;
 use crate::driver::ic_gateway_vm::IC_GATEWAY_VM_NAME;
-use crate::driver::ic_images::try_get_setupos_img_version;
+use crate::driver::ic_images::{try_get_hostos_img_version, try_get_setupos_img_version};
 use crate::driver::nested::NestedVm;
 use crate::driver::test_env_api::get_guestos_launch_measurements;
 use crate::driver::test_env_api::{
-    SshSession, get_guestos_img_url, get_guestos_initial_launch_measurements,
-    get_hostos_initial_update_img_url,
+    SshSession, get_guestos_img_url, get_hostos_initial_update_img_url,
 };
 use crate::driver::{
     config::NODES_INFO,
@@ -28,6 +27,7 @@ use crate::driver::{
 };
 use crate::util::block_on;
 use anyhow::{Context, Result, bail};
+use bare_metal_deployment::SshAuthMethod;
 use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
 use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_tool::setupos::{
@@ -631,7 +631,7 @@ pub fn setup_baremetal_instance(
         setupos_config_image: Some(ImageSource::File(config_image.to_path_buf())),
     };
 
-    deploy_to_bare_metal(&config, host_ip, &private_key_path)?;
+    deploy_to_bare_metal(&config, host_ip, &SshAuthMethod::KeyFile(private_key_path))?;
     Ok(())
 }
 

@@ -46,7 +46,7 @@ pub fn setup(env: TestEnv) {
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full setup() setup.
-pub fn simple_setup(env: TestEnv) {
+fn simple_setup(env: TestEnv) {
     NestedNodes::new([HOST_VM_NAME])
         .setup_and_start(&env)
         .unwrap();
@@ -54,7 +54,7 @@ pub fn simple_setup(env: TestEnv) {
 
 /// Minimal setup that sets up a bare metal instance without any IC infrastructure.
 /// This is much faster than the full setup() setup.
-pub fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
+fn simple_bare_metal_with_trusted_execution_environment_setup(env: TestEnv) {
     let bare_metal_secrets = std::env::var(BARE_METAL_HOST_SECRETS)
         .expect("Could not read env var BARE_METAL_HOST_SECRETS");
     let bare_metal_login_info =
