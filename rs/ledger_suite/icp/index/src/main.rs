@@ -97,6 +97,10 @@ struct State {
     /// The principal of the ledger canister that is indexed by this index.
     ledger_id: Principal,
 
+    // Last wait time in nanoseconds.
+    #[deprecated]
+    pub last_wait_time: Duration,
+
     /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
     /// cycle burn for the index, ledger and archive(s).
@@ -117,6 +121,7 @@ impl Default for State {
         Self {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
+            last_wait_time: Duration::from_secs(0),
             retrieve_blocks_from_ledger_interval: None,
         }
     }
