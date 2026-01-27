@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    let colocated_test = env::var("COLOCATED_TEST").unwrap();
+    let colocated_test_name = env::var("COLOCATED_TEST_NAME").unwrap();
 
     let test_tmpdir = env::var("TEST_TMPDIR").unwrap();
     let runtime_deps_dir = format!("{test_tmpdir}/runtime_deps/");
@@ -60,7 +60,7 @@ fn setup(env: TestEnv) {
 
     info!(
         log,
-        "Preparing Universal VM {UVM_NAME} which is going to run {colocated_test}..."
+        "Preparing Universal VM {UVM_NAME} which is going to run {colocated_test_name}..."
     );
 
     let host_features: Vec<HostFeature> =
@@ -320,7 +320,7 @@ docker run \
     --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
-    --group-base-name {colocated_test} \
+    --group-base-name {colocated_test_name} \
     {metrics_flag} \
     {logs_flag} \
     {exclude_logs_args} \

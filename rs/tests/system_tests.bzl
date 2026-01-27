@@ -240,7 +240,7 @@ def system_test(
                   "RUN_SCRIPT_DRIVER_EXTRA_ARGS": " ".join(extra_args_colocated),
                   "COLOCATED_RUNTIME_DEP_ENV_VARS": COLOCATED_RUNTIME_DEP_ENV_VARS,
                   "COLOCATED_UVM_CONFIG_IMAGE_PATH": "$(rootpath //rs/tests:colocate_uvm_config_image)",
-                  "COLOCATED_TEST": test_name,
+                  "COLOCATED_TEST_NAME": test_name,
                   "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
                   "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
               } | ({"COLOCATED_TEST_DRIVER_VM_ENABLE_IPV4": "1"} if colocated_test_driver_vm_enable_ipv4 else {}) |

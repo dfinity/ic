@@ -54,7 +54,7 @@ read -ra test_driver_extra_args <<<"${RUN_SCRIPT_DRIVER_EXTRA_ARGS:-}"
 # To force system-tests to specify all their runtime dependencies using the runtime_deps parameter
 # we execute the test in $TEST_TMPDIR such that relative paths to bazel's runfiles directory fail to work.
 # Instead we create a $TEST_TMPDIR/runtime_deps directory, symlink all runtime dependencies there
-# and reset the runtime_deps environment variables to point to the symlinks.
+# and reset the runtime_deps environment variables to point (absolutely) to the symlinks.
 RUNTIME_DEPS="$TEST_TMPDIR/runtime_deps"
 mkdir "$RUNTIME_DEPS"
 IFS=';' read -ra runtime_dep_env_vars <<<"$RUN_SCRIPT_RUNTIME_DEP_ENV_VARS"
