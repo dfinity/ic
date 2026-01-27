@@ -9,7 +9,7 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::{
-    CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting,
+    CanisterQueuesTesting, ReplicatedStateTesting, StreamTesting, SystemStateTesting,
 };
 use ic_replicated_state::{CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology};
 use ic_test_utilities_logger::with_test_replica_logger;

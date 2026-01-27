@@ -20,7 +20,8 @@ use crate::{
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
             AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl, HasTestEnv,
-            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path,
+            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+            get_dependency_path_from_env,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -86,8 +87,8 @@ impl IcGatewayVm {
     /// Creates a new IC Gateway VM with the specified name.
     pub fn new(name: &str) -> Self {
         let universal_vm = UniversalVm::new(name.to_string())
-            .with_config_img(get_dependency_path(
-                std::env::var("IC_GATEWAY_UVM_CONFIG_IMAGE_PATH").unwrap(),
+            .with_config_img(get_dependency_path_from_env(
+                "IC_GATEWAY_UVM_CONFIG_IMAGE_PATH",
             ))
             .enable_ipv4();
         Self { universal_vm }
