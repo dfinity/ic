@@ -234,6 +234,30 @@ impl LogMemoryStore {
     }
 }
 
+impl Clone for LogMemoryStore {
+    fn clone(&self) -> Self {
+        Self {
+            // PageMap is a persistent data structure, so clone is cheap and creates
+            // an independent snapshot.
+            page_map: self.page_map.clone(),
+            delta_log_sizes: self.delta_log_sizes.clone(),
+            // We create a new independent lock for the cloned store, initialized with
+            // the current cache state. Since the stores are independent, they need
+            // separate locks.
+            cache_header: RwLock::new(*self.cache_header.read()),
+        }
+    }
+}
+
+impl PartialEq for LogMemoryStore {
+    fn eq(&self, other: &Self) -> bool {
+        // cache_header is a transient cache and should not be compared.
+        self.page_map == other.page_map && self.delta_log_sizes == other.delta_log_sizes
+    }
+}
+
+impl Eq for LogMemoryStore {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
