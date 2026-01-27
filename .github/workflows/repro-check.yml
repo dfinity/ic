@@ -84,11 +84,10 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
         env:
           CI_PROJECT_DIR: ${{ github.workspace }}
-          DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           set -euo pipefail
-          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} $DRY_RUN
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
 
       - name: Repro check for ${{ inputs.github_sha }}
         shell: bash
