@@ -206,11 +206,9 @@ impl Recovery {
                     local_ic_admin_path
                 } else {
                     // the env var is not set, the binary does not exist locally and we have no version
-                    // to download. We've exhausted all possibilities.
-                    return Err(RecoveryError::UnexpectedError(format!(
-                        "no ic-admin: IC_ADMIN_BIN not set, use_local_binaries is true, and '{:?}' does not exist",
-                        local_ic_admin_path
-                    )));
+                    // to download.
+                    info!(logger, "No ic-admin version provided, file may not exist: '{:?}'", local_ic_admin_path);
+                    local_ic_admin_path
                 }
             }
             Err(e) => panic!("Could not read IC_ADMIN_BIN: {:?}", e),

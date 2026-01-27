@@ -571,7 +571,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
         // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
         // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
         // IC_ADMIN_BIN to a dummy value.
-        r#"IC_ADMIN_BIN="/dev/false" /opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );
