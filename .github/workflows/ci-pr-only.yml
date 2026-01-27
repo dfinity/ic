@@ -222,6 +222,13 @@ jobs:
     name: Test Container Run
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      matrix:
+        include:
+          - name: TestCase 1
+            command: ""
+          - name: TestCase 2
+            command: "--image ic-build bash"
     steps:
       - *checkout
       - name: Filter Relevant Files
@@ -233,7 +240,7 @@ jobs:
             container-run:
               - '.github/workflows/ci-pr-only.yml'
               - 'ci/container/**'
-      - name: Test Container Run
-        id: test-container-run
+      - name: Container Run ${{ matrix.name }}
         if: steps.filter.outputs.container-run == 'true'
-        run: ./ci/container/container-run.sh
+        run: |
+          ./ci/container/container-run.sh ${{ matrix.command }}
