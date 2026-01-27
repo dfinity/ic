@@ -3198,9 +3198,9 @@ impl StateManager for StateManagerImpl {
         );
     }
 
-    /// Updates the *latest certified height* of the subnet, i.e.,
-    /// the latest height for which a valid certification is available to consensus.
-    fn update_latest_subnet_certified_height(&self, height: Height) {
+    /// Notify the state manager that it could skip cloning and hashing the state
+    /// up until and including the specified `height`.
+    fn set_fast_forward_hint(&self, height: Height) {
         let latest_subnet_certified_height =
             update_latest_height(&self.latest_subnet_certified_height, height);
         self.metrics

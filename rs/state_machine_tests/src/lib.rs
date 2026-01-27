@@ -975,8 +975,8 @@ impl StateManager for StateMachineStateManager {
             .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
-    fn update_latest_subnet_certified_height(&self, height: Height) {
-        self.deref().update_latest_subnet_certified_height(height);
+    fn set_fast_forward_hint(&self, height: Height) {
+        self.deref().set_fast_forward_hint(height);
     }
 
     fn commit_and_certify(

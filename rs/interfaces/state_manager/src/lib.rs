@@ -242,9 +242,9 @@ pub trait StateManager: StateReader {
         extra_heights_to_keep: &BTreeSet<Height>,
     );
 
-    /// Notify the state manager about the *latest certified height* of the subnet, i.e.,
-    /// the latest height for which a valid certification is available to consensus.
-    fn update_latest_subnet_certified_height(&self, height: Height);
+    /// Notify the state manager that it could skip cloning and hashing the state
+    /// up until and including the specified `height`.
+    fn set_fast_forward_hint(&self, height: Height);
 
     /// Commits the `state` at given `height`, limits the certification to
     /// `scope`. The `state` must be the mutable state obtained via a call to

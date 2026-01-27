@@ -57,7 +57,7 @@ mock! {
 
         fn remove_inmemory_states_below(&self, height: Height, extra_heights_to_keep: &std::collections::BTreeSet<Height>);
 
-        fn update_latest_subnet_certified_height(&self, height: Height);
+        fn set_fast_forward_hint(&self, height: Height);
 
         fn commit_and_certify(
             &self,

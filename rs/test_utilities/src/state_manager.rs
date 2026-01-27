@@ -218,8 +218,8 @@ impl StateManager for FakeStateManager {
         // All heights are checkpoints
     }
 
-    fn update_latest_subnet_certified_height(&self, _height: Height) {
-        // The latest subnet certified height is not used by `FakeStateManager`.
+    fn set_fast_forward_hint(&self, _height: Height) {
+        // `FakeStateManager` does not implement fast-forwarding.
     }
 
     fn commit_and_certify(
@@ -705,11 +705,8 @@ impl StateManager for RefMockStateManager {
         self.mock.read().unwrap().remove_states_below(height)
     }
 
-    fn update_latest_subnet_certified_height(&self, height: Height) {
-        self.mock
-            .read()
-            .unwrap()
-            .update_latest_subnet_certified_height(height)
+    fn set_fast_forward_hint(&self, height: Height) {
+        self.mock.read().unwrap().set_fast_forward_hint(height)
     }
 
     fn remove_inmemory_states_below(
