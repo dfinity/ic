@@ -1,3 +1,4 @@
+use super::InstallCodeResult;
 use crate::{
     IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
     canister_manager::{
@@ -97,6 +98,7 @@ use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
 use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
+use prometheus::IntCounter;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -107,9 +109,6 @@ use std::{
     sync::Arc,
 };
 use wirm::wasmparser;
-
-use super::InstallCodeResult;
-use prometheus::IntCounter;
 
 const T: u128 = 1_000_000_000_000;
 
