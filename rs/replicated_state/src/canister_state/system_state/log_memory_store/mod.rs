@@ -40,12 +40,12 @@ impl LogMemoryStore {
     /// Creates a new store with an empty ring buffer to avoid unnecessary log-memory charges.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         // This creates a new empty page map with invalid ring buffer header.
-        Self::new_inner(RingBuffer::load_raw(PageMap::new(fd_factory)).to_page_map())
+        Self::new_inner(PageMap::new(fd_factory))
     }
 
     /// Creates a new store that will use the temp file system for allocating new pages.
     pub fn new_for_testing() -> Self {
-        Self::new_inner(RingBuffer::load_raw(PageMap::new_for_testing()).to_page_map())
+        Self::new_inner(PageMap::new_for_testing())
     }
 
     fn new_inner(page_map: PageMap) -> Self {
