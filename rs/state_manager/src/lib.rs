@@ -19,7 +19,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Sender, unbounded};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
@@ -940,6 +940,8 @@ pub struct StateManagerImpl {
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
+    hash_channel: Sender<HashRequest>,
+    _hash_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
     latest_height_update_time: Arc<Mutex<Instant>>,
@@ -1352,6 +1354,7 @@ impl StateManagerImpl {
             metrics.clone(),
             malicious_flags.clone(),
         );
+        let (_hash_thread_handle, hash_channel) = spawn_hash_thread(metrics.clone(), log.clone());
 
         let starting_time = Instant::now();
         let loaded_states_metadata =
@@ -1619,6 +1622,8 @@ impl StateManagerImpl {
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
+            hash_channel,
+            _hash_thread_handle,
             fd_factory,
             malicious_flags,
             latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
@@ -3316,18 +3321,18 @@ impl StateManager for StateManagerImpl {
             CertificationScope::Metadata => Arc::new(state),
         };
 
-        let certification_metadata =
-            Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
-                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+        // let certification_metadata =
+        //     Self::compute_certification_metadata(&state, height, &self.metrics, &self.log)
+        //         .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
-        if scope == CertificationScope::Full {
-            info!(
-                self.log,
-                "Certification hash for height {}: {:?}",
-                height,
-                certification_metadata.certified_state_hash
-            );
-        }
+        // if scope == CertificationScope::Full {
+        //     info!(
+        //         self.log,
+        //         "Certification hash for height {}: {:?}",
+        //         height,
+        //         certification_metadata.certified_state_hash
+        //     );
+        // }
 
         // This step is expensive, so we do it before the write lock for `states`.
         let next_tip = {
@@ -3348,54 +3353,68 @@ impl StateManager for StateManagerImpl {
         // It's possible that we already computed this state before.  We
         // validate that hashes agree to spot bugs causing non-determinism as
         // early as possible.
-        if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
-            let prev_hash = &prev_metadata.certified_state_hash;
-            let hash = &certification_metadata.certified_state_hash;
-            if prev_hash != hash {
-                if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
-                    error!(
-                        self.log,
-                        "Failed to mark state @{} diverged: {}", height, err
-                    );
-                }
-                panic!(
-                    "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
-                );
-            }
-        }
+        // if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
+        //     let prev_hash = &prev_metadata.certified_state_hash;
+        //     let hash = &certification_metadata.certified_state_hash;
+        //     if prev_hash != hash {
+        //         if let Err(err) = self.state_layout.create_diverged_state_marker(height) {
+        //             error!(
+        //                 self.log,
+        //                 "Failed to mark state @{} diverged: {}", height, err
+        //             );
+        //         }
+        //         panic!(
+        //             "Committed state @{height} with hash {hash:?} which is different from previously computed or delivered hash {prev_hash:?}"
+        //         );
+        //     }
+        // }
 
-        if !states
-            .snapshots
-            .iter()
-            .any(|snapshot| snapshot.height == height)
-        {
-            states.snapshots.push_back(Snapshot {
-                height,
+        // Kick off hashing of the new state if necessary.
+        // TODO: Skip if we got the hash from consensus via self.certifications
+        if true {
+            let hash_req = HashRequest::HashState {
                 state: Arc::clone(&state),
-            });
-            states
-                .snapshots
-                .make_contiguous()
-                .sort_by_key(|snapshot| snapshot.height);
-
-            states
-                .certifications_metadata
-                .insert(height, certification_metadata);
-
-            let latest_height = update_latest_height(&self.latest_state_height, height);
-            self.metrics.max_resident_height.set(latest_height as i64);
-            {
-                let mut last_height_update_time = self
-                    .latest_height_update_time
-                    .lock()
-                    .expect("Failed to lock last height update time.");
-                let now = Instant::now();
-                self.metrics
-                    .height_update_time_seconds
-                    .observe((now - *last_height_update_time).as_secs_f64());
-                *last_height_update_time = now;
-            }
+                states: Arc::clone(&self.states),
+                latest_state_height: self.latest_state_height.clone(),
+                height,
+                latest_height_update_time: Arc::clone(&self.latest_height_update_time),
+                scope: scope.clone(),
+            };
+            self.hash_channel.send(hash_req).unwrap();
         }
+
+        // if !states
+        //     .snapshots
+        //     .iter()
+        //     .any(|snapshot| snapshot.height == height)
+        // {
+        //     states.snapshots.push_back(Snapshot {
+        //         height,
+        //         state: Arc::clone(&state),
+        //     });
+        //     states
+        //         .snapshots
+        //         .make_contiguous()
+        //         .sort_by_key(|snapshot| snapshot.height);
+
+        //     states
+        //         .certifications_metadata
+        //         .insert(height, certification_metadata);
+
+        //     let latest_height = update_latest_height(&self.latest_state_height, height);
+        //     self.metrics.max_resident_height.set(latest_height as i64);
+        //     {
+        //         let mut last_height_update_time = self
+        //             .latest_height_update_time
+        //             .lock()
+        //             .expect("Failed to lock last height update time.");
+        //         let now = Instant::now();
+        //         self.metrics
+        //             .height_update_time_seconds
+        //             .observe((now - *last_height_update_time).as_secs_f64());
+        //         *last_height_update_time = now;
+        //     }
+        // }
 
         if let Some((state_metadata, compute_manifest_request)) =
             state_metadata_and_compute_manifest_request
@@ -3479,6 +3498,99 @@ impl StateManager for StateManagerImpl {
 
         fatal!(self.log, "Replica diverged at height {}", height)
     }
+}
+
+pub enum HashRequest {
+    HashState {
+        state: Arc<ReplicatedState>,
+        states: Arc<parking_lot::RwLock<SharedState>>,
+        latest_state_height: AtomicU64,
+        height: Height,
+        latest_height_update_time: Arc<Mutex<Instant>>,
+        scope: CertificationScope,
+    },
+    /// Wait for the message to be executed and notify back via sender.
+    Wait { sender: Sender<()> },
+}
+
+fn spawn_hash_thread(
+    metrics: StateManagerMetrics,
+    log: ReplicaLogger,
+) -> (JoinOnDrop<()>, Sender<HashRequest>) {
+    let (hash_req_sender, receiver) = unbounded();
+    let handle = JoinOnDrop::new(
+        std::thread::Builder::new()
+            .name("HashThread".to_string())
+            .spawn(move || {
+                while let Ok(req) = receiver.recv() {
+                    match req {
+                        HashRequest::HashState {
+                            state,
+                            states,
+                            latest_state_height,
+                            height,
+                            latest_height_update_time,
+                            scope,
+                        } => {
+                            let certification_metadata =
+                                StateManagerImpl::compute_certification_metadata(
+                                    &metrics, &log, &state,
+                                )
+                                .unwrap_or_else(|err| {
+                                    fatal!(log, "Failed to compute hash tree: {:?}", err)
+                                });
+
+                            if scope == CertificationScope::Full {
+                                info!(
+                                    log,
+                                    "Certification hash for height {}: {:?}",
+                                    height,
+                                    certification_metadata.certified_state_hash
+                                );
+                            }
+                            // add state and hash to snapshots and certification_metadata
+                            let mut states = states.write();
+
+                            if !states
+                                .snapshots
+                                .iter()
+                                .any(|snapshot| snapshot.height == height)
+                            {
+                                states.snapshots.push_back(Snapshot {
+                                    height,
+                                    state: Arc::clone(&state),
+                                });
+                                states
+                                    .snapshots
+                                    .make_contiguous()
+                                    .sort_by_key(|snapshot| snapshot.height);
+
+                                states
+                                    .certifications_metadata
+                                    .insert(height, certification_metadata);
+
+                                let latest_height =
+                                    update_latest_height(latest_state_height, height);
+                                metrics.max_resident_height.set(latest_height as i64);
+                                {
+                                    let mut last_height_update_time = latest_height_update_time
+                                        .lock()
+                                        .expect("Failed to lock last height update time.");
+                                    let now = Instant::now();
+                                    metrics
+                                        .height_update_time_seconds
+                                        .observe((now - *last_height_update_time).as_secs_f64());
+                                    *last_height_update_time = now;
+                                }
+                            }
+                        }
+                        HashRequest::Wait { sender } => {}
+                    }
+                }
+            })
+            .unwrap(),
+    );
+    (handle, hash_req_sender)
 }
 
 struct CertifiedStateSnapshotImpl {
