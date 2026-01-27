@@ -66,12 +66,14 @@ impl RingBuffer {
         Some(Self { io })
     }
 
-    pub fn get_header(&self) -> Header {
-        self.io.load_header()
-    }
-
+    /// Returns the page map of the ring buffer.
     pub fn to_page_map(&self) -> PageMap {
         self.io.to_page_map()
+    }
+
+    /// Returns the header of the ring buffer.
+    pub fn get_header(&self) -> Header {
+        self.io.load_header()
     }
 
     /// Returns the data capacity of the ring buffer.
