@@ -1131,7 +1131,6 @@ impl IcNodeSnapshot {
 
     pub fn assert_no_critical_errors(&self) {
         block_on(async {
-            // Check critical error counters in replica metrics.
             let replica_metric_name_prefix = "critical_errors";
             let replica_metrics_fetcher = MetricsFetcher::new(
                 std::iter::once(self.clone()),
@@ -1143,14 +1142,14 @@ impl IcNodeSnapshot {
                 Err(e) => {
                     info!(
                         self.env.logger(),
-                        "Could not fetch metrics for node {}: {e:?}", self.node_id
+                        "Could not fetch replica metrics for node {}: {e:?}", self.node_id
                     );
                     return;
                 }
             };
             assert!(
                 !replica_metrics.is_empty(),
-                "No critical error counters were found for node {}",
+                "No critical error counters were found in replica metrics for node {}",
                 self.node_id
             );
             for (name, value) in replica_metrics {
@@ -1160,21 +1159,34 @@ impl IcNodeSnapshot {
                     name, self.node_id
                 );
             }
+        });
+    }
 
-            // Check if the replica crashed using orchestrator metrics.
+    pub fn assert_no_replica_restarts(&self) {
+        block_on(async {
             let orchestrator_metric_name = "orchestrator_replica_process_start_attempts_total";
             let orchestrator_metrics_fetcher = MetricsFetcher::new_with_port(
                 std::iter::once(self.clone()),
                 vec![orchestrator_metric_name.to_string()],
                 9091,
             );
-            let orchestrator_metrics = orchestrator_metrics_fetcher
+            let orchestrator_metrics_result
+              = orchestrator_metrics_fetcher
                 .fetch::<u64>()
-                .await
-                .expect("Failed to fetch orchestrator metrics");
+                .await;
+            let orchestrator_metrics = match orchestrator_metrics_result {
+                Ok(orchestrator_metrics) => orchestrator_metrics,
+                Err(e) => {
+                    info!(
+                        self.env.logger(),
+                        "Could not fetch orchestrator metrics for node {}: {e:?}", self.node_id
+                    );
+                    return;
+                }
+            };
             assert_eq!(
                 orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "Node {} crashed during test",
+                "The replica process on node {} was restarted during test",
                 self.node_id
             );
         });

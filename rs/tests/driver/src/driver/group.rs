@@ -55,6 +55,7 @@ const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
 const TEARDOWN_TASK_NAME: &str = "teardown";
 const ASSERT_NO_CRITICAL_ERRORS_TASK_NAME: &str = "assert_no_critical_errors";
+const ASSERT_NO_REPLICA_RESTARTS_TASK_NAME: &str = "assert_no_replica_restarts";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 #[derive(Debug, Parser)]
@@ -426,6 +427,7 @@ pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     teardown: Option<Box<dyn PotSetupFn>>,
     assert_no_critical_errors: bool,
+    assert_no_replica_restarts: bool,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -465,6 +467,7 @@ impl SystemTestGroup {
             setup: Default::default(),
             teardown: Default::default(),
             assert_no_critical_errors: true,
+            assert_no_replica_restarts: true,
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -498,6 +501,11 @@ impl SystemTestGroup {
 
     pub fn without_assert_no_critical_errors(mut self) -> Self {
         self.assert_no_critical_errors = false;
+        self
+    }
+
+    pub fn without_assert_no_replica_restarts(mut self) -> Self {
+        self.assert_no_replica_restarts = false;
         self
     }
 
@@ -702,7 +710,7 @@ impl SystemTestGroup {
                     Err(e) => {
                         info!(
                             env.logger(),
-                            "Could not get topology ({e:?}) => skipping no critical errors checks."
+                            "Could not get topology ({e:?}) => skipping checks of critical errors."
                         );
                         return;
                     }
@@ -723,11 +731,42 @@ impl SystemTestGroup {
             None
         };
 
+        let assert_no_replica_restarts_fn: Option<(String, Box<dyn PotSetupFn>)> = if self
+            .assert_no_replica_restarts
+        {
+            let teardown_fn = |env: TestEnv| {
+                let topology = match env.safe_topology_snapshot() {
+                    Ok(topology) => topology,
+                    Err(e) => {
+                        info!(
+                            env.logger(),
+                            "Could not get topology ({e:?}) => skipping checks that the replica process did not restart."
+                        );
+                        return;
+                    }
+                };
+                let nodes: Vec<IcNodeSnapshot> = topology
+                    .subnets()
+                    .flat_map(|subnet| subnet.nodes())
+                    .collect();
+                for node in nodes {
+                    node.assert_no_replica_restarts();
+                }
+            };
+            Some((
+                format!("{ASSERT_NO_REPLICA_RESTARTS_TASK_NAME}_fn"),
+                Box::new(teardown_fn),
+            ))
+        } else {
+            None
+        };
+
         let teardown_plan: Vec<Plan<Box<dyn Task>>> = self
             .teardown
             .into_iter()
             .map(|teardown| (format!("{TEARDOWN_TASK_NAME}_fn"), teardown))
             .chain(assert_no_critical_errors_fn)
+            .chain(assert_no_replica_restarts_fn)
             .map(|(teardown_name, teardown_fn)| {
                 let logger = logger.clone();
                 let group_ctx = group_ctx.clone();
