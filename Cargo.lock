@@ -18627,6 +18627,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "open_rootfs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "attestation",
+ "candid",
+ "command_runner",
+ "config_tool",
+ "config_types",
+ "hex",
+ "ic-agent 0.40.1",
+ "ic-certification 3.0.3",
+ "ic-certification-test-utils",
+ "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-nns-constants",
+ "ic-nns-governance-api",
+ "ic_device",
+ "linux_kernel_command_line",
+ "mockall",
+ "pem 3.0.6",
+ "rand 0.8.5",
+ "serde_cbor",
+ "sev",
+ "sev_guest",
+ "sev_guest_testing",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "openssh-keys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

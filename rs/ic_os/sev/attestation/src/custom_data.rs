@@ -19,6 +19,8 @@ pub enum SevCustomDataNamespace {
     RawRemoteAttestation = 1,
     /// Custom data for disk encryption key exchange during GuestOS upgrades.
     GetDiskEncryptionKeyToken = 2,
+    /// Custom data for verifying alternative GuestOS proposal.
+    VerifyAlternativeGuestOsProposal = 3,
 }
 
 impl SevCustomDataNamespace {
