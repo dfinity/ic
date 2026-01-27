@@ -1,5 +1,5 @@
 [package]
-name = "ic-crypto-internal-iccsa-test-utils"
+name = "ic-crypto-iccsa-test-utils"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

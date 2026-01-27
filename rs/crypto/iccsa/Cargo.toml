@@ -24,7 +24,7 @@ simple_asn1 = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
-ic-crypto-internal-iccsa-test-utils = { path = "test_utils" }
+ic-crypto-iccsa-test-utils = { path = "test_utils" }
 ic-crypto-test-utils = { path = "../test_utils" }
 ic-crypto-internal-test-vectors = { path = "../internal/test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }

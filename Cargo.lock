@@ -8120,8 +8120,8 @@ dependencies = [
  "hex",
  "ic-certification 0.9.0",
  "ic-certification-test-utils",
+ "ic-crypto-iccsa-test-utils",
  "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-iccsa-test-utils",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
@@ -8135,6 +8135,17 @@ dependencies = [
  "serde_bytes",
  "serde_cbor",
  "simple_asn1",
+]
+
+[[package]]
+name = "ic-crypto-iccsa-test-utils"
+version = "0.9.0"
+dependencies = [
+ "ic-certification-test-utils",
+ "ic-crypto-sha2",
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -8420,17 +8431,6 @@ dependencies = [
  "hex",
  "ic-crypto-sha2",
  "wycheproof",
-]
-
-[[package]]
-name = "ic-crypto-internal-iccsa-test-utils"
-version = "0.9.0"
-dependencies = [
- "ic-certification-test-utils",
- "ic-crypto-sha2",
- "ic-crypto-tree-hash",
- "ic-types",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -8780,7 +8780,7 @@ version = "0.9.0"
 dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-iccsa",
- "ic-crypto-internal-iccsa-test-utils",
+ "ic-crypto-iccsa-test-utils",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-types",
@@ -15325,9 +15325,9 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-certification-test-utils",
  "ic-crypto-iccsa",
+ "ic-crypto-iccsa-test-utils",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-iccsa-test-utils",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
