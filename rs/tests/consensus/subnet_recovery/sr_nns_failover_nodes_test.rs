@@ -306,9 +306,7 @@ pub fn test(env: TestEnv) {
 
 fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &read_dependency_to_string(
-        "rs/tests/consensus/subnet_recovery/orchestrator_universal_vm_activation.sh",
-    )
+    let activate_script = &read_dependency_from_env_to_string("ORCHESTRATOR_UVM_ACTIVATION_SCRIPT")
     .expect("File not found")[..];
     let config_dir = env
         .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
@@ -320,7 +318,7 @@ fn setup_file_server(env: &TestEnv, file_path: &std::path::PathBuf) -> String {
         &fs::read(file_path).expect("File not found")[..],
     );
 
-    let path = get_dependency_path("rs/tests/static-file-server.tar");
+    let path = get_dependency_path_from_env("STATIC_FILE_SERVER_IMAGE");
     let _ = insert_file_to_config(
         config_dir.clone(),
         "static-file-server.tar",
