@@ -1194,7 +1194,7 @@ mod tests {
     ) {
         data_provider
             .add(
-                &make_replica_version_key(replica_version.to_string()),
+                &make_replica_version_key(replica_version),
                 registry_version,
                 Some(ReplicaVersionRecord {
                     release_package_sha256_hex: "sha256".to_string(),
@@ -2337,8 +2337,8 @@ mod tests {
                                 current_replica_version: current_replica_version.clone(),
                                 has_local_cup: has_local_cup.clone(),
                                 has_registry_cup: has_registry_cup.clone(),
-                                initial_subnet_assignment: initial_subnet_assignment.clone(),
-                                is_leaving: is_leaving.clone(),
+                                initial_subnet_assignment: *initial_subnet_assignment,
+                                is_leaving: *is_leaving,
                                 upgrade_to: upgrade_to.clone(),
                             };
 
