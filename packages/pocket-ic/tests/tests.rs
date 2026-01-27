@@ -2742,6 +2742,14 @@ fn test_specified_id(pic: &PocketIc) {
         .create_canister_with_id(None, None, specified_id)
         .unwrap();
     assert_eq!(canister_id, specified_id);
+
+    // https://dashboard.internetcomputer.org/canister/rimrc-piaaa-aaaao-aaljq-cai
+    let subnet_id = pic.get_subnet(canister_id).unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("o3ow2-2ipam-6fcjo-3j5vt-fzbge-2g7my-5fz2m-p4o2t-dwlc4-gt2q7-5ae")
+            .unwrap()
+    );
 }
 
 #[test]
@@ -3231,4 +3239,16 @@ fn deterministic_registry() {
     };
 
     assert_eq!(registry_bytes(), registry_bytes());
+}
+
+#[test]
+fn fiduciary_subnet_id() {
+    let pic = PocketIcBuilder::new().with_fiduciary_subnet().build();
+
+    let subnet_id = pic.topology().get_fiduciary().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap()
+    );
 }

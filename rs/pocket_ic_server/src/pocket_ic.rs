@@ -2799,7 +2799,9 @@ impl PocketIc {
                         canister_allocation_range: alloc_range,
                     } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None)
+                    let subnet_id = subnet_kind_subnet_id(subnet_kind);
+
+                    (ranges, alloc_range, subnet_id)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -2951,68 +2953,37 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
+fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
+    use rest::SubnetKind::*;
+    match subnet_kind {
+        Application | VerifiedApplication | System => None,
+        NNS => Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into()),
+        II => Some(PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into()),
+        Bitcoin => Some(
+            PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        Fiduciary => Some(
+            PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        SNS => Some(PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into()),
+    }
+}
+
 fn subnet_kind_canister_ranges(
     mainnet_routing_table: &RoutingTable,
     subnet_kind: SubnetKind,
 ) -> Option<Vec<CanisterIdRange>> {
-    use rest::SubnetKind::*;
-    match subnet_kind {
-        Application | VerifiedApplication | System => None,
-        NNS => {
-            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(nns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        II => {
-            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(ii_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Bitcoin => {
-            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(bitcoin_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Fiduciary => {
-            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(fiduciary_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        SNS => {
-            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(sns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-    }
+    subnet_kind_subnet_id(subnet_kind).map(|subnet_id| {
+        mainnet_routing_table
+            .ranges(subnet_id)
+            .iter()
+            .cloned()
+            .collect()
+    })
 }
 
 fn subnet_kind_from_canister_id(
@@ -5144,7 +5115,7 @@ fn route(
                         SubnetConfigInfo {
                             ranges,
                             alloc_range: Some(canister_allocation_range),
-                            subnet_id: None,
+                            subnet_id: Some(subnet_id),
                             subnet_state_dir: None,
                             subnet_kind,
                             instruction_config,
