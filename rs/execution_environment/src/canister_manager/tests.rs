@@ -9,6 +9,7 @@ use crate::{
     execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
+    units::{GIB, KIB, MIB},
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
@@ -109,8 +110,6 @@ use wirm::wasmparser;
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
-
-use crate::units::{GIB, KIB, MIB};
 
 const T: u128 = 1_000_000_000_000;
 
