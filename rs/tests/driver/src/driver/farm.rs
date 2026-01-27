@@ -633,7 +633,6 @@ impl CreateVmRequest {
 #[serde(rename_all = "camelCase")]
 pub enum VmType {
     Production,
-    Test,
     Sev,
 }
 
