@@ -486,7 +486,7 @@ pub async fn rejoin_test_long_rounds(
         minimum_no_state_clone_count < 10,
         "Minimum no state clone count is too high"
     );
-    // the restarted node should be behind for many rounds and skip only cloning the majority of states during that time
+    // the restarted node should be behind for many rounds and skip cloning a majority of states during that time
     assert!(
         rejoin_node_no_state_clone_count > 100,
         "No state clone count of the restarted node is unexpectedly low"
