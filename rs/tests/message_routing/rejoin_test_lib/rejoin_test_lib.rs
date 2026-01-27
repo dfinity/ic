@@ -8,7 +8,6 @@ use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
 use ic_types::PrincipalId;
-use ic_types::messages::ReplicaHealthStatus;
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
@@ -455,7 +454,7 @@ pub async fn rejoin_test_long_rounds(
     );
 
     info!(logger, "Checking that all nodes are healthy.");
-    for node in nodes {
+    for node in &nodes {
         assert!(
             node.status_is_healthy_async()
                 .await
