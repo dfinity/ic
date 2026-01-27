@@ -34,8 +34,8 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
-    get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
-    get_guestos_update_img_version,
+    get_guestos_update_img_sha256, get_guestos_update_img_url, get_guestos_update_img_version,
+    get_guestos_update_launch_measurements,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
@@ -144,7 +144,7 @@ pub async fn test_async(env: TestEnv) {
 
     let sha256 = get_guestos_update_img_sha256();
     let upgrade_url = get_guestos_update_img_url();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     bless_replica_version(
         &nns_node,
         &branch_version,

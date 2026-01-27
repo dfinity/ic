@@ -18,6 +18,7 @@ use nested::util::{
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(nested::setup)
+        .with_teardown(nested::teardown)
         .add_test(systest!(upgrade_hostos))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(40 * 60))
@@ -31,8 +32,7 @@ fn main() -> Result<()> {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    // The original HostOS version is the deployed version (i.e., the SetupOS image version).
-    let original_version = get_setupos_img_version();
+    let original_version = get_hostos_version();
     let target_version = get_hostos_update_img_version();
     let update_image_url = get_hostos_update_img_url();
     let update_image_sha256 = get_hostos_update_img_sha256();
