@@ -18,7 +18,6 @@ if [ -e /run/.containerenv ]; then
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    eprintln "Podman missing...install it."
     eprintln "Podman needs to be installed to run this script."
     exit 1
 fi
@@ -35,6 +34,7 @@ Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
     -r | --rebuild          Rebuild the container image
+    -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
     --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
                                 otherwise will choose based on detected environment)
@@ -45,13 +45,12 @@ To run a different shell or command, pass it as arguments, e.g.:
     $0 /usr/bin/zsh
     $0 bash -l
 
-Script uses dfinity/ic-build image by default.
 EOF
 }
 
 REBUILD_IMAGE=false
+IMAGE_NAME="ic-dev"
 
-IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
@@ -59,6 +58,16 @@ while test $# -gt $CTR; do
         -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
         -r | --rebuild)
             REBUILD_IMAGE=true
+            shift
+            ;;
+        -i | --image)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --image requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            IMAGE_NAME="$1"
             shift
             ;;
         --container-cmd)
@@ -70,6 +79,7 @@ while test $# -gt $CTR; do
             fi
             # Split the argument into an array (supports "sudo podman")
             read -ra CONTAINER_CMD <<<"$1"
+            shift
             ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
@@ -89,6 +99,14 @@ while test $# -gt $CTR; do
         *) let CTR=CTR+1 ;;
     esac
 done
+
+# option to pass in another shell if desired
+if [ $# -eq 0 ]; then
+    cmd=("${USHELL:-/usr/bin/bash}")
+else
+    cmd=("$@")
+fi
+echo "Using ${cmd[*]} as run command."
 
 # Detect environment
 if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
@@ -112,13 +130,13 @@ echo "Using container command: ${CONTAINER_CMD[*]}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="$IMAGE:$IMAGE_TAG"
+IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
 
 if [ $REBUILD_IMAGE = true ]; then
-    "$REPO_ROOT"/ci/container/build-image.sh
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
 elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
     if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
-        "$REPO_ROOT"/ci/container/build-image.sh
+        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
     fi
 fi
 
@@ -166,10 +184,6 @@ mkdir -p "${ICT_TESTNETS_DIR}"
 MISC_TMP_DIR="/tmp/misc"
 mkdir -p "${MISC_TMP_DIR}"
 
-trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 
@@ -215,6 +229,9 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
+        )
     fi
 fi
 
@@ -226,16 +243,6 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
 else
     eprintln "No ssh-agent to forward."
 fi
-
-# Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
-chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
-chmod +r ${SUBGID_FILE}
-PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
-)
 
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
@@ -252,13 +259,6 @@ fi
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
-
-# option to pass in another shell if desired
-if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
-else
-    cmd=("$@")
-fi
 
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
