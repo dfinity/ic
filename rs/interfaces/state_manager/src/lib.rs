@@ -226,10 +226,8 @@ pub trait StateManager: StateReader {
     /// Notify the state manager that states committed with partial certification
     /// state and heights strictly less than the specified `height` can be removed, except
     /// for any heights provided in `extra_heights_to_keep`, which will still be retained.
-    /// There are no guarantees for future heights in `extra_heights_to_keep`
-    /// w.r.t. the height of the latest state snapshot stored by the state manager,
-    /// i.e., such heights must also be included in `extra_heights_to_keep`
-    /// of subsequent calls to prevent removal of their corresponding states.
+    ///
+    /// The heights in `extra_heights_to_keep` only apply to this call.
     ///
     /// Note that:
     ///  * The initial state (height = 0) is not removed.

@@ -3130,11 +3130,8 @@ impl StateManager for StateManagerImpl {
 
     /// Variant of `remove_states_below()` that only removes states committed with
     /// partial certification scope.
-    /// There are no guarantees for future heights in `extra_heights_to_keep`
-    /// w.r.t. the height of the latest state snapshot stored by the state manager, i.e.,
-    /// for heights greater than `self.latest_state_height`.
-    /// Such heights must also be included in `extra_heights_to_keep`
-    /// of subsequent calls to prevent removal of their corresponding states.
+    ///
+    /// The heights in `extra_heights_to_keep` only apply to this call.
     ///
     /// The following states are NOT removed:
     /// * Any state with height >= min(requested_height, latest state height)
