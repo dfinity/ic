@@ -253,9 +253,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ));
     }
 
-    let recovery_dir = get_dependency_path("rs/tests");
+    set_sandbox_env_vars();
+
     let output_dir = env.get_path("recovery_output");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
@@ -330,6 +330,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
@@ -567,7 +568,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
+        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
+        // IC_ADMIN_BIN to a dummy value.
+        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );
