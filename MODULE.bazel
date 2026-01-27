@@ -357,7 +357,7 @@ http_file(
     name = "btc_canister",
     downloaded_file_path = "ic-btc-canister.wasm.gz",
     sha256 = "f18d28cbebf49cbd2b6a3dba8f6da1399b95714c7cf100d3fb31ba9c33941daa",
-    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2024-07-28/ic-btc-canister.wasm.gz",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release/2024-07-28/ic-btc-canister.wasm.gz",
 )
 
 # Dogecoin canister
@@ -366,7 +366,7 @@ http_file(
     name = "doge_canister",
     downloaded_file_path = "ic-doge-canister.wasm.gz",
     sha256 = "2efd5a5b28315a3d4896419df14a4aad8a346174f53cc7727a63b37ec086b3ac",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release%2F2025-12-10/ic-doge-canister.wasm.gz",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/release/2025-12-10/ic-doge-canister.wasm.gz",
 )
 
 # Bitcoin Adapter Mainnet Data for Integration Test
@@ -681,7 +681,7 @@ http_file(
     name = "dogecoin_example_canister",
     downloaded_file_path = "basic_dogecoin.wasm",
     sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
-    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example/basic-dogecoin/2025-11-12/basic_dogecoin.wasm",
 )
 
 http_file(

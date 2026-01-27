@@ -68,6 +68,9 @@ pub const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 /// For mainnet the recommended min amount to retrieve is 50 DOGE.
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 5_000_000_000;
 
+/// Min deposit amount is 1 DOGE.
+pub const DEPOSIT_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests right away
@@ -75,7 +78,7 @@ pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 
-pub const DOGE_MIN_CONFIRMATIONS: u64 = 10;
+pub const DOGE_MIN_CONFIRMATIONS: u64 = 60;
 
 pub const CHECK_FEE: u64 = 1001;
 
@@ -456,10 +459,10 @@ pub async fn install_ckdoge_minter(
         max_time_in_queue_nanos,
         min_confirmations: Some(DOGE_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
-        get_utxos_cache_expiration_seconds: None,
-        utxo_consolidation_threshold: None,
-        max_num_inputs_in_transaction: None,
-        deposit_doge_min_amount: None,
+        get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
+        utxo_consolidation_threshold: Some(10_000),
+        max_num_inputs_in_transaction: Some(500),
+        deposit_doge_min_amount: Some(DEPOSIT_DOGE_MIN_AMOUNT),
     };
 
     let minter_arg = ic_ckdoge_minter::lifecycle::MinterArg::Init(args);
@@ -576,36 +579,23 @@ pub async fn install_bitcoin_canister_with_network(
 }
 
 pub async fn install_dogecoin_canister(runtime: &Runtime, logger: &Logger) -> CanisterId {
-    use ic_doge_interface::{Config, Fees, Flag, Network};
-    info!(&logger, "Installing bitcoin canister ...");
+    use ic_doge_interface::{Flag, InitConfig, Network};
+    info!(&logger, "Installing dogecoin canister ...");
     let canister_id = DOGECOIN_MAINNET_CANISTER_ID;
     let mut dogecoin_canister =
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
-    let args = Config {
-        stability_threshold: DOGE_MIN_CONFIRMATIONS as u128,
-        network: Network::Regtest,
-        blocks_source: Principal::management_canister(),
-        syncing: Flag::Enabled,
-        fees: Fees {
-            get_utxos_base: 0,
-            get_utxos_cycles_per_ten_instructions: 0,
-            get_utxos_maximum: 0,
-            get_balance: 0,
-            get_balance_maximum: 0,
-            get_current_fee_percentiles: 0,
-            get_current_fee_percentiles_maximum: 0,
-            send_transaction_base: 0,
-            send_transaction_per_byte: 0,
-            get_block_headers_base: 0,
-            get_block_headers_cycles_per_ten_instructions: 0,
-            get_block_headers_maximum: 0,
-        },
-        api_access: Flag::Enabled,
-        disable_api_if_not_fully_synced: Flag::Disabled,
+    let args = InitConfig {
+        stability_threshold: Some(DOGE_MIN_CONFIRMATIONS as u128),
+        network: Some(Network::Regtest),
+        blocks_source: Some(Principal::management_canister()),
+        syncing: Some(Flag::Enabled),
+        fees: None,
+        api_access: Some(Flag::Enabled),
+        disable_api_if_not_fully_synced: Some(Flag::Disabled),
         watchdog_canister: None,
-        burn_cycles: Flag::Enabled,
-        lazily_evaluate_fee_percentiles: Flag::Enabled,
+        burn_cycles: Some(Flag::Enabled),
+        lazily_evaluate_fee_percentiles: Some(Flag::Enabled),
     };
 
     install_rust_canister_from_path(

@@ -31,7 +31,7 @@ impl From<candid::Error> for CkDogeMinterAgentError {
     }
 }
 
-/// Agent to make calls to the ckBTC minter.
+/// Agent to make calls to the ckDOGE minter.
 #[derive(Clone)]
 pub struct CkDogeMinterAgent {
     pub agent: Agent,
@@ -122,10 +122,6 @@ impl CkDogeMinterAgent {
             },
         )
         .await
-    }
-
-    pub async fn distribute_kyt_fee(&self) -> Result<(), CkDogeMinterAgentError> {
-        self.update("distribute_kyt_fee", ()).await
     }
 
     pub async fn get_events(

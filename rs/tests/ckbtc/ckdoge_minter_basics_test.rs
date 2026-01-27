@@ -18,7 +18,7 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    DOGE_MIN_CONFIRMATIONS, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, adapter::fund_with_btc,
+    DOGE_MIN_CONFIRMATIONS, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, adapter::fund_with_tokens,
     ckdoge_setup, create_canister, install_ckdoge_minter, install_dogecoin_canister,
     install_ledger, subnet_app, subnet_sys, utils::get_rpc_client,
 };
@@ -38,7 +38,8 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
     let doge_rpc = get_rpc_client::<dogecoin::Network>(&env);
 
     let default_address = doge_rpc.get_address().unwrap();
-    fund_with_btc(&doge_rpc, default_address);
+    fund_with_tokens(&doge_rpc, default_address);
+    let receiver_address = doge_rpc.get_new_address().unwrap();
 
     info!(&logger, "Testing ckDOGE minter agent");
     block_on(async {
@@ -88,11 +89,10 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
 
         info!(logger, "Call retrieve_doge_with_approval...");
         let to_retrieve = received / 2;
-        let original_balance = doge_rpc.get_balance(None).unwrap();
         let (fee, block_index) = test_retrieve_doge_with_approval(
             &minter_agent,
             &ledger_agent,
-            default_address,
+            &receiver_address,
             to_retrieve,
         )
         .await;
@@ -104,10 +104,10 @@ pub fn test_ckdoge_minter_agent(env: TestEnv) {
                 .unwrap();
         })
         .await;
-        let new_balance = doge_rpc.get_balance(None).unwrap();
+        let new_balance = doge_rpc.get_balance_of(None, &receiver_address).unwrap();
         assert_eq!(
             new_balance,
-            original_balance + Amount::from_sat(fee.minter_fee + fee.dogecoin_fee)
+            Amount::from_sat(to_retrieve - fee.minter_fee - fee.dogecoin_fee)
         );
     });
 }
