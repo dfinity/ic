@@ -1,3 +1,4 @@
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -54,7 +55,6 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
