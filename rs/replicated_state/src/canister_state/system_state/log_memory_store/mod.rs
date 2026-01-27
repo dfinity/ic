@@ -211,9 +211,8 @@ impl LogMemoryStore {
         if delta_log.is_empty() {
             return; // Don't append if delta is empty.
         }
-        let mut ring_buffer = match self.load_ring_buffer() {
-            Some(rb) => rb,
-            None => return, // No ring buffer exists.
+        let Some(mut ring_buffer) = self.load_ring_buffer() else {
+            return; // No ring buffer exists.
         };
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.bytes_used());
