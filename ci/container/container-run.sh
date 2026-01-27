@@ -96,13 +96,17 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
-        *)
-            echo "unknown argument: $1" >&2
-            usage >&2
-            exit 1
-            ;;
+        *) let CTR=CTR+1 ;;
     esac
 done
+
+# option to pass in another shell if desired
+if [ $# -eq 0 ]; then
+    cmd=("${USHELL:-/usr/bin/bash}")
+else
+    cmd=("$@")
+fi
+echo "Using ${cmd[*]} as run command."
 
 # Detect environment
 if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
@@ -253,13 +257,6 @@ fi
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
-
-# option to pass in another shell if desired
-if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
-else
-    cmd=("$@")
-fi
 
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
