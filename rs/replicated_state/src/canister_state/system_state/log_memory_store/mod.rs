@@ -105,14 +105,16 @@ impl LogMemoryStore {
             HeaderCache::Uninitialized => {} // Fall through to write logic
         }
         let mut cache = self.cache_header.write();
-        if let Some(rb) = self.load_ring_buffer() {
-            let h = rb.get_header();
-            *cache = HeaderCache::Initialized(h);
-            Some(h)
-        } else {
-            *cache = HeaderCache::Empty;
-            None
+        if let HeaderCache::Uninitialized = *cache {
+            if let Some(rb) = self.load_ring_buffer() {
+                let h = rb.get_header();
+                *cache = HeaderCache::Initialized(h);
+                return Some(h);
+            } else {
+                *cache = HeaderCache::Empty;
+            }
         }
+        None
     }
 
     /// Returns the total allocated bytes for the ring buffer
