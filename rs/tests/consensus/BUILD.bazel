@@ -338,9 +338,6 @@ system_test_nns(
         "//bazel:upload_perf_systest_results_enabled": ["upload_perf_systest_results"],
         "//conditions:default": [],
     }),
-    data = [
-        "//rs/tests:jaeger_uvm_config_image",
-    ],
     enable_head_nns_variant = False,
     enable_metrics = True,
     prometheus_vm_required_host_features = ["performance"],
@@ -351,6 +348,7 @@ system_test_nns(
     test_timeout = "eternal",
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS | {
         "IC_VERSION_FILE": "//bazel:version.txt",
+        "JAEGER_UVM_CONFIG_IMAGE_ZST": "//rs/tests:jaeger_uvm_config_image",
     },
     deps = [
         # Keep sorted.
