@@ -468,7 +468,7 @@ impl StateManagerMetrics {
 
         let fast_forward_height = metrics_registry.int_gauge(
             "state_manager_fast_forward_height",
-            "Height up until which states do not need to be cloned and hashed.",
+            "Height below which states do not need to be cloned and hashed.",
         );
 
         let no_state_clone_count = metrics_registry.int_counter(
