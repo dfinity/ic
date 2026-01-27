@@ -137,8 +137,9 @@ fn create_data_payload(
     if !remote_dkg_transcripts.is_empty() {
         info!(
             logger,
-            "Including {} early remote DKG transcripts in regular block payload",
-            remote_dkg_transcripts.len()
+            "Including {} early remote DKG transcripts in data block payload at height {}",
+            remote_dkg_transcripts.len(),
+            parent.height.increment(),
         );
     }
 
@@ -212,8 +213,9 @@ pub(crate) fn create_early_remote_transcripts(
                 Err(err) if err.is_reproducible() => {
                     warn!(
                         logger,
-                        "Failed to create early remote transcript for dkg id {:?}: {:?}",
+                        "Failed to create early remote transcript for dkg id {:?} at height {}: {:?}",
                         config.dkg_id(),
+                        parent.height.increment(),
                         err
                     );
                     continue;
@@ -249,7 +251,9 @@ pub(crate) fn create_early_remote_transcripts(
             other => {
                 warn!(
                     logger,
-                    "Produced unexpected number of early remote NiDKG transcripts: {other}"
+                    "Produced unexpected number of early remote NiDKG transcripts at height {}: {}",
+                    parent.height.increment(),
+                    other
                 );
                 false
             }

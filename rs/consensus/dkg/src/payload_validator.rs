@@ -215,16 +215,18 @@ fn validate_dealings_payload(
         if dealings.transcripts_for_remote_subnets != expected_transcripts {
             warn!(
                 log,
-                "Failed to validate {} early remote DKG transcripts in data block payload",
-                dealings.transcripts_for_remote_subnets.len()
+                "Failed to validate {} early remote DKG transcripts in data block payload at height {}",
+                dealings.transcripts_for_remote_subnets.len(),
+                parent.height.increment(),
             );
             return Err(InvalidDkgPayloadReason::InvalidTranscripts.into());
         }
 
         info!(
             log,
-            "Validated {} early remote DKG transcripts in data block payload",
-            dealings.transcripts_for_remote_subnets.len()
+            "Validated {} early remote DKG transcripts in data block payload at height {}",
+            dealings.transcripts_for_remote_subnets.len(),
+            parent.height.increment(),
         );
     }
 
