@@ -522,30 +522,20 @@ mod tests {
             // Checkpoint purge height depends on certified height of highest checkpoint
             let checkpoint_purge_height = Arc::new(RwLock::new(Height::from(0)));
 
-            let inmemory_purge_height_clone_for_update_fast_forward_height =
-                Arc::clone(&inmemory_purge_height);
-            let inmemory_purge_height_clone_for_remove_inmemory_states_below =
-                Arc::clone(&inmemory_purge_height);
+            let update_fast_forward_height = Arc::clone(&inmemory_purge_height);
+            let remove_inmemory_states_below_height = Arc::clone(&inmemory_purge_height);
             let checkpoint_purge_height_clone = Arc::clone(&checkpoint_purge_height);
 
             state_manager
                 .get_mut()
                 .expect_update_fast_forward_height()
-                .withf(move |height| {
-                    *height
-                        == *inmemory_purge_height_clone_for_update_fast_forward_height
-                            .read()
-                            .unwrap()
-                })
+                .withf(move |height| *height == *update_fast_forward_height.read().unwrap())
                 .return_const(());
             state_manager
                 .get_mut()
                 .expect_remove_inmemory_states_below()
                 .withf(move |height, _extra_heights| {
-                    *height
-                        == *inmemory_purge_height_clone_for_remove_inmemory_states_below
-                            .read()
-                            .unwrap()
+                    *height == *remove_inmemory_states_below_height.read().unwrap()
                 })
                 .return_const(());
 
