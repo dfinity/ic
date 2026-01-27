@@ -8,6 +8,7 @@ use ic_test_utilities_state::insert_dummy_canister;
 use ic_test_utilities_types::ids::{
     canister_test_id, message_test_id, subnet_test_id, user_test_id,
 };
+use ic_types::Height;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::time::UNIX_EPOCH;
 
@@ -15,8 +16,9 @@ use ic_types::time::UNIX_EPOCH;
 fn simple_state_old_vs_new_hashing() {
     let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
-    let crypto_hash_tree = crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state));
+    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let crypto_hash_tree =
+        crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
     assert_eq!(hash_tree, crypto_hash_tree);
 }
@@ -28,8 +30,9 @@ fn many_canister_state_old_vs_new_hashing() {
         insert_dummy_canister(&mut state, canister_test_id(i), user_test_id(24).get());
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
-    let crypto_hash_tree = crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state));
+    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let crypto_hash_tree =
+        crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
     assert_eq!(hash_tree, crypto_hash_tree);
 }
@@ -51,8 +54,9 @@ fn large_history_state_old_vs_new_hashing() {
         );
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
-    let crypto_hash_tree = crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state));
+    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let crypto_hash_tree =
+        crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
     assert_eq!(hash_tree, crypto_hash_tree);
 }
@@ -76,8 +80,9 @@ fn large_history_and_canisters_state_old_vs_new_hashing() {
         );
     }
 
-    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state)).unwrap();
-    let crypto_hash_tree = crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state));
+    let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0))).unwrap();
+    let crypto_hash_tree =
+        crypto_hash_lazy_tree(&replicated_state_as_lazy_tree(&state, Height::new(0)));
 
     assert_eq!(hash_tree, crypto_hash_tree);
 }

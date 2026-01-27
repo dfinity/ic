@@ -1298,19 +1298,22 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             status: canister_state.system_state.get_status().clone(),
             scheduled_as_first: canister_state
                 .system_state
-                .canister_metrics
-                .scheduled_as_first,
+                .canister_metrics()
+                .scheduled_as_first(),
             skipped_round_due_to_no_messages: canister_state
                 .system_state
-                .canister_metrics
-                .skipped_round_due_to_no_messages,
-            executed: canister_state.system_state.canister_metrics.executed,
+                .canister_metrics()
+                .skipped_round_due_to_no_messages(),
+            executed: canister_state.system_state.canister_metrics().executed(),
             interrupted_during_execution: canister_state
                 .system_state
-                .canister_metrics
-                .interrupted_during_execution,
+                .canister_metrics()
+                .interrupted_during_execution(),
             certified_data: canister_state.system_state.certified_data.clone(),
-            consumed_cycles: canister_state.system_state.canister_metrics.consumed_cycles,
+            consumed_cycles: canister_state
+                .system_state
+                .canister_metrics()
+                .consumed_cycles(),
             stable_memory_size: canister_state
                 .execution_state
                 .as_ref()
@@ -1327,11 +1330,11 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .system_state
                 .global_timer
                 .to_nanos_since_unix_epoch(),
-            canister_version: canister_state.system_state.canister_version,
+            canister_version: canister_state.system_state.canister_version(),
             consumed_cycles_by_use_cases: canister_state
                 .system_state
-                .canister_metrics
-                .get_consumed_cycles_by_use_cases()
+                .canister_metrics()
+                .consumed_cycles_by_use_cases()
                 .clone(),
             canister_history: canister_state.system_state.get_canister_history().clone(),
             wasm_chunk_store_metadata: canister_state
@@ -1344,7 +1347,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),
             wasm_memory_limit: canister_state.system_state.wasm_memory_limit,
-            next_snapshot_id: canister_state.system_state.next_snapshot_id,
+            next_snapshot_id: canister_state.system_state.next_snapshot_id(),
             snapshots_memory_usage: canister_state.system_state.snapshots_memory_usage,
             environment_variables: canister_state
                 .system_state
@@ -1544,6 +1547,11 @@ fn handle_compute_manifest_request(
             .inc();
     }
 
+    let base_manifest = base_manifest_info
+        .as_ref()
+        .map(|base| base.base_manifest.clone());
+    drop(base_manifest_info);
+
     let mut states = states.write();
 
     if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
@@ -1581,12 +1589,8 @@ fn handle_compute_manifest_request(
     drop(timer);
 
     let timer = request_timer(metrics, "observe_file_sizes");
-    if let Some(base_manifest_info) = &base_manifest_info {
-        crate::manifest::observe_file_sizes(
-            &manifest,
-            &base_manifest_info.base_manifest,
-            &metrics.manifest_metrics,
-        );
+    if let Some(base_manifest) = &base_manifest {
+        crate::manifest::observe_file_sizes(&manifest, base_manifest, &metrics.manifest_metrics);
     }
     drop(timer);
 

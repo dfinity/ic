@@ -1,6 +1,7 @@
 use ic_canonical_state::{Control, Visitor};
 use ic_crypto_tree_hash::{HashTree, HashTreeBuilder, HashTreeBuilderImpl, Label};
 use ic_replicated_state::ReplicatedState;
+use ic_types::Height;
 
 /// A visitor that constructs a hash tree by traversing a replicated
 /// state.
@@ -50,10 +51,14 @@ where
 }
 
 /// Compute the hash tree corresponding to the full replicated state.
-pub fn hash_state(state: &ReplicatedState) -> HashTree {
-    ic_canonical_state::traverse(state, HashingVisitor::<HashTreeBuilderImpl>::default())
-        .into_hash_tree()
-        .unwrap()
+pub fn hash_state(state: &ReplicatedState, height: Height) -> HashTree {
+    ic_canonical_state::traverse(
+        state,
+        height,
+        HashingVisitor::<HashTreeBuilderImpl>::default(),
+    )
+    .into_hash_tree()
+    .unwrap()
 }
 
 #[cfg(test)]
@@ -77,7 +82,7 @@ mod tests {
         },
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
         page_map::{PAGE_SIZE, PageIndex},
-        testing::ReplicatedStateTesting,
+        testing::{ReplicatedStateTesting, StreamTesting},
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
@@ -85,7 +90,7 @@ mod tests {
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
-        CanisterId, CryptoHashOfPartialState, Cycles, Time,
+        CanisterId, CryptoHashOfPartialState, Cycles, Height, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
         messages::{NO_DEADLINE, Refund, RequestMetadata},
@@ -106,7 +111,7 @@ mod tests {
     fn partial_hash_reflects_streams() {
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
-        let hash_of_empty_state = hash_state(&state);
+        let hash_of_empty_state = hash_state(&state, Height::new(0));
 
         state.modify_streams(|streams| {
             streams.insert(
@@ -118,7 +123,7 @@ mod tests {
             );
         });
 
-        let hash_of_state_with_streams = hash_state(&state);
+        let hash_of_state_with_streams = hash_state(&state, Height::new(0));
 
         assert!(
             hash_of_empty_state != hash_of_state_with_streams,
@@ -142,7 +147,7 @@ mod tests {
             streams.insert(subnet_test_id(5), stream);
         });
 
-        let hash_of_state_one = hash_state(&state);
+        let hash_of_state_one = hash_state(&state, Height::new(0));
 
         let stream = Stream::new(
             StreamIndexedQueue::with_begin(StreamIndex::from(14)),
@@ -152,7 +157,7 @@ mod tests {
             streams.insert(subnet_test_id(6), stream);
         });
 
-        let hash_of_state_two = hash_state(&state);
+        let hash_of_state_two = hash_state(&state, Height::new(0));
 
         assert!(
             hash_of_state_one != hash_of_state_two,
@@ -365,7 +370,7 @@ mod tests {
             let state = state_fixture(certification_version);
 
             assert_eq!(
-                hash_state(&state).digest(),
+                hash_state(&state, Height::new(0)).digest(),
                 &Digest::from(<[u8; 32]>::from_hex(expected_hash,).unwrap()),
                 "Mismatched partial state hash computed according to certification version {certification_version:?}. \
                 Perhaps you made a change that requires writing backward compatibility code?"
@@ -383,6 +388,7 @@ mod tests {
             "9D9C8D991198BCD0BCAA627F409181D08ADD8CA442730393D5A27FA1042D2477",
             "7FA3E764326968A311F7FE760CE7B6D29978BC9165DCDA332B4350EBEEC6D90C",
             "07797459A2F82D6F64628C0668C5BDB7F83447680DDB178208A40C2256409E8D",
+            "F80B2659485C03F68935F214E4CB5D8CCAC02913DCA88E913C4B497F2120DA50",
         ];
         assert_eq!(expected_hashes.len(), all_supported_versions().count());
 

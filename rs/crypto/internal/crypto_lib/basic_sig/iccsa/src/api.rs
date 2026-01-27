@@ -11,22 +11,18 @@ use ic_types::{
 };
 use std::convert::TryFrom;
 
-/// The object identifier for ICCSA public keys
-pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
-    der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(
-        1, 3, 6, 1, 4, 1, 56387, 1, 2
-    ))
-}
-
 /// Parse `pk_der` as DER-encoded public key with OID 1.3.6.1.4.1.56387.1.2, and
 /// returns the unwrapped public key bytes. See
 /// * https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
 /// * https://tools.ietf.org/html/rfc8410#section-4
 pub fn public_key_bytes_from_der(pk_der: &[u8]) -> CryptoResult<PublicKeyBytes> {
+    let algorithm_identifier = der_utils::PkixAlgorithmIdentifier::new_with_empty_param(
+        simple_asn1::oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2),
+    );
     let pk = der_utils::parse_public_key(
         pk_der,
         AlgorithmId::IcCanisterSignature,
-        algorithm_identifier(),
+        algorithm_identifier,
         None,
     )?;
     Ok(PublicKeyBytes(pk))

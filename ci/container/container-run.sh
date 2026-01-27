@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+## This script only supports podman as container runtime
+
 eprintln() {
     echo "$@" >&2
 }
@@ -16,7 +18,13 @@ if [ -e /run/.containerenv ]; then
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    eprintln "Podman missing...install it."
+    eprintln "Podman needs to be installed to run this script."
+    exit 1
+fi
+
+# Verify podman is reachable/responding
+if ! podman info >/dev/null 2>&1; then
+    eprintln "Podman found but not responding (daemon/service not running or not reachable)."
     exit 1
 fi
 
@@ -25,24 +33,54 @@ usage() {
 Usage: $0 -h | --help, -c <dir> | --cache-dir <dir>
 
     -c | --cache-dir <dir>  Bind-mount custom cache dir instead of '~/.cache'
+    -r | --rebuild          Rebuild the container image
+    -i | --image <image>    ic-build or ic-dev (default: ic-dev)
     -h | --help             Print help
+    --container-cmd <cmd>   Specify container run command (e.g., 'podman', or 'sudo podman';
+                                otherwise will choose based on detected environment)
 
-Script uses dfinity/ic-build image by default.
+If USHELL is not set, the default shell (/usr/bin/bash) will be started inside the container.
+To run a different shell or command, pass it as arguments, e.g.:
+
+    $0 /usr/bin/zsh
+    $0 bash -l
+
 EOF
 }
 
-if findmnt /hoststorage >/dev/null; then
-    PODMAN_ARGS=(--root /hoststorage/podman-root)
-else
-    PODMAN_ARGS=()
-fi
+REBUILD_IMAGE=false
+IMAGE_NAME="ic-dev"
 
-IMAGE="ghcr.io/dfinity/ic-build"
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
         -f | --full) eprintln "The legacy image has been deprecated, --full is not an option anymore." && exit 0 ;;
+        -r | --rebuild)
+            REBUILD_IMAGE=true
+            shift
+            ;;
+        -i | --image)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --image requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            IMAGE_NAME="$1"
+            shift
+            ;;
+        --container-cmd)
+            shift
+            if [ $# -eq 0 ]; then
+                echo "Error: --container-cmd requires an argument" >&2
+                usage >&2
+                exit 1
+            fi
+            # Split the argument into an array (supports "sudo podman")
+            read -ra CONTAINER_CMD <<<"$1"
+            shift
+            ;;
         -c | --cache-dir)
             if [[ $# -gt "$CTR + 1" ]]; then
                 if [ ! -d "$2" ]; then
@@ -58,31 +96,47 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
-        *) let CTR=CTR+1 ;;
+        *)
+            echo "unknown argument: $1" >&2
+            usage >&2
+            exit 1
+            ;;
     esac
 done
 
-REPO_ROOT="$(git rev-parse --show-toplevel)"
-IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
-IMAGE="$IMAGE:$IMAGE_TAG"
-if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
-    if ! sudo podman "${PODMAN_ARGS[@]}" pull $IMAGE; then
-        # fallback to building the image
-        docker() {
-            # Preserve "${PODMAN_ARGS[@]}" in the exported function by passing
-            # them through a single variable, and unpacking them here.
-            PODMAN_ARGS=(${PODMAN_ARGS})
-            sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
-        }
-        export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
-        unset -f docker
+# Detect environment
+if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
+    echo "Detected Devenv environment."
+    DEVENV=true
+else
+    DEVENV=false
+fi
+
+# If no container command specified, use based on environment
+if [ -z "${CONTAINER_CMD[*]:-}" ]; then
+    if [ "$DEVENV" = true ]; then
+        echo "Using hoststorage for podman root."
+        CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
+    else
+        CONTAINER_CMD=(sudo podman)
     fi
 fi
 
-if findmnt /hoststorage >/dev/null; then
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
+IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
+
+if [ $REBUILD_IMAGE = true ]; then
+    "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
+elif ! "${CONTAINER_CMD[@]}" image exists $IMAGE; then
+    if ! "${CONTAINER_CMD[@]}" pull $IMAGE; then
+        "$REPO_ROOT"/ci/container/build-image.sh --image "$IMAGE_NAME"
+    fi
+fi
+
+if [ "$DEVENV" = true ]; then
     eprintln "Purging non-relevant container images"
-    sudo podman "${PODMAN_ARGS[@]}" image prune -a -f --filter "reference!=$IMAGE"
+    "${CONTAINER_CMD[@]}" image prune -a -f --filter "reference!=$IMAGE"
 fi
 
 WORKDIR="/ic"
@@ -95,6 +149,9 @@ PODMAN_RUN_ARGS=(
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+    -e TERM
+    -e LANG=C.UTF-8
+    -e CARGO_TERM_COLOR
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
@@ -102,11 +159,7 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-if podman version | grep -qE 'Version:\s+4.'; then
-    PODMAN_RUN_ARGS+=(
-        --hostuser="$USER"
-    )
-fi
+PODMAN_RUN_ARGS+=(--hostuser="$USER")
 
 if [ "$(id -u)" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
@@ -182,11 +235,6 @@ if [ "$(id -u)" = "1000" ]; then
             --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
         )
     fi
-
-    USHELL=$(getent passwd "$USER" | cut -d : -f 7)
-    if [[ "$USHELL" != *"/bash" ]] && [[ "$USHELL" != *"/zsh" ]] && [[ "$USHELL" != *"/fish" ]]; then
-        USHELL=/usr/bin/bash
-    fi
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
@@ -208,13 +256,6 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
 )
 
-PODMAN_RUN_USR_ARGS=()
-if [ -f "$HOME/.container-run.conf" ]; then
-    # conf file with user's custom PODMAN_RUN_USR_ARGS
-    eprintln "Sourcing user's ~/.container-run.conf"
-    source "$HOME/.container-run.conf"
-fi
-
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
 # every byte of standard output to the journal, and that
@@ -226,13 +267,17 @@ if tty >/dev/null 2>&1; then
 else
     tty_arg=
 fi
-other_args="--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host"
+
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
+OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
+
+# option to pass in another shell if desired
 if [ $# -eq 0 ]; then
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "${USHELL:-/usr/bin/bash}"
+    cmd=("${USHELL:-/usr/bin/bash}")
 else
-    set -x
-    exec sudo podman "${PODMAN_ARGS[@]}" run $other_args "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" "$IMAGE" "$@"
+    cmd=("$@")
 fi
+
+set -x
+exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
