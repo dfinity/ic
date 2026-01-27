@@ -435,6 +435,10 @@ pub async fn rejoin_test_long_rounds(
     )
     .await;
 
+    info!(
+        logger,
+        "Checking that the restarted node reached the latest CUP height."
+    );
     let rejoin_node_status = rejoin_node
         .status_async()
         .await
@@ -449,11 +453,17 @@ pub async fn rejoin_test_long_rounds(
         rejoin_node_certified_height,
         last_cup_height
     );
-    let rejoin_node_health_status = rejoin_node_status
-        .replica_health_status
-        .expect("Failed to get replica health status of rejoin_node");
-    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
 
+    info!(logger, "Checking that all nodes are healthy.");
+    for node in nodes {
+        assert!(
+            node.status_is_healthy_async()
+                .await
+                .expect("Failed to get replica health status")
+        );
+    }
+
+    // finally check the metrics for "fast-forward" mode
     let mut no_state_clone_counts = vec![];
     for node in nodes {
         let count = no_state_clone_count(node, &logger).await;
@@ -473,9 +483,15 @@ pub async fn rejoin_test_long_rounds(
     );
 
     // there should be a node that is (almost) never behind and thus (almost) never skips state cloning
-    assert!(minimum_no_state_clone_count < 10);
+    assert!(
+        minimum_no_state_clone_count < 10,
+        "Minimum no state clone count is too high"
+    );
     // the restarted node should be behind for many rounds and skip only cloning the majority of states during that time
-    assert!(rejoin_node_no_state_clone_count > 100);
+    assert!(
+        rejoin_node_no_state_clone_count > 100,
+        "No state clone count of the restarted node is unexpectedly low"
+    );
 }
 
 pub async fn assert_state_sync_has_happened(
