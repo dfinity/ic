@@ -3,7 +3,7 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("//bazel:defs.bzl", "symlink_dir", "symlink_dir_test")
+load("//bazel:defs.bzl", "symlink_dir", "write_info_file_var")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -152,18 +152,10 @@ symlink_dir(
     testonly = True,
     targets = {
         "//rs/registry/admin:ic-admin": "ic-admin",
-        "//rs/state_tool:state-tool": "state-tool",
         "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
         "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
         "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
         "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
-    },
-)
-
-symlink_dir_test(
-    name = "cup_compatibility/binaries",
-    targets = {
-        "//rs/types/types:types_test": "types_test",
     },
 )
 
@@ -187,11 +179,6 @@ uvm_config_image(
         "jaeger_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-filegroup(
-    name = "rosetta_workspace",
-    srcs = glob(["rosetta_workspace/*"]),
 )
 
 exports_files([
@@ -317,4 +304,10 @@ genrule(
     srcs = ["//bazel:version.txt"],
     outs = ["version-test.txt"],
     cmd = "sed < $< 's/$$/-test/' > $@",
+)
+
+write_info_file_var(
+    name = "farm_metadata.txt",
+    varname = "STABLE_FARM_METADATA",
+    visibility = ["//visibility:public"],
 )

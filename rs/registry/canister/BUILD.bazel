@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/crypto/utils/ni_dkg",
     "//rs/nervous_system/access_list",
     "//rs/nervous_system/chunks",
-    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/string",
@@ -44,7 +43,6 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
-    "//rs/utils",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",
@@ -189,6 +187,7 @@ rust_canister(
 
 rust_canister(
     name = "registry-canister-test",
+    testonly = True,
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = ["canister/registry_test.did"],

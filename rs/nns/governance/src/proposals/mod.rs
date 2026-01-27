@@ -2,14 +2,16 @@ use crate::{
     governance::{Environment, LOG_PREFIX},
     pb::v1::{
         ApproveGenesisKyc, BlessAlternativeGuestOsVersion, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
-        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
-        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister, Topic,
-        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
+        DeregisterKnownNeuron, GovernanceError, InstallCode, KnownNeuron, LoadCanisterSnapshot,
+        ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
+        RewardNodeProviders, SelfDescribingProposalAction, StopOrStartCanister,
+        TakeCanisterSnapshot, Topic, UpdateCanisterSettings, Vote, governance_error::ErrorType,
+        proposal::Action,
     },
     proposals::{
         add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
         execute_nns_function::ValidExecuteNnsFunction,
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest,
         self_describing::LocallyDescribableProposalAction,
     },
 };
@@ -27,10 +29,12 @@ pub mod deregister_known_neuron;
 pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
+pub mod load_canister_snapshot;
 pub mod manage_neuron;
 pub mod register_known_neuron;
 pub mod self_describing;
 pub mod stop_or_start_canister;
+pub mod take_canister_snapshot;
 pub mod update_canister_settings;
 
 mod decode_candid_args_to_self_describing_value;
@@ -54,8 +58,10 @@ pub(crate) enum ValidProposalAction {
     InstallCode(InstallCode),
     StopOrStartCanister(StopOrStartCanister),
     UpdateCanisterSettings(UpdateCanisterSettings),
-    FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+    FulfillSubnetRentalRequest(ValidFulfillSubnetRentalRequest),
     BlessAlternativeGuestOsVersion(BlessAlternativeGuestOsVersion),
+    TakeCanisterSnapshot(TakeCanisterSnapshot),
+    LoadCanisterSnapshot(LoadCanisterSnapshot),
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
@@ -107,14 +113,21 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::UpdateCanisterSettings(update_canister_settings) => Ok(
                 ValidProposalAction::UpdateCanisterSettings(update_canister_settings),
             ),
-            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
-                ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
-            ),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                ValidFulfillSubnetRentalRequest::try_from(fulfill_subnet_rental_request)
+                    .map(ValidProposalAction::FulfillSubnetRentalRequest)
+            }
             Action::BlessAlternativeGuestOsVersion(bless_alternative_guest_os_version) => {
                 Ok(ValidProposalAction::BlessAlternativeGuestOsVersion(
                     bless_alternative_guest_os_version,
                 ))
             }
+            Action::TakeCanisterSnapshot(take_canister_snapshot) => Ok(
+                ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot),
+            ),
+            Action::LoadCanisterSnapshot(load_canister_snapshot) => Ok(
+                ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot),
+            ),
 
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
@@ -159,6 +172,12 @@ impl ValidProposalAction {
             }
             ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
             ValidProposalAction::BlessAlternativeGuestOsVersion(_) => Topic::NodeAdmin,
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                take_canister_snapshot.valid_topic()?
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                load_canister_snapshot.valid_topic()?
+            }
         };
         Ok(topic)
     }
@@ -197,16 +216,18 @@ impl ValidProposalAction {
         env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingProposalAction, GovernanceError> {
         match self {
+            // ExecuteNnsFunction is the only case where we need to call `canister_metadata` to get
+            // the candid file of an external canister, and hence it's the only one with `await`.
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.to_self_describing_action(env).await
+            }
+
             ValidProposalAction::Motion(motion) => Ok(motion.to_self_describing_action()),
             ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc) => {
                 Ok(approve_genesis_kyc.to_self_describing_action())
             }
             ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
                 Ok(add_or_remove_node_provider.to_self_describing_action())
-            }
-
-            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
-                execute_nns_function.to_self_describing_action(env).await
             }
             ValidProposalAction::RegisterKnownNeuron(register_known_neuron) => {
                 Ok(register_known_neuron.to_self_describing_action())
@@ -225,6 +246,24 @@ impl ValidProposalAction {
             }
             ValidProposalAction::ManageNeuron(manage_neuron) => {
                 Ok(manage_neuron.to_self_describing_action())
+            }
+            ValidProposalAction::ManageNetworkEconomics(manage_network_economics) => {
+                Ok(manage_network_economics.to_self_describing_action())
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                Ok(fulfill_subnet_rental_request.to_self_describing_action())
+            }
+            ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system) => {
+                Ok(create_service_nervous_system.to_self_describing_action())
+            }
+            ValidProposalAction::BlessAlternativeGuestOsVersion(
+                bless_alternative_guest_os_version,
+            ) => Ok(bless_alternative_guest_os_version.to_self_describing_action()),
+            ValidProposalAction::TakeCanisterSnapshot(take_canister_snapshot) => {
+                Ok(take_canister_snapshot.to_self_describing_action())
+            }
+            ValidProposalAction::LoadCanisterSnapshot(load_canister_snapshot) => {
+                Ok(load_canister_snapshot.to_self_describing_action())
             }
             _ => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,

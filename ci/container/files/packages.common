@@ -42,19 +42,14 @@ llvm
 liblmdb-dev
 liblzma-dev
 
-# Other code dependencies
-clang
-fish
-node-json5
-
 # IC-OS
-fdisk
+clang
 cryptsetup-bin
-dosfstools
-fakeroot
+dosfstools # provides mkfs.vfat
 faketime
-grub-efi-amd64-bin
+fdisk
 iasl # to build OVMF
+ipmitool # to connect to baremetal test instances
 iputils-ping
  # Supports tar file handling in IC-OS build (mkfs dependency)
 libarchive-dev
@@ -66,13 +61,14 @@ libselinux-dev
 libsystemd-dev
  # Linked in by IC-OS binaries for managing virtual machines programmatically.
 libvirt-dev
-lsb-release
-lvm2
-mtools
+mtools # used for mcopy and mmd
 nasm # to build OVMF
 zstd
-qemu-system-x86 # used for guestos
+iputils-ping # for ping6 required by the bazel-test-bare-metal
 
 # Unknown
 containernetworking-plugins
 buildah
+
+# For ci/githubstats/query.py
+libpq-dev

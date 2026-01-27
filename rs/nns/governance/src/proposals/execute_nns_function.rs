@@ -3,19 +3,40 @@ use crate::{
     governance::Environment,
     pb::v1::{
         ExecuteNnsFunction, GovernanceError, NnsFunction, SelfDescribingProposalAction,
-        SelfDescribingValue, Topic, governance_error::ErrorType,
+        SelfDescribingValue, SelfDescribingValueMap, Topic, governance_error::ErrorType,
+        self_describing_value::Value,
     },
-    proposals::decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
+    proposals::{
+        decode_candid_args_to_self_describing_value::decode_candid_args_to_self_describing_value,
+        self_describing::{SelfDescribingProstEnum, ValueBuilder},
+    },
 };
 
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
+use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
+use ic_nns_governance_api::bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal};
+use ic_nns_governance_api::subnet_rental::{SubnetRentalProposalPayload, SubnetRentalRequest};
+use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use std::sync::Arc;
+
+/// A partial Candid interface for the management canister (ic_00) that contains the necessary
+/// methods for all the ExecuteNnsFunction proposals. Currently, only the uninstall_code method is
+/// supported.
+const PARTIAL_IC_00_CANDID: &str = r#"type uninstall_code_args = record {
+    canister_id : principal;
+    sender_canister_version : opt nat64;
+};
+service ic : {
+    uninstall_code : (uninstall_code_args) -> ();
+}"#;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidExecuteNnsFunction {
@@ -42,9 +63,40 @@ impl ValidExecuteNnsFunction {
         &self,
         env: Arc<dyn Environment>,
     ) -> Result<SelfDescribingValue, String> {
+        #[allow(clippy::single_match)]
+        match &self.nns_function {
+            ValidNnsFunction::BitcoinSetConfig => {
+                let request = get_request_for_bitcoin_set_config(&self.payload)?;
+                return Ok(SelfDescribingValue::from(request));
+            }
+            ValidNnsFunction::SubnetRentalRequest => {
+                let subnet_rental_request =
+                    decode_subnet_rental_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(subnet_rental_request));
+            }
+            ValidNnsFunction::AddSnsWasm => {
+                let add_wasm_request =
+                    decode_add_wasm_request(&self.payload).map_err(|e| e.error_message)?;
+                return Ok(SelfDescribingValue::from(add_wasm_request));
+            }
+            _ => {}
+        };
+
+        // For most of the NNS functions, we don't need to know its schema statically, but we fetch
+        // it from the management canister and decode the payload in runtime.
         let candid_source = self.get_candid_source(env).await?;
         let (_, method_name) = self.nns_function.canister_and_function();
-        decode_candid_args_to_self_describing_value(&candid_source, method_name, &self.payload)
+        let self_describing_value = decode_candid_args_to_self_describing_value(
+            &candid_source,
+            method_name,
+            &self.payload,
+        )?;
+
+        // Certain blobs (e.g. WASM and sometimes args) are hashed to avoid them being too large.
+        let self_describing_value =
+            maybe_hash_large_blobs(self_describing_value, self.nns_function);
+
+        Ok(self_describing_value)
     }
 
     pub async fn to_self_describing_action(
@@ -72,6 +124,13 @@ impl ValidExecuteNnsFunction {
 
     async fn get_candid_source(&self, env: Arc<dyn Environment>) -> Result<String, String> {
         let (canister_id, _method_name) = self.nns_function.canister_and_function();
+
+        // The management canister (ic_00) doesn't expose candid:service metadata, so we return a
+        // hard-coded DID file for it.
+        if canister_id == CanisterId::ic_00() {
+            return Ok(PARTIAL_IC_00_CANDID.to_string());
+        }
+
         let request = CanisterMetadataRequest::new(canister_id, "candid:service".to_string());
         let encoded_request = Encode!(&request).expect("Failed to encode payload");
         let response = env
@@ -88,9 +147,271 @@ impl ValidExecuteNnsFunction {
         String::from_utf8(decoded_response.value().to_vec())
             .map_err(|e| format!("Failed to convert metadata to UTF-8: {}", e))
     }
+
+    /// Returns the encoded request to the target canister by transforming the payload submitted by the proposer.
+    /// The `proposal_id` argument is used by AddSnsWasm and SubnetRentalRequest proposals.
+    /// The `proposal_timestamp_seconds` argument is used by SubnetRentalRequest proposals.
+    pub fn re_encode_payload_to_target_canister(
+        &self,
+        proposal_id: u64,
+        proposal_timestamp_seconds: u64,
+    ) -> Result<Vec<u8>, GovernanceError> {
+        match &self.nns_function {
+            ValidNnsFunction::BitcoinSetConfig => {
+                let request = get_request_for_bitcoin_set_config(&self.payload)
+                    .map_err(|e| format!("Unable to decode BitcoinSetConfig proposal: {e}"))?;
+                let encoded_request = Encode!(&request).unwrap();
+                Ok(encoded_request)
+            }
+            ValidNnsFunction::SubnetRentalRequest => {
+                let decoded_payload = decode_subnet_rental_request(&self.payload)?;
+                let encoded_payload = encode_subnet_rental_proposal_payload(
+                    decoded_payload,
+                    proposal_id,
+                    proposal_timestamp_seconds,
+                )?;
+                Ok(encoded_payload)
+            }
+
+            ValidNnsFunction::AddSnsWasm => {
+                let decoded_payload = decode_add_wasm_request(&self.payload)?;
+                let encoded_payload = encode_add_wasm_request(decoded_payload, proposal_id)?;
+                Ok(encoded_payload)
+            }
+
+            // Most NNS functions don't require any transformation of the payload, and for new NNS
+            // functions, consider use a proposal action instead, if the payload should be
+            // understood by the NNS Governance canister.
+            _ => Ok(self.payload.clone()),
+        }
+    }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+/// Returns a `CallCanisterRequest` for the BitcoinSetConfig proposal.
+fn get_request_for_bitcoin_set_config(payload: &[u8]) -> Result<CallCanisterRequest, String> {
+    let decoded_payload = Decode!([decoder_config()]; payload, BitcoinSetConfigProposal)
+        .map_err(|_| "Unable to decode BitcoinSetConfigProposal proposal: {e}")?;
+
+    let BitcoinSetConfigProposal { network, payload } = decoded_payload;
+    let canister_id = match network {
+        BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+        BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+    };
+    let method_name = "set_config".to_string();
+    Ok(CallCanisterRequest {
+        canister_id,
+        method_name,
+        payload,
+    })
+}
+
+fn decode_subnet_rental_request(payload: &[u8]) -> Result<SubnetRentalRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, SubnetRentalRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode SubnetRentalRequest proposal: {e}",
+        )
+    })
+}
+
+fn encode_subnet_rental_proposal_payload(
+    subnet_rental_request: SubnetRentalRequest,
+    proposal_id: u64,
+    proposal_creation_time_seconds: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let SubnetRentalRequest {
+        user,
+        rental_condition_id,
+    } = subnet_rental_request;
+
+    let encoded_payload = Encode!(&SubnetRentalProposalPayload {
+        user,
+        rental_condition_id,
+        proposal_id,
+        proposal_creation_time_seconds,
+    })
+    .map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode SubnetRentalProposalPayload proposal: {e}",
+        )
+    })?;
+
+    Ok(encoded_payload)
+}
+
+fn decode_add_wasm_request(payload: &[u8]) -> Result<AddWasmRequest, GovernanceError> {
+    Decode!([decoder_config()]; payload, AddWasmRequest).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to decode AddWasmRequest proposal: {e}",
+        )
+    })
+}
+
+fn encode_add_wasm_request(
+    add_wasm_request: AddWasmRequest,
+    proposal_id: u64,
+) -> Result<Vec<u8>, GovernanceError> {
+    let wasm = add_wasm_request
+        .wasm
+        .ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Payload must contain a wasm.",
+        ))?;
+
+    let add_wasm_request = AddWasmRequest {
+        wasm: Some(SnsWasm {
+            proposal_id: Some(proposal_id),
+            ..wasm
+        }),
+        ..add_wasm_request
+    };
+
+    Encode!(&add_wasm_request).map_err(|_| {
+        GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Unable to encode AddWasmRequest proposal: {e}",
+        )
+    })
+}
+
+fn maybe_hash_large_blobs(
+    self_describing_value: SelfDescribingValue,
+    nns_function: ValidNnsFunction,
+) -> SelfDescribingValue {
+    let field_names: &[&str] = match nns_function {
+        ValidNnsFunction::NnsCanisterInstall => &["wasm_module", "arg"],
+        ValidNnsFunction::HardResetNnsRootToVersion => &["wasm_module", "init_arg"],
+        _ => {
+            return self_describing_value;
+        }
+    };
+
+    // Use multiple-level match so that the original value can be returned without cloning if it
+    // doesn't match.
+    let SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    } = self_describing_value
+    else {
+        return self_describing_value;
+    };
+
+    let values_map = values_map
+        .into_iter()
+        .map(|(key, value)| maybe_replace_large_blob_entry_with_hash(key, value, field_names))
+        .collect();
+    SelfDescribingValue {
+        value: Some(Value::Map(SelfDescribingValueMap { values: values_map })),
+    }
+}
+/// If the provided `key` is one of the `field_names`, and the associated `SelfDescribingValue` is a
+/// blob, replaces the value with its SHA-256 hash and modifies the key to be `<key>_hash`.
+/// Otherwise, leaves the entry unchanged.
+///
+/// # Example
+/// {
+///   "some_key": "some_value",
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// becomes
+///
+/// {
+///   "some_key_hash": sha256("some_value"),
+///   "some_other_key": "some_other_value",
+/// }
+///
+/// if the `field_names` is `["some_key"]`.
+/// ```
+fn maybe_replace_large_blob_entry_with_hash(
+    key: String,
+    value: SelfDescribingValue,
+    field_names: &[&str],
+) -> (String, SelfDescribingValue) {
+    if !field_names.contains(&key.as_str()) {
+        return (key, value);
+    }
+
+    let Some(inner_value) = &value.value else {
+        return (key, value);
+    };
+    let Value::Blob(blob) = inner_value else {
+        return (key, value);
+    };
+
+    let key = format!("{key}_hash");
+    let hash = Sha256::hash(blob).to_vec();
+    let hashed_value = SelfDescribingValue {
+        value: Some(Value::Blob(hash)),
+    };
+
+    (key, hashed_value)
+}
+
+impl From<CallCanisterRequest> for SelfDescribingValue {
+    fn from(request: CallCanisterRequest) -> Self {
+        let CallCanisterRequest {
+            canister_id,
+            method_name,
+            payload,
+        } = request;
+        ValueBuilder::new()
+            .add_field("canister_id", canister_id)
+            .add_field("method_name", method_name)
+            .add_field("payload", payload)
+            .build()
+    }
+}
+
+impl From<SubnetRentalRequest> for SelfDescribingValue {
+    fn from(request: SubnetRentalRequest) -> Self {
+        let SubnetRentalRequest {
+            user,
+            rental_condition_id,
+        } = request;
+        ValueBuilder::new()
+            .add_field("user", user)
+            .add_field("rental_condition_id", format!("{:?}", rental_condition_id))
+            .build()
+    }
+}
+
+impl From<AddWasmRequest> for SelfDescribingValue {
+    fn from(payload: AddWasmRequest) -> Self {
+        let AddWasmRequest {
+            wasm,
+            hash,
+            skip_update_latest_version,
+        } = payload;
+
+        ValueBuilder::new()
+            .add_field("wasm", wasm)
+            .add_field("hash", hash)
+            .add_field("skip_update_latest_version", skip_update_latest_version)
+            .build()
+    }
+}
+
+impl From<SnsWasm> for SelfDescribingValue {
+    fn from(wasm: SnsWasm) -> Self {
+        let SnsWasm {
+            wasm,
+            canister_type,
+            proposal_id: _,
+        } = wasm;
+
+        let wasm_hash = Sha256::hash(&wasm).to_vec();
+        let canister_type = SelfDescribingProstEnum::<SnsCanisterType>::new(canister_type);
+
+        ValueBuilder::new()
+            .add_field("wasm_hash", wasm_hash)
+            .add_field("canister_type", canister_type)
+            .build()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ValidNnsFunction {
     CreateSubnet,
     AddNodeToSubnet,

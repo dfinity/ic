@@ -1031,7 +1031,7 @@ mod tests {
 
         // Set up the IDKG pool. Pool has shares for requests 0, 1, 2.
         // Only the share for request 0 is issued by us
-        let shares = vec![
+        let shares = [
             create_signature_share(&key_id, NODE_1, ids[0]),
             create_signature_share(&key_id, NODE_2, ids[1]),
             create_signature_share(&key_id, NODE_3, ids[2]),
@@ -1531,7 +1531,11 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_moved_to_validated(&change_set, &msg_id_1));
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Signature share validation(permanent error)"
+                ));
             })
         });
     }
@@ -1677,7 +1681,11 @@ mod tests {
 
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(
+                    &change_set,
+                    &msg_id_2,
+                    "Duplicate signature share:"
+                ));
             })
         })
     }
@@ -1741,9 +1749,17 @@ mod tests {
                 let change_set = signer.validate_signature_shares(&idkg_pool, &state);
                 assert_eq!(change_set.len(), 3);
                 let msg_1_valid = is_moved_to_validated(&change_set, &msg_id_1)
-                    && is_handle_invalid(&change_set, &msg_id_2);
+                    && is_handle_invalid(
+                        &change_set,
+                        &msg_id_2,
+                        "Duplicate share in unvalidated batch",
+                    );
                 let msg_2_valid = is_moved_to_validated(&change_set, &msg_id_2)
-                    && is_handle_invalid(&change_set, &msg_id_1);
+                    && is_handle_invalid(
+                        &change_set,
+                        &msg_id_1,
+                        "Duplicate share in unvalidated batch",
+                    );
 
                 // One is considered duplicate
                 assert!(msg_1_valid || msg_2_valid);

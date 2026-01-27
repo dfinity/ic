@@ -161,10 +161,10 @@ impl IngressSelector for IngressManager {
                 // For a given canister, add valid ingress messsages until quota is met
                 let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
                 while let Some(msg) = queue.msgs.last() {
-                    let ingress = &msg.msg.signed_ingress;
+                    let ingress = &msg.msg;
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
-                        ingress,
+                        &ingress.signed_ingress,
                         &state,
                         context,
                         &settings,
@@ -185,7 +185,7 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let ingress_size = ingress.count_bytes();
+                    let ingress_size = ingress.signed_ingress.count_bytes();
 
                     // Break criterion #1: global byte limit
                     if (accumulated_size + ingress_size) as u64 > byte_limit.get() {
@@ -244,7 +244,12 @@ impl IngressSelector for IngressManager {
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().map(|ingress| {
+                (
+                    IngressMessageId::from(*ingress),
+                    ingress.signed_ingress.clone(),
+                )
+            }));
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
@@ -522,7 +527,6 @@ impl IngressManager {
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
                         canister.message_memory_usage(),
-                        canister.scheduler_state.compute_allocation,
                         subnet_size,
                         state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance
@@ -812,7 +816,7 @@ mod tests {
                     .expiry_time(time)
                     .build();
 
-                let ingress_messages = vec![m1.clone(), m2, m3];
+                let ingress_messages = [m1.clone(), m2, m3];
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);
                     access_ingress_pool(&ingress_pool, |ingress_pool| {
@@ -1534,7 +1538,7 @@ mod tests {
                     certified_height: Height::from(0),
                 };
 
-                let ingress_messages = vec![m1.clone(), m2.clone(), m3, m4];
+                let ingress_messages = [m1.clone(), m2.clone(), m3, m4];
 
                 for m in ingress_messages.iter() {
                     let message_id = IngressMessageId::from(m);

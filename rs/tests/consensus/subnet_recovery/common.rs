@@ -92,6 +92,7 @@ const APP_NODES_LARGE: usize = 37;
 const DKG_INTERVAL_LARGE: u64 = 124;
 
 const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
+const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
@@ -105,11 +106,9 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
         .into_iter()
         .map(|key_id| KeyConfig {
             max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-            pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
-                PRE_SIGNATURES_TO_CREATE_IN_ADVANCE
-            } else {
-                0
-            },
+            pre_signatures_to_create_in_advance: key_id
+                .requires_pre_signatures()
+                .then_some(PRE_SIGNATURES_TO_CREATE_IN_ADVANCE),
             key_id,
         })
         .collect();
@@ -478,6 +477,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let maybe_upgrade_version = (cfg.upgrade && unassigned_nodes_ids.is_empty())
         .then_some(get_guestos_update_img_version());
+    std::fs::write(
+        env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
+        serde_json::to_string(&get_guestos_launch_measurements()).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
 
     let recovery_dir = get_dependency_path("rs/tests");
     let binaries_dir = recovery_dir.join("recovery/binaries");
@@ -632,6 +636,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: maybe_upgrade_version.clone(),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
+        upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: Some(replay_height),
         readonly_pub_key: ssh_readonly_pub_key_deployed,

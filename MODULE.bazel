@@ -518,15 +518,6 @@ http_file(
     url = "https://github.com/dfinity/cycles-ledger/releases/download/cycles-ledger-v1.0.3/cycles-ledger.wasm.gz",
 )
 
-# Subnet Rental Canister
-
-http_file(
-    name = "subnet_rental_canister",
-    downloaded_file_path = "subnet_rental_canister.wasm.gz",
-    sha256 = "860d30bc74facd4287b7af766004344e4cea4989ae0bf5408b4fb70ff337bc42",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.3.0/subnet_rental_canister.wasm.gz",
-)
-
 # Financial Integration artifacts for upgrade testing
 
 # ic-icrc1-ledger releases without ICRC-3
@@ -1151,6 +1142,7 @@ canisters(
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
+        "subnet_rental": "subnet_rental_canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     repositories = {
@@ -1160,6 +1152,7 @@ canisters(
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",
         "dogecoin": "dfinity/dogecoin-canister",
+        "subnet_rental": "dfinity/subnet-rental-canister",
     },
 )
 

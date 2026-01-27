@@ -13,16 +13,17 @@ use crate::driver::{
     test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
         HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
-        get_build_setupos_config_image_tool, get_guestos_img_version,
+        get_build_setupos_config_image_tool, get_dependency_path, get_guestos_img_version,
         get_guestos_initial_update_img_sha256, get_guestos_initial_update_img_url,
         get_setupos_img_sha256, get_setupos_img_url, get_setupos_img_version,
         try_get_guestos_img_version,
     },
     test_setup::InfraProvider,
 };
+use crate::util::block_on;
 use anyhow::{Context, Result, bail};
-use config::hostos::guestos_bootstrap_image::BootstrapOptions;
-use config::setupos::{
+use config_tool::hostos::guestos_bootstrap_image::BootstrapOptions;
+use config_tool::setupos::{
     config_ini::ConfigIniSettings,
     deployment_json::{self, DeploymentSettings},
 };
@@ -271,13 +272,13 @@ pub fn setup_and_start_vms(
                         &node,
                         &t_farm,
                     )?);
-                    t_farm.attach_disk_images(
+                    block_on(t_farm.attach_disk_images(
                         &group_name,
                         &vm_name,
                         "usb-storage",
                         vec![image_spec],
-                    )?;
-                    t_farm.start_vm(&group_name, &vm_name)?;
+                    ))?;
+                    block_on(t_farm.start_vm(&group_name, &vm_name))?;
                 }
             }
             std::fs::remove_file(conf_img_path)?;
@@ -346,19 +347,19 @@ pub fn setup_and_start_nested_vms(
                 &t_ic_gateway_url,
                 t_nns_public_key_override.as_deref(),
             )?;
-            let config_image_spec = AttachImageSpec::new(t_farm.upload_file(
+            let config_image_spec = AttachImageSpec::new(block_on(t_farm.upload_file(
                 &t_group_name,
                 config_image,
                 NESTED_CONFIG_IMAGE_PATH,
-            )?);
+            ))?);
 
-            t_farm.attach_disk_images(
+            block_on(t_farm.attach_disk_images(
                 &t_group_name,
                 &vm_name,
                 "usb-storage",
                 vec![t_setupos_image_spec, config_image_spec],
-            )?;
-            t_farm.start_vm(&t_group_name, &vm_name)?;
+            ))?;
+            block_on(t_farm.start_vm(&t_group_name, &vm_name))?;
 
             Ok(())
         }));
@@ -413,7 +414,7 @@ pub fn upload_config_disk_image(
 ) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
-    let image_id = farm.upload_file(group_name, target_file, &compressed_img_path)?;
+    let image_id = block_on(farm.upload_file(group_name, target_file, &compressed_img_path))?;
     info!(farm.logger, "Uploaded image: {}", image_id);
     Ok(image_id)
 }
@@ -647,7 +648,8 @@ fn create_setupos_config_image(
     let node_operator_private_key = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
         .ok()
         .filter(|s| !s.trim().is_empty())
-        .map(PathBuf::from);
+        .map(PathBuf::from)
+        .map(get_dependency_path);
 
     let vm_spec = nested_vm.get_vm_spec()?;
 

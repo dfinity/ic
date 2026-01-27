@@ -58,7 +58,9 @@ component_files = {
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
     Label("guestos/init/setup-encryption/setup-data-encryption.service"): "/etc/systemd/system/setup-data-encryption.service",
     Label("guestos/init/setup-encryption/setup-var-encryption.sh"): "/opt/ic/bin/setup-var-encryption.sh",
-    Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
+    Label("guestos/init/setup-encryption/systemd-fsck@dev-mapper-var_crypt.service"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service",
+    Label("guestos/init/setup-encryption/retry-var-failure.service"): "/etc/systemd/system/retry-var-failure.service",
+    Label("guestos/init/setup-encryption/retry-var-failure.sh"): "/opt/ic/bin/retry-var-failure.sh",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
     Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",
@@ -179,5 +181,5 @@ component_files = {
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
     Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
-    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
+    Label("upgrade/boot-state.sh"): "/opt/ic/bin/boot-state.sh",
 }

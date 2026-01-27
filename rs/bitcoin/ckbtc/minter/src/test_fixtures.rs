@@ -3,6 +3,7 @@ use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
 use crate::state::utxos::UtxoSet;
+use crate::tx::FeeRate;
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
     lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
@@ -24,6 +25,7 @@ pub fn init_args() -> InitArgs {
     InitArgs {
         btc_network: Network::Mainnet,
         ecdsa_key_name: "key_1".to_string(),
+        deposit_btc_min_amount: None,
         retrieve_btc_min_amount: 10_000,
         ledger_id: CanisterId::unchecked_from_principal(
             Principal::from_text("mxzaz-hqaaa-aaaar-qaada-cai")
@@ -33,7 +35,9 @@ pub fn init_args() -> InitArgs {
         max_time_in_queue_nanos: 600_000_000_000,
         min_confirmations: Some(6),
         mode: crate::state::Mode::GeneralAvailability,
-        btc_checker_principal: Some(CanisterId::from(0)),
+        btc_checker_principal: Some(CanisterId::unchecked_from_principal(
+            BTC_CHECKER_CANISTER_ID.into(),
+        )),
         check_fee: None,
         kyt_principal: None,
         kyt_fee: None,
@@ -146,7 +150,7 @@ pub fn build_bitcoin_unsigned_transaction(
     available_utxos: &mut UtxoSet,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
-    fee_per_vbyte: u64,
+    fee_per_vbyte: FeeRate,
 ) -> Result<
     (
         tx::UnsignedTransaction,
@@ -174,15 +178,16 @@ pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
 }
 
 pub mod mock {
-    use crate::CkBtcMinterState;
     use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
     use crate::state::eventlog::CkBtcEventLogger;
+    use crate::tx::{FeeRate, SignedRawTransaction, UnsignedTransaction};
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
-        GetUtxosRequest, GetUtxosResponse, Network, tx,
+        GetUtxosRequest, GetUtxosResponse, Network,
     };
+    use crate::{CkBtcMinterState, ECDSAPublicKey};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -212,12 +217,12 @@ pub mod mock {
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             fn event_logger(&self) -> CkBtcEventLogger;
-            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<FeeRate>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;
             async fn sign_with_ecdsa(&self, key_name: String, derivation_path: Vec<Vec<u8>>, message_hash: [u8; 32]) -> Result<Vec<u8>, CallError>;
-            async fn send_transaction(&self, transaction: &tx::SignedTransaction, network: Network) -> Result<(), CallError>;
+            async fn sign_transaction( &self, key_name: String, ecdsa_public_key: ECDSAPublicKey, unsigned_tx: UnsignedTransaction, accounts: Vec<Account>) -> Result<SignedRawTransaction, CallError>;
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
         }
@@ -227,13 +232,16 @@ pub mod mock {
 pub mod arbitrary {
     use crate::state::eventlog::CkBtcMinterEvent;
     use crate::state::utxos::UtxoSet;
+    use crate::tx::FeeRate;
     use crate::{
         WithdrawalFee,
         address::BitcoinAddress,
+        memo::{BurnMemo, MintMemo, Status},
         reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+            ChangeOutput, LedgerBurnIndex, Mode, ReimbursementReason, RetrieveBtcRequest,
+            SuspendedReason,
             eventlog::{EventType, ReplacedReason},
         },
         tx,
@@ -264,6 +272,99 @@ pub mod arbitrary {
                 }
             })
         };
+    }
+
+    pub(crate) fn burn_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        prop_oneof![burn_convert_memo(), burn_consolidate_memo()]
+    }
+
+    pub(crate) fn burn_consolidate_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (any::<u64>(), any::<u64>())
+            .prop_map(|(value, inputs)| BurnMemo::Consolidate { value, inputs })
+    }
+
+    pub(crate) fn burn_convert_memo() -> impl Strategy<Value = BurnMemo<'static>> {
+        (
+            option::of("[a-z0-9]{20,62}"),
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+        )
+            .prop_map(|(address, kyt_fee, status)| {
+                BurnMemo::Convert {
+                    address: address.as_ref().map(|s| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static str = Box::leak(s.clone().into_boxed_str());
+                        leaked
+                    }),
+                    kyt_fee,
+                    status,
+                }
+            })
+    }
+
+    pub(crate) fn mint_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        prop_oneof![
+            mint_convert_memo(),
+            mint_kyt_memo(),
+            mint_kyt_fail_memo(),
+            mint_reimburse_withdrawal_memo()
+        ]
+    }
+
+    pub(crate) fn mint_convert_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(proptest::collection::vec(any::<u8>(), 32)),
+            option::of(any::<u32>()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(|(txid, vout, kyt_fee)| {
+                MintMemo::Convert {
+                    txid: txid.as_ref().map(|v| {
+                        // For property testing, we leak memory intentionally to get 'static lifetime
+                        // This is acceptable in tests as they are short-lived
+                        let leaked: &'static [u8] = Box::leak(v.clone().into_boxed_slice());
+                        leaked
+                    }),
+                    vout,
+                    kyt_fee,
+                }
+            })
+    }
+
+    pub(crate) fn mint_kyt_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        #[allow(deprecated)]
+        Just(MintMemo::Kyt)
+    }
+
+    #[allow(deprecated)]
+    pub(crate) fn mint_kyt_fail_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        (
+            option::of(any::<u64>()),
+            option::of(memo_status()),
+            option::of(any::<u64>()),
+        )
+            .prop_map(
+                |(kyt_fee, status, associated_burn_index)| MintMemo::KytFail {
+                    kyt_fee,
+                    status,
+                    associated_burn_index,
+                },
+            )
+    }
+
+    pub(crate) fn mint_reimburse_withdrawal_memo() -> impl Strategy<Value = MintMemo<'static>> {
+        any::<u64>().prop_map(|withdrawal_id| MintMemo::ReimburseWithdrawal {
+            withdrawal_id: LedgerBurnIndex::from(withdrawal_id),
+        })
+    }
+
+    pub(crate) fn memo_status() -> impl Strategy<Value = Status> {
+        prop_oneof![
+            Just(Status::Accepted),
+            Just(Status::Rejected),
+            Just(Status::CallFailed),
+        ]
     }
 
     fn amount() -> impl Strategy<Value = Satoshi> {
@@ -449,6 +550,10 @@ pub mod arbitrary {
             })
     }
 
+    pub fn fee_rate(rates: impl Strategy<Value = u64>) -> impl Strategy<Value = FeeRate> {
+        rates.prop_map(FeeRate::from_millis_per_byte)
+    }
+
     pub fn account() -> impl Strategy<Value = Account> {
         prop_struct!(Account {
             owner: principal(),
@@ -485,6 +590,7 @@ pub mod arbitrary {
                 btc_network(),
                 canister_id(),
                 ".*",
+                option::of(0..u64::MAX),
                 0..u64::MAX,
                 0..u64::MAX,
                 mode(),
@@ -495,6 +601,7 @@ pub mod arbitrary {
                         btc_network,
                         ledger_id,
                         ecdsa_key_name,
+                        deposit_btc_min_amount,
                         retrieve_btc_min_amount,
                         max_time_in_queue_nanos,
                         mode,
@@ -503,6 +610,7 @@ pub mod arbitrary {
                         btc_network,
                         ledger_id,
                         ecdsa_key_name,
+                        deposit_btc_min_amount,
                         retrieve_btc_min_amount,
                         max_time_in_queue_nanos,
                         mode,
@@ -520,6 +628,7 @@ pub mod arbitrary {
 
         fn upgrade_args() -> impl Strategy<Value = UpgradeArgs> {
             prop_struct!(UpgradeArgs {
+                deposit_btc_min_amount: option::of(any::<u64>()),
                 retrieve_btc_min_amount: option::of(any::<u64>()),
                 min_confirmations: option::of(any::<u32>()),
                 max_time_in_queue_nanos: option::of(any::<u64>()),
@@ -553,7 +662,7 @@ pub mod arbitrary {
                     utxos: pvec(utxo(amount()), 0..10_000),
                     change_output: option::of(change_output()),
                     submitted_at: any::<u64>(),
-                    fee_per_vbyte: option::of(any::<u64>()),
+                    effective_fee_per_vbyte: option::of(any::<u64>()),
                     withdrawal_fee: option::of(withdrawal_fee()),
                     signed_tx: option::of(pvec(any::<u8>(), 1..10_000)),
                 }),
@@ -562,7 +671,7 @@ pub mod arbitrary {
                     new_txid: txid(),
                     change_output: change_output(),
                     submitted_at: any::<u64>(),
-                    fee_per_vbyte: any::<u64>(),
+                    effective_fee_per_vbyte: any::<u64>(),
                     withdrawal_fee: option::of(withdrawal_fee()),
                     reason: option::of(replaced_reason()),
                     new_utxos: option::of(pvec(utxo(amount()), 0..10_000)),

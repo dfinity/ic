@@ -769,12 +769,13 @@ pub fn load_canister_state(
 
     let starting_time = Instant::now();
     let canister_state_bits: CanisterStateBits =
-        CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
-            into_checkpoint_error(
-                format!("canister_states[{canister_id}]::canister_state_bits"),
-                err,
-            )
-        })?;
+        CanisterStateBits::try_from((canister_layout.canister().deserialize()?, *canister_id))
+            .map_err(|err| {
+                into_checkpoint_error(
+                    format!("canister_states[{canister_id}]::canister_state_bits"),
+                    err,
+                )
+            })?;
 
     durations.insert("canister_state_bits", starting_time.elapsed());
 
@@ -870,12 +871,15 @@ pub fn load_canister_state(
         *canister_id,
         queues,
         canister_state_bits.memory_allocation,
+        canister_state_bits.compute_allocation,
         canister_state_bits.wasm_memory_threshold,
         canister_state_bits.freeze_threshold,
         canister_state_bits.status,
         canister_state_bits.certified_data,
         canister_metrics,
+        canister_state_bits.total_query_stats,
         canister_state_bits.cycles_balance,
+        Time::from_nanos_since_unix_epoch(canister_state_bits.time_of_last_allocation_charge_nanos),
         canister_state_bits.cycles_debit,
         canister_state_bits.reserved_balance,
         canister_state_bits.reserved_balance_limit,
@@ -900,16 +904,11 @@ pub fn load_canister_state(
         execution_state,
         scheduler_state: SchedulerState {
             last_full_execution_round: canister_state_bits.last_full_execution_round,
-            compute_allocation: canister_state_bits.compute_allocation,
             accumulated_priority: canister_state_bits.accumulated_priority,
             priority_credit: canister_state_bits.priority_credit,
             long_execution_mode: canister_state_bits.long_execution_mode,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
-            time_of_last_allocation_charge: Time::from_nanos_since_unix_epoch(
-                canister_state_bits.time_of_last_allocation_charge_nanos,
-            ),
-            total_query_stats: canister_state_bits.total_query_stats,
         },
     };
 
