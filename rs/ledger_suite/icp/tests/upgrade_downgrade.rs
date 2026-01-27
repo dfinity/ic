@@ -80,7 +80,7 @@ impl CanisterHashes {
         for (archive_id, module_hash) in &self.archive {
             let other_module_hash = other
                 .archive
-                .get(&archive_id)
+                .get(archive_id)
                 .expect("Archive canister missing after upgrade");
             assert_ne!(
                 module_hash, other_module_hash,
@@ -105,7 +105,7 @@ impl CanisterHashes {
         for (archive_id, module_hash) in &self.archive {
             let other_module_hash = other
                 .archive
-                .get(&archive_id)
+                .get(archive_id)
                 .expect("Archive canister missing after upgrade");
             assert_eq!(
                 module_hash, other_module_hash,
