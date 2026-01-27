@@ -34,9 +34,6 @@ jobs:
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
       - name: Setup podman
         shell: bash
         run: |
@@ -76,12 +73,27 @@ jobs:
           mount -o loop /tmp/misc.img /tmp/misc
           chown -R ubuntu:ubuntu /tmp/misc
 
-      - name: Repro check for ${{ inputs.github_sha || github.sha }}
+      - name: Checkout
+        uses: actions/checkout@v6
+        if: ${{ github.event_name == 'pull_request' }}
+
+      - name: Repro check for PR
         shell: bash
+        if: ${{ github.event_name == 'pull_request' }}
         env:
           CI_PROJECT_DIR: ${{ github.workspace }}
           DRY_RUN: ${{ github.event_name == 'pull_request' && '--dry-run' || '' }}
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           set -euo pipefail
-          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ inputs.github_sha || github.sha }} $DRY_RUN
+          sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} $DRY_RUN
+
+      - name: Repro check for ${{ inputs.github_sha }}
+        shell: bash
+        if: ${{ github.event_name != 'pull_request' }}
+        run: |
+          # Hermetic python interpreter requires a non-root user to be built.
+          sudo -u ubuntu bash -c '
+            curl -fsSL https://raw.githubusercontent.com/dfinity/ic/master/ci/scripts/repro-check |
+            python3 - -c ${{ inputs.github_sha }}
+          '
