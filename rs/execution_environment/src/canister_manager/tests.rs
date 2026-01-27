@@ -115,9 +115,9 @@ const T: u128 = 1_000_000_000_000;
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
-const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * GIB); // 8GiB
+const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * GIB);
 const MAX_CONTROLLERS: usize = 10;
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * KIB; // 64KiB
+const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * KIB;
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 // The simplest valid Wasm binary: "(module)"
 const MINIMAL_WASM: [u8; 8] = [
@@ -3615,7 +3615,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
-        .with_subnet_execution_memory(100 * MIB) // 100 MiB
+        .with_subnet_execution_memory(100 * MIB)
         .with_subnet_memory_reservation(0)
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
