@@ -76,6 +76,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         if: ${{ github.event_name == 'pull_request' }}
+        with:
+          sparse-checkout: "ci/scripts/repro-check"
 
       - name: Repro check for PR
         shell: bash
