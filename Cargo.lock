@@ -8712,6 +8712,8 @@ dependencies = [
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ed25519 0.6.0",
+ "ic-secp256k1",
  "ic-secp256r1",
  "ic-types",
  "p256",
