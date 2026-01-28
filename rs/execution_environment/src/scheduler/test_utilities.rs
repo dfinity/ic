@@ -362,8 +362,9 @@ impl SchedulerTest {
         caller: CanisterId,
         input_type: InputQueueType,
     ) {
-        assert!(
-            method_name.to_string() != Method::InstallCode.to_string(),
+        assert_ne!(
+            method_name.to_string(),
+            Method::InstallCode.to_string(),
             "Use `inject_install_code_call_to_ic00()`."
         );
 
