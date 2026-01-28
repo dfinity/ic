@@ -6,18 +6,18 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
-use parking_lot::RwLock;
+use std::sync::OnceLock;
 
 pub(super) struct StructIO {
     buffer: Buffer,
-    header_cache: RwLock<Option<Header>>,
+    header_cache: OnceLock<Header>,
 }
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
-            header_cache: RwLock::new(None),
+            header_cache: OnceLock::new(),
         }
     }
 
@@ -26,39 +26,37 @@ impl StructIO {
     }
 
     pub fn load_header(&self) -> Header {
-        if let Some(header_cache) = *self.header_cache.read() {
-            return header_cache;
-        }
-        let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
-        let (version, addr) = self.read_raw_u8(addr);
-        let (index_table_pages, addr) = self.read_raw_u16(addr);
-        let (index_entries_count, addr) = self.read_raw_u16(addr);
-        let (data_offset, addr) = self.read_raw_u64(addr);
-        let (data_capacity, addr) = self.read_raw_u64(addr);
-        let (data_size, addr) = self.read_raw_u64(addr);
-        let (data_head, addr) = self.read_raw_u64(addr);
-        let (data_tail, addr) = self.read_raw_u64(addr);
-        let (next_idx, addr) = self.read_raw_u64(addr);
-        let (max_timestamp, _addr) = self.read_raw_u64(addr);
-        let header = Header {
-            magic,
-            version,
-            index_table_pages,
-            index_entries_count,
-            data_offset: MemoryAddress::new(data_offset),
-            data_capacity: MemorySize::new(data_capacity),
-            data_size: MemorySize::new(data_size),
-            data_head: MemoryPosition::new(data_head),
-            data_tail: MemoryPosition::new(data_tail),
-            next_idx,
-            max_timestamp,
-        };
-        *self.header_cache.write() = Some(header);
-        header
+        *self.header_cache.get_or_init(|| {
+            let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
+            let (version, addr) = self.read_raw_u8(addr);
+            let (index_table_pages, addr) = self.read_raw_u16(addr);
+            let (index_entries_count, addr) = self.read_raw_u16(addr);
+            let (data_offset, addr) = self.read_raw_u64(addr);
+            let (data_capacity, addr) = self.read_raw_u64(addr);
+            let (data_size, addr) = self.read_raw_u64(addr);
+            let (data_head, addr) = self.read_raw_u64(addr);
+            let (data_tail, addr) = self.read_raw_u64(addr);
+            let (next_idx, addr) = self.read_raw_u64(addr);
+            let (max_timestamp, _addr) = self.read_raw_u64(addr);
+            Header {
+                magic,
+                version,
+                index_table_pages,
+                index_entries_count,
+                data_offset: MemoryAddress::new(data_offset),
+                data_capacity: MemorySize::new(data_capacity),
+                data_size: MemorySize::new(data_size),
+                data_head: MemoryPosition::new(data_head),
+                data_tail: MemoryPosition::new(data_tail),
+                next_idx,
+                max_timestamp,
+            }
+        })
     }
 
     pub fn save_header(&mut self, header: &Header) {
-        *self.header_cache.get_mut() = Some(*header);
+        self.header_cache = OnceLock::new();
+        let _ = self.header_cache.set(*header);
         let mut addr = HEADER_OFFSET;
         addr = self.write_raw_bytes(addr, &header.magic);
         addr = self.write_raw_u8(addr, header.version);
@@ -519,7 +517,8 @@ mod tests {
         // Manually overwrite cache with a fake header.
         // This proves that load_header() uses the cache instead of reading from page map.
         let header_fake = Header::new(MemorySize::new(9999));
-        *io.header_cache.write() = Some(header_fake);
+        io.header_cache = OnceLock::new();
+        let _ = io.header_cache.set(header_fake);
 
         let loaded = io.load_header();
         assert_eq!(loaded.data_capacity.get(), 9999);

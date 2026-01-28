@@ -15,7 +15,6 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use parking_lot::RwLock;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -23,13 +22,7 @@ use std::sync::Arc;
 /// Limits memory growth, 10k covers expected per-round
 /// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
-
-#[derive(Clone, Copy, Debug)]
-enum HeaderCache {
-    Uninitialized,
-    Empty,
-    Initialized(Header),
-}
+use std::sync::OnceLock;
 
 #[derive(Debug, ValidateEq)]
 pub struct LogMemoryStore {
@@ -45,7 +38,7 @@ pub struct LogMemoryStore {
     delta_log_sizes: VecDeque<usize>,
 
     #[validate_eq(Ignore)]
-    header_cache: RwLock<HeaderCache>,
+    header_cache: OnceLock<Option<Header>>,
 }
 
 impl LogMemoryStore {
@@ -64,7 +57,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            header_cache: RwLock::new(HeaderCache::Uninitialized),
+            header_cache: OnceLock::new(),
         }
     }
 
@@ -72,7 +65,7 @@ impl LogMemoryStore {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
-            header_cache: RwLock::new(HeaderCache::Uninitialized),
+            header_cache: OnceLock::new(),
         }
     }
 
@@ -81,7 +74,7 @@ impl LogMemoryStore {
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
-        *self.header_cache.get_mut() = HeaderCache::Uninitialized;
+        self.header_cache = OnceLock::new();
         &mut self.page_map
     }
 
@@ -89,7 +82,7 @@ impl LogMemoryStore {
     pub fn clear(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         // This creates a new empty page map with invalid ring buffer header.
         self.page_map = PageMap::new(fd_factory);
-        *self.header_cache.get_mut() = HeaderCache::Empty;
+        self.header_cache = OnceLock::new();
     }
 
     /// Loads the ring buffer from the page map.
@@ -97,24 +90,10 @@ impl LogMemoryStore {
         RingBuffer::load_checked(self.page_map.clone())
     }
 
-    /// Returns the ring buffer header.
     fn get_header(&self) -> Option<Header> {
-        match *self.header_cache.read() {
-            HeaderCache::Initialized(h) => return Some(h),
-            HeaderCache::Empty => return None,
-            HeaderCache::Uninitialized => {} // Fall through to write logic
-        }
-        let mut cache = self.header_cache.write();
-        if let HeaderCache::Uninitialized = *cache {
-            if let Some(rb) = self.load_ring_buffer() {
-                let h = rb.get_header();
-                *cache = HeaderCache::Initialized(h);
-                return Some(h);
-            } else {
-                *cache = HeaderCache::Empty;
-            }
-        }
-        None
+        *self
+            .header_cache
+            .get_or_init(|| self.load_ring_buffer().map(|rb| rb.get_header()))
     }
 
     /// Returns the total allocated bytes for the ring buffer
@@ -177,7 +156,7 @@ impl LogMemoryStore {
         }
         // Update the state.
         self.page_map = new_buffer.to_page_map();
-        *self.header_cache.get_mut() = HeaderCache::Initialized(new_buffer.get_header());
+        self.header_cache = OnceLock::from(Some(new_buffer.get_header()));
     }
 
     /// Returns the next log record `idx`.
@@ -217,7 +196,7 @@ impl LogMemoryStore {
         // Append the delta records and persist the ring buffer.
         ring_buffer.append_log(delta_log.records_mut().drain(..).collect());
         self.page_map = ring_buffer.to_page_map();
-        *self.header_cache.get_mut() = HeaderCache::Initialized(ring_buffer.get_header());
+        self.header_cache = OnceLock::from(Some(ring_buffer.get_header()));
     }
 
     /// Records the size of the appended delta log.
@@ -241,10 +220,11 @@ impl Clone for LogMemoryStore {
             // an independent snapshot.
             page_map: self.page_map.clone(),
             delta_log_sizes: self.delta_log_sizes.clone(),
-            // We create a new independent lock for the cloned store, initialized with
-            // the current cache state. Since the stores are independent, they need
-            // separate locks.
-            header_cache: RwLock::new(*self.header_cache.read()),
+            // OnceLock is not Clone, so we must manually clone the state.
+            header_cache: match self.header_cache.get() {
+                Some(val) => OnceLock::from(*val),
+                None => OnceLock::new(),
+            },
         }
     }
 }
@@ -759,23 +739,17 @@ mod tests {
         fn test_cache_lifecycle() {
             let mut s = LogMemoryStore::new_for_testing();
 
-            // 1. Initial state: Uninitialized
-            match *s.header_cache.read() {
-                HeaderCache::Uninitialized => (),
-                state => panic!("Expected Uninitialized, got {:?}", state),
-            }
+            // 1. Initial state: Uninitialized (None in OnceLock)
+            assert!(s.header_cache.get().is_none());
 
             // 2. Read triggers load: Uninitialized -> Empty (since no ring buffer yet)
             assert_eq!(s.byte_capacity(), 0);
-            match *s.header_cache.read() {
-                HeaderCache::Empty => (),
-                state => panic!("Expected Empty, got {:?}", state),
-            }
+            assert_eq!(s.header_cache.get(), Some(&None));
 
             // 3. Set limit: Empty -> Initialized
             s.set_log_memory_limit(DEFAULT_LOG_MEMORY_LIMIT);
-            match *s.header_cache.read() {
-                HeaderCache::Initialized(h) => {
+            match s.header_cache.get() {
+                Some(Some(h)) => {
                     assert_eq!(h.data_capacity.get() as usize, DEFAULT_LOG_MEMORY_LIMIT);
                 }
                 state => panic!("Expected Initialized, got {:?}", state),
@@ -786,8 +760,8 @@ mod tests {
             delta.add_record(1, b"test".to_vec());
             s.append_delta_log(&mut delta);
 
-            match *s.header_cache.read() {
-                HeaderCache::Initialized(h) => {
+            match s.header_cache.get() {
+                Some(Some(h)) => {
                     assert_gt!(h.data_size.get(), 0);
                 }
                 state => panic!("Expected Initialized, got {:?}", state),
@@ -795,10 +769,7 @@ mod tests {
 
             // 5. Invalidate: Initialized -> Uninitialized
             s.page_map_mut();
-            match *s.header_cache.read() {
-                HeaderCache::Uninitialized => (),
-                state => panic!("Expected Uninitialized after page_map_mut, got {:?}", state),
-            }
+            assert!(s.header_cache.get().is_none());
         }
     }
 }
