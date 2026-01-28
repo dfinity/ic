@@ -151,7 +151,7 @@ USER=$(whoami)
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
-    -u "ubuntu:ubuntu"
+    -u "$(id -u):$(id -g)"
     -e HOSTUSER="$USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
