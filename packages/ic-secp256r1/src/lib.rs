@@ -652,3 +652,20 @@ impl PublicKey {
         (derived_key, chain_code)
     }
 }
+
+/// Error if a DER signature is not a valid encoding
+#[derive(Copy, Clone, Debug)]
+pub enum InvalidSignatureEncoding {
+    /// The encoding was not valid; no further details available
+    InvalidEncoding,
+}
+
+/// DER decode a P-256 signature and return the usual byte encoding
+pub fn signature_from_der_bytes(der: &[u8]) -> Result<Vec<u8>, InvalidSignatureEncoding>  {
+    // The p256::ecdsa::Error type doesn't contain any useful information
+    if let Ok(sig) = p256::ecdsa::Signature::from_der(der) {
+        Ok(sig.to_bytes().to_vec())
+    } else {
+        Err(InvalidSignatureEncoding::InvalidEncoding)
+    }
+}

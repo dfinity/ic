@@ -135,14 +135,13 @@ pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
 /// # Errors
 /// * `CryptoError::MalformedSignature`: if the signature cannot be DER decoded.
 pub fn ecdsa_p256_signature_from_der_bytes(sig_der: &[u8]) -> CryptoResult<BasicSig> {
-    let sig =
-        p256::ecdsa::Signature::from_der(sig_der).map_err(|e| CryptoError::MalformedSignature {
+    let sig = ic_secp256r1::signature_from_der_bytes(sig_der).map_err(|e| CryptoError::MalformedSignature {
             algorithm: AlgorithmId::EcdsaP256,
             sig_bytes: sig_der.to_vec(),
-            internal_error: format!("Error parsing DER signature: {e}"),
+            internal_error: format!("Error parsing DER signature: {:?}", e),
         })?;
 
-    Ok(BasicSig(sig.to_bytes().to_vec()))
+    Ok(BasicSig(sig))
 }
 
 /// Decodes an RSA signature from binary data.
