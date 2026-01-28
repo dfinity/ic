@@ -1119,7 +1119,6 @@ mod tests {
             threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
         },
         registry::RegistryClientError,
-        signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
     use mockall::mock;
@@ -1140,38 +1139,24 @@ mod tests {
         }
     }
 
-    fn make_local_cup(
-        height: Height,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> CatchUpPackage {
-        let mut dkg_summary = DkgSummary::fake();
-        dkg_summary.registry_version = registry_version;
-        let mut adapted_transcripts = dkg_summary.current_transcripts().clone();
-        for transcript in adapted_transcripts.values_mut() {
-            transcript.registry_version = registry_version;
-        }
-        let dkg_summary = dkg_summary.with_current_transcripts(adapted_transcripts);
-
+    // Helper function to create a CUP with given height and summary payload.
+    fn make_cup_with_summary(height: Height, summary_payload: SummaryPayload) -> CatchUpPackage {
         let block = Block::new(
             CryptoHashOf::from(CryptoHash(Vec::new())),
             Payload::new(
                 ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg: dkg_summary,
-                    idkg: None,
-                }),
+                BlockPayload::Summary(summary_payload),
             ),
             height,
             Rank(46),
             ValidationContext {
-                registry_version: registry_version + 1.into(),
-                certified_height: height - 1.into(),
+                registry_version: RegistryVersion::from(101),
+                certified_height: Height::from(42),
                 time: UNIX_EPOCH,
             },
         );
 
-        let mut cup = CatchUpPackage::fake(CatchUpContent::new(
+        let cup = CatchUpPackage::fake(CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, block),
             HashedRandomBeacon::new(
                 ic_types::crypto::crypto_hash,
@@ -1184,10 +1169,76 @@ mod tests {
             None,
         ));
 
+        cup
+    }
+
+    // Create a CUP for a given subnet id and registry version.
+    fn make_local_cup(
+        height: Height,
+        subnet_id: SubnetId,
+        registry_version: RegistryVersion,
+    ) -> CatchUpPackage {
+        let mut nidkg_summary = DkgSummary::fake();
+        nidkg_summary.registry_version = registry_version;
+        let mut nidkg_transcripts = nidkg_summary.current_transcripts().clone();
+        for transcript in nidkg_transcripts.values_mut() {
+            transcript.registry_version = registry_version;
+        }
+        nidkg_summary = nidkg_summary.with_current_transcripts(nidkg_transcripts);
+
+        let summary_payload = SummaryPayload {
+            dkg: nidkg_summary,
+            idkg: None,
+        };
+
+        let mut cup = make_cup_with_summary(height, summary_payload);
+
         cup.signature.signer.target_subnet = NiDkgTargetSubnet::Local;
         cup.signature.signer.dealer_subnet = subnet_id;
 
         cup
+    }
+
+    // Create a CUP with a given key transcript.
+    fn make_cup_with_key_transcript(
+        height: Height,
+        key_transcript: Option<(MasterPublicKeyId, KeyTranscript)>,
+    ) -> CatchUpPackage {
+        let mut nidkg_transcripts = BTreeMap::new();
+        let mut idkg_transcripts = BTreeMap::new();
+        let mut idkg_key_transcripts = Vec::new();
+
+        if let Some((key_id, transcript)) = key_transcript {
+            match (&key_id, transcript) {
+                (MasterPublicKeyId::VetKd(_), KeyTranscript::NiDkg(transcript)) => {
+                    nidkg_transcripts.insert(transcript.dkg_id.dkg_tag.clone(), transcript);
+                }
+                (MasterPublicKeyId::Ecdsa(_), KeyTranscript::IDkg(transcript))
+                | (MasterPublicKeyId::Schnorr(_), KeyTranscript::IDkg(transcript)) => {
+                    idkg_transcripts.insert(transcript.transcript_id, transcript.clone());
+                    let unmasked = idkg::UnmaskedTranscriptWithAttributes::new(
+                        transcript.to_attributes(),
+                        idkg::UnmaskedTranscript::try_from((height, &transcript)).unwrap(),
+                    );
+                    idkg_key_transcripts.push(MasterKeyTranscript {
+                        current: Some(unmasked),
+                        next_in_creation: idkg::KeyTranscriptCreation::Begin,
+                        master_key_id: key_id.clone().try_into().unwrap(),
+                    });
+                }
+                _ => panic!("Unexpected key ID, transcript combination"),
+            }
+        }
+
+        let mut idkg = idkg::IDkgPayload::empty(height, subnet_test_id(0), idkg_key_transcripts);
+        idkg.idkg_transcripts = idkg_transcripts;
+
+        let summary_payload = SummaryPayload {
+            dkg: DkgSummary::fake().with_current_transcripts(nidkg_transcripts),
+            idkg: Some(idkg),
+        };
+
+        make_cup_with_summary(height, summary_payload)
     }
 
     fn add_replica_version_to_provider(
@@ -2524,74 +2575,6 @@ mod tests {
         NiDkg(NiDkgTranscript),
     }
 
-    fn make_cup(
-        h: Height,
-        key_transcript: Option<(MasterPublicKeyId, KeyTranscript)>,
-    ) -> CatchUpPackage {
-        let mut nidkg_transcripts = BTreeMap::new();
-        let mut idkg_transcripts = BTreeMap::new();
-        let mut idkg_key_transcripts = Vec::new();
-
-        if let Some((key_id, transcript)) = key_transcript {
-            match (&key_id, transcript) {
-                (MasterPublicKeyId::VetKd(_), KeyTranscript::NiDkg(transcript)) => {
-                    nidkg_transcripts.insert(transcript.dkg_id.dkg_tag.clone(), transcript);
-                }
-                (MasterPublicKeyId::Ecdsa(_), KeyTranscript::IDkg(transcript))
-                | (MasterPublicKeyId::Schnorr(_), KeyTranscript::IDkg(transcript)) => {
-                    idkg_transcripts.insert(transcript.transcript_id, transcript.clone());
-                    let unmasked = idkg::UnmaskedTranscriptWithAttributes::new(
-                        transcript.to_attributes(),
-                        idkg::UnmaskedTranscript::try_from((h, &transcript)).unwrap(),
-                    );
-                    idkg_key_transcripts.push(MasterKeyTranscript {
-                        current: Some(unmasked),
-                        next_in_creation: idkg::KeyTranscriptCreation::Begin,
-                        master_key_id: key_id.clone().try_into().unwrap(),
-                    });
-                }
-                _ => panic!("Unexpected key ID, transcript combination"),
-            }
-        }
-
-        let mut idkg = idkg::IDkgPayload::empty(h, subnet_test_id(0), idkg_key_transcripts);
-        idkg.idkg_transcripts = idkg_transcripts;
-
-        let block = Block::new(
-            CryptoHashOf::from(CryptoHash(Vec::new())),
-            Payload::new(
-                ic_types::crypto::crypto_hash,
-                BlockPayload::Summary(SummaryPayload {
-                    dkg: DkgSummary::fake().with_current_transcripts(nidkg_transcripts),
-                    idkg: Some(idkg),
-                }),
-            ),
-            h,
-            Rank(46),
-            ValidationContext {
-                registry_version: RegistryVersion::from(101),
-                certified_height: Height::from(42),
-                time: UNIX_EPOCH,
-            },
-        );
-
-        CatchUpPackage {
-            content: CatchUpContent::new(
-                HashedBlock::new(ic_types::crypto::crypto_hash, block),
-                HashedRandomBeacon::new(
-                    ic_types::crypto::crypto_hash,
-                    RandomBeacon::fake(RandomBeaconContent::new(
-                        h,
-                        CryptoHashOf::from(CryptoHash(Vec::new())),
-                    )),
-                ),
-                CryptoHashOf::from(CryptoHash(Vec::new())),
-                None,
-            ),
-            signature: ThresholdSignature::fake(),
-        }
-    }
-
     fn get_master_key_changed_metric(
         key: &MasterPublicKeyId,
         metrics: &OrchestratorMetrics,
@@ -2703,8 +2686,8 @@ mod tests {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), Some(key));
-            let c2 = make_cup(Height::from(100), None);
+            let c1 = make_cup_with_key_transcript(Height::from(10), Some(key));
+            let c2 = make_cup_with_key_transcript(Height::from(100), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -2743,8 +2726,8 @@ mod tests {
             let key1 = setup.generate_key_transcript(&key_id);
             let key2 = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), Some(key1));
-            let c2 = make_cup(Height::from(100), Some(key2));
+            let c1 = make_cup_with_key_transcript(Height::from(10), Some(key1));
+            let c2 = make_cup_with_key_transcript(Height::from(100), Some(key2));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -2768,8 +2751,8 @@ mod tests {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), Some(key.clone()));
-            let c2 = make_cup(Height::from(100), Some(key));
+            let c1 = make_cup_with_key_transcript(Height::from(10), Some(key.clone()));
+            let c2 = make_cup_with_key_transcript(Height::from(100), Some(key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -2792,7 +2775,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript(&key_id1);
-            let c1 = make_cup(Height::from(10), Some(key.clone()));
+            let c1 = make_cup_with_key_transcript(Height::from(10), Some(key.clone()));
 
             let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
             let c2 = if let (MasterPublicKeyId::VetKd(key_id), KeyTranscript::NiDkg(transcript)) =
@@ -2801,12 +2784,12 @@ mod tests {
                 let mut transcript2 = transcript.clone();
                 transcript2.dkg_id.dkg_tag =
                     NiDkgTag::HighThresholdForKey(NiDkgMasterPublicKeyId::VetKd(key_id.clone()));
-                make_cup(
+                make_cup_with_key_transcript(
                     Height::from(100),
                     Some((key_id2, KeyTranscript::NiDkg(transcript2))),
                 )
             } else {
-                make_cup(Height::from(100), Some((key_id2, key.1)))
+                make_cup_with_key_transcript(Height::from(100), Some((key_id2, key.1)))
             };
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
@@ -2831,8 +2814,8 @@ mod tests {
             let mut setup = Setup::new();
             let key = setup.generate_key_transcript(&key_id);
 
-            let c1 = make_cup(Height::from(10), None);
-            let c2 = make_cup(Height::from(100), Some(key));
+            let c1 = make_cup_with_key_transcript(Height::from(10), None);
+            let c2 = make_cup_with_key_transcript(Height::from(100), Some(key));
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -2850,8 +2833,8 @@ mod tests {
             let setup = Setup::new();
             let key_id = make_ecdsa_key_id();
 
-            let c1 = make_cup(Height::from(10), None);
-            let c2 = make_cup(Height::from(100), None);
+            let c1 = make_cup_with_key_transcript(Height::from(10), None);
+            let c2 = make_cup_with_key_transcript(Height::from(100), None);
 
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
@@ -2950,7 +2933,7 @@ mod tests {
 
             let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
             let key_transcript = setup.generate_key_transcript(&key_id);
-            let cup = make_cup(Height::from(15), Some(key_transcript));
+            let cup = make_cup_with_key_transcript(Height::from(15), Some(key_transcript));
 
             println!(
                 "Use-case: {oldest_relevant_version}, {node_in_subnet:?}, {expected_decision:?}"
