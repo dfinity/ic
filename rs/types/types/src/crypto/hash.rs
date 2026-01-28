@@ -1,5 +1,6 @@
 //! Defines hash types.
 
+use crate::Randomness;
 use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
@@ -448,4 +449,15 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
     let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
     data.hash(&mut hash);
     CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
+}
+
+/// Derives `Randomness` from a `CryptoHashable` value using a domain-separated hash.
+///
+/// This function computes a cryptographic hash of the input data using the same
+/// domain separation as `crypto_hash`, then converts the resulting hash bytes
+/// into `Randomness`.
+pub fn crypto_hashable_to_randomness<T: CryptoHashable>(data: &T) -> Randomness {
+    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
+    data.hash(&mut hash);
+    Randomness::from(hash.finish())
 }

@@ -656,7 +656,7 @@ mod tests {
             vec![],
             pre_signature_stashes,
             &mut Csprng::from_seed_and_purpose(
-                &Randomness::new([1; 32]),
+                Csprng::seed_from_randomness(&Randomness::new([1; 32])),
                 &ic_crypto_prng::RandomnessPurpose::ExecutionThread(1),
             ),
             &RegistryExecutionSettings {

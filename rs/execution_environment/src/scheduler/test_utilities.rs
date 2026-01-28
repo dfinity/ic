@@ -559,8 +559,9 @@ impl SchedulerTest {
     pub fn drain_subnet_messages(&mut self) -> ReplicatedState {
         let state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
+        let seed = Csprng::seed_from_randomness(&Randomness::from([0; 32]));
         let mut csprng = Csprng::from_seed_and_purpose(
-            &Randomness::from([0; 32]),
+            seed,
             &ExecutionThread(self.scheduler.config.scheduler_cores as u32),
         );
         let mut round_limits = RoundLimits {
