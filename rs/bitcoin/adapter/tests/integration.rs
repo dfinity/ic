@@ -876,7 +876,6 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     client1.generate_to_address(6, address1).unwrap();
     client2.generate_to_address(6, address2).unwrap();
 
-    //
     wait_for_blocks(client1, 26);
     wait_for_blocks(client2, 26);
 
