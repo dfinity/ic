@@ -1,3 +1,4 @@
+use backfill_self_describing_action::BackfillSelfDescribingActionTask;
 use calculate_distributable_rewards::CalculateDistributableRewardsTask;
 use finalize_maturity_disbursements::FinalizeMaturityDisbursementsTask;
 use ic_metrics_encoder::MetricsEncoder;
@@ -11,8 +12,12 @@ use snapshot_voting_power::SnapshotVotingPowerTask;
 use std::cell::RefCell;
 use unstake_maturity_of_dissolved_neurons::UnstakeMaturityOfDissolvedNeuronsTask;
 
-use crate::{canister_state::GOVERNANCE, storage::VOTING_POWER_SNAPSHOTS};
+use crate::{
+    canister_state::GOVERNANCE, is_self_describing_proposal_actions_enabled,
+    storage::VOTING_POWER_SNAPSHOTS,
+};
 
+mod backfill_self_describing_action;
 mod calculate_distributable_rewards;
 mod distribute_rewards;
 mod finalize_maturity_disbursements;
@@ -34,6 +39,10 @@ pub fn schedule_tasks() {
     FinalizeMaturityDisbursementsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     UnstakeMaturityOfDissolvedNeuronsTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
     NeuronDataValidationTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+
+    if is_self_describing_proposal_actions_enabled() {
+        BackfillSelfDescribingActionTask::new(&GOVERNANCE).schedule(&METRICS_REGISTRY);
+    }
 
     run_distribute_rewards_periodic_task();
 }

@@ -5,6 +5,7 @@ use sev::certs::snp::ca::Chain as SevCaChain;
 use sev::certs::snp::{Certificate, Chain, Verifiable, ca};
 use sev::firmware::guest::AttestationReport;
 use sev::parser::ByteParser;
+use std::borrow::Borrow;
 use std::fmt::Debug;
 
 /// Controls whether the SEV root certificate is verified.
@@ -18,35 +19,38 @@ pub enum SevRootCertificateVerification {
 
 /// Extension trait for verifying attestation packages.
 pub trait AttestationPackageVerifier: Sized {
+    type Target: AttestationPackageVerifier<Target = Self::Target>;
+
     /// Verify all attestation report fields.
     fn verify_all<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
         blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
         expected_chip_ids: &[[u8; 64]],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+    ) -> Result<Self::Target, VerificationError> {
         self.verify_custom_data(expected_custom_data)
             .verify_measurement(blessed_guest_launch_measurements)
             .verify_chip_id(expected_chip_ids)
     }
+
     /// Verify that the attestation report chip ID matches one of the expected chip IDs.
     fn verify_chip_id(
         self,
         expected_chip_ids: &[[u8; 64]],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
+    ) -> Result<Self::Target, VerificationError>;
 
     /// Verify that the attestation report custom data matches the expected custom data.
     fn verify_custom_data<T: EncodeSevCustomData + Debug>(
         self,
         expected_custom_data: &T,
-    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
+    ) -> Result<Self::Target, VerificationError>;
 
     /// Verify that the attestation report launch measurement matches one of the blessed guest
     /// launch measurements.
     fn verify_measurement(
         self,
         blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError>;
+    ) -> Result<Self::Target, VerificationError>;
 }
 
 /// A parsed attestation package with the attestation report and certificate chain
@@ -163,12 +167,11 @@ impl From<ParsedSevAttestationPackage> for SevAttestationPackage {
     }
 }
 
-impl AttestationPackageVerifier for ParsedSevAttestationPackage {
-    fn verify_chip_id(
-        self,
-        expected_chip_ids: &[[u8; 64]],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
-        if !expected_chip_ids.contains(&self.attestation_report.chip_id) {
+impl<T: Borrow<ParsedSevAttestationPackage>> AttestationPackageVerifier for T {
+    type Target = Self;
+
+    fn verify_chip_id(self, expected_chip_ids: &[[u8; 64]]) -> Result<Self, VerificationError> {
+        if !expected_chip_ids.contains(&self.borrow().attestation_report.chip_id) {
             return Err(VerificationError::invalid_chip_id(format!(
                 "Expected one of chip IDs: {}, actual: {}",
                 expected_chip_ids
@@ -176,18 +179,18 @@ impl AttestationPackageVerifier for ParsedSevAttestationPackage {
                     .map(hex::encode)
                     .collect::<Vec<_>>()
                     .join(", "),
-                hex::encode(self.attestation_report.chip_id)
+                hex::encode(self.borrow().attestation_report.chip_id)
             )));
         }
 
         Ok(self)
     }
 
-    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
+    fn verify_custom_data<D: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &T,
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
-        let actual_report_data = &self.attestation_report.report_data;
+        expected_custom_data: &D,
+    ) -> Result<Self, VerificationError> {
+        let actual_report_data = &self.borrow().attestation_report.report_data;
         let expected_report_data = expected_custom_data.encode_for_sev();
         if let Ok(expected_report_data) = expected_report_data
             && expected_report_data.verify(actual_report_data)
@@ -197,7 +200,7 @@ impl AttestationPackageVerifier for ParsedSevAttestationPackage {
 
         // TODO(NODE-1784): remove this once clients no longer send legacy custom data
         let expected_report_data_legacy = expected_custom_data.encode_for_sev_legacy();
-        if T::needs_legacy_encoding()
+        if D::needs_legacy_encoding()
             && let Ok(expected_report_data_legacy) = expected_report_data_legacy
             && &expected_report_data_legacy == actual_report_data
         {
@@ -211,15 +214,15 @@ impl AttestationPackageVerifier for ParsedSevAttestationPackage {
              Debug info: \
              expected: {expected_custom_data:?} \
              actual: {}",
-            self.custom_data_debug_info
+            self.borrow().custom_data_debug_info
         )))
     }
 
     fn verify_measurement(
         self,
         blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
-        let launch_measurement = self.attestation_report.measurement;
+    ) -> Result<Self, VerificationError> {
+        let launch_measurement = self.borrow().attestation_report.measurement;
         if !blessed_guest_launch_measurements
             .iter()
             .any(|blessed_measurement| {
@@ -242,25 +245,27 @@ impl AttestationPackageVerifier for ParsedSevAttestationPackage {
 }
 
 /// Allows chaining verification methods
-impl AttestationPackageVerifier for Result<ParsedSevAttestationPackage, VerificationError> {
+impl<T: AttestationPackageVerifier> AttestationPackageVerifier for Result<T, VerificationError> {
+    type Target = T::Target;
+
     fn verify_chip_id(
         self,
         expected_chip_ids: &[[u8; 64]],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+    ) -> Result<Self::Target, VerificationError> {
         self?.verify_chip_id(expected_chip_ids)
     }
 
-    fn verify_custom_data<T: EncodeSevCustomData + Debug>(
+    fn verify_custom_data<U: EncodeSevCustomData + Debug>(
         self,
-        expected_custom_data: &T,
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+        expected_custom_data: &U,
+    ) -> Result<Self::Target, VerificationError> {
         self?.verify_custom_data(expected_custom_data)
     }
 
     fn verify_measurement(
         self,
         blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
-    ) -> Result<ParsedSevAttestationPackage, VerificationError> {
+    ) -> Result<Self::Target, VerificationError> {
         self?.verify_measurement(blessed_guest_launch_measurements)
     }
 }
