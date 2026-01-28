@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
 use ic_certification_test_utils::serialize_to_cbor;
-use ic_crypto_internal_basic_sig_iccsa::types::*;
-use ic_crypto_internal_basic_sig_iccsa::*;
-use ic_crypto_internal_basic_sig_iccsa_test_utils::new_random_cert;
+use ic_crypto_iccsa::types::*;
+use ic_crypto_iccsa::*;
+use ic_crypto_iccsa_test_utils::new_random_cert;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
