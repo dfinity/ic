@@ -2,6 +2,7 @@ use super::*;
 use crate::sign::tests::KEY_ID;
 use crate::sign::tests::KEY_ID_STRING;
 use crate::sign::threshold_sig::ThresholdSigDataStore;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp::types::{CspPublicCoefficients, ThresBls12_381_Signature};
 use ic_crypto_internal_csp_test_utils::types::{
     csp_sig_thres_bls12381_combined_from_array_of, csp_sig_thres_bls12381_indiv_from_array_of,
@@ -35,7 +36,6 @@ pub const NI_DKG_ID_1: NiDkgId = NiDkgId {
 
 mod sign_threshold {
     use super::*;
-    use assert_matches::assert_matches;
     use ic_crypto_internal_csp::key_id::KeyId;
 
     #[test]
@@ -570,18 +570,13 @@ mod verify_threshold_sig_share {
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: the algorithm of the public key from the threshold \
-            signature data store (which is based on the algorithm of the public coefficients in \
-            the store) is not supported"
-    )]
-    fn should_panic_if_csp_returns_invalid_argument_error() {
+    fn should_forward_error_if_csp_returns_invalid_argument_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(invalid_argument()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -589,21 +584,18 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_matches!(result, Err(CryptoError::InvalidArgument { .. }));
     }
 
     #[test]
-    #[should_panic(
-        expected = "Illegal state: the algorithm of the public key from the threshold signature data \
-            store (which is based on the algorithm of the public coefficients in the store) is \
-            not supported"
-    )]
-    fn should_panic_if_csp_returns_malformed_public_key_error() {
+    fn should_forward_error_if_csp_returns_malformed_public_key_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(malformed_public_key()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -611,17 +603,18 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_eq!(result, Err(malformed_public_key()));
     }
 
     #[test]
-    #[should_panic(expected = "This case cannot occur")]
-    fn should_panic_if_csp_returns_malformed_signature_error() {
+    fn should_forward_error_if_csp_returns_malformed_signature_error() {
         let (sig_share, message, csp_public_key) = (sig_share(), signable_mock(), csp_public_key());
         let threshold_sig_data_store =
             threshold_sig_data_store_with_coeffs_and_pubkey(&NI_DKG_ID_1, NODE_ID, csp_public_key);
         let csp = csp_with_verify_indiv_sig_returning_once(Err(malformed_signature()));
 
-        let _panic = ThresholdSigVerifierInternal::verify_threshold_sig_share(
+        let result = ThresholdSigVerifierInternal::verify_threshold_sig_share(
             &threshold_sig_data_store,
             &csp,
             &sig_share,
@@ -629,6 +622,8 @@ mod verify_threshold_sig_share {
             &NI_DKG_ID_1,
             NODE_ID,
         );
+
+        assert_eq!(result, Err(malformed_signature()));
     }
 
     fn csp_with_indiv_pk_returning_once(
@@ -853,9 +848,7 @@ mod combine_threshold_sig_shares {
     }
 
     #[test]
-    #[should_panic(expected = "The CSP must return a signature of type \
-        `CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined)`.")]
-    fn should_panic_if_csp_returns_wrong_signature_type() {
+    fn should_return_malformed_signature_error_if_csp_returns_wrong_signature_type() {
         let shares = shares(vec![(
             NODE_1,
             threshold_sig_share(vec![1; IndividualSignatureBytes::SIZE]),
@@ -867,12 +860,14 @@ mod combine_threshold_sig_shares {
         let threshold_sig_data_store =
             threshold_sig_data_store_with(&NI_DKG_ID_1, pub_coeffs(), indices);
 
-        let _panic = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
+        let result = ThresholdSigVerifierInternal::combine_threshold_sig_shares(
             &threshold_sig_data_store,
             &csp,
             shares,
             &NI_DKG_ID_1,
         );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
     }
 
     #[test]
