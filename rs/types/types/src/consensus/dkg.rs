@@ -138,7 +138,7 @@ impl HasVersion for DealingContent {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Serialize, Deserialize, Eq, PartialEq, Hash, Debug)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 /// Represents the status of subnet splitting at the given summary height.
 pub enum SubnetSplittingStatus {
@@ -229,6 +229,7 @@ impl DkgSummary {
         next_interval_length: Height,
         height: Height,
         initial_dkg_attempts: BTreeMap<NiDkgTargetId, u32>,
+        subnet_splitting_status: Option<SubnetSplittingStatus>,
     ) -> Self {
         Self {
             configs: configs
@@ -243,8 +244,7 @@ impl DkgSummary {
             next_interval_length,
             height,
             initial_dkg_attempts,
-            // TODO: start populating this field when it's safe
-            subnet_splitting_status: None,
+            subnet_splitting_status,
         }
     }
 

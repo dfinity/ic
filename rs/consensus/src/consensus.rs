@@ -251,6 +251,7 @@ impl ConsensusImpl {
                 crypto.clone(),
                 state_manager.clone(),
                 message_routing.clone(),
+                registry_client.clone(),
                 logger.clone(),
             ),
             block_maker: BlockMaker::new(
@@ -286,6 +287,8 @@ impl ConsensusImpl {
                 membership,
                 message_routing.clone(),
                 crypto.clone(),
+                registry_client.clone(),
+                replica_config.clone(),
                 logger.clone(),
             ),
             purger: Purger::new(

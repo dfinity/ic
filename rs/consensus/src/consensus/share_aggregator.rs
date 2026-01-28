@@ -2,23 +2,30 @@
 //! of shares into full objects. That is, it constructs Random Beacon objects
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
-use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
+use crate::consensus::{
+    catchup_package_maker::CatchUpPackageType,
+    random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE,
+};
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id, aggregate,
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
     registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
-use ic_logger::ReplicaLogger;
+use ic_interfaces_registry::RegistryClient;
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_types::{
     Height,
     consensus::{
-        CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
-        RandomTapeContent,
+        Block, CatchUpContent, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable,
+        FinalizationContent, HasCommittee, HasHeight, RandomTapeContent,
     },
-    crypto::Signed,
+    crypto::threshold_sig::ni_dkg::NiDkgTag,
+    replica_config::ReplicaConfig,
 };
 use std::{cmp::min, sync::Arc};
+
+use super::catchup_package_maker;
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
@@ -26,6 +33,8 @@ pub(crate) struct ShareAggregator {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
+    registry: Arc<dyn RegistryClient>,
+    replica_config: ReplicaConfig,
     log: ReplicaLogger,
 }
 
@@ -34,12 +43,16 @@ impl ShareAggregator {
         membership: Arc<Membership>,
         message_routing: Arc<dyn MessageRouting>,
         crypto: Arc<dyn ConsensusCrypto>,
+        registry: Arc<dyn RegistryClient>,
+        replica_config: ReplicaConfig,
         log: ReplicaLogger,
     ) -> ShareAggregator {
         ShareAggregator {
             membership,
             crypto,
             message_routing,
+            registry,
+            replica_config,
             log,
         }
     }
@@ -53,6 +66,7 @@ impl ShareAggregator {
         messages.append(&mut self.aggregate_notarization_shares(pool));
         messages.append(&mut self.aggregate_finalization_shares(pool));
         messages.append(&mut self.aggregate_catch_up_package_shares(pool));
+
         messages
     }
 
@@ -135,27 +149,24 @@ impl ShareAggregator {
         let current_cup_height = pool.get_catch_up_height();
 
         while start_block.height() > current_cup_height {
-            let height = start_block.height();
-            let shares = pool.get_catch_up_package_shares(height).map(|share| {
-                let block = pool
-                    .get_block(&share.content.block, height)
-                    .unwrap_or_else(|err| panic!("Block not found for {share:?}, error: {err:?}"));
-                Signed {
-                    content: CatchUpContent::from_share_content(share.content, block.into_inner()),
-                    signature: share.signature,
+            match self.aggregate_catch_up_package_shares_for_summary_block(pool, &start_block) {
+                Ok(Some(cup)) => {
+                    return vec![ConsensusMessage::CatchUpPackage(cup)];
                 }
-            });
-            let state_reader = pool.as_cache();
-            let dkg_id = active_high_threshold_nidkg_id(state_reader, height);
-            let result = aggregate(
-                &self.log,
-                self.membership.as_ref(),
-                self.crypto.as_aggregate(),
-                Box::new(|_| dkg_id.clone()),
-                shares,
-            );
-            if !result.is_empty() {
-                return to_messages(result);
+                Ok(None) => {
+                    debug!(
+                        self.log,
+                        "Not enough shares to be able to create a full CUP at height{}",
+                        start_block.height()
+                    );
+                }
+                Err(err) => {
+                    warn!(
+                        self.log,
+                        "Encountered an error while aggregating CUP shares at height {}: {err}",
+                        start_block.height()
+                    );
+                }
             }
 
             let Some(block_from_last_interval) =
@@ -177,6 +188,80 @@ impl ShareAggregator {
         }
         Vec::new()
     }
+
+    fn aggregate_catch_up_package_shares_for_summary_block(
+        &self,
+        pool: &PoolReader<'_>,
+        summary_block: &Block,
+    ) -> Result<Option<CatchUpPackage>, String> {
+        let (threshold, dkg_id, block) = match catchup_package_maker::get_catch_up_package_type(
+            self.registry.as_ref(),
+            self.replica_config.node_id,
+            summary_block,
+        )
+        .map_err(|err| format!("Failed to determine the cup type: {err}"))?
+        {
+            CatchUpPackageType::Normal => {
+                let threshold = self
+                    .membership
+                    .get_committee_threshold(summary_block.height(), CatchUpPackage::committee())
+                    .map_err(|err| format!("Failed to get the committee threshold: {err:?}"))?;
+
+                let dkg_id =
+                    active_high_threshold_nidkg_id(pool.as_cache(), summary_block.height())
+                        .ok_or_else(|| String::from("Couldn't get the high dkg id"))?;
+
+                (threshold, dkg_id, summary_block.clone())
+            }
+            CatchUpPackageType::PostSplit { new_subnet_id } => {
+                let post_split_summary_block =
+                    catchup_package_maker::create_post_split_summary_block(
+                        summary_block,
+                        new_subnet_id,
+                        self.registry.as_ref(),
+                    )
+                    .map_err(|err| format!("Failed to create a post-split summary block: {err}"))?;
+
+                let transcript = post_split_summary_block
+                    .payload
+                    .as_ref()
+                    .as_summary()
+                    .dkg
+                    .current_transcript(&NiDkgTag::HighThreshold)
+                    .ok_or_else(|| {
+                        String::from("Couldn't find the transcript in the post-split summary block")
+                    })?;
+
+                let threshold = transcript.threshold.get().get() as usize;
+                let dkg_id = transcript.dkg_id.clone();
+
+                (threshold, dkg_id, post_split_summary_block)
+            }
+        };
+
+        let shares = pool
+            .get_catch_up_package_shares(block.height())
+            .collect::<Vec<_>>();
+
+        if shares.len() < threshold {
+            return Ok(None);
+        }
+
+        let cup_content =
+            CatchUpContent::from_share_content(shares[0].content.clone(), block.clone());
+        let signatures = shares.iter().map(|share| &share.signature).collect();
+
+        let cup = self
+            .crypto
+            .aggregate(signatures, dkg_id)
+            .map_err(|err| format!("Failed to aggregate shares: {err}"))
+            .map(|signature| CatchUpPackage {
+                content: cup_content,
+                signature,
+            })?;
+
+        Ok(Some(cup))
+    }
 }
 
 fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusMessage> {
@@ -185,23 +270,31 @@ fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusM
 
 #[cfg(test)]
 mod tests {
+    use crate::consensus::catchup_package_maker::CatchUpPackageMaker;
+
     use super::*;
-    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
+    use ic_consensus_mocks::{
+        Dependencies, DependenciesBuilder, dependencies, dependencies_with_subnet_params,
+    };
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
     use ic_test_utilities_consensus::fake::{FakeContentSigner, FakeSigner};
-    use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_registry::{SubnetRecordBuilder, insert_initial_dkg_transcript};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        NodeId, RegistryVersion,
+        CryptoHashOfState, NodeId, RegistryVersion, SubnetId,
         consensus::{
-            CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
-            HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
+            BlockPayload, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
+            FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare, Payload,
+            RandomBeaconShare,
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
     };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, SUBNET_1, SUBNET_2};
+    use rstest::rstest;
     use std::sync::Arc;
 
     const INITIAL_REGISTRY_VERSION: u64 = 1;
@@ -220,6 +313,8 @@ mod tests {
                 mut pool,
                 membership,
                 crypto,
+                registry,
+                replica_config,
                 ..
             } = dependencies(pool_config, 1);
 
@@ -236,8 +331,14 @@ mod tests {
 
             let message_routing = Arc::new(FakeMessageRouting::new());
 
-            let aggregator =
-                ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
+            let aggregator = ShareAggregator::new(
+                membership,
+                message_routing,
+                crypto,
+                registry,
+                replica_config,
+                no_op_logger(),
+            );
             let messages = aggregator.on_state_change(&PoolReader::new(&pool));
 
             let beacon_was_created = messages.iter().any(|x| match x {
@@ -326,6 +427,8 @@ mod tests {
                 mut pool,
                 membership,
                 crypto,
+                registry,
+                replica_config,
                 ..
             } = dependencies_with_subnet_params(
                 pool_config,
@@ -338,8 +441,14 @@ mod tests {
                 )],
             );
             let message_routing = Arc::new(FakeMessageRouting::new());
-            let aggregator =
-                ShareAggregator::new(membership, message_routing, crypto, no_op_logger());
+            let aggregator = ShareAggregator::new(
+                membership,
+                message_routing,
+                crypto,
+                registry,
+                replica_config,
+                no_op_logger(),
+            );
 
             // Skip till next DKG interval.
             pool.advance_round_normal_operation_n(interval_length);
@@ -385,8 +494,165 @@ mod tests {
                 x => panic!("Expecting CatchUpPackageShare but got {x:?}\n"),
             };
 
+            assert!(cup.check_integrity());
             assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);
             cup
+        })
+    }
+
+    #[rstest]
+    #[trace]
+    #[case::no_shares(&[], false)]
+    #[case::not_enough_shares(&[NODE_1], false)]
+    #[case::not_enough_shares(&[NODE_1, NODE_2], false)]
+    #[case::enough_shares(&[NODE_1, NODE_2, NODE_3], true)]
+    #[case::enough_shares(&[NODE_1, NODE_2, NODE_3, NODE_4], true)]
+    fn aggregate_post_split_cup_shares_test(
+        #[case] signers: &[NodeId],
+        #[case] expected_cup: bool,
+    ) {
+        with_test_replica_logger(|log| {
+            ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+                use ic_types::consensus::dkg::SubnetSplittingStatus;
+
+                const SOURCE_SUBNET_ID: SubnetId = SUBNET_1;
+                const DESTINATION_SUBNET_ID: SubnetId = SUBNET_2;
+                const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
+                const SPLITTING_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(2);
+                const INTERVAL_LENGTH: Height = Height::new(9);
+                let fake_state_hash = CryptoHashOfState::from(CryptoHash(vec![1, 2, 3]));
+
+                let Dependencies {
+                    mut pool,
+                    membership,
+                    registry,
+                    crypto,
+                    state_manager,
+                    replica_config,
+                    ..
+                } = DependenciesBuilder::new(
+                    pool_config,
+                    vec![
+                        (
+                            INITIAL_REGISTRY_VERSION.get(),
+                            SOURCE_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4, NODE_5])
+                                .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                .build(),
+                        ),
+                        (
+                            SPLITTING_REGISTRY_VERSION.get(),
+                            SOURCE_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                                .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                .build(),
+                        ),
+                        (
+                            SPLITTING_REGISTRY_VERSION.get(),
+                            DESTINATION_SUBNET_ID,
+                            SubnetRecordBuilder::from(&[NODE_5])
+                                .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                                .build(),
+                        ),
+                    ],
+                )
+                .add_additional_registry_mutation(|registry_data_provider| {
+                    insert_initial_dkg_transcript(
+                        SPLITTING_REGISTRY_VERSION.get(),
+                        SOURCE_SUBNET_ID,
+                        &SubnetRecordBuilder::from(&[NODE_1, NODE_2, NODE_3, NODE_4])
+                            .with_dkg_interval_length(INTERVAL_LENGTH.get())
+                            .build(),
+                        registry_data_provider,
+                    )
+                })
+                .with_replica_config(ReplicaConfig {
+                    node_id: NODE_1,
+                    subnet_id: SOURCE_SUBNET_ID,
+                })
+                .with_mocked_state_manager()
+                .build();
+
+                state_manager
+                    .get_mut()
+                    .expect_get_state_hash_at()
+                    .return_const(Ok(fake_state_hash.clone()));
+
+                let message_routing = FakeMessageRouting::new();
+                *message_routing.next_batch_height.write().unwrap() = Height::from(2);
+                let message_routing = Arc::new(message_routing);
+
+                pool.advance_round_normal_operation_n(INTERVAL_LENGTH.get());
+
+                let subnet_splitting_status = SubnetSplittingStatus::Scheduled {
+                    source_subnet_id: SOURCE_SUBNET_ID,
+                    destination_subnet_id: DESTINATION_SUBNET_ID,
+                };
+                let mut proposal = pool.make_next_block();
+                let block = proposal.content.as_mut();
+                block.context.certified_height = block.height;
+                block.context.registry_version = SPLITTING_REGISTRY_VERSION;
+                let mut payload = block.payload.as_ref().as_summary().clone();
+                payload.dkg.subnet_splitting_status = Some(subnet_splitting_status);
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Summary(payload),
+                );
+                proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.insert_validated(proposal.clone());
+                pool.notarize(&proposal);
+                pool.finalize(&proposal);
+
+                let mut insert_cup_share = |node_id: NodeId| {
+                    let cup_maker = CatchUpPackageMaker::new(
+                        ReplicaConfig {
+                            node_id,
+                            subnet_id: SOURCE_SUBNET_ID,
+                        },
+                        membership.clone(),
+                        crypto.clone(),
+                        state_manager.clone(),
+                        message_routing.clone(),
+                        registry.clone(),
+                        log.clone(),
+                    );
+
+                    let share = cup_maker
+                        .consider_block(&PoolReader::new(&pool), proposal.content.as_ref().clone())
+                        .expect("Should succeed with valid inputs");
+                    pool.insert_validated(share.clone());
+                    share
+                };
+
+                let shares = signers
+                    .iter()
+                    .map(|node_id| insert_cup_share(*node_id))
+                    .collect::<Vec<_>>();
+
+                let aggregator = ShareAggregator::new(
+                    membership,
+                    message_routing,
+                    crypto,
+                    registry,
+                    replica_config,
+                    log,
+                );
+
+                let messages = aggregator.on_state_change(&PoolReader::new(&pool));
+
+                if expected_cup {
+                    let [ConsensusMessage::CatchUpPackage(cup)] = messages.as_slice() else {
+                        panic!("Should have aggregated a single CUP: {messages:?}");
+                    };
+
+                    assert!(cup.check_integrity());
+                    for share in shares {
+                        assert_eq!(CatchUpShareContent::from(&cup.content), share.content);
+                    }
+                } else {
+                    assert_eq!(messages, vec![], "Shouldn't have aggregated any artifacts");
+                }
+            })
         })
     }
 }
