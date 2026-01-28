@@ -232,30 +232,31 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
+    --mount type=tmpfs,target="${CTR_HOME}/.local/share/containers"
 )
 
-if [ "$(id -u)" = "1000" ]; then
+# Todo: remove if condition in another PR
+if [ "${HOST_UID}" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
+            --mount type=bind,source="${HOME}/.gitconfig",target="${CTR_HOME}/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
+            --mount type=bind,source="${HOME}/.bash_history",target="${CTR_HOME}/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="${CTR_HOME}/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
+            --mount type=bind,source="${HOME}/.zsh_history",target="${CTR_HOME}/.zsh_history"
         )
     fi
 
