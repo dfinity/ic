@@ -258,8 +258,20 @@ fi
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
 
-#OTHER_ARGS+=(--uidmap "1000:$(id -u):1" --gidmap "1000:$(id -g):1")
-OTHER_ARGS+=(--userns=host)
+trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
+SUBUID_FILE=$(mktemp --suffix=containerrun)
+SUBGID_FILE=$(mktemp --suffix=containerrun)
+
+echo "ubuntu:100000:65536" >$SUBUID_FILE
+chmod +r ${SUBUID_FILE}
+echo "ubuntu:100000:65536" >$SUBGID_FILE
+chmod +r ${SUBGID_FILE}
+PODMAN_RUN_ARGS+=(
+    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid"
+    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid"
+)
+
+OTHER_ARGS+=(--uidmap "1000:$(id -u):1" --gidmap "1000:$(id -g):1")
 
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
