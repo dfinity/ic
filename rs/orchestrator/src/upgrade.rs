@@ -1060,38 +1060,16 @@ fn report_master_public_key_changed_metric(
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
-    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
-    use ic_crypto_test_utils_keys::public_keys::valid_dkg_dealing_encryption_public_key;
-    use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::crypto::v1::PublicKey;
-    use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
-    };
-    use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::{
-        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_list_record_key,
-        make_subnet_record_key, make_unassigned_nodes_config_record_key,
-    };
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
-    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
-    use prost::Message;
-    use rand::RngCore;
-    use rstest::rstest;
-    use slog::Level;
-    use std::collections::BTreeSet;
-    use std::{collections::BTreeMap, path::Path};
-
     use crate::catch_up_package_provider::LocalCUPReader;
     use crate::catch_up_package_provider::tests::mock_tls_config;
 
     use super::*;
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
+    use ic_crypto_test_utils_keys::public_keys::valid_dkg_dealing_encryption_public_key;
     use ic_crypto_test_utils_ni_dkg::{
         InitialNiDkgConfig, NiDkgTestEnvironment, RandomNiDkgConfig, initial_dkg_transcript,
         run_ni_dkg_and_create_single_transcript,
@@ -1104,13 +1082,28 @@ mod tests {
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::log::log_entry::v1::LogEntry;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
+    use ic_protobuf::registry::subnet::v1::{
+        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
+    };
+    use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
     };
     use ic_protobuf::types::v1 as pb;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::{
+        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_list_record_key,
+        make_subnet_record_key, make_unassigned_nodes_config_record_key,
+    };
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
+    use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, node_test_id, subnet_test_id};
+    use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
         PrincipalId, Time,
         batch::ValidationContext,
@@ -1130,9 +1123,15 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use prost::Message;
+    use rand::RngCore;
+    use rstest::rstest;
+    use slog::Level;
+    use std::collections::BTreeSet;
     use std::io::Write;
     use std::os::fd::AsRawFd;
     use std::os::unix::fs::PermissionsExt;
+    use std::{collections::BTreeMap, path::Path};
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
