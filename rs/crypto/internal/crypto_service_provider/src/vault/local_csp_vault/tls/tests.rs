@@ -142,7 +142,7 @@ mod keygen {
     #[test]
     fn should_set_random_cert_serial_number() {
         use ic_crypto_internal_seed::Seed;
-        use rand::RngCore;
+        use rand::Rng;
 
         pub const FIXED_SEED: u64 = 42;
         let csp_vault = LocalCspVault::builder_for_test()
@@ -156,8 +156,7 @@ mod keygen {
 
         let intermediate_seed: [u8; 32] = csprng_seeded_with(FIXED_SEED).r#gen();
         let seed = Seed::from_bytes(&intermediate_seed);
-        let mut expected_randomness = [0u8; 19];
-        seed.into_rng().fill_bytes(&mut expected_randomness);
+        let expected_randomness: [u8; 19] = seed.into_rng().r#gen();
         let expected_serial = &num_bigint::BigUint::from_bytes_be(&expected_randomness);
         assert_eq!(expected_serial, cert_serial);
     }

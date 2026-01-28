@@ -11,7 +11,6 @@
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::SecretBytes;
 use ic_ed25519::{PrivateKey, PrivateKeyFormat};
-use rand::RngCore;
 use rcgen::{
     Certificate, CertificateParams, DistinguishedName, DnType, DnValue, KeyPair, SerialNumber,
 };
@@ -70,10 +69,10 @@ pub fn generate_tls_key_pair_der(
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let mut rng = seed.into_rng();
-    let mut serial = [0u8; 19];
-    rng.fill_bytes(&mut serial);
-    let secret_key = PrivateKey::generate_using_rng(&mut rng);
+    use rand::Rng;
+    let rng = &mut seed.into_rng();
+    let serial: [u8; 19] = rng.r#gen();
+    let secret_key = PrivateKey::generate_using_rng(rng);
     let x509_cert = x509_v3_certificate(
         common_name,
         serial,

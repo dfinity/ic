@@ -3,6 +3,7 @@ use super::types;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
+
 #[cfg(test)]
 mod tests;
 

@@ -60,7 +60,7 @@ fn should_have_stable_representation_of_private_key() {
 
     assert_eq!(
         hex::encode(serialized_sk),
-        "a16562797465735830302e020100300506032b6570042204208c585dc5f5032b3c022716cdda961ef9aa9dfb7270e39cb5fb3531cf8a9b30c3"
+        "a16562797465735830302e020100300506032b6570042204205bd7a19bfed7ece6c75105fcdcd0f028f1775a8adbeca03f6e65b9c6bd0cab79"
     );
 }
 

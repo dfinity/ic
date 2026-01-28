@@ -289,7 +289,7 @@ mod tls {
         assert_eq!(
             key_id,
             KeyId::from(hex_to_32_bytes(
-                "29a7a43e7b6853c1f7b4945d45b61638a2da2d98cb9de91107ca937fa5a0cc0f"
+                "d4e30d68abf2c67d5e37390a1331fc67e84cdd00a34df5daa6723d1ca18df8f9"
             )),
         );
         assert_eq!(
