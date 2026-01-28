@@ -13,15 +13,15 @@ pub trait BudgetTracker: Send {
 pub struct AdapterLimits {
     /// The maximum size of the HTTP response, including the headers and the body.
     pub max_response_size: NumBytes,
-    /// Tha maximum duration of a response, as measured by the client.
-    pub max_response_duration: Duration,
+    /// The maximumm duration allowed from sending the HTTP request to fully receiving the response, as measured by the client.
+    pub max_response_time: Duration,
 }
 
 pub struct NetworkUsage {
     /// The size of the HTTP response, including the headers and the body.
     pub response_size: NumBytes,
-    /// The duration of the HTTP response, as measured by the client.
-    pub response_duration: Duration,
+    /// The total time elapsed between sending the HTTP request and fully receiving the response, as measured by the client.
+    pub response_time: Duration,
 }
 
 pub enum PricingError {
