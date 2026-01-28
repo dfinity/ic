@@ -497,7 +497,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{
-        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, Replication, Transform,
+        MAX_CANISTER_HTTP_RESPONSE_BYTES, PricingVersion, RefundStatus, Replication, Transform,
     };
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
@@ -591,6 +591,7 @@ mod tests {
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
                 pricing_version: PricingVersion::Legacy,
+                refund_status: RefundStatus::default(),
             },
             socks_proxy_addrs: vec![],
         }
