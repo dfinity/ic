@@ -140,10 +140,10 @@ pub struct CanisterHttpRequestContext {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct RefundStatus {
     /// The amount of cycles that are available to be refunded for this request.
-    /// The amount is calculated base to the payment of the request.
+    /// The amount is calculated based to the payment of the request.
     pub refundable_cycles: Cycles,
     /// The amount of cycles that are allowed to be refunded for this request.
-    /// The allowance is calculated base on the subnet size: per_replica_allowance = refundable_cycles / subnet_size.
+    /// The allowance is calculated based on the subnet size: per_replica_allowance = refundable_cycles / subnet_size.
     pub per_replica_allowance: Cycles,
     /// The amount of cycles that have already been refunded for this request.
     /// Invariant: refunded_cycles <= refundable_cycles
