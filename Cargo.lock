@@ -18897,7 +18897,6 @@ dependencies = [
  "serde_json",
  "sev",
  "sev_guest",
- "sha2 0.10.9",
  "slog",
  "slog-async",
  "strum 0.26.3",
