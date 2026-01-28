@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::xmd;
-use ic_crypto_sha2::Sha256;
+use ic_crypto_sha2::{Sha256, Sha512};
 
 fn xmd_check<const N: usize>(msg: &str, dst: &str, want: &str) {
     assert_eq!(want.len() / 2, N);
@@ -8,7 +8,7 @@ fn xmd_check<const N: usize>(msg: &str, dst: &str, want: &str) {
 }
 
 #[test]
-fn test_xmd_output_lengths() {
+fn test_xmd_sha256_output_lengths() {
     // Check we can handle lengths that are not a perfect multiple of 32.
 
     let inp = b"input";
@@ -19,6 +19,27 @@ fn test_xmd_output_lengths() {
     assert_eq!(xmd::<257, Sha256>(inp, dst).len(), 257);
     assert_eq!(xmd::<8159, Sha256>(inp, dst).len(), 8159);
     assert_eq!(xmd::<8160, Sha256>(inp, dst).len(), 8160);
+
+    // Will fail to compile:
+    //assert_eq!(xmd::<8161, Sha256>(inp, dst).len(), 8161);
+}
+
+#[test]
+fn test_xmd_sha512_output_lengths() {
+    // Check we can handle lengths that are not a perfect multiple of 32.
+
+    let inp = b"input";
+    let dst = b"dst";
+
+    assert_eq!(xmd::<3, Sha512>(inp, dst).len(), 3);
+    assert_eq!(xmd::<63, Sha512>(inp, dst).len(), 63);
+    assert_eq!(xmd::<257, Sha512>(inp, dst).len(), 257);
+    assert_eq!(xmd::<8159, Sha512>(inp, dst).len(), 8159);
+    assert_eq!(xmd::<8160, Sha512>(inp, dst).len(), 8160);
+    assert_eq!(xmd::<16320, Sha512>(inp, dst).len(), 16320);
+
+    // Will fail to compile:
+    //assert_eq!(xmd::<16321, Sha512>(inp, dst).len(), 16321);
 }
 
 #[test]

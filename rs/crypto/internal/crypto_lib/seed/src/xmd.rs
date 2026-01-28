@@ -42,12 +42,12 @@ impl XmdHashFunction for Sha512 {
     }
 }
 
-struct SizeCheck<const L: usize>;
-
-impl<const L: usize> SizeCheck<L> {
-    // This assumes no XmdHashFunction has a DIGEST_LEN < 32
-    const XMD_CAN_PRODUCE_THIS_OUTPUT: usize = 255 * 32 - L;
+pub trait XmdHashFunctionWithSizeCheck<const N: usize>: XmdHashFunction {
+    const XMD_CAN_PRODUCE_THIS_OUTPUT: () = if N > 255 * Self::OUTPUT_BYTES {
+        panic!("XMD output length exceeds maximum allowed length");
+    };
 }
+impl<const N: usize, T: XmdHashFunction> XmdHashFunctionWithSizeCheck<N> for T {}
 
 /// XMD function
 ///
@@ -57,13 +57,13 @@ impl<const L: usize> SizeCheck<L> {
 /// Produces a uniformly random byte string of a given length using a hash
 /// from a message and domain separator.
 ///
-/// The output length is upper bounded by 8160 bytes; SHA-512 can produce
-/// more but it's not possible to write the compile-time assertion to cover
-/// this case.
+/// As defined, XMD can only produce outputs up to 255 times the length
+/// of the hash output: for SHA-256 that's 8160 bytes, for SHA-512 16320 bytes.
+/// Values of N larger than this will fail to compile.
 ///
-pub fn xmd<const N: usize, H: XmdHashFunction>(msg: &[u8], dst: &[u8]) -> [u8; N] {
+pub fn xmd<const N: usize, H: XmdHashFunctionWithSizeCheck<N>>(msg: &[u8], dst: &[u8]) -> [u8; N] {
     // Compile time assertion that XMD can output the requested bytes
-    let _ = SizeCheck::<N>::XMD_CAN_PRODUCE_THIS_OUTPUT;
+    let _ = H::XMD_CAN_PRODUCE_THIS_OUTPUT;
 
     let mut out = [0u8; N];
 
