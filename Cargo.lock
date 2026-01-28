@@ -8996,7 +8996,6 @@ dependencies = [
  "assert_matches",
  "curve25519-dalek",
  "hex",
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",

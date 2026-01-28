@@ -43,7 +43,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
 ///
 /// Uses the Ed25519 object identifier (OID) 1.3.101.112 (see [RFC 8410](https://tools.ietf.org/html/rfc8410)).
 pub fn public_key_to_der(key: types::PublicKeyBytes) -> Vec<u8> {
-    ic_ed25519::convert_raw32_to_der(&key.0)
+    ic_ed25519::PublicKey::convert_raw32_to_der(key.0)
 }
 
 /// An error indicating that decoding of a key failed
