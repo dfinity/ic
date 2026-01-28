@@ -280,7 +280,7 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
     // This ensures the attestation was generated specifically for this node
     let expected_custom_data = NodeRegistrationAttestationCustomData {
         node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
-            .expect("node_signing_pk is valid"),
+            .expect("node_signing_pk must be valid"),
     };
 
     let parsed = ParsedSevAttestationPackage::parse(
