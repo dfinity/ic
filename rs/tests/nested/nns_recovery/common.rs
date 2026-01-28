@@ -498,30 +498,19 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Run guestos-recovery-upgrader via limited-console's rbash-console
-    // This tests the backup recovery path that node providers can use if the recovery TUI fails.
-    //
-    // Flow: SSH as admin → su to limited-console user → rbash-console → sudo recovery-launcher
+    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
     info!(
         logger,
-        "Running guestos-recovery-upgrader via rbash-console on HostOS {} with version={}, recovery-hash-prefix={}",
+        "Running guestos-recovery-upgrader on GuestOS {} with version={}, recovery-hash-prefix={}",
         host.vm_name(),
         img_version,
         recovery_hash_prefix,
     );
-
-    let recovery_upgrader_cmd =
+    let recovery_upgrader_command =
         build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
-
-    // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
-    let script = format!(
-        r#"echo -e "rbash-console\n{}\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
-        recovery_upgrader_cmd
-    );
-
-    host.block_on_bash_script_async(&script)
+    host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
-        .expect("Failed to run guestos-recovery-upgrader via rbash-console");
+        .expect("Failed to run guestos-recovery-upgrader");
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
