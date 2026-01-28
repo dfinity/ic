@@ -119,13 +119,13 @@ pub fn user_public_key_from_bytes(
 /// # Errors
 /// * `CryptoError::MalformedPublicKey`: if the raw public key is malformed.
 pub fn ed25519_public_key_to_der(raw_key: Vec<u8>) -> CryptoResult<Vec<u8>> {
-    Ok(ic_ed25519::PublicKey::deserialize_rfc8410_der(bytes).map_err(|e| {
+    Ok(ic_ed25519::PublicKey::deserialize_raw(&raw_key).map_err(|e| {
         CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Ed25519,
-            key_bytes: Some(bytes.to_vec()),
+            key_bytes: Some(raw_key.to_vec()),
             internal_error: format!("{:?}", e),
         }
-    })?.serialize_raw().to_vec())
+    })?.serialize_rfc8410_der())
 }
 
 /// Decodes an ECDSA P-256 signature from DER.
