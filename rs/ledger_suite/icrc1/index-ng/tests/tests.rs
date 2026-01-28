@@ -1604,14 +1604,13 @@ fn test_fee_collector_107_with_ledger() {
     let feecol_107_2 = account(103, 0);
     let sending_account = account(1, 0);
     let receiving_account = account(2, 0);
-    let minter = minter_identity().sender().unwrap();
     let mut expected_balances = BTreeMap::new();
     let ledger_id = install_ledger_with_wasm(
         env,
         vec![(sending_account, 10_000_000)],
         default_archive_options(),
         Some(feecol_legacy),
-        minter,
+        account(1000, 0).owner,
         ledger_legacy_fc_wasm(),
     );
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
