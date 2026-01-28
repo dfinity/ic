@@ -4,7 +4,7 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
-use crate::canister_state::execution_state::WasmExecutionMode;
+use crate::canister_state::execution_state::{NextScheduledMethod, WasmExecutionMode};
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{
     ExecutionTask, SystemState, log_memory_store::LogMemoryStore,

@@ -2,13 +2,14 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES},
 };
+use more_asserts::debug_assert_gt;
 
 /// Magic prefix that marks a properly initialized canister log buffer.
 pub(crate) const MAGIC: &[u8; 3] = b"CLB";
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub(super) struct Header {
     // Validation and compatibility.
     pub magic: [u8; 3],
@@ -55,8 +56,8 @@ impl Header {
         position: MemoryPosition,
         distance: MemorySize,
     ) -> MemoryPosition {
-        debug_assert!(self.data_capacity.get() > 0);
-        debug_assert!(distance.get() > 0);
+        debug_assert_gt!(self.data_capacity.get(), 0);
+        debug_assert_gt!(distance.get(), 0);
         (position + distance) % self.data_capacity
     }
 

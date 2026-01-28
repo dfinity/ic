@@ -734,6 +734,7 @@ minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
+more-asserts = "0.3.1"
 nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"
