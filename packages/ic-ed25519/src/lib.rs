@@ -15,6 +15,9 @@ use zeroize::ZeroizeOnDrop;
 
 pub use ic_principal::Principal as CanisterId;
 
+/// The length of an Ed25519 signature in bytes
+pub const SIGNATURE_BYTES: usize = 64;
+
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
 pub enum PrivateKeyDecodingError {
@@ -136,7 +139,7 @@ impl PrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         self.sk.sign(msg).into()
     }
 
@@ -358,7 +361,7 @@ impl DerivedPrivateKey {
     /// Sign a message and return a signature
     ///
     /// This is the non-prehashed variant of Ed25519
-    pub fn sign_message(&self, msg: &[u8]) -> [u8; 64] {
+    pub fn sign_message(&self, msg: &[u8]) -> [u8; SIGNATURE_BYTES] {
         ed25519_dalek::hazmat::raw_sign::<Sha512>(&self.esk, msg, &self.vk).to_bytes()
     }
 
@@ -445,7 +448,7 @@ struct Signature {
 
 impl Signature {
     fn from_slice(signature: &[u8]) -> Result<Self, SignatureError> {
-        if signature.len() != 64 {
+        if signature.len() != SIGNATURE_BYTES {
             return Err(SignatureError::InvalidLength);
         }
 
@@ -564,7 +567,7 @@ impl PublicKey {
     /// encoding of a point not in the prime order subgroup), then the DER
     /// encoding of that invalid key will be returned.
     pub fn convert_raw_to_der(raw: &[u8]) -> Result<Vec<u8>, PublicKeyDecodingError> {
-        let raw32 : [u8; 32] = raw.try_into().map_err(|_| {
+        let raw32: [u8; 32] = raw.try_into().map_err(|_| {
             PublicKeyDecodingError::InvalidKeyEncoding(format!(
                 "Expected key of exactly {} bytes, got {}",
                 Self::BYTES,
