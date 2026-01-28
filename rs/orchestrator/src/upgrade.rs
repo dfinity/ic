@@ -1547,6 +1547,7 @@ mod tests {
         // `None` means the node is staying in the subnet
         is_leaving: Option<RegistryVersion>,
         // Whether there is an upcoming upgrade (<=> different replica version at the CUP's registry
+        // version or <=> different replica version for unassigned nodes at the latest registry
         // version)
         // `Some` includes the registry version where the node is upgraded to the new replica
         // version.
