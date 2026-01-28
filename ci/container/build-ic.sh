@@ -40,20 +40,34 @@ EOF
 
 # Color helpers
 tp() { tput -T xterm "$@"; }
+# Check if stdout is a terminal
+is_tty() { [ -t 1 ]; }
 echo_red() {
-    tp setaf 1
-    echo "$1"
-    tp sgr0
+    if is_tty; then
+        tput setaf 1
+        echo "$1"
+        tput sgr0
+    else
+        echo "$1"
+    fi
 }
 echo_green() {
-    tp setaf 2
-    echo "$1"
-    tp sgr0
+    if is_tty; then
+        tput setaf 2
+        echo "$1"
+        tput sgr0
+    else
+        echo "$1"
+    fi
 }
 echo_blue() {
-    tp setaf 4
-    echo "$1"
-    tp sgr0
+    if is_tty; then
+        tput setaf 4
+        echo "$1"
+        tput sgr0
+    else
+        echo "$1"
+    fi
 }
 
 # Join a bash array with a string
