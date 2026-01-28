@@ -2040,7 +2040,7 @@ mod tests {
                     }
                     (Some((registry_cup, _registry_cup_registry_version)), None) => {
                         // The node is joining a subnet, and there is no upgrade scheduled, so we
-                        // are expected to be `Assigned`
+                        // are expected to turn `Assigned`
                         assert_has_not_prepared_upgrade();
                         assert_has_cleared_version_and_image();
                         OrchestratorControlFlow::Assigned(registry_cup.subnet_id)
@@ -2050,7 +2050,7 @@ mod tests {
                         Some((upgrade_replica_version, upgrade_registry_version)),
                     ) if registry_cup_registry_version < upgrade_registry_version => {
                         // An upgrade is scheduled but the CUP's registry version has not
-                        // reached the upgrade registry version yet, so we are expected to stay
+                        // reached the upgrade registry version yet, so we are expected to turn
                         // `Assigned` and not stop and reboot
                         // Though, we should start to download the upgrade in advance
                         assert_has_prepared_upgrade();
