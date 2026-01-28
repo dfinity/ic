@@ -17658,6 +17658,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-management-canister-types 0.5.0",
+ "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -17667,6 +17668,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rejoin-test-lib",
  "slog",
+ "tempfile",
  "tokio",
  "xnet-test",
 ]
