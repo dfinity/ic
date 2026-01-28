@@ -1328,7 +1328,7 @@ fn test_fee_collector_ranges(legacy: bool) {
     );
 
     // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None, legacy); // txid: 5
+    upgrade_ledger(env, ledger_id, None, legacy);
     if !legacy {
         curr_txid += 1; // upgrade fee collector block
     }
