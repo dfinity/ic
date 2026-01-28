@@ -8176,7 +8176,6 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-der-utils"
 version = "0.9.0"
 dependencies = [
- "ic-types",
  "simple_asn1",
 ]
 
