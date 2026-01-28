@@ -1266,3 +1266,87 @@ proptest! {
         }
     }
 }
+
+mod sign_and_submit_request {
+    use crate::management::CallError;
+    use crate::state::eventlog::CkBtcEventLogger;
+    use crate::state::utxos::UtxoSet;
+    use crate::state::{RetrieveBtcRequest, audit, mutate_state, read_state};
+    use crate::submit_pending_requests;
+    use crate::test_fixtures::mock::{MockCanisterRuntime, mock_increasing_time};
+    use crate::test_fixtures::{
+        NOW, bitcoin_address, bitcoin_fee_estimator, ecdsa_public_key, init_state, ledger_account,
+        minter_address, signed_raw_transaction, utxo,
+    };
+    use crate::tx::FeeRate;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn should_be_in_preflight_even_when_sending_fails() {
+        init_state_with_ecdsa_public_key();
+        mutate_state(|s| s.max_time_in_queue_nanos = 0);
+
+        let mut runtime = MockCanisterRuntime::new();
+        mock_increasing_time(&mut runtime, NOW, Duration::from_secs(1));
+        runtime.expect_event_logger().return_const(CkBtcEventLogger);
+
+        let utxo = utxo();
+        let account = ledger_account();
+        mutate_state(|s| audit::add_utxos(s, None, account, vec![utxo.clone()], &runtime));
+
+        let withdrawal_request = RetrieveBtcRequest {
+            amount: 10_000,
+            address: bitcoin_address(),
+            block_index: 0,
+            received_at: 0,
+            kyt_provider: None,
+            reimbursement_account: None,
+        };
+        mutate_state(|s| {
+            audit::accept_retrieve_btc_request(s, withdrawal_request.clone(), &runtime)
+        });
+
+        runtime
+            .expect_derive_minter_address()
+            .times(1)
+            .return_const(minter_address());
+
+        runtime
+            .expect_get_current_fee_percentiles()
+            .times(1)
+            .return_const(Ok([FeeRate::from_millis_per_byte(1_500); 100].to_vec()));
+
+        runtime
+            .expect_fee_estimator()
+            .times(2)
+            .return_const(bitcoin_fee_estimator());
+
+        runtime
+            .expect_sign_transaction()
+            .times(1)
+            .return_const(Ok(signed_raw_transaction()));
+
+        runtime
+            .expect_send_raw_transaction()
+            .times(1)
+            .return_const(Err(CallError::from_cdk_call_error(
+                "bitcoin_send_transaction",
+                ic_cdk::call::CallRejected::with_rejection(1, "BOOM!".to_string()),
+            )));
+
+        submit_pending_requests(&runtime).await;
+
+        read_state(|s| {
+            assert_eq!(
+                s.available_utxos,
+                UtxoSet::default(),
+                "BUG: UTXOs should be unavailable after signing"
+            )
+        });
+    }
+
+    fn init_state_with_ecdsa_public_key() {
+        init_state(crate::test_fixtures::init_args());
+        mutate_state(|s| s.ecdsa_public_key = Some(ecdsa_public_key()))
+    }
+}
