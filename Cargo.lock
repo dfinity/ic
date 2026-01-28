@@ -8650,7 +8650,6 @@ dependencies = [
  "curve25519-dalek",
  "hex",
  "ic-base-types",
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-canister-threshold-sig",
