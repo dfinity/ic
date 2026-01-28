@@ -53,7 +53,7 @@ pub fn run(
 ) -> Result<()> {
     let base_root_hash = kernel_cmdline
         .get_argument("root_hash")
-        .context("Missing root_hash from kernel cmdline")?;
+        .with_context(|| format!("Missing root_hash from kernel cmdline: {kernel_cmdline}"))?;
 
     eprintln!("Attempting to open root device with base root hash from kernel cmdline");
     match veritysetup(root_device, &base_root_hash, command_runner) {
