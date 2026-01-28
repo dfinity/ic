@@ -19,7 +19,7 @@ use crate::{
     },
     tip::{PageMapToFlush, TipRequest, flush_tip_channel, spawn_tip_thread},
 };
-use crossbeam_channel::{Sender, unbounded};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use ic_canonical_state_tree_hash::{
     hash_tree::{HashTree, HashTreeError, hash_lazy_tree},
@@ -1945,35 +1945,9 @@ impl StateManagerImpl {
         }
     }
 
-    fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
+    fn populate_extra_metadata(&self, state: &mut ReplicatedState) {
         state.metadata.state_sync_version = CURRENT_STATE_SYNC_VERSION;
         state.metadata.certification_version = ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
-
-        if height == Self::INITIAL_STATE_HEIGHT {
-            return;
-        }
-        let prev_height = height - Height::from(1);
-
-        if prev_height == Self::INITIAL_STATE_HEIGHT {
-            return;
-        }
-
-        let states = self.states.read();
-        if let Some(metadata) = states.certifications_metadata.get(&prev_height) {
-            assert_eq!(
-                state.metadata.prev_state_hash,
-                Some(CryptoHashOfPartialState::from(
-                    metadata.certified_state_hash.clone(),
-                ))
-            );
-        } else {
-            info!(
-                self.log,
-                "The previous certification metadata at height {} are not available. This can happen when the replica \
-                (i) catches up or (ii) syncs a newer state concurrently and removes the states below.",
-                prev_height,
-            );
-        }
     }
 
     fn find_checkpoint_by_root_hash(
@@ -3237,7 +3211,31 @@ impl StateManager for StateManagerImpl {
             .with_label_values(&["commit_and_certify"])
             .start_timer();
 
-        self.populate_extra_metadata(&mut state, height);
+        // Get the previous state hash either from consensus via certification metadata (if we are catching up)
+        // or wait for the hashing thread to finish computing it.
+        // TODO: use states.certifications
+        let prev_state_hash = {
+            let (sender, recv) = bounded(1);
+            self.hash_channel
+                .send(HashRequest::Wait { sender })
+                .expect("Failed to send `Wait` to hash channel");
+            recv.recv().expect("Failed to wait for hash channel");
+            // Now, snapshot and certification_metadata must have an entry at height-1, so we can unwrap.
+            let states = self.states.read();
+            states
+                .certifications_metadata
+                .get(&(height - Height::from(1)))
+                .unwrap()
+                .certified_state_hash
+                .clone()
+        };
+        // Write the previous state hash to the state.
+        state
+            .metadata
+            .prev_state_hash
+            .replace(CryptoHashOfPartialState::from(prev_state_hash));
+
+        self.populate_extra_metadata(&mut state);
 
         if let CertificationScope::Metadata = scope {
             // We want to balance writing too many overlay files with having too many unflushed pages at
@@ -3500,7 +3498,7 @@ impl StateManager for StateManagerImpl {
     }
 }
 
-pub enum HashRequest {
+enum HashRequest {
     HashState {
         state: Arc<ReplicatedState>,
         states: Arc<parking_lot::RwLock<SharedState>>,
@@ -3517,6 +3515,7 @@ fn spawn_hash_thread(
     metrics: StateManagerMetrics,
     log: ReplicaLogger,
 ) -> (JoinOnDrop<()>, Sender<HashRequest>) {
+    #[allow(clippy::disallowed_methods)]
     let (hash_req_sender, receiver) = unbounded();
     let handle = JoinOnDrop::new(
         std::thread::Builder::new()
@@ -3532,6 +3531,7 @@ fn spawn_hash_thread(
                             latest_height_update_time,
                             scope,
                         } => {
+                            // TODO: check certifications via catch up first.
                             let certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
                                     &state, height, &metrics, &log,
