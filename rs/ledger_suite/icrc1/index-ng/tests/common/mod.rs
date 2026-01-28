@@ -77,6 +77,24 @@ pub fn install_ledger(
     fee_collector_account: Option<Account>,
     minter_principal: Principal,
 ) -> CanisterId {
+    install_ledger_with_wasm(
+        env,
+        initial_balances,
+        archive_options,
+        fee_collector_account,
+        minter_principal,
+        ledger_wasm(),
+    )
+}
+
+pub fn install_ledger_with_wasm(
+    env: &StateMachine,
+    initial_balances: Vec<(Account, u64)>,
+    archive_options: ArchiveOptions,
+    fee_collector_account: Option<Account>,
+    minter_principal: Principal,
+    ledger_wasm: Vec<u8>,
+) -> CanisterId {
     let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .with_minting_account(minter_principal)
         .with_transfer_fee(FEE)
@@ -93,7 +111,7 @@ pub fn install_ledger(
         builder = builder.with_initial_balance(account, amount);
     }
     env.install_canister_with_cycles(
-        ledger_wasm(),
+        ledger_wasm,
         Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
         None,
         ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
@@ -146,6 +164,26 @@ pub fn ledger_wasm() -> Vec<u8> {
             ledger_wasm_path, e
         )
     })
+}
+
+pub fn ledger_legacy_fc_wasm() -> Vec<u8> {
+    #[cfg(not(feature = "u256-tokens"))]
+    let mainnet_wasm = ledger_legacy_fc_u64_wasm();
+    #[cfg(feature = "u256-tokens")]
+    let mainnet_wasm = ledger_legacy_fc_u256_wasm();
+    mainnet_wasm
+}
+
+#[cfg(not(feature = "u256-tokens"))]
+fn ledger_legacy_fc_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
+}
+
+#[cfg(feature = "u256-tokens")]
+fn ledger_legacy_fc_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+        .unwrap()
 }
 
 #[cfg(feature = "icrc3_disabled")]

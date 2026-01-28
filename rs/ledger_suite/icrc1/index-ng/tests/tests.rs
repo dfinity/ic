@@ -1,8 +1,8 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
     index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
-    wait_until_sync_is_completed_or_error,
+    install_ledger_with_wasm, ledger_get_all_blocks, ledger_legacy_fc_wasm, ledger_wasm,
+    parse_index_logs, wait_until_sync_is_completed, wait_until_sync_is_completed_or_error,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -1258,7 +1258,111 @@ fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
 }
 
 #[test]
-fn test_fee_collector() {
+fn test_fee_collector_ranges_legacy() {
+    let env = &StateMachine::new();
+    let fee_collector = account(42, 0);
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger_with_wasm(
+        env,
+        vec![(account(1, 0), 10_000_000)], // txid: 0
+        default_archive_options(),
+        Some(fee_collector),
+        minter,
+        ledger_legacy_fc_wasm(),
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
+    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    assert_contain_same_elements(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+    );
+
+    // Remove the fee collector to burn some transactions fees.
+    upgrade_ledger(env, ledger_id, None);
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    assert_contain_same_elements(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
+    );
+
+    // Add a new fee collector different from the first one.
+    let new_fee_collector = account(42, 42);
+    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for fee_collector in &[fee_collector, new_fee_collector] {
+        assert_eq!(
+            icrc1_balance_of(env, ledger_id, *fee_collector),
+            icrc1_balance_of(env, index_id, *fee_collector)
+        );
+    }
+
+    assert_contain_same_elements(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (fee_collector, vec![(0u8.into(), 4u8.into())]),
+        ],
+    );
+
+    // Add back the original fee_collector and make a couple of transactions again.
+    upgrade_ledger(env, ledger_id, Some(fee_collector));
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for fee_collector in &[fee_collector, new_fee_collector] {
+        assert_eq!(
+            icrc1_balance_of(env, ledger_id, *fee_collector),
+            icrc1_balance_of(env, index_id, *fee_collector)
+        );
+    }
+
+    assert_contain_same_elements(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![
+            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
+            (
+                fee_collector,
+                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
+            ),
+        ],
+    );
+}
+
+#[test]
+fn test_fee_collector_ranges_107() {
     let env = &StateMachine::new();
     let fee_collector = account(42, 0);
     let minter = minter_identity().sender().unwrap();
