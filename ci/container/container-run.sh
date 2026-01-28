@@ -96,13 +96,17 @@ while test $# -gt $CTR; do
             shift
             shift
             ;;
-        *)
-            echo "unknown argument: $1" >&2
-            usage >&2
-            exit 1
-            ;;
+        *) let CTR=CTR+1 ;;
     esac
 done
+
+# option to pass in another shell if desired
+if [ $# -eq 0 ]; then
+    cmd=("${USHELL:-/usr/bin/bash}")
+else
+    cmd=("$@")
+fi
+echo "Using ${cmd[*]} as run command."
 
 # Detect environment
 if [ -d /var/lib/cloud/instance ] && findmnt /hoststorage >/dev/null; then
@@ -178,46 +182,40 @@ mkdir -p "${ICT_TESTNETS_DIR}"
 MISC_TMP_DIR="/tmp/misc"
 mkdir -p "${MISC_TMP_DIR}"
 
-trap 'rm -rf "${SUBUID_FILE}" "${SUBGID_FILE}"' EXIT
-SUBUID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-SUBGID_FILE=$(mktemp -p "${MISC_TMP_DIR}" --suffix=containerrun)
-
-IDMAP="uids=$(id -u)-1000-1;gids=$(id -g)-1000-1"
-
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache}
 
 PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache",idmap="${IDMAP}"
-    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh",idmap="${IDMAP}"
-    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws",idmap="${IDMAP}"
+    --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
+    --mount type=bind,source="${CACHE_DIR:-${HOME}/.cache}",target="${CTR_HOME}/.cache"
+    --mount type=bind,source="${ZIG_CACHE}",target="/tmp/zig-cache"
+    --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
+    --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
+    --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
     --mount type=tmpfs,target="/home/ubuntu/.local/share/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then
     if [ -e "${HOME}/.gitconfig" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
         )
     fi
 
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
         )
 
     fi
     if [ -e "${HOME}/.local/share/fish" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
         )
     fi
     if [ -e "${HOME}/.zsh_history" ]; then
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history",idmap="${IDMAP}"
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
         )
     fi
 
@@ -229,10 +227,8 @@ if [ "$(id -u)" = "1000" ]; then
             sudo mkdir -p /hoststorage/cache/cargo
             sudo chown -R 1000:1000 /hoststorage/cache/cargo
         fi
-        # Pre-create target directory to avoid crun 64-bit inode issues
-        mkdir -p "${REPO_ROOT}/target"
         PODMAN_RUN_ARGS+=(
-            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target",idmap="${IDMAP}"
+            --mount type=bind,source="/hoststorage/cache/cargo",target="/ic/target"
         )
     fi
 fi
@@ -245,16 +241,6 @@ if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
 else
     eprintln "No ssh-agent to forward."
 fi
-
-# Create dynamic subuid/subgid files for the user to run nested containers
-echo "ubuntu:100000:65536" >$SUBUID_FILE
-chmod +r ${SUBUID_FILE}
-echo "ubuntu:100000:65536" >$SUBGID_FILE
-chmod +r ${SUBGID_FILE}
-PODMAN_RUN_ARGS+=(
-    --mount type=bind,source="${SUBUID_FILE}",target="/etc/subuid",idmap="${IDMAP}"
-    --mount type=bind,source="${SUBGID_FILE}",target="/etc/subgid",idmap="${IDMAP}"
-)
 
 # Omit -t if not a tty.
 # Also shut up logging, because podman will by default log
@@ -271,13 +257,6 @@ fi
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
-
-# option to pass in another shell if desired
-if [ $# -eq 0 ]; then
-    cmd=("${USHELL:-/usr/bin/bash}")
-else
-    cmd=("$@")
-fi
 
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
