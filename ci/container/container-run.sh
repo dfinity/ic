@@ -194,8 +194,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${ICT_TESTNETS_DIR}",target="${ICT_TESTNETS_DIR}"
     --mount type=bind,source="${HOME}/.ssh",target="${CTR_HOME}/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="${CTR_HOME}/.aws"
-    --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
-    --mount type=tmpfs,destination=/var/sysimage
+    --mount type=tmpfs,target="${CTR_HOME}/.local/share/containers"
 )
 
 if [ "$(id -u)" = "1000" ]; then
