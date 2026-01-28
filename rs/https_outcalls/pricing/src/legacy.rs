@@ -23,7 +23,7 @@ impl BudgetTracker for LegacyTracker {
             max_response_size: self.max_response_size,
             // Note: there is already a timeout limit on the server itself (30 seconds, see DEFAULT_HTTP_REQUEST_TIMEOUT_SECS).
             // Setting higher than that just to be safe.
-            max_response_duration: Duration::from_secs(60),
+            max_response_time: Duration::from_secs(60),
         }
     }
 

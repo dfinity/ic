@@ -177,14 +177,14 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
             let AdapterLimits {
                 max_response_size,
-                max_response_duration,
+                max_response_time,
             } = budget.get_adapter_limits();
             let max_response_size_bytes = max_response_size.get();
 
             // Build future that sends and transforms request.
             let adapter_canister_http_response = async move {
                 let (result, elapsed) = timeout_with_capped_metric(
-                    max_response_duration,
+                    max_response_time,
                     http_adapter_client.https_outcall(HttpsOutcallRequest {
                         url: request_url,
                         method: match request_http_method {
@@ -227,7 +227,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     response_size: NumBytes::from(
                         adapter_metrics.map_or(0, |m| m.downloaded_bytes),
                     ),
-                    response_duration: elapsed,
+                    response_time: elapsed,
                 };
 
                 budget.subtract_network_usage(network_usage).map_err(
