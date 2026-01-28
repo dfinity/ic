@@ -36,7 +36,6 @@ libc = { workspace = true }
 maplit = "1.0.2"
 more-asserts = { workspace = true }
 nix = { workspace = true }
-parking_lot = { workspace = true }
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 prost = { workspace = true }
