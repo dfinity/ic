@@ -516,7 +516,7 @@ async fn simulate_node_provider_action(
     // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
     // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
     let script = format!(
-        r#"sudo bash -c 'echo -e "rbash-console\n{}\nexit\nexit" | env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1'"#,
+        r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
         recovery_upgrader_cmd
     );
 
