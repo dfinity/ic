@@ -21,7 +21,7 @@ use crate::{
     PageMap, StateError,
 };
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
-use ic_base_types::{EnvironmentVariables, NumSeconds};
+use ic_base_types::{CanisterEnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::{ReplicaLogger, error};
@@ -420,7 +420,7 @@ pub struct SystemState {
     pub snapshots_memory_usage: NumBytes,
 
     /// Environment variables.
-    pub environment_variables: EnvironmentVariables,
+    pub environment_variables: CanisterEnvironmentVariables,
 }
 
 /// A wrapper around the different canister statuses.
@@ -662,7 +662,7 @@ impl SystemState {
             wasm_memory_limit,
             next_snapshot_id,
             snapshots_memory_usage,
-            environment_variables: EnvironmentVariables::new(environment_variables),
+            environment_variables: CanisterEnvironmentVariables::new(environment_variables),
         };
         system_state.check_invariants().unwrap_or_else(|msg| {
             metrics.observe_broken_soft_invariant(msg);
