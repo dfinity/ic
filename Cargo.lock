@@ -2002,7 +2002,9 @@ dependencies = [
  "ic-cdk",
  "ic-management-canister-types-private",
  "ic-state-machine-tests",
+ "ic-sys",
  "ic-types",
+ "more-asserts",
  "wat",
 ]
 

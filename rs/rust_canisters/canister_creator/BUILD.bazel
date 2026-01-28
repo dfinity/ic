@@ -21,6 +21,8 @@ DEV_DEPENDENCIES = [
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
     "//rs/types/types",
+    "//rs/sys",
+    "@crate_index//:more-asserts",
 ]
 
 MACRO_DEPENDENCIES = []
