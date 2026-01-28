@@ -1268,19 +1268,16 @@ mod tests {
     ) {
         let nodes_set = membership_keys.keys().cloned().collect::<BTreeSet<_>>();
         let rng = &mut reproducible_rng();
-        let mut low_target_id_bytes = [0u8; 32];
-        rng.fill_bytes(&mut low_target_id_bytes);
-        let low_target_id = NiDkgTargetId::new(low_target_id_bytes);
-        let mut high_target_id_bytes = [0u8; 32];
-        rng.fill_bytes(&mut high_target_id_bytes);
-        let high_target_id = NiDkgTargetId::new(high_target_id_bytes);
+        let mut target_id_bytes = [0u8; 32];
+        rng.fill_bytes(&mut target_id_bytes);
+        let target_id = NiDkgTargetId::new(target_id_bytes);
 
         let low_transcript = initial_dkg_transcript(
             InitialNiDkgConfig::new(
                 &nodes_set,
                 dealer_subnet,
                 NiDkgTag::LowThreshold,
-                low_target_id,
+                target_id,
                 cup_scenario.registry_version,
             ),
             &membership_keys,
@@ -1291,7 +1288,7 @@ mod tests {
                 &nodes_set,
                 dealer_subnet,
                 NiDkgTag::HighThreshold,
-                high_target_id,
+                target_id,
                 cup_scenario.registry_version,
             ),
             &membership_keys,
