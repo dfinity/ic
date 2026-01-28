@@ -60,6 +60,11 @@ jobs:
         run: |
           # Hermetic python interpreter requires a non-root user to be built.
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y uidmap
+          sudo chown root:root /usr/bin/newuidmap /usr/bin/newgidmap
+          sudo chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
+          ls -l /usr/bin/newuidmap /usr/bin/newgidmap
           sudo -u ubuntu -- "$CI_PROJECT_DIR"/ci/scripts/repro-check --commit ${{ github.sha }} --dry-run
 
       - name: Repro check for ${{ inputs.github_sha }}
