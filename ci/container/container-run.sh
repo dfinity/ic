@@ -260,5 +260,12 @@ fi
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
 
+if [ -f "$HOME/.container-run.conf" ]; then
+    # conf file with user's custom PODMAN_RUN_USR_ARGS
+    eprintln "Sourcing user's ~/.container-run.conf"
+    source "$HOME/.container-run.conf"
+    PODMAN_RUN_ARGS+=(${PODMAN_RUN_USR_ARGS:-})
+fi
+
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
