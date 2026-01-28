@@ -1,7 +1,13 @@
+use std::fs;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
+use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
+use ic_registry_keys::make_blessed_replica_versions_key;
+use ic_registry_nns_data_provider::registry::RegistryCanister;
+use prost::Message;
+use url::Url;
 
 use config_tool::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{Ipv6Config, SetupOSConfig};
@@ -10,6 +16,8 @@ use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
+
+const VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -22,6 +30,12 @@ pub enum Commands {
     GenerateIpv6Address {
         #[arg(short, long, default_value_t = NodeType::SetupOS)]
         node_type: NodeType,
+    },
+    /// Check if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
+    CheckBlessedVersion {
+        #[arg(short, long, default_value_t = VERSION_FILE_PATH.to_string(), value_name = "FILE")]
+        /// Path to the version file
+        version_file: String,
     },
 }
 
@@ -96,8 +110,64 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
+        Some(Commands::CheckBlessedVersion { version_file }) => {
+            let setupos_config: SetupOSConfig =
+                deserialize_config(&opts.setupos_config_object_path)?;
+
+            check_blessed_version(&setupos_config, &version_file)
+        }
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
         )),
+    }
+}
+
+/// Checks if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
+fn check_blessed_version(config: &SetupOSConfig, version_file: &str) -> Result<()> {
+    let version = fs::read_to_string(version_file)
+        .map_err(|e| anyhow!("Failed to read version file '{}': {}", version_file, e))?
+        .trim()
+        .to_string();
+
+    eprintln!("Checking if version '{}' is blessed...", version);
+
+    let nns_urls: Vec<Url> = config.icos_settings.nns_urls.clone();
+    if nns_urls.is_empty() {
+        return Err(anyhow!("No NNS URLs configured"));
+    }
+
+    eprintln!("Using NNS URLs: {:?}", nns_urls);
+
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| anyhow!("Failed to create tokio runtime: {}", e))?;
+
+    let blessed_versions = runtime.block_on(async {
+        let registry_canister = RegistryCanister::new(nns_urls);
+        let result = registry_canister
+            .get_value(
+                make_blessed_replica_versions_key().as_bytes().to_vec(),
+                None,
+            )
+            .await
+            .map_err(|e| anyhow!("Failed to query registry: {:?}", e))?;
+
+        BlessedReplicaVersions::decode(&*result.0)
+            .map_err(|e| anyhow!("Failed to decode blessed versions: {}", e))
+    })?;
+
+    let is_blessed = blessed_versions
+        .blessed_version_ids
+        .iter()
+        .any(|v| v == &version);
+
+    if is_blessed {
+        eprintln!("Version '{}' is blessed.", version);
+        Ok(())
+    } else {
+        eprintln!(
+            "Version '{}' is NOT blessed. Blessed versions: {:?}",
+            version, blessed_versions.blessed_version_ids
+        );
+        Err(anyhow!("Version '{}' is not blessed", version))
     }
 }
