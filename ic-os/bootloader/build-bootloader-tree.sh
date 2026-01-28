@@ -31,6 +31,7 @@ BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd32
 podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
+    RUN apt-get update && apt-get install -y uidmap && chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
