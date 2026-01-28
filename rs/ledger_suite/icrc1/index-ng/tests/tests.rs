@@ -67,6 +67,7 @@ fn upgrade_ledger(
     env: &StateMachine,
     ledger_id: CanisterId,
     fee_collector_account: Option<Account>,
+    legacy_fc_wasm: bool,
 ) {
     let change_fee_collector =
         Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
@@ -81,7 +82,12 @@ fn upgrade_ledger(
         change_archive_options: None,
         index_principal: None,
     }));
-    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
+    let wasm = if legacy_fc_wasm {
+        ledger_legacy_fc_wasm()
+    } else {
+        ledger_wasm()
+    };
+    env.upgrade_canister(ledger_id, wasm, Encode!(&args).unwrap())
         .unwrap()
 }
 
@@ -1257,131 +1263,43 @@ fn assert_contain_same_elements<T: Debug + Eq + Hash>(vl: Vec<T>, vr: Vec<T>) {
     )
 }
 
-#[test]
-fn test_fee_collector_ranges_legacy() {
+fn test_fee_collector_ranges(legacy: bool) {
     let env = &StateMachine::new();
     let fee_collector = account(42, 0);
     let minter = minter_identity().sender().unwrap();
-    let ledger_id = install_ledger_with_wasm(
-        env,
-        vec![(account(1, 0), 10_000_000)], // txid: 0
-        default_archive_options(),
-        Some(fee_collector),
-        minter,
-        ledger_legacy_fc_wasm(),
-    );
+    let ledger_id = if legacy {
+        install_ledger_with_wasm(
+            env,
+            vec![(account(1, 0), 10_000_000)],
+            default_archive_options(),
+            Some(fee_collector),
+            minter,
+            ledger_legacy_fc_wasm(),
+        )
+    } else {
+        install_ledger(
+            env,
+            vec![(account(1, 0), 10_000_000)],
+            default_archive_options(),
+            Some(fee_collector),
+            minter,
+        )
+    };
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
-    );
-
-    // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None);
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    assert_eq!(
-        icrc1_balance_of(env, ledger_id, fee_collector),
-        icrc1_balance_of(env, index_id, fee_collector)
-    );
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 4u8.into())])],
-    );
-
-    // Add a new fee collector different from the first one.
-    let new_fee_collector = account(42, 42);
-    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    for fee_collector in &[fee_collector, new_fee_collector] {
-        assert_eq!(
-            icrc1_balance_of(env, ledger_id, *fee_collector),
-            icrc1_balance_of(env, index_id, *fee_collector)
-        );
+    let mut range_start = 0u64;
+    let mut curr_txid = 0u64;
+    if !legacy {
+        curr_txid += 1; // init fee collector block
     }
 
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (fee_collector, vec![(0u8.into(), 4u8.into())]),
-        ],
-    );
-
-    // Add back the original fee_collector and make a couple of transactions again.
-    upgrade_ledger(env, ledger_id, Some(fee_collector));
-
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    for fee_collector in &[fee_collector, new_fee_collector] {
-        assert_eq!(
-            icrc1_balance_of(env, ledger_id, *fee_collector),
-            icrc1_balance_of(env, index_id, *fee_collector)
-        );
-    }
-
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(6u8.into(), 7u8.into())]),
-            (
-                fee_collector,
-                vec![(0u8.into(), 4u8.into()), (7u8.into(), 9u8.into())],
-            ),
-        ],
-    );
-}
-
-#[test]
-fn test_fee_collector_ranges_107() {
-    let env = &StateMachine::new();
-    let fee_collector = account(42, 0);
-    let minter = minter_identity().sender().unwrap();
-    let ledger_id = install_ledger(
-        env,
-        vec![(account(1, 0), 10_000_000)], // txid: 1
-        default_archive_options(),
-        Some(fee_collector), // txid: 0
-        minter,
-    );
-    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
-
     assert_eq!(
         icrc1_balance_of(env, ledger_id, fee_collector),
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 2
-    approve(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 3
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000);
+    approve(env, ledger_id, account(1, 0), account(3, 0), 200_000);
     transfer_from(
         env,
         ledger_id,
@@ -1389,7 +1307,8 @@ fn test_fee_collector_ranges_107() {
         account(2, 0),
         account(3, 0),
         150_000,
-    ); // txid: 4
+    );
+    curr_txid += 3;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1398,16 +1317,25 @@ fn test_fee_collector_ranges_107() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
+    let mut expected = vec![(
+        fee_collector,
+        vec![(range_start.into(), (curr_txid + 1).into())],
+    )];
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 5u8.into())])],
+        expected.clone(),
     );
 
     // Remove the fee collector to burn some transactions fees.
-    upgrade_ledger(env, ledger_id, None); // txid: 5
+    upgrade_ledger(env, ledger_id, None, legacy); // txid: 5
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 7
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000);
+    curr_txid += 2;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1418,14 +1346,22 @@ fn test_fee_collector_ranges_107() {
 
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![(fee_collector, vec![(0u8.into(), 5u8.into())])],
+        expected.clone(),
     );
 
     // Add a new fee collector different from the first one.
     let new_fee_collector = account(42, 42);
-    upgrade_ledger(env, ledger_id, Some(new_fee_collector)); // txid: 8
+    upgrade_ledger(env, ledger_id, Some(new_fee_collector), legacy);
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+        range_start = curr_txid; // new fee collector starts at the upgrade block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 9
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
+    if legacy {
+        range_start = curr_txid; // legacy fee collector starts at the first tx after it is set
+    }
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1436,19 +1372,32 @@ fn test_fee_collector_ranges_107() {
         );
     }
 
+    expected.push((
+        new_fee_collector,
+        vec![(range_start.into(), (curr_txid + 1).into())],
+    ));
+
+    println!("expected: {:?}", expected);
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(8u8.into(), 10u8.into())]),
-            (fee_collector, vec![(0u8.into(), 5u8.into())]),
-        ],
+        expected.clone(),
     );
 
     // Add back the original fee_collector and make a couple of transactions again.
-    upgrade_ledger(env, ledger_id, Some(fee_collector)); // txid: 10
+    upgrade_ledger(env, ledger_id, Some(fee_collector), legacy);
+    if !legacy {
+        curr_txid += 1; // upgrade fee collector block
+        range_start = curr_txid; // new fee collector starts at the upgrade block
+    }
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 11
-    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 12
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
+    if legacy {
+        range_start = curr_txid; // legacy fee collector starts at the first tx after it is set
+    }
+    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+    curr_txid += 1;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -1459,44 +1408,48 @@ fn test_fee_collector_ranges_107() {
         );
     }
 
+    expected[0]
+        .1
+        .push((range_start.into(), (curr_txid + 1).into()));
+
     assert_contain_same_elements(
         get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (new_fee_collector, vec![(8u8.into(), 10u8.into())]),
-            (
-                fee_collector,
-                vec![(0u8.into(), 5u8.into()), (10u8.into(), 13u8.into())],
-            ),
-        ],
+        expected.clone(),
     );
 
-    set_fc_107_by_controller(env, ledger_id, Some(new_fee_collector)); // txid: 13
+    if !legacy {
+        set_fc_107_by_controller(env, ledger_id, Some(new_fee_collector));
+        curr_txid += 1;
+        range_start = curr_txid;
+        transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+        approve(env, ledger_id, account(1, 0), account(2, 0), 400_000);
+        curr_txid += 2;
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 14
-    approve(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 15
+        wait_until_sync_is_completed(env, index_id, ledger_id);
 
-    wait_until_sync_is_completed(env, index_id, ledger_id);
+        for fee_collector in &[fee_collector, new_fee_collector] {
+            assert_eq!(
+                icrc1_balance_of(env, ledger_id, *fee_collector),
+                icrc1_balance_of(env, index_id, *fee_collector)
+            );
+        }
 
-    for fee_collector in &[fee_collector, new_fee_collector] {
-        assert_eq!(
-            icrc1_balance_of(env, ledger_id, *fee_collector),
-            icrc1_balance_of(env, index_id, *fee_collector)
-        );
+        expected[1]
+            .1
+            .push((range_start.into(), (curr_txid + 1).into()));
+
+        assert_contain_same_elements(get_fee_collectors_ranges(env, index_id).ranges, expected);
     }
+}
 
-    assert_contain_same_elements(
-        get_fee_collectors_ranges(env, index_id).ranges,
-        vec![
-            (
-                new_fee_collector,
-                vec![(8u8.into(), 10u8.into()), (13u8.into(), 16u8.into())],
-            ),
-            (
-                fee_collector,
-                vec![(0u8.into(), 5u8.into()), (10u8.into(), 13u8.into())],
-            ),
-        ],
-    );
+#[test]
+fn test_fee_collector_ranges_legacy() {
+    test_fee_collector_ranges(true);
+}
+
+#[test]
+fn test_fee_collector_ranges_107() {
+    test_fee_collector_ranges(false);
 }
 
 #[test]
