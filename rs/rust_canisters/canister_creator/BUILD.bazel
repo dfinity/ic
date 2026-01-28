@@ -20,8 +20,8 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
-    "//rs/types/types",
     "//rs/sys",
+    "//rs/types/types",
     "@crate_index//:more-asserts",
 ]
 
