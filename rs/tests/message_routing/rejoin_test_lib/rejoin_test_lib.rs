@@ -455,11 +455,11 @@ pub async fn rejoin_test_long_rounds(
 
     info!(logger, "Checking that all nodes are healthy.");
     for node in &nodes {
-        assert!(
-            node.status_is_healthy_async()
-                .await
-                .expect("Failed to get replica health status")
-        );
+        let health_status = node
+            .status_is_healthy_async()
+            .await
+            .expect("Failed to get replica health status");
+        assert!(health_status);
     }
 
     // finally check the metrics for "fast-forward" mode
