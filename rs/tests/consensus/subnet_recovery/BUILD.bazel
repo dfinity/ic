@@ -4,13 +4,6 @@ load("//rs/tests:system_tests.bzl", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = [":orchestrator_universal_vm_activation.sh"]
-
-STATIC_FILE_SERVER_IMAGE_DATA = [
-    # Keep sorted.
-    "//rs/tests:static-file-server.tar",
-]
-
 IC_ADMIN_RUNTIME_DEPS = {
     "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
     "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",  # used by rs/recovery/src/lib.rs
@@ -243,14 +236,16 @@ system_test_nns(
 
 system_test_nns(
     name = "sr_nns_failover_nodes_test",
-    data = ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_DATA,
     tags = [
         "colocate",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
     test_timeout = "eternal",
-    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS,
+    runtime_deps = RECOVERY_TOOLS_RUNTIME_DEPS | MESSAGE_CANISTER_RUNTIME_DEPS | {
+        "ORCHESTRATOR_UVM_ACTIVATION_SCRIPT": ":orchestrator_universal_vm_activation.sh",
+        "STATIC_FILE_SERVER_IMAGE": "//rs/tests:static-file-server.tar",
+    },
     deps = [
         # Keep sorted.
         ":lib",
