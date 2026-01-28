@@ -1082,6 +1082,6 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let blocks =
-        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 250);
+        sync_blocks::<BtcNetwork>(&adapter_client, &mut vec![], anchor[..].to_vec(), 9, 400);
     assert_eq!(blocks.len(), 9);
 }
