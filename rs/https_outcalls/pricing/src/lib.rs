@@ -2,12 +2,14 @@ mod legacy;
 
 use std::time::Duration;
 
-use ic_types::{NumBytes, canister_http::CanisterHttpRequestContext};
+use ic_types::{NumBytes, NumInstructions, canister_http::CanisterHttpRequestContext};
 use legacy::LegacyTracker;
 
 pub trait BudgetTracker: Send {
     fn get_adapter_limits(&self) -> AdapterLimits;
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
+    fn get_transform_limit(&self) -> NumInstructions;
+    fn subtract_transform_usage(&mut self, usage: NumInstructions) -> Result<(), PricingError>;
 }
 
 pub struct AdapterLimits {

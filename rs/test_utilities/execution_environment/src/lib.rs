@@ -1245,6 +1245,7 @@ impl ExecutionTest {
             None,
             true,
             None,
+            None,
         );
 
         self.state = Some(Arc::try_unwrap(state).unwrap());
@@ -1791,6 +1792,7 @@ impl ExecutionTest {
             Labeled::new(Height::from(0), state),
             Some(data_certificate_with_delegation_metadata),
             true,
+            None,
             None,
         )
     }

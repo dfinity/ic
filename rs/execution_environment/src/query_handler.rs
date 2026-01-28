@@ -181,6 +181,7 @@ impl InternalHttpQueryHandler {
         data_certificate_with_delegation_metadata: Option<DataCertificateWithDelegationMetadata>,
         enable_query_stats_tracking: bool,
         instruction_observation: Option<Arc<AtomicU64>>,
+        max_instructions: Option<NumInstructions>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -293,6 +294,9 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
+        let max_instructions_per_query = max_instructions
+            .unwrap_or(self.max_instructions_per_query)
+            .min(self.max_instructions_per_query);
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
@@ -306,7 +310,7 @@ impl InternalHttpQueryHandler {
             subnet_available_callbacks,
             subnet_memory_reservation,
             self.config.canister_guaranteed_callback_quota as u64,
-            self.max_instructions_per_query,
+            max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
             self.config.max_query_call_walltime,
@@ -472,6 +476,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             Some(data_certificate_with_delegation_metadata),
                             enable_query_stats_tracking,
                             None,
+                            None,
                         );
 
                         Ok((response, time))
@@ -505,6 +510,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
         TransformExecutionInput {
             query,
             instruction_observation,
+            max_instructions,
         }: TransformExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
@@ -543,6 +549,7 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                             None,
                             enable_query_stats_tracking,
                             Some(instruction_observation),
+                            Some(max_instructions),
                         );
 
                         Ok((response, time))

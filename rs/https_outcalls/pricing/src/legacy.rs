@@ -1,8 +1,11 @@
 use std::time::Duration;
 
-use ic_types::{NumBytes, canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES};
+use ic_types::{NumBytes, NumInstructions, canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES};
 
 use crate::{AdapterLimits, BudgetTracker, NetworkUsage, PricingError};
+
+const B: u64 = 1_000_000_000;
+const MAX_TRANSFORM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5 * B);
 
 pub struct LegacyTracker {
     max_response_size: NumBytes,
@@ -30,6 +33,15 @@ impl BudgetTracker for LegacyTracker {
     fn subtract_network_usage(&mut self, _network_usage: NetworkUsage) -> Result<(), PricingError> {
         // Note: currently the client enforces the timeout limit, while the adapter enforces the response size limit.
         // So there is no need to do anything here.
+        Ok(())
+    }
+
+    fn get_transform_limit(&self) -> NumInstructions {
+        // SEE config/src/subnet_config.rs:MAX_INSTRUCTIONS_PER_QUERY_MESSAGE.
+        NumInstructions::from(MAX_TRANSFORM_INSTRUCTIONS)
+    }
+
+    fn subtract_transform_usage(&mut self, _usage: NumInstructions) -> Result<(), PricingError> {
         Ok(())
     }
 }
