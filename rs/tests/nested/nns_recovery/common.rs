@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
@@ -188,12 +188,10 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
-    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
-    // paths for the underlying tools (and the environment variable name needs to be adapted).
-    set_var_to_path(
-        "IC_ADMIN_BIN",
-        get_dependency_path_from_env("IC_ADMIN_PATH"),
-    );
+    // ic-recovery will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
+    // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
+    // IC_ADMIN_BIN to a dummy value.
+    set_var_to_path("IC_ADMIN_BIN", PathBuf::from("/bin/false"));
 
     let logger = env.logger();
 
