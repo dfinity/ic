@@ -188,6 +188,13 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
+    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
+    // paths for the underlying tools (and the environment variable name needs to be adapted).
+    set_var_to_path(
+        "IC_ADMIN_BIN",
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
+    );
+
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
