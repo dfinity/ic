@@ -146,13 +146,29 @@ if [ "$DEVENV" = true ]; then
 fi
 
 WORKDIR="/ic"
-USER=$(whoami)
+
+HOST_USER=$(whoami)
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+SUBUID_START=100000
+SUBGID_START=100000
+SUB_RANGE=65536
+
+# Ensure host has an entry for subgid
+if ! grep -q "^$HOST_USER:" /etc/subuid; then
+    echo "$HOST_USER:${SUBUID_START}:${SUB_RANGE}" | sudo tee -a /etc/subuid
+fi
+
+if ! grep -q "^$HOST_USER:" /etc/subgid; then
+    echo "$HOST_USER:${SUBGID_START}:${SUB_RANGE}" | sudo tee -a /etc/subgid
+fi
+
+grep "^$HOST_USER:" /etc/subuid
+grep "^$HOST_USER:" /etc/subgid
 
 PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
-
-    -u "ubuntu:ubuntu"
-    -e HOSTUSER="$USER"
+    -e HOSTUSER="$HOST_USER"
     -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e TERM
@@ -165,7 +181,17 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-PODMAN_RUN_ARGS+=(--hostuser="$USER")
+# Set up user namespace mappings so that uid 1000 in the container
+# maps to the invoking user's uid on the host.
+PODMAN_RUN_ARGS+=(
+    --uidmap 0:${SUBUID_START}:1000
+    --uidmap 1000:${HOST_UID}:1
+    --uidmap $((1000+1)):$((SUBUID_START+1000+1)):$((SUB_RANGE-1000-1))
+    --gidmap 0:${SUBGID_START}:1000
+    --gidmap 1000:${HOST_GID}:1
+    --gidmap $((1000+1)):$((SUBGID_START+1000+1)):$((SUB_RANGE-1000-1))
+    --user 1000:1000
+)
 
 if [ "$(id -u)" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
