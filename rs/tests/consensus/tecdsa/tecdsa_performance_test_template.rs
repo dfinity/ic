@@ -100,17 +100,18 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 40;
+const MAX_PARALLEL_PRE_SIGNATURE_TRANSCRIPTS: u32 = 20;
+const PRE_SIGNATURES_TO_CREATE: u32 = 200;
 const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 15.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -215,7 +216,9 @@ pub fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: None,
+                    max_parallel_pre_signature_transcripts_in_creation: Some(
+                        MAX_PARALLEL_PRE_SIGNATURE_TRANSCRIPTS,
+                    ),
                 })
                 .add_nodes(nodes_count),
         )
@@ -231,7 +234,7 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let download_p8s_data =
         std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    tecdsa_performance_test(env, false, download_p8s_data);
+    tecdsa_performance_test(env, true, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
