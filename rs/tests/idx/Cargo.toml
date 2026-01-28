@@ -1,5 +1,5 @@
 [package]
-name = "testing-verification-tests"
+name = "idx-tests"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -38,14 +38,6 @@ path = "ii_delegation_test.rs"
 [[bin]]
 name = "mainnet_test"
 path = "mainnet_test.rs"
-
-[[bin]]
-name = "remote_replicable_mock_test"
-path = "remote_replicable_mock_test.rs"
-
-[[bin]]
-name = "replicable_mock_test"
-path = "replicable_mock_test.rs"
 
 [[bin]]
 name = "test_driver_e2e_scenarios"

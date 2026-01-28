@@ -126,6 +126,8 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
     fi
 fi
 
+echo "Using container command: ${CONTAINER_CMD[*]}"
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"

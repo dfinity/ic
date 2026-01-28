@@ -32,7 +32,6 @@
 
 use anyhow::Result;
 use slog::{Logger, info};
-use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -42,13 +41,6 @@ use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv, t
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
-
-fn data_dependency_file(dependency_path: &str) -> PathBuf {
-    let runfiles_path: PathBuf = env::var("RUNFILES_DIR")
-        .expect("RUNFILES_DIR not set; are you running this from Bazel?")
-        .into();
-    runfiles_path.join(dependency_path)
-}
 
 fn run_unit_test(
     binary: &Path,
@@ -150,15 +142,15 @@ enum TestType {
 }
 
 struct TestCase {
-    test_binary: String,
+    test_binary_env_var: String,
     test_module: String,
     test_type: TestType,
 }
 
 impl TestCase {
-    fn new(test_type: TestType, test_binary: &str, test_module: &str) -> Self {
+    fn new(test_type: TestType, test_binary_env_var: &str, test_module: &str) -> Self {
         Self {
-            test_binary: test_binary.to_string(),
+            test_binary_env_var: test_binary_env_var.to_string(),
             test_module: test_module.to_string(),
             test_type,
         }
@@ -180,10 +172,10 @@ impl TestCase {
     }
 
     fn self_test(&self, logger: &Logger) {
-        let test_binary = data_dependency_file(&self.test_binary);
+        let test_binary = get_dependency_path_from_env(&self.test_binary_env_var);
         info!(
             logger,
-            "Testing self-compatibility of module {}", self.test_module
+            "Testing self-compatibility of module {} using {:?}", self.test_module, test_binary,
         );
         let tmp_dir = tempfile::tempdir().unwrap();
         let tmp_dir_path = tmp_dir.path();
@@ -210,7 +202,7 @@ impl TestCase {
             download_dir_path,
             logger,
         );
-        let test_binary = data_dependency_file(&self.test_binary);
+        let test_binary = get_dependency_path_from_env(&self.test_binary_env_var);
         info!(
             logger,
             "Testing module {} with the mainnet commit {} and published binary {}",
@@ -252,7 +244,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::basic_test",
             ),
             TestCase::new(
@@ -260,7 +252,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::best_effort_test",
             ),
             TestCase::new(
@@ -268,7 +260,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::input_order_test",
             ),
             TestCase::new(
@@ -276,7 +268,7 @@ fn test(env: TestEnv) {
                     published_binary: "replicated-state-test".to_string(),
                     mainnet_version: v.clone(),
                 },
-                "_main/rs/replicated_state/replicated_state_test_binary/replicated_state_test_binary",
+                "REPLICATED_STATE_TEST_BINARY_PATH",
                 "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
             TestCase::new(
@@ -286,7 +278,7 @@ fn test(env: TestEnv) {
                 //     mainnet_version: v.clone(),
                 // },
                 TestType::SelfTestOnly,
-                "_main/rs/state_layout/state_layout_test_binary/state_layout_test_binary",
+                "STATE_LAYOUT_TEST_BINARY_PATH",
                 "state_layout::tests::mainnet_compatibility_tests::task_queue_compatibility_test",
             ),
         ]

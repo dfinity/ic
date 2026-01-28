@@ -4,7 +4,7 @@ use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, get_dependency_path};
+use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, get_dependency_path_from_env};
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -432,7 +432,7 @@ fn average_f64(nums: &[f64]) -> f64 {
 pub fn setup_jaeger_vm(env: &TestEnv) -> std::net::Ipv6Addr {
     const JAEGER_VM_NAME: &str = "jaeger-vm";
 
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
         .with_vm_resources(VmResources {

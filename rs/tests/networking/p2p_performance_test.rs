@@ -12,7 +12,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SubnetSnapshot, get_dependency_path_from_env,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -58,7 +58,7 @@ pub fn setup(
 ) {
     let logger = env.logger();
 
-    let path = get_dependency_path("rs/tests/jaeger_uvm_config_image.zst");
+    let path = get_dependency_path_from_env("JAEGER_UVM_CONFIG_IMAGE_ZST");
 
     UniversalVm::new(JAEGER_VM_NAME.to_string())
         .with_required_host_features(vec![HostFeature::Performance])
