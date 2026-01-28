@@ -151,3 +151,9 @@ SIGNER_CANISTER_RUNTIME_DEPS = {
 IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = {
     "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "//rs/tests:impersonate_upstreams_uvm_config_image",
 }
+
+CANISTER_SANDBOX_RUNTIME_DEPS = {
+    "SANDBOX_BINARY": "//rs/canister_sandbox:canister_sandbox",
+    "LAUNCHER_BINARY": "//rs/canister_sandbox:sandbox_launcher",
+    "COMPILER_BINARY": "//rs/canister_sandbox:compiler_sandbox",
+}
