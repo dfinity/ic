@@ -3,7 +3,6 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_types::time::UNIX_EPOCH;
 use std::str::FromStr;
-use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 
 mod all_node_public_keys_validation {
     use super::*;
@@ -167,11 +166,8 @@ mod node_signing_public_key_validation {
     fn should_fail_if_node_signing_key_verification_fails() {
         let (corrupted_node_signing_public_key, node_id_for_corrupted_node_signing_key) = {
             let mut corrupted_public_key = valid_node_signing_public_key();
-            corrupted_public_key.key_value = {
-                let nspk_bytes =
-                    BasicSigEd25519PublicKeyBytes::try_from(&corrupted_public_key).unwrap();
-                invalidate_valid_ed25519_pubkey(nspk_bytes).0.to_vec()
-            };
+            invalidate_ed25519_pubkey(&mut corrupted_public_key.key_value);
+
             let node_id_for_corrupted_node_signing_key = {
                 let der_prefix = vec![
                     48, 42, // A sequence of 42 bytes follows.
@@ -508,15 +504,19 @@ fn should_correctly_display_key_validation_error() {
     );
 }
 
-fn invalidate_valid_ed25519_pubkey(
-    valid_pubkey: BasicSigEd25519PublicKeyBytes,
-) -> BasicSigEd25519PublicKeyBytes {
+fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
+    assert_eq!(key.len(), 32);
+
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(&key);
+
     use curve25519_dalek::edwards::CompressedEdwardsY;
-    let point_of_prime_order = CompressedEdwardsY(valid_pubkey.0).decompress().unwrap();
+    let point_of_prime_order = CompressedEdwardsY(key_arr).decompress().unwrap();
     let point_of_order_8 = CompressedEdwardsY([0; 32]).decompress().unwrap();
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
     assert!(!point_of_composite_order.is_torsion_free());
-    BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
+
+    *key = point_of_composite_order.compress().0.to_vec();
 }
 
 fn node_id(n: u64) -> NodeId {

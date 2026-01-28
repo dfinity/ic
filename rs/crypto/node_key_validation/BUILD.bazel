@@ -21,7 +21,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/basic_sig",
     "@crate_index//:assert_matches",
