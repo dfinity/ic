@@ -18,7 +18,7 @@ pub fn verify_basic_sig_by_public_key(
 
     match algorithm_id {
         AlgorithmId::Ed25519 => {
-            let pk = ic_ed25519::PublicKey::deserialize_raw(&pk_bytes).map_err(|e| {
+            let pk = ic_ed25519::PublicKey::deserialize_raw(pk_bytes).map_err(|e| {
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::Ed25519,
                     key_bytes: Some(pk_bytes.to_vec()),
@@ -35,7 +35,7 @@ pub fn verify_basic_sig_by_public_key(
                 })
         }
         AlgorithmId::EcdsaP256 => {
-            let pk = ic_secp256r1::PublicKey::deserialize_sec1(&pk_bytes).map_err(|e| {
+            let pk = ic_secp256r1::PublicKey::deserialize_sec1(pk_bytes).map_err(|e| {
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::EcdsaP256,
                     key_bytes: Some(pk_bytes.to_vec()),
@@ -55,7 +55,7 @@ pub fn verify_basic_sig_by_public_key(
             }
         }
         AlgorithmId::EcdsaSecp256k1 => {
-            let pk = ic_secp256k1::PublicKey::deserialize_sec1(&pk_bytes).map_err(|e| {
+            let pk = ic_secp256k1::PublicKey::deserialize_sec1(pk_bytes).map_err(|e| {
                 CryptoError::MalformedPublicKey {
                     algorithm: AlgorithmId::EcdsaSecp256k1,
                     key_bytes: Some(pk_bytes.to_vec()),
