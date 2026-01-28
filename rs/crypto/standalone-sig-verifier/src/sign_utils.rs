@@ -7,7 +7,6 @@ use crate::algorithm_identifiers::{
 use ic_crypto_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_cose as cose;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
->>>>>>> 87a84f371d (WIP on standalone-sig-verifier)
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
