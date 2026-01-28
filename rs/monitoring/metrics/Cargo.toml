@@ -12,7 +12,6 @@ ic-adapter-metrics-client = { path = "../adapter_metrics/client" }
 libc = { workspace = true }
 parking_lot = { workspace = true }
 prometheus = { workspace = true }
-tokio = { workspace = true }
 tokio-metrics = { workspace = true }
 
 [dev-dependencies]

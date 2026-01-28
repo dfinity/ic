@@ -133,10 +133,11 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
-    data = [
-        "//rs/replicated_state:replicated_state_test_binary",
-    ],
     env = MAINNET_ENV,
+    runtime_deps = {
+        "REPLICATED_STATE_TEST_BINARY_PATH": "//rs/replicated_state:replicated_state_test_binary",
+        "STATE_LAYOUT_TEST_BINARY_PATH": "//rs/state_layout:state_layout_test_binary",
+    },
     deps = [
         "//rs/recovery",
         "//rs/tests/driver:ic-system-test-driver",

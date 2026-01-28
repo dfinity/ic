@@ -3,7 +3,7 @@ load("@rules_distroless//apt:defs.bzl", "dpkg_status")
 load("@rules_distroless//distroless:defs.bzl", "passwd")
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
-load("//bazel:defs.bzl", "symlink_dir", "write_info_file_var")
+load("//bazel:defs.bzl", "write_info_file_var")
 load(":system_tests.bzl", "oci_tar", "uvm_config_image")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -146,19 +146,6 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
-symlink_dir(
-    name = "recovery/binaries",
-    testonly = True,
-    targets = {
-        "//rs/registry/admin:ic-admin": "ic-admin",
-        "//rs/state_tool:state-tool": "state-tool",
-        "//rs/canister_sandbox:compiler_sandbox": "compiler_sandbox",
-        "//rs/canister_sandbox:sandbox_launcher": "sandbox_launcher",
-        "//rs/canister_sandbox:canister_sandbox": "canister_sandbox",
-        "@crate_index//:ic-wasm__ic-wasm": "ic-wasm",
-    },
-)
-
 oci_tar(
     name = "static-file-server.tar",
     image = "@static-file-server",
@@ -179,11 +166,6 @@ uvm_config_image(
         "jaeger_activate.sh": "activate",
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
-)
-
-filegroup(
-    name = "rosetta_workspace",
-    srcs = glob(["rosetta_workspace/*"]),
 )
 
 exports_files([

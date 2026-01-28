@@ -166,8 +166,12 @@ use tonic::transport::{Endpoint, Uri};
 use tonic::{Code, Request, Response, Status};
 use tower::{service_fn, util::ServiceExt};
 
-// See build.rs
-include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
+#[derive(askama::Template)]
+#[template(path = "dashboard.html", escape = "html")]
+struct Dashboard<'a> {
+    height: Height,
+    canisters: &'a Vec<(&'a ic_replicated_state::CanisterState, SubnetId)>,
+}
 
 const MAINNET_NNS_SUBNET_ID: &str =
     "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
@@ -579,28 +583,12 @@ impl PocketIcSubnets {
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {
             beta_features,
-            canister_backtrace,
             function_name_length_limits,
             canister_execution_rate_limiting,
         } = icp_config;
         let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
             IcpConfigFlag::Disabled => execution_environment::Config::default(),
             IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
-        };
-        match canister_backtrace {
-            None => (),
-            Some(IcpConfigFlag::Enabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Enabled;
-            }
-            Some(IcpConfigFlag::Disabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Disabled;
-            }
         };
         match function_name_length_limits {
             None | Some(IcpConfigFlag::Enabled) => (),
@@ -2118,12 +2106,14 @@ impl PocketIcSubnets {
               ("API_HOST".to_string(), localhost_url.clone()),
               ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
               ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_ADDRESS_BOOK\":true,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false}".to_string()),
               ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
               ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
               ("HOST".to_string(), localhost_url.clone()),
               /* ICP swap canister is not deployed by PocketIC! */
-              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}/")),
+              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}")),
+              /* Kong swap canister is not deployed by PocketIC! */
+              ("KONG_SWAP_URL".to_string(), format!("http://xvemo-ap777-77774-qaalq-cai.raw.localhost:{gateway_port}")),
               ("IDENTITY_SERVICE_URL".to_string(), format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}")),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),

@@ -141,9 +141,7 @@ lazy_static! {
 }
 
 fn get_canister_wasm(env_var: &str) -> Vec<u8> {
-    let uc_wasm_path = get_dependency_path(
-        std::env::var(env_var).unwrap_or_else(|e| panic!("{env_var:?} not set: {e:?}")),
-    );
+    let uc_wasm_path = get_dependency_path_from_env(env_var);
     std::fs::read(&uc_wasm_path)
         .unwrap_or_else(|e| panic!("Could not read WASM from {uc_wasm_path:?}: {e:?}"))
 }
@@ -949,7 +947,7 @@ pub async fn agent_with_client_identity(
         .with_http_client(client)
         .with_identity(identity)
         // Setting a large polling time for the sake of long-running update calls.
-        .with_max_polling_time(Duration::from_secs(3600))
+        .with_max_polling_time(Duration::from_secs(600))
         .with_max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
         // Ingresses are created with the system time but are checked against the consensus time.
         // Consensus time is the time that is in the last finalized block. Consensus time might lag
