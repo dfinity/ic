@@ -234,7 +234,9 @@ impl TryFrom<PublicKey> for ValidNodeSigningPublicKey {
             .map_err(|e| invalid_node_signing_key_error(format!("{:?}", e)))?;
 
         if !pk.is_torsion_free() {
-            return Err(invalid_node_signing_key_error("has torsion component".to_string()));
+            return Err(invalid_node_signing_key_error(
+                "has torsion component".to_string(),
+            ));
         }
 
         let derived_node_id = derive_node_id(&pk);

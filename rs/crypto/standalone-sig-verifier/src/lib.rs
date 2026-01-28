@@ -14,7 +14,6 @@ pub fn verify_basic_sig_by_public_key(
     sig: &[u8],
     pk_bytes: &[u8],
 ) -> CryptoResult<()> {
-
     let (public_key_bytes, signature_bytes) = (pk_bytes.to_vec(), sig.to_vec());
 
     match algorithm_id {

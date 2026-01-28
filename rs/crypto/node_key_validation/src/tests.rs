@@ -170,8 +170,9 @@ mod node_signing_public_key_validation {
 
             let node_id_for_corrupted_node_signing_key = {
                 // Only fails if the length is incorrect which should not happen
-                let pubkey_der = ic_ed25519::PublicKey::convert_raw_to_der(&corrupted_public_key.key_value).
-                    expect("Conversion failed");
+                let pubkey_der =
+                    ic_ed25519::PublicKey::convert_raw_to_der(&corrupted_public_key.key_value)
+                        .expect("Conversion failed");
 
                 NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
             };

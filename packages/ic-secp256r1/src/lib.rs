@@ -538,7 +538,9 @@ impl PublicKey {
         let pk = Self::deserialize_der(bytes)?;
 
         if pk.serialize_der() != bytes {
-            return Err(KeyDecodingError::InvalidKeyEncoding("Non-canonical encoding".to_string()));
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "Non-canonical encoding".to_string(),
+            ));
         }
 
         Ok(pk)
@@ -661,7 +663,7 @@ pub enum InvalidSignatureEncoding {
 }
 
 /// DER decode a P-256 signature and return the usual byte encoding
-pub fn signature_from_der_bytes(der: &[u8]) -> Result<Vec<u8>, InvalidSignatureEncoding>  {
+pub fn signature_from_der_bytes(der: &[u8]) -> Result<Vec<u8>, InvalidSignatureEncoding> {
     // The p256::ecdsa::Error type doesn't contain any useful information
     if let Ok(sig) = p256::ecdsa::Signature::from_der(der) {
         Ok(sig.to_bytes().to_vec())

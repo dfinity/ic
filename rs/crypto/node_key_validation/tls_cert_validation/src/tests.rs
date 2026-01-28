@@ -338,7 +338,8 @@ fn replace_tls_certificate_pubkey_with_invalid_one(cert: &mut X509PublicKeyCert)
         .tbs_certificate
         .subject_pki
         .subject_public_key
-        .data.to_vec();
+        .data
+        .to_vec();
     let range_of_pubkey_raw_in_der = range_of_needle_in_haystack(&pubkey_raw, x509_cert_der);
     invalidate_ed25519_pubkey(&mut pubkey_raw);
     cert.certificate_der

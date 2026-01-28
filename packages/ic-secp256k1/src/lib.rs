@@ -843,7 +843,9 @@ impl PublicKey {
         let pk = Self::deserialize_der(bytes)?;
 
         if pk.serialize_der() != bytes {
-            return Err(KeyDecodingError::InvalidKeyEncoding("Non-canonical encoding".to_string()));
+            return Err(KeyDecodingError::InvalidKeyEncoding(
+                "Non-canonical encoding".to_string(),
+            ));
         }
 
         Ok(pk)

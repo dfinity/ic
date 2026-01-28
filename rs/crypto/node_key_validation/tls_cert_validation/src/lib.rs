@@ -2,7 +2,7 @@
 
 use core::fmt;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::crypto::{CryptoResult, CryptoError, AlgorithmId};
+use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::{NodeId, Time};
 use serde::Deserialize;
 use serde::Serialize;
@@ -210,7 +210,7 @@ fn ed25519_pubkey_from_x509_cert(
             .tbs_certificate
             .subject_pki
             .subject_public_key
-            .data
+            .data,
     )
     .map_err(|e| {
         invalid_tls_certificate_error(format!("conversion to Ed25519 public key failed: {e}"))
