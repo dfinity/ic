@@ -65,7 +65,7 @@ fn creating_canisters_works() {
     assert_eq!(env.num_running_canisters(), 1_001);
     assert_le!(
         env.canister_memory_usage_bytes(),
-        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1001 * LOG_MEMORY_STORE_USAGE,
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * LOG_MEMORY_STORE_USAGE,
     );
 }
 
@@ -87,7 +87,7 @@ fn install_code_works() {
     assert_eq!(env.num_running_canisters(), 1_001);
     assert_le!(
         env.canister_memory_usage_bytes(),
-        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1001 * LOG_MEMORY_STORE_USAGE,
+        CANISTER_CREATOR_CANISTER_MEMORY_USAGE_BYTES + 1_001 * LOG_MEMORY_STORE_USAGE,
     );
 
     // Install code.
