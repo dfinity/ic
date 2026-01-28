@@ -280,12 +280,10 @@ fn test(env: TestEnv) {
                 "canister_state::queues::tests::mainnet_compatibility_tests::refunds_test",
             ),
             TestCase::new(
-                // TODO(MR-539): Switch to bi-directional once we have mainnet binaries.
-                // TestType::Bidirectional {
-                //     published_binary: "state_layout-test".to_string(),
-                //     mainnet_version: v.clone(),
-                // },
-                TestType::SelfTestOnly,
+                TestType::Bidirectional {
+                    published_binary: "state_layout-test".to_string(),
+                    mainnet_version: v.clone(),
+                },
                 "_main/rs/state_layout/state_layout_test_binary/state_layout_test_binary",
                 "state_layout::tests::mainnet_compatibility_tests::task_queue_compatibility_test",
             ),

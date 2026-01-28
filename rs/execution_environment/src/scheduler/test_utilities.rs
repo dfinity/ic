@@ -1362,7 +1362,6 @@ impl TestWasmExecutorCore {
         let callback = system_state
             .register_callback(Callback {
                 call_context_id,
-                originator: sender,
                 respondent: receiver,
                 cycles_sent: Cycles::zero(),
                 prepayment_for_response_execution,

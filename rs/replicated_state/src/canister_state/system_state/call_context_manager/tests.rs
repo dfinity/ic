@@ -97,7 +97,6 @@ fn call_context_handling() {
     // First call (CallContext 1) makes two outgoing calls
     let callback_id1 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
         Cycles::new(42),
@@ -109,7 +108,6 @@ fn call_context_handling() {
     ));
     let callback_id2 = call_context_manager.register_callback(Callback::new(
         call_context_id1,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
         Cycles::new(43),
@@ -126,7 +124,6 @@ fn call_context_handling() {
     // Second one (CallContext 2) has one outgoing call
     let callback_id3 = call_context_manager.register_callback(Callback::new(
         call_context_id2,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
         Cycles::new(44),
@@ -301,7 +298,6 @@ fn test_call_context_instructions_executed_is_updated() {
     // Register a callback, so the call context is not deleted in `on_canister_result()` later.
     let _callback_id = call_context_manager.register_callback(Callback::new(
         call_context_id,
-        canister_test_id(1),
         canister_test_id(2),
         Cycles::zero(),
         Cycles::new(42),
@@ -385,7 +381,6 @@ fn callback_stats() {
     let respondent = canister_test_id(2);
     let best_effort_callback = Callback::new(
         call_context_id,
-        originator,
         respondent,
         Cycles::zero(),
         Cycles::new(42),
@@ -397,7 +392,6 @@ fn callback_stats() {
     );
     let guaranteed_response_callback = Callback::new(
         call_context_id,
-        originator,
         respondent,
         Cycles::zero(),
         Cycles::new(42),
@@ -489,7 +483,7 @@ fn callback_stats() {
     let call_context_manager_proto: pb::CallContextManager = (&ccm).into();
     assert_eq!(
         ccm,
-        CallContextManager::try_from((call_context_manager_proto, originator)).unwrap(),
+        CallContextManager::try_from(call_context_manager_proto).unwrap(),
     );
 
     //
@@ -517,7 +511,6 @@ fn test_expire_callbacks() {
     fn callback_with_deadline(deadline: CoarseTime) -> Callback {
         Callback::new(
             CallContextId::from(1),
-            canister_test_id(1),
             canister_test_id(2),
             Cycles::zero(),
             Cycles::new(42),
@@ -755,7 +748,6 @@ fn call_context_stats() {
 fn roundtrip_encode() {
     let mut ccm = CallContextManager::default();
 
-    let this = canister_test_id(13);
     let other = canister_test_id(14);
     let deadline_1 = CoarseTime::from_secs_since_unix_epoch(1);
     let deadline_2 = CoarseTime::from_secs_since_unix_epoch(2);
@@ -771,7 +763,6 @@ fn roundtrip_encode() {
     // Register two best-effort and one guaranteed response callbacks.
     let callback_1 = ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::new(21),
         Cycles::new(42),
@@ -783,7 +774,6 @@ fn roundtrip_encode() {
     ));
     ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::zero(),
         Cycles::new(43),
@@ -795,7 +785,6 @@ fn roundtrip_encode() {
     ));
     ccm.register_callback(Callback::new(
         call_context_id,
-        this,
         other,
         Cycles::zero(),
         Cycles::new(44),
@@ -813,7 +802,7 @@ fn roundtrip_encode() {
     );
 
     let encoded: pb::CallContextManager = (&ccm).into();
-    let decoded = (encoded, this).try_into().unwrap();
+    let decoded = encoded.try_into().unwrap();
 
     assert_eq!(ccm, decoded);
 }

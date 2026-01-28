@@ -269,7 +269,6 @@ pub(crate) fn into_request(
 
     let callback_id = sandbox_safe_system_state.register_callback(Callback::new(
         call_context_id,
-        sender,
         destination_canister,
         cycles,
         prepayment_for_response_execution,

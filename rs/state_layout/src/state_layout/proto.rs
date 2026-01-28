@@ -78,12 +78,10 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     }
 }
 
-impl TryFrom<(pb_canister_state_bits::CanisterStateBits, CanisterId)> for CanisterStateBits {
+impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
     type Error = ProxyDecodeError;
 
-    fn try_from(
-        (value, own_canister_id): (pb_canister_state_bits::CanisterStateBits, CanisterId),
-    ) -> Result<Self, Self::Error> {
+    fn try_from(value: pb_canister_state_bits::CanisterStateBits) -> Result<Self, Self::Error> {
         let execution_state_bits = value
             .execution_state_bits
             .map(|b| b.try_into())
@@ -129,11 +127,9 @@ impl TryFrom<(pb_canister_state_bits::CanisterStateBits, CanisterId)> for Canist
         let tasks: pb_canister_state_bits::TaskQueue =
             try_from_option_field(value.tasks, "CanisterStateBits::tasks").unwrap_or_default();
 
-        let mut status: CanisterStatus = try_from_option_field(
-            value.canister_status.map(|cs| (cs, own_canister_id)),
-            "CanisterStateBits::canister_status",
-        )?;
-        let mut task_queue = TaskQueue::try_from((tasks, own_canister_id))?;
+        let mut status: CanisterStatus =
+            try_from_option_field(value.canister_status, "CanisterStateBits::canister_status")?;
+        let mut task_queue = TaskQueue::try_from(tasks)?;
 
         // Forward compatibility: convert any `NewResponse` aborted execution into a
         // `Response`, moving its callback into the call context manager.
