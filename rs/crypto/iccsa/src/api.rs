@@ -1,7 +1,7 @@
 //! ICCSA (Internet Computer Canister Signature Algorithm) API
 use crate::types::{PublicKey, PublicKeyBytes, Signature, SignatureBytes};
 use ic_certification::CertificateValidationError;
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_internal_basic_sig_der_utils::{PkixAlgorithmIdentifier, parse_public_key};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{Digest, LabeledTree};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -16,10 +16,10 @@ use std::convert::TryFrom;
 /// * https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
 /// * https://tools.ietf.org/html/rfc8410#section-4
 pub fn public_key_bytes_from_der(pk_der: &[u8]) -> CryptoResult<PublicKeyBytes> {
-    let algorithm_identifier = der_utils::PkixAlgorithmIdentifier::new_with_empty_param(
+    let algorithm_identifier = PkixAlgorithmIdentifier::new_with_empty_param(
         simple_asn1::oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2),
     );
-    let pk = der_utils::parse_public_key(
+    let pk = parse_public_key(
         pk_der,
         AlgorithmId::IcCanisterSignature,
         algorithm_identifier,

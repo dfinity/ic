@@ -6,7 +6,7 @@ use crate::algorithm_identifiers::{
 };
 use ic_crypto_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_cose as cose;
-use ic_crypto_internal_basic_sig_der_utils as der_utils;
+use ic_crypto_internal_basic_sig_der_utils::algo_id_and_public_key_bytes_from_der;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
 
@@ -37,7 +37,7 @@ fn cose_key_bytes_content_type(alg_id: AlgorithmId) -> Option<KeyBytesContentTyp
 pub fn user_public_key_from_bytes(
     bytes: &[u8],
 ) -> CryptoResult<(UserPublicKey, KeyBytesContentType)> {
-    let (pkix_algo_id, pk_der) = der_utils::algo_id_and_public_key_bytes_from_der(bytes)
+    let (pkix_algo_id, pk_der) = algo_id_and_public_key_bytes_from_der(bytes)
         .map_err(|e| CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Unspecified,
             key_bytes: Some(bytes.to_vec()),
