@@ -16250,6 +16250,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "idx-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent 0.40.1",
+ "ic-prep",
+ "ic-regedit",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-universal-canister",
+ "itertools 0.12.1",
+ "serde_json",
+ "slog",
+ "ssh2",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "impl-codec"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23526,27 +23547,6 @@ dependencies = [
  "quote",
  "structmeta 0.3.0",
  "syn 2.0.110",
-]
-
-[[package]]
-name = "testing-verification-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "ic-agent 0.40.1",
- "ic-prep",
- "ic-regedit",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic-universal-canister",
- "itertools 0.12.1",
- "serde_json",
- "slog",
- "ssh2",
- "tempfile",
- "tokio",
 ]
 
 [[package]]
