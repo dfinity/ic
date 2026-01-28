@@ -396,54 +396,40 @@ impl From<&DkgSummary> for pb::Summary {
             subnet_splitting_status: summary
                 .subnet_splitting_status
                 .as_ref()
-                .map(pb::SubnetSplittingStatus::from),
+                .map(pb::summary::SubnetSplittingStatus::from),
         }
     }
 }
 
-impl From<&SubnetSplittingStatus> for pb::SubnetSplittingStatus {
+impl From<&SubnetSplittingStatus> for pb::summary::SubnetSplittingStatus {
     fn from(status: &SubnetSplittingStatus) -> Self {
         match status {
-            SubnetSplittingStatus::NotScheduled => pb::SubnetSplittingStatus {
-                status: Some(pb::subnet_splitting_status::Status::NotScheduled(())),
-            },
+            SubnetSplittingStatus::NotScheduled => {
+                pb::summary::SubnetSplittingStatus::NotScheduled(())
+            }
             SubnetSplittingStatus::Scheduled {
                 destination_subnet_id,
                 source_subnet_id,
-            } => pb::SubnetSplittingStatus {
-                status: Some(pb::subnet_splitting_status::Status::Scheduled(
-                    pb::SplittingArgs {
-                        destination_subnet_id: Some(subnet_id_into_protobuf(
-                            *destination_subnet_id,
-                        )),
-                        source_subnet_id: Some(subnet_id_into_protobuf(*source_subnet_id)),
-                    },
-                )),
-            },
-            SubnetSplittingStatus::Done { new_subnet_id } => pb::SubnetSplittingStatus {
-                status: Some(pb::subnet_splitting_status::Status::Done(
-                    subnet_id_into_protobuf(*new_subnet_id),
-                )),
-            },
+            } => pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
+                destination_subnet_id: Some(subnet_id_into_protobuf(*destination_subnet_id)),
+                source_subnet_id: Some(subnet_id_into_protobuf(*source_subnet_id)),
+            }),
+            SubnetSplittingStatus::Done { new_subnet_id } => {
+                pb::summary::SubnetSplittingStatus::Done(subnet_id_into_protobuf(*new_subnet_id))
+            }
         }
     }
 }
 
-impl TryFrom<pb::SubnetSplittingStatus> for SubnetSplittingStatus {
+impl TryFrom<pb::summary::SubnetSplittingStatus> for SubnetSplittingStatus {
     type Error = ProxyDecodeError;
 
-    fn try_from(proto: pb::SubnetSplittingStatus) -> Result<Self, Self::Error> {
-        let pb::SubnetSplittingStatus { status } = proto;
-
-        let status = status.ok_or(ProxyDecodeError::MissingField(
-            "SubnetSplittingStatus::status",
-        ))?;
-
+    fn try_from(status: pb::summary::SubnetSplittingStatus) -> Result<Self, Self::Error> {
         match status {
-            pb::subnet_splitting_status::Status::NotScheduled(()) => {
+            pb::summary::SubnetSplittingStatus::NotScheduled(()) => {
                 Ok(SubnetSplittingStatus::NotScheduled)
             }
-            pb::subnet_splitting_status::Status::Scheduled(pb::SplittingArgs {
+            pb::summary::SubnetSplittingStatus::Scheduled(pb::SplittingArgs {
                 destination_subnet_id,
                 source_subnet_id,
             }) => Ok(SubnetSplittingStatus::Scheduled {
@@ -456,7 +442,7 @@ impl TryFrom<pb::SubnetSplittingStatus> for SubnetSplittingStatus {
                     "SubnetSplittingStatus::source_subnet_id",
                 )?,
             }),
-            pb::subnet_splitting_status::Status::Done(subnet_id) => {
+            pb::summary::SubnetSplittingStatus::Done(subnet_id) => {
                 Ok(SubnetSplittingStatus::Done {
                     new_subnet_id: subnet_id_try_from_protobuf(subnet_id)?,
                 })

@@ -368,30 +368,13 @@ pub struct DkgDataPayload {
     pub summary_height: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubnetSplittingStatus {
-    #[prost(oneof = "subnet_splitting_status::Status", tags = "1, 2, 3")]
-    pub status: ::core::option::Option<subnet_splitting_status::Status>,
-}
-/// Nested message and enum types in `SubnetSplittingStatus`.
-pub mod subnet_splitting_status {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Status {
-        #[prost(message, tag = "1")]
-        NotScheduled(()),
-        #[prost(message, tag = "2")]
-        Scheduled(super::SplittingArgs),
-        #[prost(message, tag = "3")]
-        Done(super::SubnetId),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SplittingArgs {
     #[prost(message, optional, tag = "1")]
     pub destination_subnet_id: ::core::option::Option<SubnetId>,
     #[prost(message, optional, tag = "2")]
     pub source_subnet_id: ::core::option::Option<SubnetId>,
 }
-/// next id: 14
+/// next id: 16
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Summary {
     #[prost(uint64, tag = "1")]
@@ -412,8 +395,20 @@ pub struct Summary {
     pub current_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
     #[prost(message, repeated, tag = "12")]
     pub next_transcripts: ::prost::alloc::vec::Vec<NiDkgTranscript>,
-    #[prost(message, optional, tag = "13")]
-    pub subnet_splitting_status: ::core::option::Option<SubnetSplittingStatus>,
+    #[prost(oneof = "summary::SubnetSplittingStatus", tags = "13, 14, 15")]
+    pub subnet_splitting_status: ::core::option::Option<summary::SubnetSplittingStatus>,
+}
+/// Nested message and enum types in `Summary`.
+pub mod summary {
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum SubnetSplittingStatus {
+        #[prost(message, tag = "13")]
+        NotScheduled(()),
+        #[prost(message, tag = "14")]
+        Scheduled(super::SplittingArgs),
+        #[prost(message, tag = "15")]
+        Done(super::SubnetId),
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CallbackIdedNiDkgTranscript {
