@@ -3375,7 +3375,7 @@ impl StateManager for StateManagerImpl {
             let hash_req = HashRequest::HashState {
                 state: Arc::clone(&state),
                 states: Arc::clone(&self.states),
-                latest_state_height: self.latest_state_height.clone(),
+                latest_state_height: Arc::clone(&self.latest_state_height),
                 height,
                 latest_height_update_time: Arc::clone(&self.latest_height_update_time),
                 scope: scope.clone(),
@@ -3504,7 +3504,7 @@ pub enum HashRequest {
     HashState {
         state: Arc<ReplicatedState>,
         states: Arc<parking_lot::RwLock<SharedState>>,
-        latest_state_height: AtomicU64,
+        latest_state_height: Arc<AtomicU64>,
         height: Height,
         latest_height_update_time: Arc<Mutex<Instant>>,
         scope: CertificationScope,
@@ -3534,7 +3534,7 @@ fn spawn_hash_thread(
                         } => {
                             let certification_metadata =
                                 StateManagerImpl::compute_certification_metadata(
-                                    &metrics, &log, &state,
+                                    &state, height, &metrics, &log,
                                 )
                                 .unwrap_or_else(|err| {
                                     fatal!(log, "Failed to compute hash tree: {:?}", err)
@@ -3568,9 +3568,9 @@ fn spawn_hash_thread(
                                 states
                                     .certifications_metadata
                                     .insert(height, certification_metadata);
-
                                 let latest_height =
-                                    update_latest_height(latest_state_height, height);
+                                    update_latest_height(&latest_state_height, height);
+
                                 metrics.max_resident_height.set(latest_height as i64);
                                 {
                                     let mut last_height_update_time = latest_height_update_time
@@ -3584,7 +3584,9 @@ fn spawn_hash_thread(
                                 }
                             }
                         }
-                        HashRequest::Wait { sender } => {}
+                        HashRequest::Wait { sender } => {
+                            sender.send(()).unwrap();
+                        }
                     }
                 }
             })
