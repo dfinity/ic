@@ -258,5 +258,7 @@ fi
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
 
+OTHER_ARGS+=(--uidmap "1000:$(id -u):1" --gidmap "1000:$(id -g):1")
+
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"
