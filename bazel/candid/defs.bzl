@@ -15,7 +15,7 @@ def did_git_test(name, did, enable_also_reverse = False, **kwargs):
     """
 
     tags = kwargs.pop("tags", [])
-    for tag in ["local", "no-sandbox", "smoke", "didc"]:
+    for tag in ["smoke", "didc"]:
         if not tag in tags:
             tags.append(tag)
 
