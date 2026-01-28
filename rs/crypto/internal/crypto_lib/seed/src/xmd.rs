@@ -63,6 +63,7 @@ impl<const N: usize, T: XmdHashFunction> XmdHashFunctionWithSizeCheck<N> for T {
 ///
 pub fn xmd<const N: usize, H: XmdHashFunctionWithSizeCheck<N>>(msg: &[u8], dst: &[u8]) -> [u8; N] {
     // Compile time assertion that XMD can output the requested bytes
+    #[allow(clippy::let_unit_value)]
     let _ = H::XMD_CAN_PRODUCE_THIS_OUTPUT;
 
     let mut out = [0u8; N];
