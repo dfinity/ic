@@ -1954,8 +1954,8 @@ mod tests {
                             if &highest_height_cup.registry_version < upgrade_registry_version =>
                         {
                             // An upgrade is scheduled but the CUP's registry version has not
-                            // reached the upgrade registry version yet, so we are expected to stay
-                            // assigned
+                            // reached the upgrade registry version yet, so we are expected not to
+                            // stop and reboot
                             // Though, we should start to download it in advance
                             assert_has_prepared_upgrade();
                             assert_has_not_cleared_version_and_image(upgrade_replica_version);
@@ -2050,8 +2050,8 @@ mod tests {
                         Some((upgrade_replica_version, upgrade_registry_version)),
                     ) if registry_cup_registry_version < upgrade_registry_version => {
                         // An upgrade is scheduled but the CUP's registry version has not
-                        // reached the upgrade registry version yet, so we are expected to be
-                        // `Assigned`
+                        // reached the upgrade registry version yet, so we are expected to stay
+                        // `Assigned` and not stop and reboot
                         // Though, we should start to download the upgrade in advance
                         assert_has_prepared_upgrade();
                         assert_has_not_cleared_version_and_image(upgrade_replica_version);
