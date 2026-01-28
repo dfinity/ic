@@ -3,7 +3,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{group::SystemTestGroup, ic::InternetComputer, test_env::TestEnv, test_env_api::*},
     systest,
-    util::block_on,
 };
 
 use anyhow::Result;
@@ -58,14 +57,14 @@ EOT
     }
 
     // Reboot once to get things fully initialized
-    block_on(async { node.vm().await.reboot().await });
+    node.vm().reboot();
     node.await_status_is_unavailable().unwrap();
     node.await_status_is_healthy().unwrap();
 
     // Reboot again to measure timing
     let reboot_start = Instant::now();
 
-    block_on(async { node.vm().await.reboot().await });
+    node.vm().reboot();
     node.await_status_is_unavailable().unwrap();
     node.await_status_is_healthy().unwrap();
 

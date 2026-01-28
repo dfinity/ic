@@ -360,7 +360,7 @@ pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Kill node: {}", app_node.get_ip_addr());
-    block_on(async { app_node.vm().await.kill().await });
+    app_node.vm().kill();
     app_node
         .await_status_is_unavailable()
         .expect("Node still healthy");
@@ -373,7 +373,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_unavailable()
         .expect("Node still healthy");
     info!(logger, "Starting node: {}", app_node.get_ip_addr());
-    block_on(async { app_node.vm().await.start().await });
+    app_node.vm().start();
     app_node
         .await_status_is_healthy()
         .expect("Node not healthy");

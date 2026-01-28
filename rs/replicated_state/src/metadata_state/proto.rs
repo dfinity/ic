@@ -476,6 +476,7 @@ impl From<&Stream> for pb_queues::Stream {
                 .iter()
                 .map(|(_, message)| message.into())
                 .collect(),
+            signals_begin: item.signals_begin().get(),
             signals_end: item.signals_end.get(),
             reject_signals,
             reverse_stream_flags: Some(pb_queues::StreamFlags {
@@ -497,6 +498,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
         let refund_count = Self::calculate_refund_count(&messages);
 
+        let signals_begin = item.signals_begin.into();
         let signals_end = item.signals_end.into();
         let reject_signals = item
             .reject_signals
@@ -511,11 +513,11 @@ impl TryFrom<pb_queues::Stream> for Stream {
             })
             .collect::<Result<VecDeque<_>, ProxyDecodeError>>()?;
 
-        // Check reject signals are sorted and below `signals_end`.
+        // Check that reject signals are sorted and below `signals_end`.
         let iter = reject_signals.iter().map(|signal| signal.index);
         for (index, next_index) in iter
             .clone()
-            .zip(iter.skip(1).chain(std::iter::once(item.signals_end.into())))
+            .zip(iter.skip(1).chain(std::iter::once(signals_end)))
         {
             if index >= next_index {
                 return Err(ProxyDecodeError::Other(format!(
@@ -524,8 +526,23 @@ impl TryFrom<pb_queues::Stream> for Stream {
             }
         }
 
+        // Check that `signals_begin` is before `signals_end` and all reject signals.
+        if signals_begin > signals_end {
+            return Err(ProxyDecodeError::Other(format!(
+                "signals_begin {signals_begin:?} after signals_end {signals_end:?}",
+            )));
+        }
+        if let Some(first_reject_signal) = reject_signals.front()
+            && first_reject_signal.index < signals_begin
+        {
+            return Err(ProxyDecodeError::Other(format!(
+                "first reject signal {first_reject_signal:?} before signals_begin {signals_begin:?}",
+            )));
+        }
+
         Ok(Self {
             messages,
+            signals_begin,
             signals_end,
             reject_signals,
             messages_size_bytes,

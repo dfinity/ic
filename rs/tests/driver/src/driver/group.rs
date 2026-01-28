@@ -31,7 +31,6 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -1038,8 +1037,8 @@ impl SystemTestGroup {
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
         let farm_url = env.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_url, env.logger()));
+        let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        block_on(farm.delete_group(&group_name));
+        farm.delete_group(&group_name);
     }
 }

@@ -29,6 +29,7 @@ curl
 faketime
 fdisk
 iproute2
+iputils-ping
 isc-dhcp-client
 jq
 less

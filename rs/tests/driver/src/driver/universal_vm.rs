@@ -14,7 +14,6 @@ use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession};
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
@@ -109,7 +108,7 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let farm = block_on(Farm::from_test_env(env, "universal VM"));
+        let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
 
         env.ssh_keygen()?;
@@ -133,11 +132,11 @@ impl UniversalVm {
             let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
             create_universal_vm_config_image(&config_ssh_dir, &config_ssh_img, "SSH")?;
 
-            let ssh_config_img_file_spec = AttachImageSpec::new(block_on(farm.upload_file(
+            let ssh_config_img_file_spec = AttachImageSpec::new(farm.upload_file(
                 &pot_setup.infra_group_name,
                 config_ssh_img,
                 CONF_SSH_IMG_FNAME,
-            ))?);
+            )?);
             image_specs.push(ssh_config_img_file_spec);
         }
 
@@ -157,8 +156,7 @@ impl UniversalVm {
                 let file_id = id_of_file(config_img.clone())?;
                 let mut file_spec = AttachImageSpec::new(file_id.clone());
 
-                let upload = match block_on(farm.claim_file(&pot_setup.infra_group_name, &file_id))?
-                {
+                let upload = match farm.claim_file(&pot_setup.infra_group_name, &file_id)? {
                     ClaimResult::FileClaimed(file_expiration) => {
                         if let Some(expiration) = file_expiration.expiration {
                             let now = Utc::now();
@@ -176,11 +174,11 @@ impl UniversalVm {
                 };
 
                 if upload {
-                    file_spec = AttachImageSpec::new(block_on(farm.upload_file(
+                    file_spec = AttachImageSpec::new(farm.upload_file(
                         &pot_setup.infra_group_name,
                         config_img,
                         CONF_IMG_FNAME,
-                    ))?);
+                    )?);
                     info!(env.logger(), "Uploaded image: {}", file_id);
                 } else {
                     info!(
@@ -193,13 +191,13 @@ impl UniversalVm {
         }
 
         if InfraProvider::read_attribute(env) == InfraProvider::Farm {
-            block_on(farm.attach_disk_images(
+            farm.attach_disk_images(
                 &pot_setup.infra_group_name,
                 &self.name,
                 "usb-storage",
                 image_specs,
-            ))?;
-            block_on(farm.start_vm(&pot_setup.infra_group_name, &self.name))?;
+            )?;
+            farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
         }
 
         Ok(())

@@ -13,7 +13,6 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../internal/crypto_lib/basic_
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
-ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../internal/crypto_lib/basic_sig/rsa_pkcs1" }
 ic-crypto-sha2 = { path = "../sha2" }
 ic-types = { path = "../../types/types" }
