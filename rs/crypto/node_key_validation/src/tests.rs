@@ -169,17 +169,9 @@ mod node_signing_public_key_validation {
             invalidate_ed25519_pubkey(&mut corrupted_public_key.key_value);
 
             let node_id_for_corrupted_node_signing_key = {
-                let der_prefix = vec![
-                    48, 42, // A sequence of 42 bytes follows.
-                    48, 5, // An element of 5 bytes follows.
-                    6, 3, 43, 101, 112, // The OID
-                    3, 33, // A bitstring of 33 bytes follows.
-                    0,  // The bitstring (32 bytes) is divisible by 8
-                ];
-
-                let mut pubkey_der = vec![];
-                pubkey_der.extend_from_slice(&der_prefix);
-                pubkey_der.extend_from_slice(&corrupted_public_key.key_value);
+                // Only fails if the length is incorrect which should not happen
+                let pubkey_der = ic_ed25519::PublicKey::convert_raw_to_der(&corrupted_public_key.key_value).
+                    expect("Conversion failed");
 
                 NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
             };
