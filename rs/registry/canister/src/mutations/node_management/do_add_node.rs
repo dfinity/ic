@@ -287,7 +287,7 @@ fn extract_chip_id_from_payload(payload: &AddNodePayload) -> Result<Option<Vec<u
         attestation_package.clone(),
         SevRootCertificateVerification::Verify,
     )
-    .and_then(|p| p.verify_custom_data(&expected_custom_data))
+    .verify_custom_data(&expected_custom_data)
     .map_err(|e| format!("{LOG_PREFIX}do_add_node: Attestation verification failed: {e}"))?;
 
     let chip_id = parsed.attestation_report().chip_id.to_vec();
