@@ -8224,6 +8224,7 @@ dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
  "hex",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
