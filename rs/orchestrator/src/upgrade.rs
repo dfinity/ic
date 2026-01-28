@@ -1156,7 +1156,7 @@ mod tests {
             },
         );
 
-        let cup = CatchUpPackage::fake(CatchUpContent::new(
+        CatchUpPackage::fake(CatchUpContent::new(
             HashedBlock::new(ic_types::crypto::crypto_hash, block),
             HashedRandomBeacon::new(
                 ic_types::crypto::crypto_hash,
@@ -1167,9 +1167,7 @@ mod tests {
             ),
             CryptoHashOf::from(CryptoHash(Vec::new())),
             None,
-        ));
-
-        cup
+        ))
     }
 
     // Create a CUP for a given subnet id and registry version.
