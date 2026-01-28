@@ -47,6 +47,7 @@ impl From<Certification> for pb::Certification {
         }
     }
 }
+
 impl TryFrom<pb::Certification> for Certification {
     type Error = ProxyDecodeError;
 
