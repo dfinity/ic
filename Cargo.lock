@@ -8016,6 +8016,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-for-verification-only",
  "ic-crypto-interfaces-sig-verification",
+ "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-bls12-381-vetkd",

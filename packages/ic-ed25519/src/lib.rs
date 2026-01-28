@@ -582,7 +582,7 @@ impl PublicKey {
     ///
     /// # Warning
     ///
-    /// This performs no validity check on the public key. f you pass an invalid
+    /// This performs no validity check on the public key. If you pass an invalid
     /// key (ie a encoding of a point not in the prime order subgroup), then the
     /// DER encoding of that invalid key will be returned.
     pub fn convert_raw32_to_der(raw: [u8; 32]) -> Vec<u8> {
@@ -647,7 +647,7 @@ impl PublicKey {
     ///
     /// See RFC 8410 for details on the format
     ///
-    /// This returns a Vec<u8> instead of a String for accidental/historical reasons
+    /// This returns a `Vec<u8>` instead of a `String` for accidental/historical reasons
     pub fn serialize_rfc8410_pem(&self) -> Vec<u8> {
         let der = self.serialize_rfc8410_der();
         pem::encode(&pem::Pem::new("PUBLIC KEY", der)).into()
