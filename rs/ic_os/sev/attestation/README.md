@@ -12,11 +12,10 @@ Folder structure:
 Generation of Rust files
 ------------------------
 
-From the repository root, run:
+To regenerate the protobuf Rust files, run:
 
 ```bash
-bazel build //rs/ic_os/sev/attestation:build_script
-cp bazel-bin/rs/ic_os/sev/attestation/build_script.out_dir/attestation.rs rs/ic_os/sev/attestation/src/proto_gen/
+REGENERATE=1 cargo test -p attestation --test check_generated_files
 ```
 
 Commit the changes.

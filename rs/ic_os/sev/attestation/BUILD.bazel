@@ -1,4 +1,3 @@
-load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 
@@ -8,25 +7,6 @@ package(default_visibility = [
     "//rs/registry/canister:__pkg__",
     "//rs/registry/canister/api:__pkg__",
 ])
-
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    build_script_env = {
-        "CARGO_MANIFEST_DIR": "rs/ic_os/sev/attestation",
-        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
-        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
-    },
-    data = [
-        "proto/attestation.proto",
-        "@com_google_protobuf//:protoc",
-        "@rules_rust//rust/toolchain:current_rustfmt_files",
-    ],
-    deps = [
-        "//rs/utils/rustfmt",
-        "@crate_index//:prost-build",
-    ],
-)
 
 rust_library(
     name = "attestation",
