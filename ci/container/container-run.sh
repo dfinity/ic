@@ -122,7 +122,7 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
         echo "Using hoststorage for podman root."
         CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
     else
-        CONTAINER_CMD=(sudo podman)
+        CONTAINER_CMD=(podman)
     fi
 fi
 
