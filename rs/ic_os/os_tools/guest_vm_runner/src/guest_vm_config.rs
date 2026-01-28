@@ -60,8 +60,9 @@ pub fn assemble_config_media(
     Ok(())
 }
 
+#[allow(unused_variables)]
 fn make_bootstrap_options(
-    _hostos_config: &HostOSConfig,
+    hostos_config: &HostOSConfig,
     guestos_config: GuestOSConfig,
 ) -> Result<BootstrapOptions> {
     #[allow(unused_mut)]
@@ -72,7 +73,7 @@ fn make_bootstrap_options(
 
     #[cfg(feature = "dev")]
     {
-        if _hostos_config.icos_settings.use_ssh_authorized_keys {
+        if hostos_config.icos_settings.use_ssh_authorized_keys {
             bootstrap_options.accounts_ssh_authorized_keys =
                 Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
         }

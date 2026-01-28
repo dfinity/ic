@@ -17,13 +17,13 @@ const NODE_OPERATOR_KEY_PATH: &str = "data/node_operator_private_key.pem";
 /// Populates the NNS root key where `ic-replica` expects it.
 /// In a dev environment it will take the overriden key from the GuestOS config
 /// if it's provided there.
-/// `_guestos_config` is prefixed with an underscore because w/o dev flag it's unused.
-fn populate_nns_public_key(root: &Path, _guestos_config: &GuestOSConfig) -> Result<()> {
+#[allow(unused_variables)]
+fn populate_nns_public_key(root: &Path, guestos_config: &GuestOSConfig) -> Result<()> {
     let nns_key_dst = root.join(NNS_KEY_PATH);
 
     // Get the override key from the config if we're in dev environment & it was set
     #[cfg(feature = "dev")]
-    if let Some(v) = _guestos_config
+    if let Some(v) = guestos_config
         .guestos_settings
         .guestos_dev_settings
         .nns_pub_key_override
