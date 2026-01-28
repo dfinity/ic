@@ -41,7 +41,7 @@ use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -1452,8 +1452,11 @@ fn test_fee_collector_ranges_107() {
     test_fee_collector_ranges(false);
 }
 
+// This test uses the test ledger to test edge cases such as
+// specifying the legacy fee collector after the 107 fee collector block
+// was genereated, which could not be tested with the prod ledger.
 #[test]
-fn test_fee_collector_107() {
+fn test_fee_collector_107_edge_cases() {
     let env = &StateMachine::new();
     let ledger_id = install_icrc3_test_ledger(env);
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
@@ -1591,6 +1594,83 @@ fn add_custom_block(
         Nat::from(block_id),
         add_block(env, ledger_id, &block).expect("error adding mint block to ICRC-3 test ledger")
     );
+}
+
+#[test]
+fn test_fee_collector_107_with_ledger() {
+    let env = &StateMachine::new();
+    let feecol_legacy = account(101, 0);
+    let feecol_107_1 = account(102, 0);
+    let feecol_107_2 = account(103, 0);
+    let sending_account = account(1, 0);
+    let receiving_account = account(2, 0);
+    let minter = minter_identity().sender().unwrap();
+    let mut expected_balances = BTreeMap::new();
+    let ledger_id = install_ledger_with_wasm(
+        env,
+        vec![(sending_account, 10_000_000)],
+        default_archive_options(),
+        Some(feecol_legacy),
+        minter,
+        ledger_legacy_fc_wasm(),
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    let verify_fc_balances = |expected_balances: &BTreeMap<Account, u64>| {
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        for (fc_account, balance) in expected_balances {
+            assert_eq!(*balance, icrc1_balance_of(env, index_id, *fc_account));
+            assert_eq!(*balance, icrc1_balance_of(env, ledger_id, *fc_account));
+        }
+    };
+
+    // Legacy fee collector collects the fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_legacy, FEE);
+    expected_balances.insert(feecol_107_1, 0);
+    expected_balances.insert(feecol_107_2, 0);
+    verify_fc_balances(&expected_balances);
+
+    // Legacy fee collector does not collect approve fees
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+
+    // Set 107 fee collector to burn
+    upgrade_ledger(env, ledger_id, None, false);
+
+    // No fees are collected
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, Some(feecol_107_1));
+
+    // The new fee collector collects all fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_1, expected_balances[&feecol_107_1] + FEE);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_1, expected_balances[&feecol_107_1] + FEE);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, Some(feecol_107_2));
+
+    // The second new fee collector collects all fees
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_2, expected_balances[&feecol_107_2] + FEE);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    expected_balances.insert(feecol_107_2, expected_balances[&feecol_107_2] + FEE);
+    verify_fc_balances(&expected_balances);
+
+    set_fc_107_by_controller(env, ledger_id, None);
+
+    // No fees are collected
+    transfer(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
+    approve(env, ledger_id, sending_account, receiving_account, 1);
+    verify_fc_balances(&expected_balances);
 }
 
 #[test]
