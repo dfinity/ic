@@ -1130,6 +1130,9 @@ mod tests {
         time::UNIX_EPOCH,
     };
     use mockall::mock;
+    use std::io::Write;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::fs::PermissionsExt;
     use tempfile::{TempDir, tempdir};
 
     impl Upgrade {
@@ -1326,14 +1329,28 @@ mod tests {
             .unwrap();
     }
 
+    // Create a fake binary file with the given bash script content
     fn create_binary(binary_path: &Path, bash_script: &str) {
         std::fs::create_dir_all(binary_path.parent().unwrap()).unwrap();
-        std::fs::write(binary_path, bash_script).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(binary_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        let mut file = std::fs::File::create(binary_path).unwrap();
+        file.write_all(bash_script.as_bytes()).unwrap();
+        file.set_permissions(std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+
+        // The ugly hack below is to work around rstest running the tests in multiple threads but
+        // in the same process. Each of them creates their own binary file and later executes it.
+        // This means a parallel test might still have the file open for writing while the current
+        // one is trying to execute it. This yields ETXTBSY errors on Linux. To avoid this, we use
+        // the below hack, taken from https://github.com/rust-lang/rust/issues/114554, see
+        // "Implementation of the `flock` algorithm"
+        std::thread::sleep(std::time::Duration::from_micros(2));
+
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
+        drop(file);
+
+        let file = std::fs::File::open(binary_path).unwrap();
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_SH) };
+        drop(file);
     }
 
     async fn create_upgrade_for_test(
