@@ -80,6 +80,7 @@ impl Fake for Certification {
                 ))),
                 signature: ThresholdSignature::fake(),
             },
+            height_witness: vec![1, 2, 3],
         }
     }
 }

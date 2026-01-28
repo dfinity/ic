@@ -349,6 +349,7 @@ impl CertifierImpl {
                     Ok(signature) => Some(CertificationShare {
                         height,
                         signed: Signed { content, signature },
+                        height_witness: vec![1, 2, 3],
                     }),
                     Err(err) => {
                         error!(self.log, "Couldn't create a signature: {:?}", err);
@@ -405,6 +406,7 @@ impl CertifierImpl {
                     content: signed_cert_tuple.content.1,
                     signature: signed_cert_tuple.signature,
                 },
+                height_witness: vec![1, 2, 3],
             })
         })
         .collect()
@@ -636,6 +638,7 @@ mod tests {
                     signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
                     content,
                 },
+                height_witness: vec![1, 2, 3],
             },
         ))
     }
@@ -660,6 +663,7 @@ mod tests {
         to_unvalidated(CertificationMessage::Certification(Certification {
             height,
             signed: Signed { content, signature },
+            height_witness: vec![1, 2, 3],
         }))
     }
 
@@ -1353,6 +1357,7 @@ mod tests {
                                 content: gen_content(),
                                 signature: ThresholdSignature::fake(),
                             },
+                            height_witness: vec![1, 2, 3],
                         }));
                 }
 

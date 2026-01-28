@@ -441,6 +441,7 @@ mod crypto_hash_stability {
                     signer: test_ni_dkg_id(),
                 },
             },
+            height_witness: vec![1, 2, 3],
         };
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -464,6 +465,7 @@ mod crypto_hash_stability {
                     signer: NodeId::from(PrincipalId::new_node_test_id(42)),
                 },
             },
+            height_witness: vec![1, 2, 3],
         };
         let hash = crypto_hash(&data);
         assert_eq!(
@@ -625,6 +627,7 @@ mod crypto_hash_stability {
                     signer: test_ni_dkg_id(),
                 },
             },
+            height_witness: vec![1, 2, 3],
         };
         let data = CertificationMessage::Certification(cert);
         let hash = crypto_hash(&data);

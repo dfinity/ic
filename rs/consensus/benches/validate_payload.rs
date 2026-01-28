@@ -230,6 +230,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
     state_manager.deliver_state_certification(Certification {
         height: Height::new(CERTIFIED_HEIGHT),
         signed: SignedCertificationContent::fake(CertificationContent::new(hash.clone())),
+        height_witness: vec![1, 2, 3],
     });
 }
 

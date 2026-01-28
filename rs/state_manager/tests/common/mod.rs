@@ -84,6 +84,7 @@ pub fn certify_height(state_manager: &impl StateManager, h: Height) -> Certifica
             content: CertificationContent::new(hash),
             signature: ThresholdSignature::fake(),
         },
+        height_witness: vec![1, 2, 3],
     };
 
     state_manager.deliver_state_certification(certification.clone());

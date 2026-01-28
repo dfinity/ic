@@ -131,6 +131,7 @@ fn make_xnet_slice(size: usize) -> CertifiedStreamSlice {
                     vec![],
                 ))),
             },
+            height_witness: vec![1, 2, 3],
         },
     }
 }

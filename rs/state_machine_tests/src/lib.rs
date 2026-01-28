@@ -5063,6 +5063,7 @@ fn certify_hash(
                 },
             },
         },
+        height_witness: vec![1, 2, 3],
     }
 }
 

@@ -43,6 +43,7 @@ impl From<Certification> for pb::Certification {
             height: value.height.get(),
             content: Some(value.signed.content.into()),
             signature: Some(value.signed.signature.into()),
+            height_witness: value.height_witness,
         }
     }
 }
@@ -56,6 +57,7 @@ impl TryFrom<pb::Certification> for Certification {
                 content: try_from_option_field(value.content, "Certification::content")?,
                 signature: try_from_option_field(value.signature, "Certification::signature")?,
             },
+            height_witness: value.height_witness,
         })
     }
 }
@@ -66,6 +68,7 @@ impl From<CertificationShare> for pb::CertificationShare {
             height: share.height.get(),
             content: Some(share.signed.content.into()),
             signature: Some(share.signed.signature.into()),
+            height_witness: share.height_witness,
         }
     }
 }
@@ -79,6 +82,7 @@ impl TryFrom<pb::CertificationShare> for CertificationShare {
                 content: try_from_option_field(value.content, "CertificationShare::content")?,
                 signature: try_from_option_field(value.signature, "CertificationShare::signature")?,
             },
+            height_witness: value.height_witness,
         })
     }
 }
