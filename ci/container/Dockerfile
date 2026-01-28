@@ -18,6 +18,13 @@ RUN apt -yq update && \
     apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
     rm "/tmp/$(basename $PACKAGE_FILE)"
 
+# try installing uidmap with setuid binaries
+RUN apt-get update && \
+    apt-get install -y uidmap && \
+    chown root:root /usr/bin/newuidmap /usr/bin/newgidmap && \
+    chmod u+s /usr/bin/newuidmap /usr/bin/newgidmap && \
+    ls -l /usr/bin/newuidmap /usr/bin/newgidmap
+
 # Install a version of google-android-platform-tools-installer with e2fsdroid
 RUN export DEBIAN_FRONTEND=noninteractive && \
     mkdir e2fsdroid && \
