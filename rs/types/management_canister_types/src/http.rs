@@ -132,9 +132,9 @@ impl CanisterHttpRequestArgs {
 ///     context : blob;
 ///   };
 ///  replication: opt record {
-///     min_responses: nat64;
-///     max_responses: nat64;
-///     total_requests: nat64;
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
 ///   };
 /// }
 /// ```s
@@ -154,16 +154,16 @@ impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
 /// Struct used for encoding/decoding
 /// ```text
 /// record {
-///     min_responses: nat64;
-///     max_responses: nat64;
-///     total_requests: nat64;
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
 ///   };
 /// ```
 #[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
 pub struct ReplicationCounts {
-    pub total_requests: u64,
-    pub min_responses: u64,
-    pub max_responses: u64,
+    pub total_requests: u32,
+    pub min_responses: u32,
+    pub max_responses: u32,
 }
 
 #[test]
