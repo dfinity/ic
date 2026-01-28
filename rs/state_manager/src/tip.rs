@@ -1283,7 +1283,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
             last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
-            compute_allocation: canister_state.scheduler_state.compute_allocation,
+            compute_allocation: canister_state.compute_allocation(),
             priority_credit: canister_state.scheduler_state.priority_credit,
             long_execution_mode: canister_state.scheduler_state.long_execution_mode,
             accumulated_priority: canister_state.scheduler_state.accumulated_priority,
@@ -1322,7 +1322,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
             heap_delta_debit: canister_state.scheduler_state.heap_delta_debit,
             install_code_debit: canister_state.scheduler_state.install_code_debit,
             time_of_last_allocation_charge_nanos: canister_state
-                .scheduler_state
+                .system_state
                 .time_of_last_allocation_charge
                 .as_nanos_since_unix_epoch(),
             task_queue: canister_state.system_state.task_queue.clone(),
@@ -1342,7 +1342,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
                 .wasm_chunk_store
                 .metadata()
                 .clone(),
-            total_query_stats: canister_state.scheduler_state.total_query_stats.clone(),
+            total_query_stats: canister_state.system_state.total_query_stats.clone(),
             log_visibility: canister_state.system_state.log_visibility.clone(),
             log_memory_limit: canister_state.system_state.log_memory_limit,
             canister_log: canister_state.system_state.canister_log.clone(),

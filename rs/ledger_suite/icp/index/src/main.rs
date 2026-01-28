@@ -89,6 +89,10 @@ thread_local! {
     static TIMER_ID: RefCell<TimerId> = RefCell::new(TimerId::default());
 }
 
+fn default_last_wait_time() -> Duration {
+    DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
+}
+
 #[derive(Copy, Clone, Debug, Deserialize, Serialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
@@ -96,6 +100,13 @@ struct State {
 
     /// The principal of the ledger canister that is indexed by this index.
     ledger_id: Principal,
+
+    // Last wait time in nanoseconds.
+    #[deprecated]
+    #[serde(default = "default_last_wait_time")]
+    // TODO(DEFI-1144): Also add `#[serde(skip_serializing)]` annotation once the above `default` annotation has been deployed to mainnet.
+    // TODO(DEFI-1144): Remove the `last_wait_time` field once the above `skip_serializing` annotation has been deployed to mainnet.
+    pub last_wait_time: Duration,
 
     /// The interval for retrieving blocks from the ledger and archive(s) for (re)building the
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
@@ -117,6 +128,7 @@ impl Default for State {
         Self {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
+            last_wait_time: Duration::from_secs(0),
             retrieve_blocks_from_ledger_interval: None,
         }
     }

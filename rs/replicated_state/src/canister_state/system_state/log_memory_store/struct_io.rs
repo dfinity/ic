@@ -504,4 +504,24 @@ mod tests {
         let (content, _) = io.read_raw_bytes::<5>(custom_offset + MemorySize::new(20));
         assert_eq!(&content, b"hello");
     }
+
+    #[test]
+    fn test_struct_io_cache_reused() {
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        // Initial state
+        let header = Header::new(MemorySize::new(1024));
+        io.save_header(&header);
+
+        // Load header - should populate cache
+        let loaded_header = io.load_header();
+        assert_eq!(loaded_header.data_capacity.get(), 1024);
+
+        // Manually overwrite cache with a fake header.
+        // This proves that load_header() uses the cache instead of reading from page map.
+        let header_fake = Header::new(MemorySize::new(9999));
+        io.cache_header.set(Some(header_fake));
+
+        let loaded = io.load_header();
+        assert_eq!(loaded.data_capacity.get(), 9999);
+    }
 }
