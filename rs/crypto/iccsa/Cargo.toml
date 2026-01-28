@@ -7,4 +7,26 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-ic-crypto-internal-basic-sig-iccsa = { path = "../internal/crypto_lib/basic_sig/iccsa" }
+ic-certification = { path = "../../certification" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../internal/crypto_lib/basic_sig/der_utils" }
+ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
+ic-crypto-sha2 = { path = "../sha2" }
+ic-crypto-tree-hash = { path = "../tree_hash" }
+ic-types = { path = "../../types/types" }
+
+base64 = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }
+serde_cbor = { workspace = true }
+simple_asn1 = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-iccsa-test-utils = { path = "test_utils" }
+ic-crypto-test-utils = { path = "../test_utils" }
+ic-crypto-internal-test-vectors = { path = "../internal/test_vectors" }
+ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
+ic-interfaces = { path = "../../interfaces" }
+rand = { workspace = true }
