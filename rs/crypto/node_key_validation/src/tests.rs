@@ -3,6 +3,7 @@ use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_types::time::UNIX_EPOCH;
 use std::str::FromStr;
+use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd25519PublicKeyBytes;
 
 mod all_node_public_keys_validation {
     use super::*;
@@ -158,8 +159,7 @@ mod node_signing_public_key_validation {
         let result = ValidNodeSigningPublicKey::try_from(invalid_node_signing_key);
 
         assert_matches!(result, Err(KeyValidationError { error })
-            if error.contains("invalid node signing key: PublicKeyBytesFromProtoError")
-            && error.contains("Wrong data length")
+            if error.contains("invalid node signing key: Unexpected length 33")
         );
     }
 
@@ -173,10 +173,19 @@ mod node_signing_public_key_validation {
                 invalidate_valid_ed25519_pubkey(nspk_bytes).0.to_vec()
             };
             let node_id_for_corrupted_node_signing_key = {
-                let corrupted_key = &corrupted_public_key.key_value;
-                let mut buf = [0; BasicSigEd25519PublicKeyBytes::SIZE];
-                buf.copy_from_slice(corrupted_key);
-                derive_node_id(BasicSigEd25519PublicKeyBytes(buf))
+                let der_prefix = vec![
+                    48, 42, // A sequence of 42 bytes follows.
+                    48, 5, // An element of 5 bytes follows.
+                    6, 3, 43, 101, 112, // The OID
+                    3, 33, // A bitstring of 33 bytes follows.
+                    0,  // The bitstring (32 bytes) is divisible by 8
+                ];
+
+                let mut pubkey_der = vec![];
+                pubkey_der.extend_from_slice(&der_prefix);
+                pubkey_der.extend_from_slice(&corrupted_public_key.key_value);
+
+                NodeId::from(PrincipalId::new_self_authenticating(&pubkey_der))
             };
             (corrupted_public_key, node_id_for_corrupted_node_signing_key)
         };
@@ -187,7 +196,7 @@ mod node_signing_public_key_validation {
         ));
 
         assert_matches!(result, Err(KeyValidationError { error })
-            if error == "invalid node signing key: verification failed"
+            if error == "invalid node signing key: has torsion component"
         );
     }
 

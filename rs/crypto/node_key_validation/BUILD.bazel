@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
-    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
@@ -22,6 +21,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/basic_sig",
     "@crate_index//:assert_matches",
