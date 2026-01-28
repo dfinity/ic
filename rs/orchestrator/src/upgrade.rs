@@ -1331,7 +1331,6 @@ mod tests {
 
     // Create a fake binary file with the given bash script content
     fn create_binary(binary_path: &Path, bash_script: &str) {
-        std::fs::create_dir_all(binary_path.parent().unwrap()).unwrap();
         let mut file = std::fs::File::create(binary_path).unwrap();
         file.write_all(bash_script.as_bytes()).unwrap();
         file.set_permissions(std::fs::Permissions::from_mode(0o755))
@@ -1378,6 +1377,7 @@ mod tests {
         let metrics = Arc::new(OrchestratorMetrics::new(&MetricsRegistry::new()));
 
         let ic_binary_dir = dir.join("ic_binary");
+        std::fs::create_dir_all(&ic_binary_dir).unwrap();
         create_binary(&ic_binary_dir.join("replica"), "#!/bin/sh\nsleep 60\n");
         create_binary(&ic_binary_dir.join("manageboot.sh"), "#!/bin/sh\nexit 0\n");
 
