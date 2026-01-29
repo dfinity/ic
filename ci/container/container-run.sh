@@ -150,18 +150,49 @@ WORKDIR="/ic"
 HOST_USER=$(whoami)
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
-SUBUID_START=100000
-SUBGID_START=100000
-SUB_RANGE=65536
+# SUBUID_START=100000
+# SUBGID_START=100000
+# SUB_RANGE=65536
 
-# Ensure host has an entry for subgid
-if ! grep -q "^$HOST_USER:" /etc/subuid; then
-    echo "$HOST_USER:${SUBUID_START}:${SUB_RANGE}" | sudo tee -a /etc/subuid
+# # Ensure host has an entry for subgid
+# if ! grep -q "^$HOST_USER:" /etc/subuid; then
+#     echo "$HOST_USER:${SUBUID_START}:${SUB_RANGE}" | sudo tee -a /etc/subuid
+# fi
+
+# if ! grep -q "^$HOST_USER:" /etc/subgid; then
+#     echo "$HOST_USER:${SUBGID_START}:${SUB_RANGE}" | sudo tee -a /etc/subgid
+# fi
+
+# If script invoked via sudo, use the original caller for subuid/subgid lookups.
+if [ -n "${SUDO_USER:-}" ]; then
+    HOST_USER="${SUDO_USER}"
+    HOST_UID="${SUDO_UID}"
+    HOST_GID="${SUDO_GID}"
+else
+    HOST_USER="$(id -un)"
+    HOST_UID="$(id -u)"
+    HOST_GID="$(id -g)"
 fi
 
-if ! grep -q "^$HOST_USER:" /etc/subgid; then
-    echo "$HOST_USER:${SUBGID_START}:${SUB_RANGE}" | sudo tee -a /etc/subgid
+# Verify newuidmap/newgidmap and subordinate ranges exist for HOST_USER
+if ! command -v newuidmap >/dev/null 2>&1 || ! command -v newgidmap >/dev/null 2>&1; then
+    eprintln "newuidmap/newgidmap not found: install 'uidmap' on the host and make helpers setuid root"
+    exit 1
 fi
+if ! ls -l "$(command -v newuidmap)" | grep -q 's'; then
+    eprintln "newuidmap/newgidmap are not setuid: sudo chmod u+s \$(command -v newuidmap) && sudo chmod u+s \$(command -v newgidmap)"
+    exit 1
+fi
+
+SUBUID_ENTRY=$(awk -F: -v u="$HOST_USER" '$1==u {print $2":"$3; exit}' /etc/subuid 2>/dev/null || true)
+SUBGID_ENTRY=$(awk -F: -v u="$HOST_USER" '$1==u {print $2":"$3; exit}' /etc/subgid 2>/dev/null || true)
+if [ -z "$SUBUID_ENTRY" ] || [ -z "$SUBGID_ENTRY" ]; then
+    eprintln "No /etc/subuid or /etc/subgid entry for ${HOST_USER}. Either:"
+    eprintln "  * run this script as the non-root user (no sudo) that has subuid/subgid ranges,"
+    eprintln "  * or add subordinate ranges for ${HOST_USER} in /etc/subuid and /etc/subgid and retry."
+    exit 1
+fi
+
 
 grep "^$HOST_USER:" /etc/subuid
 grep "^$HOST_USER:" /etc/subgid
