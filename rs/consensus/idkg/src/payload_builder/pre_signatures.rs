@@ -1594,9 +1594,4 @@ pub(super) mod tests {
             AlgorithmId::from(key_id.inner())
         );
     }
-
-    fn get_current_unmasked_key_transcript(payload: &IDkgPayload) -> UnmaskedTranscript {
-        let transcript = payload.single_key_transcript().current.clone();
-        transcript.unwrap().unmasked_transcript()
-    }
 }
