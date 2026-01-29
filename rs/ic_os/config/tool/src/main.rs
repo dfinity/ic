@@ -237,6 +237,7 @@ pub fn assemble_setupos_config(
         mgmt_mac,
         deployment_environment,
         nns_urls: nns_urls.to_vec(),
+        use_node_operator_private_key: node_operator_private_key.is_some(),
         node_operator_private_key,
         enable_trusted_execution_environment,
         use_ssh_authorized_keys,

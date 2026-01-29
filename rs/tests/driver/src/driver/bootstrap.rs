@@ -542,6 +542,7 @@ fn create_guestos_config_for_node(
         mgmt_mac,
         deployment_environment,
         nns_urls,
+        use_node_operator_private_key: false,
         node_operator_private_key: None,
         enable_trusted_execution_environment: false,
         use_ssh_authorized_keys: true,

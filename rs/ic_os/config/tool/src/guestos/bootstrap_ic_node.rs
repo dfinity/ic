@@ -18,12 +18,17 @@ const NODE_OPERATOR_KEY_PATH: &str = "data/node_operator_private_key.pem";
 /// In a dev environment it will take the overriden key from the GuestOS config
 /// if it's provided there.
 #[allow(unused_variables)]
-fn populate_nns_public_key(root: &Path, guestos_config: &GuestOSConfig) -> Result<()> {
+fn populate_nns_public_key(
+    root: &Path,
+    bootstrap_dir: &Path,
+    guestos_config: &GuestOSConfig,
+) -> Result<()> {
     let nns_key_dst = root.join(NNS_KEY_PATH);
+    let nns_key_src = root.join(NNS_KEY_DEFAULT_PATH);
 
     // Get the override key from the config if we're in dev environment & it was set
     #[cfg(feature = "dev")]
-    if let Some(v) = guestos_config
+    let nns_key_src = if let Some(v) = guestos_config
         .guestos_settings
         .guestos_dev_settings
         .nns_pub_key_override
@@ -42,10 +47,15 @@ fn populate_nns_public_key(root: &Path, guestos_config: &GuestOSConfig) -> Resul
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))
             .context("unable to set NNS public key permissions")?;
         return Ok(());
-    }
+    } else if bootstrap_dir.join("nns_public_key_override.pem").exists() {
+        // Otherwise try to copy the override file from the bootstrap dir.
+        // TODO remove this branch when HostOS is upgraded to put the override key in GuestOSConfig
+        bootstrap_dir.join("nns_public_key_override.pem")
+    } else {
+        root.join(NNS_KEY_DEFAULT_PATH)
+    };
 
     // Otherwise just copy the normal key from the rootfs
-    let nns_key_src = root.join(NNS_KEY_DEFAULT_PATH);
     println!(
         "Copying {} to {}",
         nns_key_src.display(),
@@ -88,7 +98,8 @@ fn bootstrap_ic_node_impl(
         return Ok(());
     }
 
-    populate_nns_public_key(root, &guestos_config)?;
+    populate_nns_public_key(root, bootstrap_dir, &guestos_config)
+        .context("unable to populate NNS public key")?;
 
     println!("Processing bootstrap data from {}", bootstrap_dir.display());
     process_bootstrap(
@@ -97,7 +108,9 @@ fn bootstrap_ic_node_impl(
         &state_root,
         guestos_config,
         is_sev_active,
-    )?;
+    )
+    .context("bootstrap failed")?;
+
     println!("Successfully processed bootstrap data");
 
     File::create(&configured_marker)?;
@@ -116,11 +129,19 @@ fn process_bootstrap(
     copy_bootstrap_files(bootstrap_dir, config_root, state_root, is_sev_active)?;
 
     // Write the node operator key if it was configured
+    let node_op_key_dst = state_root.join(NODE_OPERATOR_KEY_PATH);
     if let Some(v) = guestos_config.icos_settings.node_operator_private_key {
-        let dst = state_root.join(NODE_OPERATOR_KEY_PATH);
-        println!("Setting up initial {}", dst.display());
-        fs::write(&dst, v).context("unable to write node operator private key")?;
-        fs::set_permissions(&dst, fs::Permissions::from_mode(0o400))?;
+        println!("Setting up initial {}", node_op_key_dst.display());
+        fs::write(&node_op_key_dst, v).context("unable to write node operator private key")?;
+        fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
+    } else {
+        // Otherwise try to copy the file from the bootstrap dir.
+        // TODO remove this branch when HostOS is upgraded to put the key in GuestOSConfig
+        let node_op_key_src = bootstrap_dir.join("node_operator_private_key.pem");
+        if node_op_key_src.exists() {
+            copy_file_with_parent_dir(&node_op_key_src, &node_op_key_dst)?;
+            fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400))?;
+        }
     }
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
@@ -423,13 +444,13 @@ mod tests {
 
         let guestos_config = GuestOSConfig::default();
 
-        let result = bootstrap_ic_node_impl(
+        bootstrap_ic_node_impl(
             bootstrap_dir.path(),
             test_root.root_path(),
             guestos_config,
             /*is_sev_active*/ false,
-        );
-        assert!(result.is_ok());
+        )
+        .unwrap();
 
         // Verify files were copied correctly
         let state_root = test_root.path(STATE_ROOT_PATH);

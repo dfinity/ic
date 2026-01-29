@@ -132,6 +132,9 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,
+    /// TODO: Remove after HostOS is upgraded and `node_operator_private_key` is used
+    #[serde(default)]
+    pub use_node_operator_private_key: bool,
     pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
