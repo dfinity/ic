@@ -4778,117 +4778,7 @@ pub fn test_fee_collector_107_init_no_fc<T>(
     send_tx_and_verify_fee_collection(&env, canister_id, None, vec![]);
 }
 
-pub fn test_fee_collector_107_upgrade_legacy_none_to_notset<T>(
-    ledger_wasm_legacy: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let (env, canister_id) = setup(ledger_wasm_legacy, encode_init_args, vec![]);
-
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
-
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![]);
-}
-
-pub fn test_fee_collector_107_upgrade_legacy_none_to_none<T>(
-    ledger_wasm_legacy: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let (env, canister_id) = setup(ledger_wasm_legacy, encode_init_args, vec![]);
-
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        change_fee_collector: Some(ChangeFeeCollector::Unset),
-        ..UpgradeArgs::default()
-    }));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
-
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![]);
-}
-
-pub fn test_fee_collector_107_upgrade_legacy_none_to_set<T>(
-    ledger_wasm_legacy: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let (env, canister_id) = setup(ledger_wasm_legacy, encode_init_args, vec![]);
-
-    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector)),
-        ..UpgradeArgs::default()
-    }));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
-
-    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector), vec![]);
-}
-
-pub fn test_fee_collector_107_upgrade_legacy_some_to_notset<T>(
-    ledger_wasm_legacy: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
-
-    let env = StateMachine::new();
-    let args = encode_init_args(InitArgs {
-        fee_collector_account: Some(fee_collector),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env
-        .install_canister(ledger_wasm_legacy, args, None)
-        .unwrap();
-
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs::default()));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
-
-    send_tx_and_verify_fee_collection(&env, canister_id, Some(fee_collector), vec![]);
-}
-
-pub fn test_fee_collector_107_upgrade_legacy_some_to_none<T>(
-    ledger_wasm_legacy: Vec<u8>,
-    ledger_wasm: Vec<u8>,
-    encode_init_args: fn(InitArgs) -> T,
-) where
-    T: CandidType,
-{
-    let fee_collector = Account::from(PrincipalId::new_user_test_id(1).0);
-
-    let env = StateMachine::new();
-    let args = encode_init_args(InitArgs {
-        fee_collector_account: Some(fee_collector),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env
-        .install_canister(ledger_wasm_legacy, args, None)
-        .unwrap();
-
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        change_fee_collector: Some(ChangeFeeCollector::Unset),
-        ..UpgradeArgs::default()
-    }));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
-        .expect("failed to upgrade the ledger");
-
-    send_tx_and_verify_fee_collection(&env, canister_id, None, vec![fee_collector]);
-}
-
-pub fn test_fee_collector_107_upgrade_legacy_some_to_set<T>(
+pub fn test_fee_collector_107_upgrade_legacy<T>(
     ledger_wasm_legacy: Vec<u8>,
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
@@ -4898,29 +4788,55 @@ pub fn test_fee_collector_107_upgrade_legacy_some_to_set<T>(
     let fee_collector_1 = Account::from(PrincipalId::new_user_test_id(1).0);
     let fee_collector_2 = Account::from(PrincipalId::new_user_test_id(2).0);
 
-    let env = StateMachine::new();
-    let args = encode_init_args(InitArgs {
-        fee_collector_account: Some(fee_collector_1),
-        ..init_args(vec![])
-    });
-    let args = Encode!(&args).unwrap();
-    let canister_id = env
-        .install_canister(ledger_wasm_legacy, args, None)
-        .unwrap();
+    let test_params = [
+        (None, None),
+        (None, Some(ChangeFeeCollector::Unset)),
+        (None, Some(ChangeFeeCollector::SetTo(fee_collector_2))),
+        (Some(fee_collector_1), None),
+        (Some(fee_collector_1), Some(ChangeFeeCollector::Unset)),
+        (
+            Some(fee_collector_1),
+            Some(ChangeFeeCollector::SetTo(fee_collector_2)),
+        ),
+    ];
 
-    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector_2)),
-        ..UpgradeArgs::default()
-    }));
-    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+    for (init_fee_collector, upgrade_fee_collector) in test_params {
+        let env = StateMachine::new();
+        let args = encode_init_args(InitArgs {
+            fee_collector_account: init_fee_collector,
+            ..init_args(vec![])
+        });
+        let args = Encode!(&args).unwrap();
+        let canister_id = env
+            .install_canister(ledger_wasm_legacy.clone(), args, None)
+            .unwrap();
+        let active_fc = match upgrade_fee_collector {
+            Some(ChangeFeeCollector::SetTo(fee_collector)) => Some(fee_collector),
+            Some(ChangeFeeCollector::Unset) => None,
+            None => init_fee_collector,
+        };
+
+        let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+            change_fee_collector: upgrade_fee_collector,
+            ..UpgradeArgs::default()
+        }));
+        env.upgrade_canister(
+            canister_id,
+            ledger_wasm.clone(),
+            Encode!(&upgrade_args).unwrap(),
+        )
         .expect("failed to upgrade the ledger");
 
-    send_tx_and_verify_fee_collection(
-        &env,
-        canister_id,
-        Some(fee_collector_2),
-        vec![fee_collector_1],
-    );
+        let mut inactive_fcs = vec![];
+        if active_fc != Some(fee_collector_1) {
+            inactive_fcs.push(fee_collector_1);
+        }
+        if active_fc != Some(fee_collector_2) {
+            inactive_fcs.push(fee_collector_2);
+        }
+
+        send_tx_and_verify_fee_collection(&env, canister_id, active_fc, inactive_fcs);
+    }
 }
 
 pub mod metadata {

@@ -796,53 +796,8 @@ fn test_fee_collector_107_init_no_fc() {
 }
 
 #[test]
-fn test_fee_collector_107_upgrade_legacy_none_to_notset() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_none_to_notset(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_upgrade_legacy_none_to_none() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_none_to_none(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_upgrade_legacy_none_to_set() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_none_to_set(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_upgrade_legacy_some_to_notset() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_some_to_notset(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_upgrade_legacy_some_to_none() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_some_to_none(
-        ledger_mainnet_wasm(),
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_upgrade_legacy_some_to_set() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy_some_to_set(
+fn test_fee_collector_107_upgrade_legacy() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_upgrade_legacy(
         ledger_mainnet_wasm(),
         ledger_wasm(),
         encode_init_args,
