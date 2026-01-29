@@ -1073,9 +1073,7 @@ mod tests {
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::subnet::v1::{
-        CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
-    };
+    use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, InitialNiDkgTranscriptRecord};
     use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
     use ic_protobuf::registry::{
         replica_version::v1::ReplicaVersionRecord, subnet::v1::SubnetRecord,
@@ -1083,14 +1081,15 @@ mod tests {
     use ic_protobuf::types::v1 as pb;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_list_record_key,
-        make_subnet_record_key, make_unassigned_nodes_config_record_key,
+        make_catch_up_package_contents_key, make_replica_version_key, make_subnet_record_key,
+        make_unassigned_nodes_config_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_consensus::fake::{Fake, FakeContent};
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_test_utilities_registry::add_subnet_list_record;
     use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, node_test_id, subnet_test_id};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
@@ -1300,27 +1299,6 @@ mod tests {
                 &make_catch_up_package_contents_key(cup_scenario.subnet_id),
                 registry_version,
                 Some(cup_contents),
-            )
-            .unwrap();
-    }
-
-    fn add_subnet_list_record_to_provider(
-        data_provider: &ProtoRegistryDataProvider,
-        registry_version: RegistryVersion,
-        subnet_ids: impl IntoIterator<Item = SubnetId>,
-    ) {
-        let subnet_list_record = SubnetListRecord {
-            subnets: subnet_ids
-                .into_iter()
-                .map(|subnet_id| subnet_id.get().to_vec())
-                .collect(),
-        };
-
-        data_provider
-            .add(
-                &make_subnet_list_record_key(),
-                registry_version,
-                Some(subnet_list_record),
             )
             .unwrap();
     }
@@ -1576,8 +1554,8 @@ mod tests {
         }
 
         // Sets up the registry according to the test scenario
-        fn setup_registry(&self) -> ProtoRegistryDataProvider {
-            let data_provider = ProtoRegistryDataProvider::new();
+        fn setup_registry(&self) -> Arc<ProtoRegistryDataProvider> {
+            let data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
             // Another subnet (to avoid having an empty subnet list)
             let other_subnet_id = subnet_test_id(12345678);
@@ -1594,11 +1572,7 @@ mod tests {
             if let Some((registry_cup, _)) = &self.has_registry_cup {
                 subnet_list.insert(registry_cup.subnet_id);
             }
-            add_subnet_list_record_to_provider(
-                &data_provider,
-                RegistryVersion::from(1),
-                subnet_list,
-            );
+            add_subnet_list_record(&data_provider, 1, subnet_list.into_iter().collect());
 
             // The current replica version must have been elected in the past
             add_replica_version_to_provider(
@@ -2432,7 +2406,7 @@ mod tests {
             tmp_path,
             ReplicaLogger::from(&logger),
             test_scenario.clone(),
-            Arc::new(data_provider),
+            data_provider,
         )
         .await;
 
