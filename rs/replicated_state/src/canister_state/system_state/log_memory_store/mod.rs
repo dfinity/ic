@@ -37,14 +37,14 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
 
+    /// Caches the ring buffer header to avoid expensive reads from the `PageMap`.
     #[validate_eq(Ignore)]
     header_cache: OnceLock<Option<Header>>,
 }
 
 impl LogMemoryStore {
-    /// Creates a new store with an empty ring buffer to avoid unnecessary log-memory charges.
+    /// Creates a new store with an empty ring buffer.
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        // This creates a new empty page map with invalid ring buffer header.
         Self::new_inner(PageMap::new(fd_factory))
     }
 
@@ -53,15 +53,12 @@ impl LogMemoryStore {
         Self::new_inner(PageMap::new_for_testing())
     }
 
-    fn new_inner(page_map: PageMap) -> Self {
-        Self {
-            page_map,
-            delta_log_sizes: VecDeque::new(),
-            header_cache: OnceLock::new(),
-        }
+    /// Creates a new store from a checkpoint.
+    pub fn from_checkpoint(page_map: PageMap) -> Self {
+        Self::new_inner(page_map)
     }
 
-    pub fn from_checkpoint(page_map: PageMap) -> Self {
+    fn new_inner(page_map: PageMap) -> Self {
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
