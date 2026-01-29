@@ -235,7 +235,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     std::fs::write(
         env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
         serde_json::to_string(&guest_launch_measurements).unwrap(),
