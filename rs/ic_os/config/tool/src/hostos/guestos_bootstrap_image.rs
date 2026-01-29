@@ -131,12 +131,14 @@ impl BootstrapOptions {
 
         if let Some(mut guestos_config) = self.guestos_config.clone() {
             // See if there's a node operator key defined on the config.
-            // If not - see if there's a fallback path to the file provided.
+            // If not - see if there's a fallback path to the file provided
+            // and try to load it if it exists.
             if guestos_config
                 .icos_settings
                 .node_operator_private_key
                 .is_none()
                 && let Some(v) = &self.node_operator_private_key
+                && v.exists()
             {
                 let key = fs::read_to_string(v)
                     .context("unable to read Node Operator private key from the file")?;
@@ -338,7 +340,6 @@ mod tests {
             "node_operator_private_key_from_file",
         )?;
 
-        // Create full configuration
         let bootstrap_options = BootstrapOptions {
             guestos_config: Some(guestos_config.clone()),
             node_operator_private_key: Some(node_operator_private_key_path),

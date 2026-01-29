@@ -51,7 +51,6 @@ pub fn assemble_config_media(
     .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
-
     bootstrap_options.build_bootstrap_config_image(media_path)?;
 
     println!(
@@ -250,6 +249,7 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
+                node_operator_private_key: Some(PathBuf::from(NODE_OPERATOR_PRIVATE_KEY_PATH)),
                 #[cfg(feature = "dev")]
                 accounts_ssh_authorized_keys: Some(PathBuf::from(
                     "/boot/config/ssh_authorized_keys"
