@@ -459,7 +459,7 @@ pub async fn rejoin_test_long_rounds(
             .status_is_healthy_async()
             .await
             .expect("Failed to get replica health status");
-        assert!(health_status);
+        assert!(health_status, "Node {} is not healthy.", node.node_id);
     }
 
     // finally check the metrics for "fast-forward" mode
@@ -475,7 +475,7 @@ pub async fn rejoin_test_long_rounds(
         "Minimum no state clone count: {minimum_no_state_clone_count}"
     );
 
-    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node.clone(), &logger).await;
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger).await;
     info!(
         logger,
         "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
