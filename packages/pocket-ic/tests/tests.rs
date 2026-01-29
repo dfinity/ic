@@ -3006,6 +3006,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
 
@@ -3070,6 +3071,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
 
@@ -3121,6 +3123,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+        mainnet_nns_subnet_id: None,
     };
     assert_create_instance_failure(
         &server_url,
@@ -3249,6 +3252,33 @@ fn fiduciary_subnet_id() {
     assert_eq!(
         subnet_id,
         Principal::from_text("pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae")
+            .unwrap()
+    );
+}
+
+#[test]
+fn default_nns_subnet_id() {
+    let pic = PocketIcBuilder::new().with_nns_subnet().build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_ne!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap()
+    );
+}
+
+#[test]
+fn mainnet_nns_subnet_id() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_mainnet_nns_subnet_id()
+        .build();
+
+    let subnet_id = pic.topology().get_nns().unwrap();
+    assert_eq!(
+        subnet_id,
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap()
     );
 }

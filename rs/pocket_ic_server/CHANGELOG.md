@@ -11,8 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+- The endpoint `/instances/` takes an additional optional field `mainnet_nns_subnet_id` specifying that the NNS subnet should be created with the mainnet NNS subnet ID.
+
 ### Changed
-- Subnets with mainnet canister ranges are created with mainnet subnet IDs.
+- All subnets with mainnet canister ranges but the NNS subnet are always created with mainnet subnet IDs.
 
 
 

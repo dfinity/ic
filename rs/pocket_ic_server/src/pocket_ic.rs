@@ -2583,6 +2583,7 @@ impl PocketIc {
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
+        mainnet_nns_subnet_id: bool,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -2799,7 +2800,15 @@ impl PocketIc {
                         canister_allocation_range: alloc_range,
                     } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
-                    let subnet_id = subnet_kind_subnet_id(subnet_kind);
+                    let subnet_id = if matches!(subnet_kind, SubnetKind::NNS) {
+                        if mainnet_nns_subnet_id {
+                            Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into())
+                        } else {
+                            None
+                        }
+                    } else {
+                        subnet_kind_subnet_id(subnet_kind)
+                    };
 
                     (ranges, alloc_range, subnet_id)
                 };
@@ -5234,6 +5243,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -5254,6 +5264,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());
