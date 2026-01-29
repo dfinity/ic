@@ -93,6 +93,13 @@ fn setup(env: TestEnv) {
 }
 
 fn subnet_splitting_test(env: TestEnv) {
+    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
+    // paths for the underlying tools (and the environment variable name needs to be adapted).
+    set_var_to_path(
+        "IC_ADMIN_BIN",
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
+    );
+
     //
     // 1. Prepare for subnet splitting
     //
