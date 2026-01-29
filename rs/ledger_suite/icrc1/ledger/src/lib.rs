@@ -735,7 +735,7 @@ impl Ledger {
 
         ledger
     }
-    
+
     pub fn ledger_set_107_fee_collector(&mut self, fee_collector: Option<Account>) {
         self.fee_collector_107 = fee_collector;
         let op: Operation<Tokens> = Operation::FeeCollector {
