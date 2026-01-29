@@ -1267,18 +1267,18 @@ proptest! {
     }
 }
 
-mod sign_and_submit_request {
+mod submit_pending_requests {
     use crate::management::CallError;
     use crate::state::eventlog::CkBtcEventLogger;
     use crate::state::utxos::UtxoSet;
     use crate::state::{RetrieveBtcRequest, audit, mutate_state, read_state};
-    use crate::submit_pending_requests;
     use crate::test_fixtures::mock::{MockCanisterRuntime, mock_increasing_time};
     use crate::test_fixtures::{
         NOW, bitcoin_address, bitcoin_fee_estimator, ecdsa_public_key, init_state, ledger_account,
         minter_address, signed_raw_transaction, utxo,
     };
     use crate::tx::FeeRate;
+    use crate::{CanisterRuntime, submit_pending_requests};
     use std::time::Duration;
 
     #[tokio::test]
@@ -1315,7 +1315,6 @@ mod sign_and_submit_request {
             .expect_get_current_fee_percentiles()
             .times(1)
             .return_const(Ok([FeeRate::from_millis_per_byte(1_500); 100].to_vec()));
-
         runtime
             .expect_fee_estimator()
             .times(2)
@@ -1338,11 +1337,22 @@ mod sign_and_submit_request {
 
         read_state(|s| {
             assert_eq!(
+                s.pending_retrieve_btc_requests,
+                vec![],
+                "BUG: all withdrawal requests are in processing"
+            );
+            assert_eq!(
                 s.available_utxos,
                 UtxoSet::default(),
                 "BUG: UTXOs should be unavailable after signing"
             )
         });
+
+        let last_time = runtime.time();
+        runtime.checkpoint();
+        mock_increasing_time(&mut runtime, (last_time + 1).into(), Duration::from_secs(1));
+
+        submit_pending_requests(&runtime).await;
     }
 
     fn init_state_with_ecdsa_public_key() {

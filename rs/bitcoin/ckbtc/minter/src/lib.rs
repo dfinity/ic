@@ -509,7 +509,7 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     });
 
     // This guard ensures that we return pending requests and UTXOs back to
-    // the state if the signing or sending of a transaction fails or panics.
+    // the state if the signing of a transaction fails or panics.
     let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
         undo_withdrawal_request(reqs, utxos);
     });
@@ -529,11 +529,17 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
                 err
             );
         })?;
+    // Defuse the guard because we signed the transaction successfully.
+    // At this point it does not matter whether the transaction can be sent successfully,
+    // since all nodes in this subnet know the signed transaction,
+    // it is safer to assume that it is public.
+    let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
+
     let txid = signed_tx.txid();
     let fee_rate = signed_tx.fee_rate();
 
     state::mutate_state(|s| {
-        for block_index in requests_guard.0.iter_block_index() {
+        for block_index in requests.iter_block_index() {
             s.push_in_flight_request(block_index, state::InFlightStatus::Sending { txid });
         }
     });
@@ -559,10 +565,6 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
         "[sign_and_submit_request]: successfully sent transaction {}",
         &txid,
     );
-
-    // Defuse the guard because we sent the transaction
-    // successfully.
-    let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
     // Only fill signed_tx when it is a consolidation transaction.
     let signed_tx = match requests {
