@@ -69,10 +69,8 @@ impl IngressSelector for IngressManager {
                     certified_height,
                     err
                 );
-                return PayloadWithSizeEstimate {
-                    payload: IngressPayload::default(),
-                    wire_size_estimate: NumBytes::new(0),
-                };
+
+                return PayloadWithSizeEstimate::default();
             }
         };
 
@@ -84,10 +82,8 @@ impl IngressSelector for IngressManager {
                     self.log,
                     "StateManager doesn't have state for height {}: {:?}", certified_height, err
                 );
-                return PayloadWithSizeEstimate {
-                    payload: IngressPayload::default(),
-                    wire_size_estimate: NumBytes::new(0),
-                };
+
+                return PayloadWithSizeEstimate::default();
             }
         }
         .take();
@@ -152,12 +148,7 @@ impl IngressSelector for IngressManager {
         // messages to fill the quota, the quota increases proportionally for subsequent
         // canisters.
         let mut quota = match canister_count {
-            0 => {
-                return PayloadWithSizeEstimate {
-                    payload: IngressPayload::default(),
-                    wire_size_estimate: NumBytes::new(0),
-                };
-            }
+            0 => return PayloadWithSizeEstimate::default(),
             canister_count @ 1.. => memory_byte_limit.get() as usize / canister_count,
         };
 
@@ -2238,11 +2229,11 @@ mod tests {
     #[rstest]
     #[case(true, 5, 2_000_000, 1)]
     #[case(false, 5, 2_000_000, 1)]
-    #[case(true, 5, 1_000_000, 2)]
+    #[case(true, 5, 1_000_000, 1)]
     #[case(false, 5, 1_000_000, 1)]
-    #[case(true, 1, 1_000_000, 8)]
+    #[case(true, 1, 1_000_000, 4)]
     #[case(false, 1, 1_000_000, 4)]
-    #[case(true, 40, 25_000, 9)]
+    #[case(true, 40, 25_000, 5)]
     #[case(false, 40, 25_000, 5)]
     #[trace]
     #[tokio::test]
@@ -2381,10 +2372,10 @@ mod tests {
     #[rstest]
     #[case::limited_by_the_wire_limit(true, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, 10)]
     #[case::limited_by_the_wire_limit(false, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, 0)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, 83)]
+    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, 41)]
     #[case::limited_by_the_wire_limit(false, 100_000, 1_500_000, 14)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 10_000_000, 83)]
-    #[case::limited_by_the_mem_limit(false, 100_000, 10_000_000, 83)]
+    #[case::limited_by_the_mem_limit(true, 100_000, 10_000_000, 41)]
+    #[case::limited_by_the_mem_limit(false, 100_000, 10_000_000, 41)]
     #[case::limited_by_the_msgs_count_limit(true, 1_000, 4_000_000, 1_000)]
     #[case::limited_by_the_msgs_count_limit(false, 1_000, 4_000_000, 1_000)]
     #[trace]

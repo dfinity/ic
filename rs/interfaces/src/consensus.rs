@@ -27,7 +27,7 @@ use ic_types::{
 
 pub mod errors;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 /// Contains a payload together with an estimate how many bytes the payload would take when sent
 /// over wire. This is not necessarily the same as, or even close to, the size of the structure
 /// in the memory.
