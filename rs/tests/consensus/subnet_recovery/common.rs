@@ -64,7 +64,9 @@ use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, 
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
-use ic_system_test_driver::driver::test_env_api::scp_send_to;
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path_from_env, scp_send_to, set_var_to_path,
+};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{
@@ -306,17 +308,14 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 }
 
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
-    let logger = env.logger();
+    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
+    // paths for the underlying tools (and the environment variable name needs to be adapted).
+    set_var_to_path(
+        "IC_ADMIN_BIN",
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
+    );
 
-    if cfg.local_recovery {
-        // TODO: Audit that the environment access only happens in single-threaded code.
-        unsafe {
-            std::env::set_var(
-                "IC_ADMIN_BIN",
-                get_dependency_path_from_env("IC_ADMIN_PATH"),
-            )
-        };
-    }
+    let logger = env.logger();
 
     let AdminAndUserKeys {
         ssh_admin_priv_key_path,
@@ -483,16 +482,11 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     )
     .expect("Could not write guest launch measurements to file");
 
-    let recovery_dir = get_dependency_path("rs/tests");
-    let binaries_dir = recovery_dir.join("recovery/binaries");
-    set_sandbox_env_vars(binaries_dir.clone());
+    set_sandbox_env_vars();
 
     let app_subnet_id = app_subnet.subnet_id;
     let admin_helper = AdminHelper::new(
-        match std::env::var("IC_ADMIN_PATH") {
-            Ok(path) => get_dependency_path(path),
-            Err(_) => binaries_dir.join("ic-admin"),
-        },
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
         nns_node.get_public_url(),
         None,
     );
@@ -619,6 +613,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
