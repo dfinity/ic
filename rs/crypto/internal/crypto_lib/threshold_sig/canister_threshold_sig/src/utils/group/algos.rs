@@ -220,14 +220,8 @@ macro_rules! declare_sswu_p_3_mod_4_map_to_curve_impl {
                 const XMD_BYTES: usize = 2 * FIELD_BYTES;
                 const WIDE_BYTES_OFFSET: usize = 2 * $fe::BYTES - FIELD_BYTES;
 
-                // Compile time assertion that XMD can output the requested bytes
-                const _: () = assert!(XMD_BYTES <= 8160, "XMD output is sufficient");
-
-                // XMD only fails if the requested output is too long, but we already checked
-                // at compile time that the output length is within range.
                 let u =
-                    ic_crypto_internal_seed::xmd::<ic_crypto_sha2::Sha256>(input, dst, XMD_BYTES)
-                        .expect("XMD unexpected failed");
+                    ic_crypto_internal_seed::xmd::<XMD_BYTES, ic_crypto_sha2::Sha256>(input, dst);
 
                 fn extended_u(u: &[u8]) -> [u8; 2 * $fe::BYTES] {
                     let mut ext_u = [0u8; 2 * $fe::BYTES];

@@ -646,6 +646,7 @@ pub struct InstanceConfig {
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
+    pub mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
