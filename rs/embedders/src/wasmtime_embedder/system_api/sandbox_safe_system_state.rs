@@ -333,7 +333,7 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
-        // Append non-empty delta logs.
+        // Append delta logs.
         let log_memory_store = &mut system_state.log_memory_store;
         if log_memory_store.is_allocated() {
             // TODO(DSM-11): cleanup population logic after migration is done.
@@ -343,8 +343,6 @@ impl SystemStateModifications {
             if log_memory_store.is_empty() && !old_total.is_empty() {
                 log_memory_store.append_delta_log(&mut old_total.clone());
             }
-
-            // Append delta log to the total canister log.
             log_memory_store.append_delta_log(&mut self.canister_log.clone());
         }
         system_state
