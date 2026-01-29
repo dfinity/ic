@@ -49,14 +49,6 @@ function copy_config_files() {
         echo >&2 "Warning: node_operator_private_key.pem does not exist, requiring HSM."
     fi
 
-    echo "* Copying NNS public key override to hostOS config partition..."
-    if [ -f "/data/nns_public_key_override.pem" ]; then
-        cp /data/nns_public_key_override.pem "${CONFIG_PARTITION_PATH}/"
-        log_and_halt_installation_on_error "${?}" "Unable to copy NNS public key override to hostOS config partition."
-    else
-        echo >&2 "nns_public_key_override.pem does not exist, skipping."
-    fi
-
     echo "* Converting 'config.json' to hostOS config file 'config-hostos.json'..."
     /opt/ic/bin/config_tool generate-hostos-config
     log_and_halt_installation_on_error "${?}" "Unable to generate hostos configuration."
