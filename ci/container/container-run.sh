@@ -193,18 +193,6 @@ PODMAN_RUN_ARGS=(
     --pull=missing
 )
 
-# Set up user namespace mappings so that uid 1000 in the container
-# maps to the invoking user's uid on the host.
-PODMAN_RUN_ARGS+=(
-    --uidmap 0:${SUBUID_START}:1000
-    --uidmap 1000:${HOST_UID}:1
-    --uidmap $((1000 + 1)):$((SUBUID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
-    --gidmap 0:${SUBGID_START}:1000
-    --gidmap 1000:${HOST_GID}:1
-    --gidmap $((1000 + 1)):$((SUBGID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
-    --user 1000:1000
-)
-
 if [ "${HOST_UID}" = "1000" ]; then
     CTR_HOME="/home/ubuntu"
 else
