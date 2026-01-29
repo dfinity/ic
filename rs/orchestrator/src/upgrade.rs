@@ -1060,9 +1060,8 @@ mod tests {
         CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
-    use ic_crypto_test_utils_keys::public_keys::valid_dkg_dealing_encryption_public_key;
     use ic_crypto_test_utils_ni_dkg::{
-        InitialNiDkgConfig, NiDkgTestEnvironment, RandomNiDkgConfig, initial_dkg_transcript,
+        NiDkgTestEnvironment, RandomNiDkgConfig, dummy_transcript_for_tests_with_params,
         run_ni_dkg_and_create_single_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
@@ -1074,7 +1073,6 @@ mod tests {
     };
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::log::log_entry::v1::LogEntry;
-    use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_protobuf::registry::subnet::v1::{
         CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetListRecord,
     };
@@ -1248,48 +1246,51 @@ mod tests {
             .unwrap();
     }
 
+    fn initial_ni_dkg_transcript_for_tests(
+        target_id: NiDkgTargetId,
+        committee: &[NodeId],
+        registry_version: RegistryVersion,
+        tag: NiDkgTag,
+    ) -> InitialNiDkgTranscriptRecord {
+        let mut transcript = dummy_transcript_for_tests_with_params(
+            committee.to_vec(),
+            tag.clone(),
+            tag.threshold_for_subnet_of_size(committee.len()) as u32,
+            registry_version.get(),
+        );
+        transcript.dkg_id.target_subnet = NiDkgTargetSubnet::Remote(target_id);
+        InitialNiDkgTranscriptRecord::from(transcript)
+    }
+
     fn add_registry_cup_to_provider(
         data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         cup_scenario: &CUPScenario,
-        dealer_subnet: SubnetId,
-        membership_keys: BTreeMap<NodeId, PublicKey>,
+        membership: impl IntoIterator<Item = NodeId>,
     ) {
-        let nodes_set = membership_keys.keys().cloned().collect::<BTreeSet<_>>();
+        let membership_vec = membership.into_iter().collect::<Vec<_>>();
+
         let rng = &mut reproducible_rng();
         let mut target_id_bytes = [0u8; 32];
         rng.fill_bytes(&mut target_id_bytes);
         let target_id = NiDkgTargetId::new(target_id_bytes);
 
-        let low_transcript = initial_dkg_transcript(
-            InitialNiDkgConfig::new(
-                &nodes_set,
-                dealer_subnet,
-                NiDkgTag::LowThreshold,
-                target_id,
-                cup_scenario.registry_version,
-            ),
-            &membership_keys,
-            rng,
+        let high_initial_transcript = initial_ni_dkg_transcript_for_tests(
+            target_id,
+            &membership_vec,
+            cup_scenario.registry_version,
+            NiDkgTag::HighThreshold,
         );
-        let high_transcript = initial_dkg_transcript(
-            InitialNiDkgConfig::new(
-                &nodes_set,
-                dealer_subnet,
-                NiDkgTag::HighThreshold,
-                target_id,
-                cup_scenario.registry_version,
-            ),
-            &membership_keys,
-            rng,
+        let low_initial_transcript = initial_ni_dkg_transcript_for_tests(
+            target_id,
+            &membership_vec,
+            cup_scenario.registry_version,
+            NiDkgTag::LowThreshold,
         );
+
         let cup_contents = CatchUpPackageContents {
-            initial_ni_dkg_transcript_low_threshold: Some(InitialNiDkgTranscriptRecord::from(
-                low_transcript,
-            )),
-            initial_ni_dkg_transcript_high_threshold: Some(InitialNiDkgTranscriptRecord::from(
-                high_transcript,
-            )),
+            initial_ni_dkg_transcript_high_threshold: Some(high_initial_transcript),
+            initial_ni_dkg_transcript_low_threshold: Some(low_initial_transcript),
             height: cup_scenario.height.get(),
             ..Default::default()
         };
@@ -1577,15 +1578,16 @@ mod tests {
         // Sets up the registry according to the test scenario
         fn setup_registry(&self) -> ProtoRegistryDataProvider {
             let data_provider = ProtoRegistryDataProvider::new();
-            let nns_subnet_id = subnet_test_id(12345678);
 
+            // Another subnet (to avoid having an empty subnet list)
+            let other_subnet_id = subnet_test_id(12345678);
             // Another node in the subnet (to avoid having an empty subnet in case the current node
             // leaves)
             let other_node_id = node_test_id(87654321);
 
             // Initialize the subnet list
             let mut subnet_list = BTreeSet::new();
-            subnet_list.insert(nns_subnet_id);
+            subnet_list.insert(other_subnet_id);
             if let Some(local_cup) = &self.has_local_cup {
                 subnet_list.insert(local_cup.subnet_id);
             }
@@ -1607,16 +1609,11 @@ mod tests {
 
             if let Some((registry_cup, registry_cup_registry_version)) = &self.has_registry_cup {
                 // There is a registry CUP at the specified registry version
-                let membership_keys = BTreeMap::from([
-                    (self.node_id, valid_dkg_dealing_encryption_public_key()),
-                    (other_node_id, valid_dkg_dealing_encryption_public_key()),
-                ]);
                 add_registry_cup_to_provider(
                     &data_provider,
                     *registry_cup_registry_version,
                     registry_cup,
-                    nns_subnet_id,
-                    membership_keys,
+                    vec![self.node_id, other_node_id],
                 );
             }
 
