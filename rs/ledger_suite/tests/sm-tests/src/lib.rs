@@ -4810,14 +4810,9 @@ pub fn test_fee_collector_107_upgrade_legacy<T>(
         let canister_id = env
             .install_canister(ledger_wasm_legacy.clone(), args, None)
             .unwrap();
-        let active_fc = match upgrade_fee_collector {
-            Some(ChangeFeeCollector::SetTo(fee_collector)) => Some(fee_collector),
-            Some(ChangeFeeCollector::Unset) => None,
-            None => init_fee_collector,
-        };
 
         let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-            change_fee_collector: upgrade_fee_collector,
+            change_fee_collector: upgrade_fee_collector.clone(),
             ..UpgradeArgs::default()
         }));
         env.upgrade_canister(
@@ -4827,6 +4822,11 @@ pub fn test_fee_collector_107_upgrade_legacy<T>(
         )
         .expect("failed to upgrade the ledger");
 
+        let active_fc = match upgrade_fee_collector {
+            Some(ChangeFeeCollector::SetTo(fee_collector)) => Some(fee_collector),
+            Some(ChangeFeeCollector::Unset) => None,
+            None => init_fee_collector,
+        };
         let mut inactive_fcs = vec![];
         if active_fc != Some(fee_collector_1) {
             inactive_fcs.push(fee_collector_1);
