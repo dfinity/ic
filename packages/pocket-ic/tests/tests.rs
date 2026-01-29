@@ -2734,16 +2734,17 @@ fn stack_overflow() {
 }
 
 fn test_specified_id(pic: &PocketIc) {
-    // We define a "specified" canister ID that exists on the IC mainnet,
+    // We define a "specified" canister ID that belongs to the canister ranges of a mainnet subnet,
     // but belongs to the canister ranges of no subnet on the PocketIC instance.
-    let specified_id = Principal::from_text("rimrc-piaaa-aaaao-aaljq-cai").unwrap();
+    // Its hexadecimal representation is `0000000001CFFFFF0101` and thus
+    // this is the last canister ID in the default canister ranges of the `0x1C`-th subnet.
+    let specified_id = Principal::from_text("jujpo-eqaaa-aaaao-p777q-cai").unwrap();
 
     let canister_id = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap();
     assert_eq!(canister_id, specified_id);
 
-    // https://dashboard.internetcomputer.org/canister/rimrc-piaaa-aaaao-aaljq-cai
     let subnet_id = pic.get_subnet(canister_id).unwrap();
     assert_eq!(
         subnet_id,
