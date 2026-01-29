@@ -248,7 +248,7 @@ fn verify_ed25519_signature(
     let msg = x509_cert.tbs_certificate.as_ref();
 
     public_key
-        .verify_signature(msg, &sig)
+        .verify_signature(msg, sig)
         .map_err(|e| CryptoError::SignatureVerification {
             algorithm: AlgorithmId::Ed25519,
             public_key_bytes: public_key.serialize_raw().to_vec(),
