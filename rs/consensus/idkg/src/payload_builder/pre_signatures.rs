@@ -1,5 +1,3 @@
-// TODO(CON-1530): Remove this once the new code is called
-#![allow(dead_code)]
 use crate::payload_builder::IDkgPayloadError;
 use ic_interfaces_state_manager::Labeled;
 use ic_logger::{ReplicaLogger, debug, error};

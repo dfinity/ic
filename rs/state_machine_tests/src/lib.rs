@@ -1,6 +1,5 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
-use ed25519_dalek::{SigningKey, pkcs8::EncodePrivateKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -874,9 +873,8 @@ impl StateMachineNode {
         let mut xnet_ip_addr_bytes = rng.r#gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
-        let seed = rng.r#gen::<[u8; 32]>();
-        let signing_key = SigningKey::from_bytes(&seed);
-        let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
+        let signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let pkcs8_bytes = signing_key.serialize_pkcs8(ic_ed25519::PrivateKeyFormat::Pkcs8v1);
         let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
         Self {
             node_id: PrincipalId::new_self_authenticating(
@@ -973,6 +971,10 @@ impl StateManager for StateMachineStateManager {
     ) {
         self.deref()
             .remove_inmemory_states_below(height, extra_heights_to_keep)
+    }
+
+    fn update_fast_forward_height(&self, height: Height) {
+        self.deref().update_fast_forward_height(height);
     }
 
     fn commit_and_certify(
@@ -4801,7 +4803,7 @@ impl StateMachine {
         state
             .canister_state(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
-            .scheduler_state
+            .system_state
             .total_query_stats
             .clone()
     }
@@ -4816,7 +4818,7 @@ impl StateMachine {
         state
             .canister_state_mut(canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
-            .scheduler_state
+            .system_state
             .total_query_stats = total_query_stats;
 
         self.state_manager.commit_and_certify(

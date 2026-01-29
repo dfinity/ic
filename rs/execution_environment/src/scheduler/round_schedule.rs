@@ -331,8 +331,7 @@ impl RoundSchedule {
         // Fully divide the free allocation across all canisters.
         for canister in canister_states.values_mut() {
             // De-facto compute allocation includes bonus allocation
-            let factual = canister.scheduler_state.compute_allocation.as_percent() as i64
-                * multiplier
+            let factual = canister.compute_allocation().as_percent() as i64 * multiplier
                 + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
             canister.scheduler_state.accumulated_priority += factual.into();
@@ -423,15 +422,14 @@ impl RoundSchedule {
             if is_reset_round {
                 // By default, each canister accumulated priority is set to its compute allocation.
                 canister.scheduler_state.accumulated_priority =
-                    (canister.scheduler_state.compute_allocation.as_percent() as i64 * multiplier)
-                        .into();
+                    (canister.compute_allocation().as_percent() as i64 * multiplier).into();
                 canister.scheduler_state.priority_credit = Default::default();
             }
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
 
-            let compute_allocation = canister.scheduler_state.compute_allocation;
+            let compute_allocation = canister.compute_allocation();
             let accumulated_priority = canister.scheduler_state.accumulated_priority;
             round_states.push(CanisterRoundState {
                 canister_id,
@@ -445,11 +443,11 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
-            if !canister.has_input() {
+            if canister.has_input() {
                 canister
                     .system_state
                     .canister_metrics_mut()
-                    .observe_skipped_round_due_to_no_messages();
+                    .observe_round_scheduled();
             }
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.

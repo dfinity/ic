@@ -630,13 +630,7 @@ impl SchedulerImpl {
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
-                let allocation = Ratio::new(
-                    canister_state
-                        .scheduler_state
-                        .compute_allocation
-                        .as_percent(),
-                    100,
-                );
+                let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
                     self.metrics.canister_compute_allocation_violation.inc();
@@ -907,7 +901,7 @@ impl SchedulerImpl {
             }
 
             if state_time
-                < canister.scheduler_state.time_of_last_allocation_charge
+                < canister.system_state.time_of_last_allocation_charge
                     + self
                         .cycles_account_manager
                         .duration_between_allocation_charges()
@@ -919,7 +913,7 @@ impl SchedulerImpl {
                 self.observe_canister_metrics(canister);
                 let duration_since_last_charge =
                     canister.duration_since_last_allocation_charge(state_time);
-                canister.scheduler_state.time_of_last_allocation_charge = state_time;
+                canister.system_state.time_of_last_allocation_charge = state_time;
                 if self
                     .cycles_account_manager
                     .charge_canister_for_resource_allocation_and_usage(
@@ -939,7 +933,7 @@ impl SchedulerImpl {
                         state_time,
                         Arc::clone(&self.fd_factory),
                     ));
-                    canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
+                    canister.system_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::default();
                     canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
