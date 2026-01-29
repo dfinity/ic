@@ -762,6 +762,11 @@ fn should_node_become_unassigned(
     UnassignmentDecision::Now
 }
 
+// Checks if the given node belongs to the given subnet at the given registry version, by looking
+// at the corresponding subnet record's membership in the registry.
+// If the record is missing, or there is any error (like a corrupted local store), then this
+// function returns true, to avoid removing the subnet state by mistake, as a conservative
+// approach. This function thus assumes that the caller has verified that the subnet ID exists.
 fn node_is_in_subnet_at_version(
     registry: &dyn RegistryClient,
     node_id: NodeId,
@@ -773,9 +778,9 @@ fn node_is_in_subnet_at_version(
         .map(|maybe_members| {
             maybe_members
                 .map(|members| members.iter().any(|id| id == &node_id))
-                .unwrap_or(false)
+                .unwrap_or(true)
         })
-        .unwrap_or(false)
+        .unwrap_or(true)
 }
 
 // Call `sync` and `fstrim` on the data partition
@@ -2927,5 +2932,51 @@ mod tests {
                 "Expected {expected_decision:?} but got: {response:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_stay_in_subnet_on_subnet_missing() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Ok(RegistryVersionedRecord {
+                key: make_subnet_record_key(subnet_id),
+                version: RegistryVersion::new(0),
+                value: None,
+            }));
+
+        assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
+    }
+
+    #[test]
+    fn test_stay_in_subnet_on_registry_error() {
+        let node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let version = 10;
+
+        let mut registry_client = MockFakeRegistryClient::new();
+        registry_client
+            .expect_get_versioned_value()
+            .once()
+            .return_const(Err(RegistryClientError::VersionNotAvailable {
+                version: RegistryVersion::new(version),
+            }));
+
+        assert!(node_is_in_subnet_at_version(
+            &registry_client,
+            node_id,
+            subnet_id,
+            version
+        ))
     }
 }
