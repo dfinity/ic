@@ -7,7 +7,11 @@ use ic_cdk::{init, post_upgrade, query, trap};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
-use ic_icp_index::{GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse, GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, IndexArg, InitArg, Log, LogEntry, Priority, SettledTransaction, SettledTransactionWithId, Status, UpgradeArg};
+use ic_icp_index::{
+    GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
+    GetAccountIdentifierTransactionsResult, GetAccountTransactionsResult, IndexArg, InitArg, Log,
+    LogEntry, Priority, SettledTransaction, SettledTransactionWithId, Status, UpgradeArg,
+};
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};

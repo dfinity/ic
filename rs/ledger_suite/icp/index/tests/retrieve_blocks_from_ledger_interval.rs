@@ -3,6 +3,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{IndexArg, InitArg, Status, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
+use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload, Memo, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
@@ -11,9 +12,6 @@ use proptest::test_runner::TestRunner;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
-use ic_ledger_test_utils::state_machine_helpers::index::{
-    wait_until_sync_is_completed,
-};
 
 /// Corresponds to ic_icp_index::DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
 const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS: u64 = 1;
@@ -107,7 +105,10 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     candid::Decode!(&res, Status).expect("Failed to decode status response")
 }
 
-fn install_and_upgrade(install_interval: Option<u64>, upgrade_interval: Option<u64>) -> Result<(), UserError> {
+fn install_and_upgrade(
+    install_interval: Option<u64>,
+    upgrade_interval: Option<u64>,
+) -> Result<(), UserError> {
     let env = &StateMachine::new();
     let ledger_id = install_ledger(env, vec![], default_archive_options());
 
@@ -217,8 +218,9 @@ fn should_sync_according_to_interval() {
         .expect("should be able to add 1 to block index");
         let mut index_num_blocks_synced = status(env, index_id).num_blocks_synced;
         if index_num_blocks_synced != ledger_chain_length {
-            let time_to_advance =
-                upgrade_interval.or(install_interval).unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
+            let time_to_advance = upgrade_interval
+                .or(install_interval)
+                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
             if time_to_advance > 0 {
                 env.advance_time(Duration::from_secs(time_to_advance));
                 env.tick();
@@ -264,7 +266,7 @@ fn should_sync_according_to_interval() {
                     a1, // from
                     a2, // to
                     install_interval,
-                    None
+                    None,
                 );
 
                 // Upgrade the index with a specific interval
@@ -296,26 +298,18 @@ fn should_sync_according_to_interval() {
 
 #[test]
 fn should_install_and_upgrade_without_build_index_interval_field_set() {
-     #[derive(Clone, Debug, CandidType, Deserialize)]
+    #[derive(Clone, Debug, CandidType, Deserialize)]
     struct OldInitArg {
         pub ledger_id: Principal,
     }
 
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(
-        env,
-        vec![],
-        default_archive_options(),
-    );
+    let ledger_id = install_ledger(env, vec![], default_archive_options());
     let args = OldInitArg {
         ledger_id: ledger_id.into(),
     };
     let index_id = env
-        .install_canister(
-            index_wasm(),
-            Encode!(&args).unwrap(),
-            None,
-        )
+        .install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap();
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
