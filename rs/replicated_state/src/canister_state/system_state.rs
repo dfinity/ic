@@ -30,6 +30,7 @@ use ic_management_canister_types_private::{
     LogVisibilityV2,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_types::batch::TotalQueryStats;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
@@ -38,10 +39,10 @@ use ic_types::messages::{
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;
-use ic_types::time::CoarseTime;
+use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -120,8 +121,8 @@ enum ConsumingCycles {
 /// For the semantics of the fields, check
 /// `canister_state_bits.proto:CanisterStateBits`.
 pub struct CanisterMetrics {
+    rounds_scheduled: u64,
     scheduled_as_first: u64,
-    skipped_round_due_to_no_messages: u64,
     executed: u64,
     interrupted_during_execution: u64,
     consumed_cycles: NominalCycles,
@@ -130,16 +131,16 @@ pub struct CanisterMetrics {
 
 impl CanisterMetrics {
     pub fn new(
+        rounds_scheduled: u64,
         scheduled_as_first: u64,
-        skipped_round_due_to_no_messages: u64,
         executed: u64,
         interrupted_during_execution: u64,
         consumed_cycles: NominalCycles,
         consumed_cycles_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
     ) -> Self {
         Self {
+            rounds_scheduled,
             scheduled_as_first,
-            skipped_round_due_to_no_messages,
             executed,
             interrupted_during_execution,
             consumed_cycles,
@@ -147,12 +148,12 @@ impl CanisterMetrics {
         }
     }
 
-    pub fn scheduled_as_first(&self) -> u64 {
-        self.scheduled_as_first
+    pub fn rounds_scheduled(&self) -> u64 {
+        self.rounds_scheduled
     }
 
-    pub fn skipped_round_due_to_no_messages(&self) -> u64 {
-        self.skipped_round_due_to_no_messages
+    pub fn scheduled_as_first(&self) -> u64 {
+        self.scheduled_as_first
     }
 
     pub fn executed(&self) -> u64 {
@@ -171,12 +172,12 @@ impl CanisterMetrics {
         &self.consumed_cycles_by_use_cases
     }
 
-    pub fn observe_scheduled_as_first(&mut self) {
-        self.scheduled_as_first += 1;
+    pub fn observe_round_scheduled(&mut self) {
+        self.rounds_scheduled += 1;
     }
 
-    pub fn observe_skipped_round_due_to_no_messages(&mut self) {
-        self.skipped_round_due_to_no_messages += 1;
+    pub fn observe_scheduled_as_first(&mut self) {
+        self.scheduled_as_first += 1;
     }
 
     pub fn observe_executed(&mut self) {
@@ -294,8 +295,14 @@ pub struct SystemState {
     /// reservations.
     #[validate_eq(CompareWithValidateEq)]
     queues: CanisterQueues,
+
     /// The canister's memory allocation.
     pub memory_allocation: MemoryAllocation,
+
+    /// A canister's compute allocation. A higher compute allocation corresponds
+    /// to higher priority in scheduling.
+    pub compute_allocation: ComputeAllocation,
+
     /// Threshold used for activation of canister_on_low_wasm_memory hook.
     pub wasm_memory_threshold: NumBytes,
     pub freeze_threshold: NumSeconds,
@@ -319,6 +326,16 @@ pub struct SystemState {
 
     canister_metrics: CanisterMetrics,
 
+    /// Query statistics.
+    ///
+    /// As queries are executed in non-deterministic fashion state modifications are
+    /// disallowed during the query call.
+    /// Instead, each node collects statistics about query execution locally and periodically,
+    /// once per "epoch", sends those to other machines as part of consensus blocks.
+    /// At the end of an "epoch", each node deterministically aggregates all those partial
+    /// query statistics received from consensus blocks and mutates these values.
+    pub total_query_stats: TotalQueryStats,
+
     /// Should only be modified through `CyclesAccountManager`.
     ///
     /// A canister's state has an associated cycles balance, and may `send` a
@@ -333,6 +350,13 @@ pub struct SystemState {
     ///     2. executing the operation and return `cycles_spent`
     ///     3. reimburse the canister with `cycles_reserved` - `cycles_spent`
     cycles_balance: Cycles,
+
+    /// The last time when the canister was charged for the resource allocations.
+    ///
+    /// Charging for compute and storage is done periodically, so this is
+    /// needed to calculate how much time should be considered when charging
+    /// occurs.
+    pub time_of_last_allocation_charge: Time,
 
     /// Pending charges to `cycles_balance` that are not applied yet.
     ///
@@ -515,6 +539,7 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
+        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
@@ -522,6 +547,7 @@ impl SystemState {
             canister_id,
             controller,
             initial_cycles,
+            time_of_last_allocation_charge,
             freeze_threshold,
             CanisterStatus::new_running(),
             WasmChunkStore::new(fd_factory),
@@ -532,6 +558,7 @@ impl SystemState {
         canister_id: CanisterId,
         controller: PrincipalId,
         initial_cycles: Cycles,
+        time_of_last_allocation_charge: Time,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
@@ -541,16 +568,19 @@ impl SystemState {
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
             cycles_balance: initial_cycles,
+            time_of_last_allocation_charge,
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
             memory_allocation: MemoryAllocation::default(),
+            compute_allocation: ComputeAllocation::default(),
             environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
             status,
             certified_data: Default::default(),
             canister_metrics: CanisterMetrics::default(),
+            total_query_stats: TotalQueryStats::default(),
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
@@ -574,12 +604,15 @@ impl SystemState {
         canister_id: CanisterId,
         queues: CanisterQueues,
         memory_allocation: MemoryAllocation,
+        compute_allocation: ComputeAllocation,
         wasm_memory_threshold: NumBytes,
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         certified_data: Vec<u8>,
         canister_metrics: CanisterMetrics,
+        total_query_stats: TotalQueryStats,
         cycles_balance: Cycles,
+        time_of_last_allocation_charge: Time,
         ingress_induction_cycles_debit: Cycles,
         reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
@@ -603,12 +636,15 @@ impl SystemState {
             canister_id,
             queues,
             memory_allocation,
+            compute_allocation,
             wasm_memory_threshold,
             freeze_threshold,
             status,
             certified_data,
             canister_metrics,
+            total_query_stats,
             cycles_balance,
+            time_of_last_allocation_charge,
             ingress_induction_cycles_debit,
             reserved_balance,
             reserved_balance_limit,
@@ -693,6 +729,7 @@ impl SystemState {
             canister_id,
             controller,
             initial_cycles,
+            UNIX_EPOCH,
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
@@ -2294,12 +2331,15 @@ pub mod testing {
             canister_id: 0.into(),
             queues: Default::default(),
             memory_allocation: Default::default(),
+            compute_allocation: Default::default(),
             wasm_memory_threshold: Default::default(),
             freeze_threshold: Default::default(),
             status: CanisterStatus::Stopped,
             certified_data: Default::default(),
             canister_metrics: Default::default(),
+            total_query_stats: Default::default(),
             cycles_balance: Default::default(),
+            time_of_last_allocation_charge: UNIX_EPOCH,
             ingress_induction_cycles_debit: Default::default(),
             reserved_balance: Default::default(),
             reserved_balance_limit: Default::default(),

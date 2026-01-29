@@ -74,7 +74,7 @@ fn test_can_charge_application_subnets() {
                         *freeze_threshold,
                     );
                     canister.system_state.memory_allocation = *memory_allocation;
-                    canister.scheduler_state.compute_allocation = compute_allocation;
+                    canister.system_state.compute_allocation = compute_allocation;
                     let duration = Duration::from_secs(1);
 
                     // Ensure that we are not losing test coverage due to the memory usage
@@ -426,7 +426,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             Cycles::from(u128::MAX),
             NumSeconds::from(0),
         );
-        canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
+        canister.system_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
         canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
@@ -444,7 +444,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             Cycles::zero(),
             NumSeconds::from(0),
         );
-        canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
+        canister.system_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
         canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
@@ -462,7 +462,7 @@ fn charging_removes_canisters_with_insufficient_balance() {
             Cycles::new(100),
             NumSeconds::from(0),
         );
-        canister.scheduler_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
+        canister.system_state.compute_allocation = ComputeAllocation::try_from(50).unwrap();
         canister.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(1 << 30));
         cycles_account_manager
             .charge_canister_for_resource_allocation_and_usage(
@@ -617,7 +617,7 @@ fn do_not_charge_canister_for_compute_allocation_free_schedule() {
             Cycles::zero(),
             NumSeconds::from(0),
         );
-        canister.scheduler_state.compute_allocation = compute_allocation;
+        canister.system_state.compute_allocation = compute_allocation;
         canister
             .push_output_request(
                 RequestBuilder::new().sender(canister_id).build().into(),
@@ -850,7 +850,6 @@ fn cycles_withdraw_for_execution() {
         guaranteed_response: NumBytes::new(6 << 20),
         best_effort: NumBytes::new(2 << 20),
     };
-    let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
     let initial_amount = u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
@@ -862,13 +861,14 @@ fn cycles_withdraw_for_execution() {
         initial_cycles,
         freeze_threshold,
     );
+    system_state.compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
     let freeze_threshold_cycles = cycles_account_manager.freeze_threshold_cycles(
         system_state.freeze_threshold,
         system_state.memory_allocation,
         memory_usage,
         message_memory_usage,
-        compute_allocation,
+        system_state.compute_allocation,
         SMALL_APP_SUBNET_MAX_SIZE,
         cost_schedule,
         system_state.reserved_balance(),
@@ -881,7 +881,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -897,7 +896,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -916,7 +914,6 @@ fn cycles_withdraw_for_execution() {
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -929,7 +926,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 exec_cycles_max,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -945,7 +941,6 @@ fn cycles_withdraw_for_execution() {
             Cycles::new(10),
             memory_usage,
             message_memory_usage,
-            compute_allocation,
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,
             false,
@@ -966,7 +961,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 exec_cycles_max,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -981,7 +975,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 Cycles::new(10),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -996,7 +989,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 Cycles::new(1),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -1011,7 +1003,6 @@ fn cycles_withdraw_for_execution() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 Cycles::zero(),
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -1032,7 +1023,6 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         guaranteed_response: NumBytes::new(6 << 20),
         best_effort: NumBytes::new(2 << 20),
     };
-    let compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
     let initial_amount = u128::MAX;
     let initial_cycles = Cycles::from(initial_amount);
@@ -1044,13 +1034,14 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
         initial_cycles,
         freeze_threshold,
     );
+    system_state.compute_allocation = ComputeAllocation::try_from(90).unwrap();
 
     let freeze_threshold_cycles = cycles_account_manager.freeze_threshold_cycles(
         system_state.freeze_threshold,
         system_state.memory_allocation,
         memory_usage,
         message_memory_usage,
-        compute_allocation,
+        system_state.compute_allocation,
         SMALL_APP_SUBNET_MAX_SIZE,
         cost_schedule,
         system_state.reserved_balance(),
@@ -1063,7 +1054,6 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
                 &mut system_state,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 amount,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
@@ -1083,7 +1073,6 @@ fn do_not_withdraw_cycles_for_execution_free_schedule() {
                 exec_cycles_max,
                 memory_usage,
                 message_memory_usage,
-                compute_allocation,
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
                 false,
@@ -1163,7 +1152,6 @@ fn consume_cycles_updates_consumed_cycles() {
             &mut system_state,
             NumBytes::from(0),
             MessageMemoryUsage::ZERO,
-            ComputeAllocation::default(),
             Cycles::new(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
             cost_schedule,

@@ -14,7 +14,6 @@ use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::block_on;
 use nested::util::block_on_bash_script_and_log;
 use slog::{error, info};
 use std::time::Duration;
@@ -32,7 +31,7 @@ fn test(env: TestEnv) {
     let log = &env.logger();
     let node = &env.get_first_healthy_system_node_snapshot();
     let node_id = node.node_id;
-    let vm = block_on(node.vm());
+    let vm = node.vm();
     let num_kill_start_iterations = std::env::var("NUM_KILL_START_ITERATIONS")
         .expect("NUM_KILL_START_ITERATIONS not set")
         .parse::<usize>()
@@ -45,7 +44,7 @@ fn test(env: TestEnv) {
 
         node.await_status_is_healthy().expect("Node not healthy");
         info!(log, "Killing node: {node_id} ...");
-        block_on(vm.kill());
+        vm.kill();
         node.await_status_is_unavailable()
             .expect("Node still healthy");
 
@@ -53,7 +52,7 @@ fn test(env: TestEnv) {
         std::thread::sleep(POST_KILL_SLEEP_DURATION);
 
         info!(log, "Starting node: {node_id} ...");
-        block_on(vm.start());
+        vm.start();
         if let Err(err) = node.await_status_is_healthy() {
             error!(
                 log,

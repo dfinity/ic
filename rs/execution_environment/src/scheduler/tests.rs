@@ -99,7 +99,7 @@ fn can_fully_execute_canisters_with_one_input_message_each() {
             test.last_round()
         );
         let canister_metrics = canister.system_state.canister_metrics();
-        assert_eq!(canister_metrics.skipped_round_due_to_no_messages(), 0);
+        assert_eq!(canister_metrics.rounds_scheduled(), 1);
         assert_eq!(canister_metrics.executed(), 1);
         assert_eq!(canister_metrics.interrupted_during_execution(), 0);
     }
@@ -1289,12 +1289,7 @@ fn dont_execute_any_canisters_if_not_enough_instructions_in_round() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(0)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 0);
         assert_eq!(
             system_state
@@ -1334,10 +1329,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
 
     for (_, canister) in test.state().canister_states.iter() {
         assert!(canister.execution_state.is_none());
-        assert_eq!(
-            canister.scheduler_state.compute_allocation,
-            ComputeAllocation::zero()
-        );
+        assert_eq!(canister.compute_allocation(), ComputeAllocation::zero());
         assert_eq!(
             canister.system_state.memory_allocation,
             MemoryAllocation::default()
@@ -1686,12 +1678,7 @@ fn can_execute_messages_with_just_enough_instructions() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::from(1)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
             system_state
@@ -1746,12 +1733,7 @@ fn execute_idle_and_canisters_with_messages() {
         idle.scheduler_state.last_full_execution_round,
         test.last_round()
     );
-    assert_eq!(
-        idle.system_state
-            .canister_metrics()
-            .skipped_round_due_to_no_messages(),
-        1
-    );
+    assert_eq!(idle.system_state.canister_metrics().rounds_scheduled(), 0);
 
     let active = test.canister_state(active);
     let system_state = &active.system_state;
@@ -1759,12 +1741,7 @@ fn execute_idle_and_canisters_with_messages() {
         active.scheduler_state.last_full_execution_round,
         ExecutionRound::from(1)
     );
-    assert_eq!(
-        system_state
-            .canister_metrics()
-            .skipped_round_due_to_no_messages(),
-        0
-    );
+    assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
     assert_eq!(active.system_state.canister_metrics().executed(), 1);
     assert_eq!(
         system_state
@@ -1812,12 +1789,7 @@ fn can_fully_execute_multiple_canisters_with_multiple_messages_each() {
             canister_state.scheduler_state.last_full_execution_round,
             ExecutionRound::new(1)
         );
-        assert_eq!(
-            system_state
-                .canister_metrics()
-                .skipped_round_due_to_no_messages(),
-            0
-        );
+        assert_eq!(system_state.canister_metrics().rounds_scheduled(), 1);
         assert_eq!(system_state.canister_metrics().executed(), 1);
         assert_eq!(
             system_state
@@ -2790,8 +2762,7 @@ fn can_record_metrics_for_a_round() {
     }
 
     for canister in test.state_mut().canister_states.values_mut() {
-        canister.scheduler_state.time_of_last_allocation_charge =
-            UNIX_EPOCH + Duration::from_secs(1);
+        canister.system_state.time_of_last_allocation_charge = UNIX_EPOCH + Duration::from_secs(1);
     }
     test.state_mut().metadata.batch_time = UNIX_EPOCH
         + Duration::from_secs(1)
@@ -4780,7 +4751,7 @@ fn scheduler_respects_compute_allocation(
 
     // Check that the compute allocations of the canisters are respected.
     for (canister_id, canister) in test.state().canister_states.iter() {
-        let compute_allocation = canister.scheduler_state.compute_allocation.as_percent() as usize;
+        let compute_allocation = canister.compute_allocation().as_percent() as usize;
 
         let count = scheduled_first_counters.get(canister_id).unwrap_or(&0);
 
