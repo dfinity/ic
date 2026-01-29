@@ -195,7 +195,6 @@ use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     convert::TryFrom,
-    ffi::OsStr,
     fs,
     future::Future,
     io::{Read, Write},
@@ -1979,18 +1978,6 @@ impl NnsInstallationBuilder {
         });
         Ok(())
     }
-}
-
-/// Set environment variable `env_name` to `file_path`
-/// or to wherever `file_path` points to in case it's a symlink.
-pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
-    let path = if file_path.is_symlink() {
-        std::fs::read_link(file_path).unwrap()
-    } else {
-        file_path
-    };
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var(env_name, path) };
 }
 
 pub trait HasRegistryVersion {

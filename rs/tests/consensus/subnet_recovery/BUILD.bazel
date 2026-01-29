@@ -6,7 +6,6 @@ package(default_visibility = ["//rs:system-tests-pkg"])
 
 IC_ADMIN_RUNTIME_DEPS = {
     "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
-    "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",  # used by rs/recovery/src/lib.rs
 }
 
 RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | IC_ADMIN_RUNTIME_DEPS

@@ -31,7 +31,6 @@ use ic_consensus_system_test_utils::{
     rw_message::{
         cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
-    set_sandbox_env_vars,
     subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
@@ -181,13 +180,6 @@ pub fn test(env: TestEnv) {
     );
 
     let recovery_dir = tempdir().unwrap().path().to_path_buf();
-    set_sandbox_env_vars();
-    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
-    // paths for the underlying tools (and the environment variable name needs to be adapted).
-    set_var_to_path(
-        "IC_ADMIN_BIN",
-        get_dependency_path_from_env("IC_ADMIN_PATH"),
-    );
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: parent_nns_node.get_public_url(),
