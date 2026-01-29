@@ -85,7 +85,6 @@ thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
     static TOTAL_VOLUME: RefCell<f64> = const { RefCell::new(0f64) };
     static TOTAL_VOLUME_DENOMINATOR: RefCell<f64> = const { RefCell::new(1f64) };
     static TOTAL_VOLUME_FEE_IN_DECIMALS: RefCell<f64> = const { RefCell::new(0f64) };
@@ -309,7 +308,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         .value(&[("canister", "icrc1-ledger")], cycle_balance)?;
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
-    let stable_upgrade_migration_steps = STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow());
     w.encode_gauge(
         "ledger_pre_upgrade_instructions_consumed",
         pre_upgrade_instructions as f64,
