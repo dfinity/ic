@@ -1,3 +1,4 @@
+use crate::units::{KIB, MIB};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
@@ -305,7 +306,7 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
         .with_install_code_slice_instruction_limit(1_000_000_000)
-        .with_subnet_wasm_custom_sections_memory(1024 * 1024) // 1MiB
+        .with_subnet_wasm_custom_sections_memory(MIB) // 1MiB
         .with_manual_execution()
         .build();
     let canister_id = test
@@ -335,7 +336,7 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
 fn install_code_respects_wasm_custom_sections_available_memory() {
     // Limit available custom section memory so that we can hit the limit with
     // only a few canisters.
-    let available_wasm_custom_sections_memory = 1024; // 1 KiB
+    let available_wasm_custom_sections_memory = KIB; // 1 KiB
 
     let canister_history_memory_for_creation =
         size_of::<CanisterChange>() + size_of::<PrincipalId>();
