@@ -1,18 +1,16 @@
-use super::{
-    canister_state::CanisterState,
-    metadata_state::{
-        IngressHistoryState, Stream, StreamMap, SystemMetadata,
-        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
-    },
+use crate::canister_snapshots::{CanisterSnapshot, CanisterSnapshots};
+use crate::canister_state::queues::{
+    CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool,
 };
+use crate::canister_state::system_state::{
+    CanisterOutputQueuesIterator, CyclesUseCase, push_input,
+};
+use crate::metadata_state::subnet_call_context_manager::{
+    PreSignatureStash, ReshareChainKeyContext, SignWithThresholdContext,
+};
+use crate::metadata_state::{IngressHistoryState, Stream, StreamMap, SystemMetadata};
 use crate::{
-    CanisterQueues, DroppedMessageMetrics,
-    canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
-    canister_state::{
-        queues::{CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool},
-        system_state::{CanisterOutputQueuesIterator, CyclesUseCase, push_input},
-    },
-    metadata_state::subnet_call_context_manager::PreSignatureStash,
+    CanisterPriority, CanisterQueues, CanisterState, DroppedMessageMetrics, SubnetSchedule,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -524,6 +522,7 @@ impl ReplicatedState {
             canister_snapshots,
         )
     }
+
     pub fn canister_state(&self, canister_id: &CanisterId) -> Option<&CanisterState> {
         self.canister_states
             .get(canister_id)
@@ -536,7 +535,19 @@ impl ReplicatedState {
         self.canister_states.get_mut(canister_id).map(Arc::make_mut)
     }
 
+    /// Takes the canister state out of the replicated state, with the expectation
+    /// that it will be replaced using `put_canister_state()`.
+    ///
+    /// Intended to work around borrow checker limitations (e.g. routing messages
+    /// from one canister's output queues into another canister's input queues).
     pub fn take_canister_state(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.canister_states.remove(canister_id)
+    }
+
+    /// Permanently removes the canister and its scheduling priority from the subnet
+    /// schedule.
+    pub fn remove_canister(&mut self, canister_id: &CanisterId) -> Option<Arc<CanisterState>> {
+        self.metadata.subnet_schedule.remove(canister_id);
         self.canister_states.remove(canister_id)
     }
 
@@ -558,25 +569,17 @@ impl ReplicatedState {
         Arc::clone(&self.metadata.network_topology.routing_table)
     }
 
-    /// Time complexity: O(n), where n is the number of canisters.
-    pub fn get_scheduler_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
-        self.canister_states
-            .iter()
-            .map(|(canister_id, canister_state)| {
-                (
-                    *canister_id,
-                    canister_state.scheduler_state.accumulated_priority,
-                )
-            })
-            .collect()
-    }
-
     /// Insert the canister state into the replicated state. If a canister
     /// already exists for the given canister ID, it will be replaced. It is the
     /// responsibility of the caller of this function to ensure that any
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
     pub fn put_canister_state(&mut self, canister_state: CanisterState) {
+        // Also insert a scheduling priority for the canister. This is a temporary
+        // measure to ensure that every canister has an explicit priority.
+        self.metadata
+            .subnet_schedule
+            .get_mut(canister_state.canister_id());
         self.canister_states
             .insert(canister_state.canister_id(), Arc::new(canister_state));
     }
@@ -588,6 +591,11 @@ impl ReplicatedState {
     /// relevant state associated with the older canister state are properly
     /// cleaned up.
     pub fn put_canister_state_arc(&mut self, canister_state: Arc<CanisterState>) {
+        // Also insert a scheduling priority for the canister. This is a temporary
+        // measure to ensure that every canister has an explicit priority.
+        self.metadata
+            .subnet_schedule
+            .get_mut(canister_state.canister_id());
         self.canister_states
             .insert(canister_state.canister_id(), canister_state);
     }
@@ -641,6 +649,67 @@ impl ReplicatedState {
         } else {
             Ok(canister)
         }
+    }
+
+    /// Returns the scheduling priority for the given canister, or the default
+    /// priority if not explicitly set.
+    pub fn canister_priority(&self, canister_id: &CanisterId) -> &CanisterPriority {
+        self.metadata.subnet_schedule.get(canister_id)
+    }
+
+    pub fn canister_priorities_mut_(
+        &mut self,
+    ) -> impl Iterator<Item = (&CanisterState, &mut CanisterPriority)> {
+        // self.canister_states.values().map(|canister| {
+        //     (
+        //         canister.clone(),
+        //         self.metadata
+        //             .subnet_schedule
+        //             .get_mut(canister.canister_id()),
+        //     )
+        // })
+        self.metadata
+            .subnet_schedule
+            .iter_mut()
+            .map(|(canister_id, priority)| {
+                (
+                    self.canister_states.get(canister_id).unwrap().as_ref(),
+                    priority,
+                )
+            })
+    }
+
+    pub fn subnet_schedule_mut(
+        &mut self,
+    ) -> (
+        &BTreeMap<CanisterId, Arc<CanisterState>>,
+        &mut SubnetSchedule,
+    ) {
+        (&self.canister_states, &mut self.metadata.subnet_schedule)
+    }
+
+    /// Time complexity: `O(n)` in the number of active canisters.
+    pub fn canister_accumulated_priorities(&self) -> BTreeMap<CanisterId, AccumulatedPriority> {
+        self.canister_states
+            .keys()
+            .map(|canister_id| {
+                (
+                    *canister_id,
+                    self.metadata
+                        .subnet_schedule
+                        .get(canister_id)
+                        .accumulated_priority,
+                )
+            })
+            .collect()
+    }
+
+    /// Prunes all canister priorities for which a corresponding canister state no
+    /// longer exists.
+    pub fn garbage_collect_subnet_schedule(&mut self) {
+        self.metadata
+            .subnet_schedule
+            .retain(|canister_id, _| self.canister_states.contains_key(canister_id));
     }
 
     pub fn system_metadata(&self) -> &SystemMetadata {
@@ -1726,6 +1795,9 @@ pub mod testing {
 
     /// Exposes `ReplicatedState` internals for use in other crates' unit tests.
     pub trait ReplicatedStateTesting {
+        /// Testing only: Returns a mutable reference to `self.canister_states`.
+        fn canister_states_mut(&mut self) -> &mut BTreeMap<CanisterId, Arc<CanisterState>>;
+
         /// Testing only: Returns a reference to `self.subnet_queues`
         fn subnet_queues(&self) -> &CanisterQueues;
 
@@ -1752,6 +1824,10 @@ pub mod testing {
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
+        fn canister_states_mut(&mut self) -> &mut BTreeMap<CanisterId, Arc<CanisterState>> {
+            &mut self.canister_states
+        }
+
         fn subnet_queues(&self) -> &CanisterQueues {
             &self.subnet_queues
         }

@@ -1927,21 +1927,18 @@ fn scheduler_long_execution_progress_across_checkpoints() {
         }
     );
     // Assert penalized canister accumulated priority is lower.
-    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
-    let other = test.state().canister_state(&other_long_id).unwrap();
-    assert_lt!(
-        penalized.scheduler_state.accumulated_priority,
-        other.scheduler_state.accumulated_priority
-    );
+    let penalized = test.state().canister_priority(&penalized_long_id);
+    let other = test.state().canister_priority(&other_long_id);
+    assert_lt!(penalized.accumulated_priority, other.accumulated_priority);
 
     // Start another long execution on the penalized canister.
     test.send_ingress(penalized_long_id, ingress(message_instructions));
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Assert the LEM is prioritized.
-    let penalized = test.state().canister_state(&penalized_long_id).unwrap();
+    let penalized = test.state().canister_priority(&penalized_long_id);
     assert_eq!(
-        penalized.scheduler_state.long_execution_mode,
+        penalized.long_execution_mode,
         LongExecutionMode::Prioritized
     );
 
@@ -1950,22 +1947,18 @@ fn scheduler_long_execution_progress_across_checkpoints() {
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     test.execute_round(ExecutionRoundType::OrdinaryRound);
     // Assert the LEM is opportunistic.
-    let other = test.state().canister_state(&other_long_id).unwrap();
-    assert_eq!(
-        other.scheduler_state.long_execution_mode,
-        LongExecutionMode::Opportunistic
-    );
+    let other = test.state().canister_priority(&other_long_id);
+    assert_eq!(other.long_execution_mode, LongExecutionMode::Opportunistic);
 
     // Abort both canisters on checkpoint.
     test.execute_round(ExecutionRoundType::CheckpointRound);
 
     // Assert penalized canister accumulated priority is still lower.
+    let penalized = test.state().canister_priority(&penalized_long_id);
+    let other = test.state().canister_priority(&other_long_id);
+    assert_lt!(penalized.accumulated_priority, other.accumulated_priority);
+
     let penalized = test.state().canister_state(&penalized_long_id).unwrap();
-    let other = test.state().canister_state(&other_long_id).unwrap();
-    assert_lt!(
-        penalized.scheduler_state.accumulated_priority,
-        other.scheduler_state.accumulated_priority
-    );
     let penalized_executed_before = penalized.system_state.canister_metrics().executed();
 
     // Send a bunch of messages.
@@ -6532,8 +6525,6 @@ fn inner_round_first_execution_is_not_a_full_execution() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
@@ -6548,8 +6539,12 @@ fn inner_round_first_execution_is_not_a_full_execution() {
         } else {
             assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
         }
-        total_accumulated_priority += scheduler_state.accumulated_priority.get();
-        total_priority_credit += scheduler_state.priority_credit.get();
+    }
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
+    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
+        total_accumulated_priority += canister_priority.accumulated_priority.get();
+        total_priority_credit += canister_priority.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
     assert_eq!(total_accumulated_priority - total_priority_credit, 0);
@@ -6591,8 +6586,6 @@ fn inner_round_long_execution_is_a_full_execution() {
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for canister in test.state().canisters_iter() {
         let system_state = &canister.system_state;
         let scheduler_state = &canister.scheduler_state;
@@ -6607,8 +6600,12 @@ fn inner_round_long_execution_is_a_full_execution() {
         // All canisters should be marked as fully executed. The target canister,
         // despite still having messages, executed a full slice of instructions.
         assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
-        total_accumulated_priority += scheduler_state.accumulated_priority.get();
-        total_priority_credit += scheduler_state.priority_credit.get();
+    }
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
+    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
+        total_accumulated_priority += canister_priority.accumulated_priority.get();
+        total_priority_credit += canister_priority.priority_credit.get();
     }
     // The accumulated priority invariant should be respected.
     assert_eq!(total_accumulated_priority - total_priority_credit, 0);
@@ -6649,8 +6646,6 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         if i < num_canisters as usize / 2 {
             // The first half of the canisters should finish their messages.
@@ -6666,8 +6661,12 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
             prop_assert_eq!(canister.system_state.canister_metrics().executed(), 0);
             prop_assert_eq!(canister.scheduler_state.last_full_execution_round, 0.into());
         }
-        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
-        total_priority_credit += canister.scheduler_state.priority_credit.get();
+    }
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
+    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
+        total_accumulated_priority += canister_priority.accumulated_priority.get();
+        total_priority_credit += canister_priority.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
 
@@ -6680,8 +6679,6 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
 
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-    let mut total_accumulated_priority = 0;
-    let mut total_priority_credit = 0;
     for (i, canister) in test.state().canisters_iter().enumerate() {
         // Now all the canisters should be executed once.
         prop_assert_eq!(canister.system_state.canister_metrics().executed(), 1);
@@ -6702,8 +6699,12 @@ fn charge_canisters_for_full_execution(#[strategy(2..10_usize)] scheduler_cores:
                 test.last_round()
             );
         }
-        total_accumulated_priority += canister.scheduler_state.accumulated_priority.get();
-        total_priority_credit += canister.scheduler_state.priority_credit.get();
+    }
+    let mut total_accumulated_priority = 0;
+    let mut total_priority_credit = 0;
+    for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
+        total_accumulated_priority += canister_priority.accumulated_priority.get();
+        total_priority_credit += canister_priority.priority_credit.get();
     }
     prop_assert_eq!(total_accumulated_priority - total_priority_credit, 0);
 }
@@ -6748,8 +6749,6 @@ fn charge_idle_canisters_for_full_execution_round() {
     for round in 0..num_rounds {
         test.execute_round(ExecutionRoundType::OrdinaryRound);
 
-        let mut total_accumulated_priority = 0;
-        let mut total_priority_credit = 0;
         for canister in test.state().canisters_iter() {
             let scheduler_state = &canister.scheduler_state;
             // Assert that we punished all idle canisters, not just top `scheduler_cores`.
@@ -6757,13 +6756,18 @@ fn charge_idle_canisters_for_full_execution_round() {
                 assert_ne!(test.last_round(), 0.into());
                 assert_eq!(scheduler_state.last_full_execution_round, test.last_round());
             }
+        }
+        let mut total_accumulated_priority = 0;
+        let mut total_priority_credit = 0;
+        for (_, canister_priority) in test.state().metadata.subnet_schedule.iter() {
             // Assert there is no divergency in accumulated priorities.
-            let priority = scheduler_state.accumulated_priority - scheduler_state.priority_credit;
+            let priority =
+                canister_priority.accumulated_priority - canister_priority.priority_credit;
             assert_le!(priority.get(), 100 * multiplier as i64);
             assert_ge!(priority.get(), -100 * multiplier as i64);
 
-            total_accumulated_priority += scheduler_state.accumulated_priority.get();
-            total_priority_credit += scheduler_state.priority_credit.get();
+            total_accumulated_priority += canister_priority.accumulated_priority.get();
+            total_priority_credit += canister_priority.priority_credit.get();
         }
         // The accumulated priority invariant should be respected.
         assert_eq!(total_accumulated_priority - total_priority_credit, 0);

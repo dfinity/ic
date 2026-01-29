@@ -1169,6 +1169,8 @@ fn split() {
     //
     state_a.after_split();
 
+    // `CANISTER_2` should have been removed from the schedule.
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
     // The input schedules of `CANISTER_1` should have been repartitioned.
@@ -1193,10 +1195,11 @@ fn split() {
 
     // Subnet B state is based off of an empty state.
     let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);
-    // Only `CANISTER_2` should be left.
+    // Only `CANISTER_2` should be left, with no scheduling priority.
     expected.put_canister_state(fixture.state.canister_state(&CANISTER_2).unwrap().clone());
+    expected.metadata.subnet_schedule.remove(&CANISTER_2);
     // The full ingress history should be preserved.
-    expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
+    expected.metadata.ingress_history = fixture.state.metadata.ingress_history.clone();
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
     // Otherwise, the state should be the same.
@@ -1205,6 +1208,10 @@ fn split() {
     //
     // Subnet B, phase 2.
     //
+
+    // Loading `state_b` will populate the scheduling priority for `CANISTER_2`.
+    state_b.metadata.subnet_schedule.get_mut(CANISTER_2);
+
     state_b.after_split();
 
     // Ingress history should only contain the message to `CANISTER_2`.
@@ -1330,7 +1337,7 @@ fn online_split() {
     // Start off with the original state (plus new routing table).
     let mut expected = fixture.state.clone();
     // Only `CANISTER_1` should be left.
-    expected.take_canister_state(&CANISTER_2);
+    expected.remove_canister(&CANISTER_2);
     // The input schedules of `CANISTER_1` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_1).unwrap();
     Arc::make_mut(&mut canister_state)
@@ -1360,7 +1367,7 @@ fn online_split() {
     // New subnet ID.
     expected.metadata.own_subnet_id = SUBNET_B;
     // Only `CANISTER_2` should be hosted.
-    expected.take_canister_state(&CANISTER_1);
+    expected.remove_canister(&CANISTER_1);
     // The input schedules of `CANISTER_2` should have been repartitioned.
     let mut canister_state = expected.take_canister_state(&CANISTER_2).unwrap();
     Arc::make_mut(&mut canister_state)

@@ -1111,11 +1111,12 @@ impl SchedulerImpl {
             .canisters_iter()
             .filter_map(|canister| {
                 if canister.has_paused_execution() {
+                    let canister_priority = state.canister_priority(&canister.canister_id());
                     Some(CanisterRoundState {
                         canister_id: canister.canister_id(),
-                        accumulated_priority: canister.scheduler_state.accumulated_priority,
+                        accumulated_priority: canister_priority.accumulated_priority,
                         compute_allocation: Default::default(), // not used
-                        long_execution_mode: canister.scheduler_state.long_execution_mode,
+                        long_execution_mode: canister_priority.long_execution_mode,
                         has_aborted_or_paused_execution: true,
                     })
                 } else {
@@ -1486,12 +1487,12 @@ impl Scheduler for SchedulerImpl {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
 
             RoundSchedule::apply_scheduling_strategy(
-                &round_log,
+                &mut state,
                 self.config.scheduler_cores,
                 current_round,
                 self.config.accumulated_priority_reset_interval,
-                &mut state,
                 &self.metrics,
+                &round_log,
             )
         };
 

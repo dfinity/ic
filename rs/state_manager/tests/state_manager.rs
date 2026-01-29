@@ -2515,11 +2515,11 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
 /// Asserts that all error counters in the state manager are still 0
 fn assert_error_counters(metrics: &MetricsRegistry) {
+    let critical_errors = fetch_int_counter_vec(metrics, "critical_errors");
     assert_eq!(
         0,
-        fetch_int_counter_vec(metrics, "critical_errors")
-            .values()
-            .sum::<u64>()
+        critical_errors.values().sum::<u64>(),
+        "critical_errors: {critical_errors:?}"
     );
 }
 
@@ -8156,11 +8156,11 @@ fn can_split_with_inflight_restore_snapshot() {
             if subnet_id == SUBNET_A {
                 other_subnet_id = SUBNET_B;
                 // `SUBNET_A` should only host `CANISTER_1` (and preserve its snapshot).
-                expected.take_canister_state(&CANISTER_2);
+                expected.remove_canister(&CANISTER_2);
             } else if subnet_id == SUBNET_B {
                 other_subnet_id = SUBNET_A;
                 // `SUBNET_B` should only host `CANISTER_2`.
-                expected.take_canister_state(&CANISTER_1);
+                expected.remove_canister(&CANISTER_1);
                 // And the snapshot of `CANISTER_1` should be deleted.
                 expected.canister_snapshots = Default::default();
             } else {
@@ -8210,6 +8210,12 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
     // Take canister out.
     let mut canister_arc = state.take_canister_state(&old_id).unwrap();
     let canister = Arc::make_mut(&mut canister_arc);
+
+    // Migrate the canister priority.
+    state
+        .metadata
+        .subnet_schedule
+        .rename_canister(&old_id, new_id);
 
     canister.system_state.set_canister_id(new_id);
     state

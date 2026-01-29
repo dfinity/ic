@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::{CanisterState, ReplicatedState};
+use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
 use crate::{
@@ -325,9 +325,13 @@ impl RoundSchedule {
         // Charge canisters for full executions in this round.
         let mut total_charged_priority = 0;
         for canister_id in fully_executed_canister_ids {
-            if let Some(canister) = state.canister_state_mut(&canister_id) {
+            if state.canister_state(&canister_id).is_some() {
                 total_charged_priority += 100 * multiplier;
-                canister.scheduler_state.priority_credit += (100 * multiplier).into();
+                state
+                    .metadata
+                    .subnet_schedule
+                    .get_mut(canister_id)
+                    .priority_credit += (100 * multiplier).into();
             }
         }
 
@@ -336,18 +340,19 @@ impl RoundSchedule {
         let free_capacity_per_canister = total_charged_priority.saturating_sub(total_allocated)
             / number_of_canisters.max(1) as i64;
         // Fully divide the free allocation across all canisters.
-        for (_, canister) in state.canister_states_iter_mut() {
-            let canister = Arc::make_mut(canister);
+        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
+        for canister in canister_states.values() {
             // De-facto compute allocation includes bonus allocation
             let factual = canister.compute_allocation().as_percent() as i64 * multiplier
                 + free_capacity_per_canister;
             // Increase accumulated priority by de-facto compute allocation.
-            canister.scheduler_state.accumulated_priority += factual.into();
+            let canister_priority = subnet_schedule.get_mut(canister.canister_id());
+            canister_priority.accumulated_priority += factual.into();
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
             if !has_aborted_or_paused_execution {
-                RoundSchedule::apply_priority_credit(canister);
+                RoundSchedule::apply_priority_credit(canister_priority);
             }
         }
     }
@@ -383,12 +388,12 @@ impl RoundSchedule {
     /// A shorter description of the scheduling strategy is available in the note
     /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
     pub(super) fn apply_scheduling_strategy(
-        logger: &ReplicaLogger,
+        state: &mut ReplicatedState,
         scheduler_cores: usize,
         current_round: ExecutionRound,
         accumulated_priority_reset_interval: ExecutionRound,
-        state: &mut ReplicatedState,
         metrics: &SchedulerMetrics,
+        logger: &ReplicaLogger,
     ) -> RoundSchedule {
         let number_of_canisters = state.canister_states().len();
 
@@ -426,25 +431,27 @@ impl RoundSchedule {
         // Collect the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
         let mut accumulated_priority_deviation = 0.0;
-        for (&canister_id, canister) in state.canister_states_iter_mut() {
+        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
+        for (&canister_id, canister) in canister_states.iter() {
             if is_reset_round {
+                let canister_priority = subnet_schedule.get_mut(canister_id);
                 // By default, each canister accumulated priority is set to its compute allocation.
-                let canister = Arc::make_mut(canister);
-                canister.scheduler_state.accumulated_priority =
+                canister_priority.accumulated_priority =
                     (canister.compute_allocation().as_percent() as i64 * multiplier).into();
-                canister.scheduler_state.priority_credit = Default::default();
+                canister_priority.priority_credit = Default::default();
             }
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
 
+            let canister_priority = subnet_schedule.get(&canister_id);
             let compute_allocation = canister.compute_allocation();
-            let accumulated_priority = canister.scheduler_state.accumulated_priority;
+            let accumulated_priority = canister_priority.accumulated_priority;
             round_states.push(CanisterRoundState {
                 canister_id,
                 accumulated_priority,
                 compute_allocation,
-                long_execution_mode: canister.scheduler_state.long_execution_mode,
+                long_execution_mode: canister_priority.long_execution_mode,
                 has_aborted_or_paused_execution,
             });
 
@@ -452,6 +459,8 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
+        }
+        for (_, canister) in state.canister_states_iter_mut() {
             if canister.has_input() {
                 let canister = Arc::make_mut(canister);
                 canister
@@ -554,20 +563,23 @@ impl RoundSchedule {
             .iter()
             .take(long_execution_cores)
         {
-            let canister = state.canister_state_mut(canister_id).unwrap();
-            canister.scheduler_state.long_execution_mode = LongExecutionMode::Prioritized;
+            state
+                .metadata
+                .subnet_schedule
+                .get_mut(*canister_id)
+                .long_execution_mode = LongExecutionMode::Prioritized;
         }
 
         round_schedule
     }
 
     /// Applies priority credit and resets long execution mode.
-    pub fn apply_priority_credit(canister: &mut CanisterState) {
-        canister.scheduler_state.accumulated_priority -=
-            std::mem::take(&mut canister.scheduler_state.priority_credit);
+    pub fn apply_priority_credit(canister_priority: &mut CanisterPriority) {
+        canister_priority.accumulated_priority -=
+            std::mem::take(&mut canister_priority.priority_credit);
         // Aborting a long-running execution moves the canister to the
         // default execution mode because the canister does not have a
         // pending execution anymore.
-        canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
+        canister_priority.long_execution_mode = LongExecutionMode::default();
     }
 }
