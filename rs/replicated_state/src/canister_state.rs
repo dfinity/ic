@@ -426,8 +426,8 @@ impl CanisterState {
 
     /// Returns the memory usage of the log memory store in bytes.
     pub fn log_memory_store_memory_usage(&self) -> NumBytes {
-        // DEBUG: can't use log_memory_limit because uninstalled canister gets charged for memory.
-        //NumBytes::new(self.system_state.log_memory_limit.get() as u64)
+        // Report only ring-buffer allocated memory usage,
+        // skip the header and index table.
         NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
     }
 

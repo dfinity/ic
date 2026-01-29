@@ -1033,6 +1033,7 @@ fn test_memory_suite_take_snapshot_and_uninstall_code() {
     };
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
+        // Uninstalling code removes canister log allocated memory.
         memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
