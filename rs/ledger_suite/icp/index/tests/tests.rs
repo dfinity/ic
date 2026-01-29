@@ -2056,6 +2056,6 @@ mod metrics {
     }
 
     fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg { ledger_id }
+        InitArg { ledger_id, retrieve_blocks_from_ledger_interval_seconds: None }
     }
 }

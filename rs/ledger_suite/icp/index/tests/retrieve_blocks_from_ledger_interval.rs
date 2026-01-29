@@ -13,8 +13,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-/// Corresponds to ic_icp_index::DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL
-const DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS: u64 = 1;
 const GENESIS_NANOS: u64 = 1_620_328_630_000_000_000;
 const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
 const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u8 = 100;
@@ -220,7 +218,7 @@ fn should_sync_according_to_interval() {
         if index_num_blocks_synced != ledger_chain_length {
             let time_to_advance = upgrade_interval
                 .or(install_interval)
-                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL_SECS);
+                .unwrap_or(DEFAULT_RETRIEVE_BLOCKS_FROM_LEDGER_INTERVAL);
             if time_to_advance > 0 {
                 env.advance_time(Duration::from_secs(time_to_advance));
                 env.tick();
