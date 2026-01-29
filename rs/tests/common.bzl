@@ -134,8 +134,6 @@ XNET_TEST_CANISTER_RUNTIME_DEPS = {
     "XNET_TEST_CANISTER_WASM_PATH": "//rs/rust_canisters/xnet_test:xnet-test-canister",
 }
 
-STATESYNC_TEST_CANISTER_DATA = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
-
 UNIVERSAL_CANISTER_RUNTIME_DEPS = {
     "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
 }

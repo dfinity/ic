@@ -21,7 +21,10 @@ ic-btc-interface = { workspace = true }
 ic-btc-checker = { path = "../../bitcoin/checker" }
 ic-ckbtc-agent = { path = "../../bitcoin/ckbtc/agent" }
 ic-ckbtc-minter = { path = "../../bitcoin/ckbtc/minter" }
+ic-ckdoge-agent = { path = "../../dogecoin/ckdoge/agent" }
+ic-ckdoge-minter = { path = "../../dogecoin/ckdoge/minter" }
 ic-config = { path = "../../config" }
+ic-doge-interface = { workspace = true }
 ic-icrc1-ledger = { path = "../../ledger_suite/icrc1/ledger" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
@@ -68,3 +71,7 @@ path = "ckbtc_minter_checker.rs"
 [[bin]]
 name = "ic-systest-ckbtc-update-balance"
 path = "ckbtc_minter_update_balance.rs"
+
+[[bin]]
+name = "ic-systest-ckdoge-minter-basics-test"
+path = "ckdoge_minter_basics_test.rs"

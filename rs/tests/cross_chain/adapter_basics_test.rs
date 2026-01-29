@@ -12,7 +12,7 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     IcRpcClientType,
-    adapter::{AdapterProxy, fund_with_btc},
+    adapter::{AdapterProxy, fund_with_tokens},
     adapter_test_setup, subnet_sys,
     utils::get_rpc_client,
 };
@@ -70,7 +70,7 @@ fn test_receives_new_3rd_party_txs<T: IcRpcClientType>(env: TestEnv) {
     let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    fund_with_btc(&alice_client, alice_address);
+    fund_with_tokens(&alice_client, alice_address);
 
     let alice_balance_initial = alice_client.get_balance(None).unwrap();
     let bob_balance_initial = bob_client.get_balance(None).unwrap();
@@ -127,7 +127,7 @@ fn test_send_tx<T: IcRpcClientType>(env: TestEnv) {
     let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    let utxo = fund_with_btc(&alice_client, alice_address);
+    let utxo = fund_with_tokens(&alice_client, alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();

@@ -13,6 +13,8 @@ DEPENDENCIES = [
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/config",
+    "//rs/dogecoin/ckdoge/agent",
+    "//rs/dogecoin/ckdoge/minter",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
     "//rs/nns/constants",
@@ -34,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-management-canister-types",
     "@crate_index//:ic-utils",
     "@crate_index//:k256",
@@ -143,6 +146,21 @@ system_test_nns(
         "CKBTC_UVM_CONFIG_PATH": "//rs/tests:ckbtc_uvm_config_image",
         "IC_BTC_CHECKER_WASM_PATH": "//rs/bitcoin/checker:btc_checker_canister",
         "IC_CKBTC_MINTER_WASM_PATH": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+        "LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+        "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
+    },
+    deps = DEPENDENCIES + [":ckbtc"],
+)
+
+system_test_nns(
+    name = "ckdoge_minter_basics_test",
+    tags = [
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS | {
+        "DOGE_WASM_PATH": "@doge_canister//file",
+        "CKBTC_UVM_CONFIG_PATH": "//rs/tests:ckbtc_uvm_config_image",
+        "IC_CKDOGE_MINTER_WASM_PATH": "//rs/dogecoin/ckdoge/minter:ckdoge_minter_debug",
         "LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "UNIVERSAL_CANISTER_WASM_PATH": "//rs/universal_canister/impl:universal_canister.wasm.gz",
     },

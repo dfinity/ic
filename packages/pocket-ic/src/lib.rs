@@ -172,6 +172,7 @@ pub struct PocketIcBuilder {
     dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
+    mainnet_nns_subnet_id: Option<bool>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -191,6 +192,7 @@ impl PocketIcBuilder {
             dogecoind_addr: None,
             icp_features: IcpFeatures::default(),
             initial_time: None,
+            mainnet_nns_subnet_id: None,
         }
     }
 
@@ -215,6 +217,7 @@ impl PocketIcBuilder {
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
     }
 
@@ -233,6 +236,7 @@ impl PocketIcBuilder {
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
+            self.mainnet_nns_subnet_id,
         )
         .await
     }
@@ -479,6 +483,11 @@ impl PocketIcBuilder {
         self.http_gateway_config = Some(http_gateway_config);
         self
     }
+
+    pub fn with_mainnet_nns_subnet_id(mut self) -> Self {
+        self.mainnet_nns_subnet_id = Some(true);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
@@ -598,6 +607,7 @@ impl PocketIc {
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
+        mainnet_nns_subnet_id: Option<bool>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -624,6 +634,7 @@ impl PocketIc {
                 icp_features,
                 initial_time,
                 http_gateway_config,
+                mainnet_nns_subnet_id,
             )
             .await
         });

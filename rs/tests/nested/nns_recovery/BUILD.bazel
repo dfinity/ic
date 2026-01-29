@@ -47,9 +47,7 @@ system_test_nns(
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -86,11 +84,7 @@ system_test_nns(
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        # Different parts of the codebase expect different variable names
-        "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -107,9 +101,7 @@ system_test_nns(
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",
@@ -126,9 +118,7 @@ system_test_nns(
     setupos = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS | {
-        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
-    },
+    runtime_deps = RUNTIME_DEPS,
     deps = [
         # Keep sorted.
         ":common",

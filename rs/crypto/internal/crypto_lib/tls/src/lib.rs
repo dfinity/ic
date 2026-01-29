@@ -8,9 +8,9 @@
 #![warn(rust_2018_idioms)]
 #![warn(future_incompatible)]
 
+use ic_crypto_internal_seed::Seed;
 use ic_crypto_secrets_containers::SecretBytes;
 use ic_ed25519::{PrivateKey, PrivateKeyFormat};
-use rand::{CryptoRng, Rng};
 use rcgen::{
     Certificate, CertificateParams, DistinguishedName, DnType, DnValue, KeyPair, SerialNumber,
 };
@@ -57,11 +57,11 @@ impl fmt::Debug for TlsEd25519SecretKeyDerBytes {
     }
 }
 
-/// Generates a TLS key pair.
+/// Generates a TLS key pair from a seed.
 ///
 /// The notBefore and notAfter dates are interpreted as Unix time, i.e., seconds since Unix epoch.
-pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
-    csprng: &mut R,
+pub fn generate_tls_key_pair_der(
+    seed: Seed,
     common_name: &str,
     not_before_secs_since_unix_epoch: u64,
     not_after_secs_since_unix_epoch: u64,
@@ -69,8 +69,10 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let serial: [u8; 19] = csprng.r#gen();
-    let secret_key = PrivateKey::generate_using_rng(csprng);
+    use rand::Rng;
+    let rng = &mut seed.into_rng();
+    let serial: [u8; 19] = rng.r#gen();
+    let secret_key = PrivateKey::generate_using_rng(rng);
     let x509_cert = x509_v3_certificate(
         common_name,
         serial,

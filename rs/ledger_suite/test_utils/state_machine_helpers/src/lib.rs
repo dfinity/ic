@@ -34,9 +34,9 @@ use icrc_ledger_types::icrc21::errors::Icrc21Error;
 use icrc_ledger_types::icrc21::requests::ConsentMessageRequest;
 use icrc_ledger_types::icrc21::responses::ConsentInfo;
 use num_traits::ToPrimitive;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::time::{Instant, UNIX_EPOCH};
-use std::{collections::BTreeMap, time::Duration};
 
 pub trait AllowanceProvider: Sized {
     fn get_allowance(
@@ -773,29 +773,6 @@ pub fn transfer(
             memo: None,
         },
     )
-}
-
-pub fn wait_ledger_ready(env: &StateMachine, ledger: CanisterId, num_waits: u16) {
-    let is_ledger_ready = || {
-        Decode!(
-            &env.query(ledger, "is_ledger_ready", Encode!().unwrap())
-                .expect("failed to call is_ledger_ready")
-                .bytes(),
-            bool
-        )
-        .expect("failed to decode is_ledger_ready response")
-    };
-    for i in 0..num_waits {
-        if is_ledger_ready() {
-            println!("ready after {i} waits");
-            return;
-        }
-        env.advance_time(Duration::from_secs(10));
-        env.tick();
-    }
-    if !is_ledger_ready() {
-        panic!("canister not ready!");
-    }
 }
 
 fn assert_reply(result: WasmResult) -> Vec<u8> {

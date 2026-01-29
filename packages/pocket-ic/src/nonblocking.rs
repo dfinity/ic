@@ -144,6 +144,7 @@ impl PocketIc {
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
+        mainnet_nns_subnet_id: Option<bool>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -198,6 +199,7 @@ impl PocketIc {
             icp_features: Some(icp_features),
             incomplete_state: None,
             initial_time,
+            mainnet_nns_subnet_id,
         };
 
         let test_driver_pid = std::process::id();
