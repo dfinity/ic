@@ -426,8 +426,7 @@ impl CanisterState {
 
     /// Returns the memory usage of the log memory store in bytes.
     pub fn log_memory_store_memory_usage(&self) -> NumBytes {
-        // Report only ring-buffer allocated memory usage,
-        // skip the header and index table.
+        // Report the ring buffer capacity only, omitting headers and index tables.
         NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
     }
 
