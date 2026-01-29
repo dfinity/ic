@@ -5375,6 +5375,70 @@ where
     );
 }
 
+pub fn test_fee_collector_107_with_proptest<Tokens>(
+    ledger_wasm_current: Vec<u8>,
+    init_args: Vec<u8>,
+    minter: Arc<BasicIdentity>,
+) where
+    Tokens: TokensType + Default + std::fmt::Display + From<u64>,
+{
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    let now = SystemTime::now();
+    let minter_principal: Principal = minter.sender().unwrap();
+    const TX_COUNT: usize = 150;
+    runner
+        .run(
+            &(
+                valid_transactions_strategy(minter, FEE, TX_COUNT, now).no_shrink(),
+                proptest::collection::vec(
+                    proptest::option::of(proptest::option::of(arb_account())),
+                    TX_COUNT..=TX_COUNT,
+                )
+                .no_shrink(),
+            ),
+            |(transactions, fee_collectors)| {
+                let env = StateMachine::new();
+                env.set_time(now);
+                let ledger_id = env
+                    .install_canister(ledger_wasm_current.clone(), init_args.clone(), None)
+                    .unwrap();
+
+                let mut in_memory_ledger = InMemoryLedger::<Account, Tokens>::default();
+
+                let mut total_blocks = 0u64;
+                for tx_index in 0..TX_COUNT {
+                    total_blocks += 1;
+                    if let Some(fee_collector) = fee_collectors[tx_index] {
+                        total_blocks += 1;
+                        in_memory_ledger.set_fee_collector_107(
+                            TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(
+                                env.time(),
+                            )),
+                            &fee_collector,
+                        );
+                        set_fc_107_by_controller(&env, ledger_id, fee_collector);
+                    }
+                    in_memory_ledger.apply_arg_with_caller(
+                        &transactions[tx_index],
+                        TimeStamp::from_nanos_since_unix_epoch(system_time_to_nanos(env.time())),
+                        minter_principal,
+                        Some(FEE.into()),
+                    );
+                    apply_arg_with_caller(&env, ledger_id, &transactions[tx_index]);
+                }
+                in_memory_ledger.verify_balances_and_allowances(
+                    &env,
+                    ledger_id,
+                    total_blocks,
+                    AllowancesRecentlyPurged::Yes,
+                );
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
 pub fn test_fee_collector_107_upgrade<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,

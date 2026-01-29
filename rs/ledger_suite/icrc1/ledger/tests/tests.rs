@@ -738,6 +738,20 @@ fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_pre
     );
 }
 
+#[test]
+fn test_fee_collector_107_with_proptest() {
+    let minter = Arc::new(minter_identity());
+    let builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(minter.sender().unwrap())
+        .with_transfer_fee(FEE);
+    let init_args = Encode!(&LedgerArgument::Init(builder.build())).unwrap();
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_with_proptest::<Tokens>(
+        ledger_wasm(),
+        init_args,
+        minter,
+    );
+}
+
 fn get_all_blocks(state_machine: &StateMachine, ledger_id: CanisterId) -> Vec<EncodedBlock> {
     let blocks = get_all_ledger_and_archive_blocks::<Tokens>(state_machine, ledger_id, None, None);
     blocks.into_iter().map(|b| b.encode()).collect()

@@ -717,6 +717,16 @@ where
         self.validate_invariants();
     }
 
+    pub fn set_fee_collector_107(
+        &mut self,
+        timestamp: TimeStamp,
+        fee_collector: &Option<AccountId>,
+    ) {
+        self.process_fee_collector_107(fee_collector);
+        self.latest_block_timestamp = Some(timestamp.as_nanos_since_unix_epoch());
+        self.validate_invariants();
+    }
+
     pub fn verify_balances_and_allowances(
         &self,
         env: &StateMachine,
