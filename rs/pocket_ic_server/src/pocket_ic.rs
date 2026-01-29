@@ -1413,6 +1413,7 @@ impl PocketIcSubnets {
             // Install the ICP index.
             let icp_index_init_arg = IcpIndexInitArg {
                 ledger_id: LEDGER_CANISTER_ID.get().0,
+                retrieve_blocks_from_ledger_interval_seconds: None,
             };
             nns_subnet
                 .state_machine
