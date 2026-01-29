@@ -80,7 +80,8 @@ impl Membership {
         // `sort_unstable` is effectively the same as `sort` but slightly more
         // efficient.
         node_ids.sort_unstable();
-        let mut rng = Csprng::from_random_beacon_and_purpose(previous_beacon, purpose);
+        let seed = Csprng::seed_from_random_beacon(previous_beacon);
+        let mut rng = Csprng::from_seed_and_purpose(seed, purpose);
         node_ids.shuffle(&mut rng);
         Ok(node_ids)
     }

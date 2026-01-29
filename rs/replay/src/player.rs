@@ -13,10 +13,7 @@ use ic_artifact_pool::{
 use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, lookup_replica_version, membership::Membership,
-    pool_reader::PoolReader,
-};
+use ic_consensus_utils::{lookup_replica_version, membership::Membership, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
@@ -56,6 +53,7 @@ use ic_registry_transport::{
     serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
+use ic_types::crypto::crypto_hashable_to_randomness;
 use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
     RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
@@ -759,7 +757,7 @@ impl Player {
                 (
                     last_block.context.registry_version,
                     last_block.context.time + Duration::from_nanos(1),
-                    Randomness::from(crypto_hashable_to_seed(&last_block)),
+                    crypto_hashable_to_randomness(&last_block),
                     last_block.version.clone(),
                 )
             }

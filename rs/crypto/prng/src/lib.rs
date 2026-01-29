@@ -1,9 +1,9 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
 use RandomnessPurpose::*;
 use ic_crypto_internal_seed::Seed;
+use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
-use ic_types::crypto::CryptoHashable;
-use ic_types::{Randomness, crypto::crypto_hash};
+use ic_types::crypto::crypto_hashable_to_randomness;
 use rand::{CryptoRng, Error, RngCore};
 use rand_chacha::ChaCha20Rng;
 use std::fmt;
@@ -30,34 +30,23 @@ pub struct Csprng {
 }
 
 impl Csprng {
-    /// Creates a CSPRNG from the given random beacon for the given purpose.
-    pub fn from_random_beacon_and_purpose(
-        random_beacon: &RandomBeacon,
-        purpose: &RandomnessPurpose,
-    ) -> Self {
-        let seed = Self::seed_from_crypto_hashable(random_beacon);
-        let seed_for_purpose = seed.derive(&purpose.domain_separator());
-        Csprng::from_seed(seed_for_purpose)
-    }
-
     /// Creates a CSPRNG from the given seed for the given purpose.
-    pub fn from_seed_and_purpose(seed: &Randomness, purpose: &RandomnessPurpose) -> Self {
-        let seed = Seed::from_bytes(&seed.get());
+    pub fn from_seed_and_purpose(seed: Seed, purpose: &RandomnessPurpose) -> Self {
         let seed_for_purpose = seed.derive(&purpose.domain_separator());
-        Csprng::from_seed(seed_for_purpose)
-    }
-
-    /// Creates a CSPRNG from the given seed.
-    fn from_seed(seed: ic_crypto_internal_seed::Seed) -> Self {
         Csprng {
-            rng: seed.into_rng(),
+            rng: seed_for_purpose.into_rng(),
         }
     }
 
-    /// Creates a CSPRNG seed from the given crypto hashable.
-    fn seed_from_crypto_hashable<T: CryptoHashable>(crypto_hashable: &T) -> Seed {
-        let hash = crypto_hash(crypto_hashable);
-        Seed::from_bytes(&hash.get().0)
+    /// Creates a seed from the given randomness.
+    pub fn seed_from_randomness(randomness: &Randomness) -> Seed {
+        Seed::from_bytes(&randomness.get())
+    }
+
+    /// Creates a seed from the given random beacon.
+    pub fn seed_from_random_beacon(random_beacon: &RandomBeacon) -> Seed {
+        let randomness = crypto_hashable_to_randomness(random_beacon);
+        Csprng::seed_from_randomness(&randomness)
     }
 }
 

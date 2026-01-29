@@ -43,19 +43,21 @@ fn should_produce_deterministic_randomness_from_random_beacon_and_purpose() {
     fix_replica_version();
 
     let random_beacon = fake_random_beacon(1);
+    let seed = Csprng::seed_from_random_beacon(&random_beacon);
 
-    let mut rng = Csprng::from_random_beacon_and_purpose(&random_beacon, &BlockmakerRanking);
+    let mut rng = Csprng::from_seed_and_purpose(seed, &BlockmakerRanking);
 
     assert_eq!(rng.next_u32(), 1_242_121_839);
 }
 
 #[test]
-fn should_produce_deterministic_randomness_from_seed_and_purpose() {
+fn should_produce_deterministic_randomness_from_randomness_and_purpose() {
     fix_replica_version();
 
-    let seed = seed();
+    let randomness = seed();
+    let crypto_seed = Csprng::seed_from_randomness(&randomness);
 
-    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
+    let mut rng = Csprng::from_seed_and_purpose(crypto_seed, &CommitteeSampling);
 
     assert_eq!(rng.next_u32(), 2_206_231_697);
 }
@@ -63,9 +65,10 @@ fn should_produce_deterministic_randomness_from_seed_and_purpose() {
 #[test]
 fn should_offer_methods_of_rng_trait() {
     use rand::Rng;
-    let seed = seed();
+    let randomness = seed();
+    let crypto_seed = Csprng::seed_from_randomness(&randomness);
 
-    let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
+    let mut rng = Csprng::from_seed_and_purpose(crypto_seed, &CommitteeSampling);
 
     assert_eq!(rng.r#gen::<u32>(), 2_206_231_697);
 }
@@ -75,10 +78,11 @@ fn should_generate_purpose_specific_randomness_for_random_beacon() {
     fix_replica_version();
 
     let rb = random_beacon();
+    let crypto_seed = Csprng::seed_from_random_beacon(&rb);
 
-    let mut rng_cs = Csprng::from_random_beacon_and_purpose(&rb, &CommitteeSampling);
-    let mut rng_br = Csprng::from_random_beacon_and_purpose(&rb, &BlockmakerRanking);
-    let mut rng_et = Csprng::from_random_beacon_and_purpose(&rb, &ExecutionThread(0));
+    let mut rng_cs = Csprng::from_seed_and_purpose(crypto_seed.clone(), &CommitteeSampling);
+    let mut rng_br = Csprng::from_seed_and_purpose(crypto_seed.clone(), &BlockmakerRanking);
+    let mut rng_et = Csprng::from_seed_and_purpose(crypto_seed, &ExecutionThread(0));
 
     let mut set = BTreeSet::new();
     assert!(set.insert(rng_cs.next_u32()));
@@ -91,11 +95,12 @@ fn should_generate_purpose_specific_randomness_for_random_beacon() {
 
 #[test]
 fn should_generate_purpose_specific_randomness_for_randomness_seed() {
-    let seed = seed();
+    let randomness = seed();
+    let crypto_seed = Csprng::seed_from_randomness(&randomness);
 
-    let mut rng_cs = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
-    let mut rng_br = Csprng::from_seed_and_purpose(&seed, &BlockmakerRanking);
-    let mut rng_et = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(0));
+    let mut rng_cs = Csprng::from_seed_and_purpose(crypto_seed.clone(), &CommitteeSampling);
+    let mut rng_br = Csprng::from_seed_and_purpose(crypto_seed.clone(), &BlockmakerRanking);
+    let mut rng_et = Csprng::from_seed_and_purpose(crypto_seed, &ExecutionThread(0));
 
     let mut set = BTreeSet::new();
     assert!(set.insert(rng_cs.next_u32()));
@@ -114,20 +119,26 @@ fn should_produce_different_randomness_for_same_purpose_for_different_random_bea
     assert_ne!(rb1, rb2);
     let purpose = CommitteeSampling;
 
-    let mut csprng1 = Csprng::from_random_beacon_and_purpose(&rb1, &purpose);
-    let mut csprng2 = Csprng::from_random_beacon_and_purpose(&rb2, &purpose);
+    let seed1 = Csprng::seed_from_random_beacon(&rb1);
+    let seed2 = Csprng::seed_from_random_beacon(&rb2);
+
+    let mut csprng1 = Csprng::from_seed_and_purpose(seed1, &purpose);
+    let mut csprng2 = Csprng::from_seed_and_purpose(seed2, &purpose);
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }
 
 #[test]
 fn should_produce_different_randomness_for_same_purpose_for_different_randomness_seeds() {
-    let (s1, s2) = (seed(), seed_2());
-    assert_ne!(s1, s2);
+    let (r1, r2) = (seed(), seed_2());
+    assert_ne!(r1, r2);
     let purpose = CommitteeSampling;
 
-    let mut csprng1 = Csprng::from_seed_and_purpose(&s1, &purpose);
-    let mut csprng2 = Csprng::from_seed_and_purpose(&s2, &purpose);
+    let seed1 = Csprng::seed_from_randomness(&r1);
+    let seed2 = Csprng::seed_from_randomness(&r2);
+
+    let mut csprng1 = Csprng::from_seed_and_purpose(seed1, &purpose);
+    let mut csprng2 = Csprng::from_seed_and_purpose(seed2, &purpose);
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }
@@ -137,23 +148,27 @@ fn should_produce_different_randomness_for_different_execution_threads_for_rando
     fix_replica_version();
 
     let rb = random_beacon();
+    let crypto_seed = Csprng::seed_from_random_beacon(&rb);
     let (thread_1, thread_2) = (1, 2);
     assert_ne!(thread_1, thread_2);
 
-    let mut csprng1 = Csprng::from_random_beacon_and_purpose(&rb, &ExecutionThread(thread_1));
-    let mut csprng2 = Csprng::from_random_beacon_and_purpose(&rb, &ExecutionThread(thread_2));
+    let mut csprng1 =
+        Csprng::from_seed_and_purpose(crypto_seed.clone(), &ExecutionThread(thread_1));
+    let mut csprng2 = Csprng::from_seed_and_purpose(crypto_seed, &ExecutionThread(thread_2));
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }
 
 #[test]
 fn should_produce_different_randomness_for_different_execution_threads_for_randomness_seed() {
-    let seed = seed();
+    let randomness = seed();
+    let crypto_seed = Csprng::seed_from_randomness(&randomness);
     let (thread_1, thread_2) = (1, 2);
     assert_ne!(thread_1, thread_2);
 
-    let mut csprng1 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(thread_1));
-    let mut csprng2 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(thread_2));
+    let mut csprng1 =
+        Csprng::from_seed_and_purpose(crypto_seed.clone(), &ExecutionThread(thread_1));
+    let mut csprng2 = Csprng::from_seed_and_purpose(crypto_seed, &ExecutionThread(thread_2));
 
     assert_ne!(csprng1.next_u32(), csprng2.next_u32());
 }

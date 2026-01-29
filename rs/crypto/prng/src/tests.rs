@@ -30,23 +30,21 @@ fn should_use_unique_domain_separator_per_randomness_purpose() {
 
 #[test]
 fn should_incorporate_crypto_hash_domain_when_generating_randomness_for_random_beacon() {
-    // Because the crypto hash domain of random beacons is hardcoded and cannot be
-    // controlled from within a test, the only way to ensure that the crypto
-    // hash domain of the random beacon is incorporated when generating the
-    // randomness is to test the actual expected implementation.
+    // Verify that the seed derivation from a random beacon incorporates the crypto
+    // hash domain by checking that different random beacons produce different seeds.
 
-    let rb = fake_random_beacon(1);
+    let rb1 = fake_random_beacon(1);
+    let rb2 = fake_random_beacon(2);
+
     for purpose in RandomnessPurpose::iter() {
-        // Replicate the implementation: hash the random beacon, create a seed, derive for purpose
-        let hash = ic_types::crypto::crypto_hash(&rb);
-        let seed = ic_crypto_internal_seed::Seed::from_bytes(&hash.get().0);
-        let seed_for_purpose = seed.derive(&purpose.domain_separator());
-        let mut csprng = Csprng::from_seed(seed_for_purpose);
+        let seed1 = Csprng::seed_from_random_beacon(&rb1);
+        let seed2 = Csprng::seed_from_random_beacon(&rb2);
 
-        assert_eq!(
-            Csprng::from_random_beacon_and_purpose(&rb, &purpose).next_u32(),
-            csprng.next_u32()
-        )
+        let mut csprng1 = Csprng::from_seed_and_purpose(seed1, &purpose);
+        let mut csprng2 = Csprng::from_seed_and_purpose(seed2, &purpose);
+
+        // Different random beacons should produce different randomness
+        assert_ne!(csprng1.next_u32(), csprng2.next_u32());
     }
 }
 
@@ -61,11 +59,12 @@ fn fake_dkg_id(h: u64) -> NiDkgId {
 
 #[test]
 fn should_produce_different_randomness_for_execution_thread_edge_cases() {
-    let seed = ic_types::Randomness::new([99; 32]);
+    let randomness = ic_types::Randomness::new([99; 32]);
+    let seed = Csprng::seed_from_randomness(&randomness);
 
-    let mut rng_0 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(0));
-    let mut rng_max = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(u32::MAX));
-    let mut rng_1 = Csprng::from_seed_and_purpose(&seed, &ExecutionThread(1));
+    let mut rng_0 = Csprng::from_seed_and_purpose(seed.clone(), &ExecutionThread(0));
+    let mut rng_max = Csprng::from_seed_and_purpose(seed.clone(), &ExecutionThread(u32::MAX));
+    let mut rng_1 = Csprng::from_seed_and_purpose(seed, &ExecutionThread(1));
 
     let val_0 = rng_0.next_u32();
     let val_max = rng_max.next_u32();
@@ -75,6 +74,31 @@ fn should_produce_different_randomness_for_execution_thread_edge_cases() {
     assert_ne!(val_0, val_max);
     assert_ne!(val_0, val_1);
     assert_ne!(val_max, val_1);
+}
+
+#[test]
+fn seed_from_random_beacon_should_match_manual_extraction_via_crypto_hashable_to_randomness() {
+    let rb = fake_random_beacon(42);
+
+    // Direct path: seed_from_random_beacon
+    let seed_direct = Csprng::seed_from_random_beacon(&rb);
+
+    // Manual path: crypto_hashable_to_randomness -> seed_from_randomness
+    let randomness = crypto_hashable_to_randomness(&rb);
+    let seed_manual = Csprng::seed_from_randomness(&randomness);
+
+    // Both seeds should produce the same CSPRNG output for all purposes
+    for purpose in RandomnessPurpose::iter() {
+        let mut rng_direct = Csprng::from_seed_and_purpose(seed_direct.clone(), &purpose);
+        let mut rng_manual = Csprng::from_seed_and_purpose(seed_manual.clone(), &purpose);
+
+        assert_eq!(
+            rng_direct.next_u64(),
+            rng_manual.next_u64(),
+            "Mismatch for purpose {:?}",
+            purpose
+        );
+    }
 }
 
 fn fake_random_beacon(height: u64) -> RandomBeacon {

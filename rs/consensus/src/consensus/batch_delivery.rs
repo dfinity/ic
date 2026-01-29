@@ -11,9 +11,7 @@ use ic_consensus_idkg::utils::{
     generate_responses_to_signature_request_contexts,
     get_idkg_subnet_public_keys_and_pre_signatures,
 };
-use ic_consensus_utils::{
-    crypto_hashable_to_seed, membership::Membership, pool_reader::PoolReader,
-};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
 use ic_error_types::RejectCode;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
@@ -28,6 +26,7 @@ use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
+use ic_types::crypto::crypto_hashable_to_randomness;
 use ic_types::{
     Height, PrincipalId, Randomness, SubnetId,
     batch::{
@@ -167,7 +166,7 @@ pub(crate) fn deliver_batches_with_result_processor(
             }
         }
 
-        let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
+        let randomness = crypto_hashable_to_randomness(&tape);
 
         // Retrieve the dkg summary block
         let Some(summary_block) = pool.dkg_summary_block_for_finalized_height(height) else {
