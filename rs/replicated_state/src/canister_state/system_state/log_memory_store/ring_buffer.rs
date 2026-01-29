@@ -88,11 +88,7 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
-    /// Returns the next index to be used.
-    pub fn next_idx(&self) -> u64 {
-        self.io.load_header().next_idx
-    }
-
+    /// Convenience method for adding a single log record in tests.
     #[cfg(test)]
     fn append(&mut self, record: &CanisterLogRecord) {
         self.append_log(vec![record.clone()]);
@@ -308,7 +304,6 @@ mod tests {
 
         assert_eq!(rb.byte_capacity(), data_capacity.get() as usize);
         assert_eq!(rb.bytes_used(), 0);
-        assert_eq!(rb.next_idx(), 0);
     }
 
     #[test]
