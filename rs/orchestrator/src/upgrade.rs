@@ -243,15 +243,9 @@ impl Upgrade {
                                 *self.subnet_assignment.write().unwrap() =
                                     SubnetAssignment::Unassigned;
 
-                                if let Err(err) = self.remove_state().await {
-                                    warn!(
-                                        self.logger,
-                                        "Removal of the node state failed with error {}", err
-                                    );
+                                self.remove_state().await.inspect_err(|_| {
                                     self.metrics.critical_error_state_removal_failed.inc();
-
-                                    return Err(err);
-                                }
+                                })?;
 
                                 return Ok(OrchestratorControlFlow::Unassigned);
                             }
@@ -343,14 +337,9 @@ impl Upgrade {
 
                 self.stop_replica()?;
 
-                if let Err(err) = self.remove_state().await {
-                    warn!(
-                        self.logger,
-                        "Removal of the node state failed with error {}", err
-                    );
+                self.remove_state().await.inspect_err(|_| {
                     self.metrics.critical_error_state_removal_failed.inc();
-                    return Err(err);
-                }
+                })?;
 
                 return Ok(OrchestratorControlFlow::Unassigned);
             }
