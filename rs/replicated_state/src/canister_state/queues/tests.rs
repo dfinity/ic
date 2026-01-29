@@ -1241,9 +1241,8 @@ fn test_split_input_schedules() {
     // After the split we only have `other_1` (and `this`) on the subnet.
     let system_state =
         SystemState::new_running_for_testing(other_1, other_1.get(), Cycles::zero(), 0.into());
-    let scheduler_state = SchedulerState::new(UNIX_EPOCH);
     let local_canisters = btreemap! {
-        other_1 => Arc::new(CanisterState::new(system_state, None, scheduler_state))
+        other_1 => Arc::new(CanisterState::new(system_state, None, SchedulerState::default()))
     };
 
     // Act.

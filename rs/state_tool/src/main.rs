@@ -22,6 +22,10 @@ enum Opt {
     /// Computes partial state hash that is used for certification.
     #[clap(name = "chash")]
     CHash {
+        /// State height of the checkpoint.
+        #[clap(long)]
+        height: u64,
+
         /// Path to a checkpoint.
         #[clap(long = "state")]
         path: PathBuf,
@@ -227,7 +231,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
     let opt = Parser::parse_from(args);
     let result = match opt {
         Opt::CDiff { path_a, path_b } => commands::cdiff::do_diff(path_a, path_b),
-        Opt::CHash { path } => commands::chash::do_hash(path),
+        Opt::CHash { height, path } => commands::chash::do_hash(path, Height::new(height)),
         Opt::ImportState {
             state,
             config,

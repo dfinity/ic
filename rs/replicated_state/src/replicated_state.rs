@@ -765,7 +765,7 @@ impl ReplicatedState {
     /// available canisters.
     pub fn total_compute_allocation(&self) -> u64 {
         self.canisters_iter()
-            .map(|canister| canister.scheduler_state.compute_allocation.as_percent())
+            .map(|canister| canister.system_state.compute_allocation.as_percent())
             .sum()
     }
 

@@ -1,3 +1,4 @@
+use crate::units::GIB as ONE_GIB;
 use candid::{Decode, Encode};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_btc_interface::NetworkInRequest;
@@ -41,7 +42,7 @@ use ic_types::{
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
-use more_asserts::assert_gt;
+use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 use std::mem::size_of;
 use std::sync::Arc;
 
@@ -54,7 +55,6 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -1218,8 +1218,8 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         result
     );
     let controller_balance = test.canister_state(controller).system_state.balance().get();
-    assert!(controller_balance <= 1_u128 << 62);
-    assert!(controller_balance >= (1_u128 << 62) - 100_000_000_000);
+    assert_le!(controller_balance, 1_u128 << 62);
+    assert_ge!(controller_balance, (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -1631,7 +1631,7 @@ fn subnet_split_cleans_in_progress_stop_canister_calls() {
 
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let other_subnet_id = subnet_test_id(13);
-    assert!(own_subnet_id != other_subnet_id);
+    assert_ne!(own_subnet_id, other_subnet_id);
 
     // A no-op subnet split (no canisters migrated).
     Arc::make_mut(&mut test.state_mut().metadata.network_topology.routing_table)
@@ -2412,7 +2412,10 @@ fn ingress_deducts_execution_cost_from_canister_balance() {
     );
     // Ensure that we charged some cycles. The actual value is unknown to us at
     // this point but it is definitely larger that 1000.
-    assert!(execution_cost_after - execution_cost_before > Cycles::new(1_000));
+    assert_gt!(
+        execution_cost_after - execution_cost_before,
+        Cycles::new(1_000)
+    );
 }
 
 #[test]
@@ -3779,8 +3782,8 @@ fn replicated_query_can_burn_cycles() {
     let burned_cycles = *test
         .canister_state(canister_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::BurnedCycles)
         .unwrap();
     assert_eq!(burned_cycles, NominalCycles::from(cycles_to_burn));
@@ -3819,8 +3822,8 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     assert!(
         test.canister_state(canister_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::BurnedCycles)
             .is_none()
     );
@@ -3879,20 +3882,20 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_before_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
-    assert!(transmission_consumption_before_response.get() > 0);
-    assert!(instruction_consumption_before_response.get() > 0);
+    assert_gt!(transmission_consumption_before_response.get(), 0);
+    assert_gt!(instruction_consumption_before_response.get(), 0);
 
     // Check that canister A's balance is decremented for consumed cycles
     // plus transferred cycles to canister B.
@@ -3932,8 +3935,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(a_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         2
     );
@@ -3941,15 +3944,15 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     let transmission_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::RequestAndResponseTransmission)
         .unwrap();
     let instruction_consumption_after_response = *test
         .canister_state(a_id)
         .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
+        .canister_metrics()
+        .consumed_cycles_by_use_cases()
         .get(&CyclesUseCase::Instructions)
         .unwrap();
 
@@ -3966,8 +3969,14 @@ fn test_consumed_cycles_by_use_case_with_refund() {
 
     // Consumed cycles after the response should be smaller than before
     // the response because we expect a refund for prepaid cycles.
-    assert!(transmission_consumption_after_response < transmission_consumption_before_response);
-    assert!(instruction_consumption_after_response < instruction_consumption_before_response);
+    assert_lt!(
+        transmission_consumption_after_response,
+        transmission_consumption_before_response
+    );
+    assert_lt!(
+        instruction_consumption_after_response,
+        instruction_consumption_before_response
+    );
 
     // Check that canister B's balance is updated correctly.
     assert_eq!(
@@ -3979,8 +3988,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
     assert_eq!(
         test.canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .len(),
         1
     );
@@ -3989,8 +3998,8 @@ fn test_consumed_cycles_by_use_case_with_refund() {
         *test
             .canister_state(b_id)
             .system_state
-            .canister_metrics
-            .get_consumed_cycles_by_use_cases()
+            .canister_metrics()
+            .consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::Instructions)
             .unwrap(),
         NominalCycles::from(test.canister_execution_cost(b_id))

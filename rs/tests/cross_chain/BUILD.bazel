@@ -3,14 +3,11 @@ load("//rs/tests:system_tests.bzl", "oci_tar", "system_test", "system_test_nns",
 
 package(default_visibility = ["//rs:system-tests-pkg"])
 
-CANISTER_DATA = [
-    # Keep sorted.
-    "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
-]
-
 system_test_nns(
     name = "ic_xc_ledger_suite_orchestrator_test",
-    data = CANISTER_DATA,
+    runtime_deps = {
+        "LEDGER_SUITE_ORCHESTRATOR_WASM_PATH": "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator_canister.wasm.gz",
+    },
     deps = [
         # Keep sorted.
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
