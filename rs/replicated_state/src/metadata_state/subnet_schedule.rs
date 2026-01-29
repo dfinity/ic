@@ -113,6 +113,7 @@ impl SubnetSchedule {
     }
 
     /// Returns the number of canister priorities in the schedule.
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.priorities.len()
     }
