@@ -70,14 +70,13 @@ members = [
     "rs/crypto",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
+    "rs/crypto/iccsa/test_utils",
     "rs/crypto/interfaces/sig_verification",
     "rs/crypto/internal/crypto_lib/basic_sig/cose",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-    "rs/crypto/internal/crypto_lib/basic_sig/iccsa",
-    "rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
     "rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "rs/crypto/internal/crypto_lib/bls12_381/type",
     "rs/crypto/internal/crypto_lib/bls12_381/vetkd",
@@ -161,6 +160,7 @@ members = [
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/partition_tools",
+    "rs/ic_os/command_runner",
     "rs/ic_os/config/tool",
     "rs/ic_os/config/types",
     "rs/ic_os/config/types/compatibility_tests",
@@ -734,6 +734,7 @@ minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
+more-asserts = "0.3.1"
 nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"

@@ -116,8 +116,8 @@ fn subnet_splitting_test(env: TestEnv) {
 
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    set_sandbox_env_vars();
 
     //
     // 2. Do subnet splitting
