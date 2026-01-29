@@ -1275,10 +1275,14 @@ mod submit_pending_requests {
     use crate::test_fixtures::mock::{MockCanisterRuntime, mock_increasing_time};
     use crate::test_fixtures::{
         NOW, bitcoin_address, bitcoin_fee_estimator, ecdsa_public_key, init_state, ledger_account,
-        minter_address, signed_raw_transaction, utxo,
+        minter, minter_address, other_signed_raw_transaction, signed_raw_transaction, utxo,
     };
     use crate::tx::FeeRate;
-    use crate::{CanisterRuntime, submit_pending_requests};
+    use crate::{
+        CanisterRuntime, GetUtxosResponse, MIN_RESUBMISSION_DELAY, Network, finalize_requests,
+        submit_pending_requests,
+    };
+    use maplit::btreemap;
     use std::time::Duration;
 
     #[tokio::test]
@@ -1320,10 +1324,12 @@ mod submit_pending_requests {
             .times(2)
             .return_const(bitcoin_fee_estimator());
 
+        let signed_tx = signed_raw_transaction();
+        let signed_txid = signed_tx.txid();
         runtime
             .expect_sign_transaction()
             .times(1)
-            .return_const(Ok(signed_raw_transaction()));
+            .return_const(Ok(signed_tx));
 
         runtime
             .expect_send_raw_transaction()
@@ -1345,14 +1351,96 @@ mod submit_pending_requests {
                 s.available_utxos,
                 UtxoSet::default(),
                 "BUG: UTXOs should be unavailable after signing"
-            )
+            );
+            assert!(s.stuck_transactions.is_empty());
+            assert!(s.replacement_txid.is_empty());
+            assert!(s.rev_replacement_txid.is_empty());
+            assert_eq!(s.submitted_transactions.len(), 1);
         });
 
         let last_time = runtime.time();
         runtime.checkpoint();
         mock_increasing_time(&mut runtime, (last_time + 1).into(), Duration::from_secs(1));
 
+        // nothing to do
         submit_pending_requests(&runtime).await;
+        runtime.checkpoint();
+
+        mock_increasing_time(
+            &mut runtime,
+            (last_time + MIN_RESUBMISSION_DELAY.as_nanos() as u64 + 1).into(),
+            Duration::from_secs(1),
+        );
+        runtime
+            .expect_block_time()
+            .times(1)
+            .return_const(Duration::from_secs(600));
+
+        runtime.expect_id().times(1).return_const(minter());
+        runtime
+            .expect_derive_minter_address()
+            .times(1)
+            .return_const(minter_address());
+        runtime
+            .expect_derive_minter_address_str()
+            .times(1)
+            .return_const(minter_address().display(Network::Mainnet));
+        runtime
+            .expect_get_utxos()
+            .times(2)
+            .return_const(Ok(GetUtxosResponse {
+                utxos: vec![],
+                tip_height: 0,
+                next_page: None,
+            }));
+
+        runtime
+            .expect_get_current_fee_percentiles()
+            .times(1)
+            .return_const(Ok([FeeRate::from_millis_per_byte(1_500); 100].to_vec()));
+        runtime
+            .expect_fee_estimator()
+            .times(2)
+            .return_const(bitcoin_fee_estimator());
+
+        let resubmitted_tx = other_signed_raw_transaction();
+        let resubmitted_txid = resubmitted_tx.txid();
+        runtime
+            .expect_sign_transaction()
+            .times(1)
+            .return_const(Ok(resubmitted_tx));
+
+        runtime
+            .expect_send_raw_transaction()
+            .times(1)
+            .return_const(Ok(()));
+
+        runtime.expect_event_logger().return_const(CkBtcEventLogger);
+
+        finalize_requests(&runtime).await;
+
+        read_state(|s| {
+            assert_eq!(
+                s.pending_retrieve_btc_requests,
+                vec![],
+                "BUG: all withdrawal requests are in processing"
+            );
+            assert_eq!(
+                s.available_utxos,
+                UtxoSet::default(),
+                "BUG: UTXOs should be unavailable after signing"
+            );
+            assert_eq!(s.stuck_transactions.len(), 1);
+            assert_eq!(
+                s.replacement_txid,
+                btreemap! { signed_txid => resubmitted_txid }
+            );
+            assert_eq!(
+                s.rev_replacement_txid,
+                btreemap! { resubmitted_txid => signed_txid }
+            );
+            assert_eq!(s.submitted_transactions.len(), 1);
+        });
     }
 
     fn init_state_with_ecdsa_public_key() {
