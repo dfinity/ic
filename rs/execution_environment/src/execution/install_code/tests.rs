@@ -1,3 +1,4 @@
+use crate::units::{KIB, MIB};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
@@ -31,10 +32,6 @@ use std::mem::size_of;
 use std::sync::Arc;
 
 const WASM_EXECUTION_MODE: WasmExecutionMode = WasmExecutionMode::Wasm32;
-
-const KIB: u64 = 1024;
-const MIB: u64 = 1024 * KIB;
-
 const DEFAULT_LOG_MEMORY_STORE_USAGE: u64 = PAGE_SIZE as u64;
 
 const DTS_INSTALL_WAT: &str = r#"
