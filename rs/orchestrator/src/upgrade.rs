@@ -1089,7 +1089,7 @@ mod tests {
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::add_subnet_list_record;
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_list_record};
     use ic_test_utilities_types::ids::{NODE_1, SUBNET_1, node_test_id, subnet_test_id};
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTargetId;
     use ic_types::{
@@ -1307,14 +1307,13 @@ mod tests {
         data_provider: &ProtoRegistryDataProvider,
         registry_version: RegistryVersion,
         subnet_id: SubnetId,
-        membership: impl IntoIterator<Item = NodeId>,
+        membership: impl AsRef<[NodeId]>,
         replica_version: &ReplicaVersion,
     ) {
-        let subnet_record = SubnetRecord {
-            membership: membership.into_iter().map(|id| id.get().to_vec()).collect(),
-            replica_version_id: replica_version.to_string(),
-            ..Default::default()
-        };
+        let subnet_record = SubnetRecordBuilder::new()
+            .with_membership(membership.as_ref())
+            .with_replica_version(replica_version.as_ref())
+            .build();
 
         data_provider
             .add(
