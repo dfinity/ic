@@ -501,7 +501,7 @@ fn invalidate_ed25519_pubkey(key: &mut Vec<u8>) {
     assert_eq!(key.len(), 32);
 
     let mut key_arr = [0u8; 32];
-    key_arr.copy_from_slice(&key);
+    key_arr.copy_from_slice(key);
 
     use curve25519_dalek::edwards::CompressedEdwardsY;
     let point_of_prime_order = CompressedEdwardsY(key_arr).decompress().unwrap();
