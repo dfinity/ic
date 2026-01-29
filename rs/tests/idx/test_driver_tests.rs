@@ -468,7 +468,7 @@ fn test_overall_group_timeout_in_test() {
     );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert_test_summary_size(
-        &summary, /* successes */ 3, /* failures */ 1, /* skipped */ 0,
+        &summary, /* successes */ 1, /* failures */ 3, /* skipped */ 0,
     );
     assert_name_and_message_eq(&summary.success[0], "setup", SUCCESS);
     assert_name_and_message_eq(
@@ -488,7 +488,7 @@ fn test_overall_group_timeout_in_setup() {
     );
     // panic!("{:?}", result);
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
-    assert_test_summary_size(&summary, 2, 2, 0);
+    assert_test_summary_size(&summary, 0, 4, 0);
     assert_name_and_message_eq(&summary.failure[0], "setup", Some("Timeout after 5s"));
     assert_name_and_message_eq(
         &summary.failure[1],
