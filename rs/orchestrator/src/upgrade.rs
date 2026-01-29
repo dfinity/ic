@@ -182,9 +182,11 @@ impl Upgrade {
     /// 1. Determining whether we are assigned to a subnet or unassigned. The field
     ///    `self.subnet_assignment` is updated accordingly for other tasks of the orchestrator to
     ///    use.
-    /// 2. Downloading and upgrading to a new replica version if necessary.
-    /// 3. Launching the replica process if assigned to a subnet.
-    /// 4. Stopping the replica process and removing the node state if leaving the subnet.
+    /// 2. Detecting if a recovery is taking place (i.e. there is a CUP in the registry with higher
+    ///    height than any available).
+    /// 3. Downloading and upgrading to a new replica version if necessary.
+    /// 4. Launching the replica process if assigned to a subnet.
+    /// 5. Stopping the replica process and removing the node state if leaving the subnet.
     pub(crate) async fn check(&mut self) -> OrchestratorResult<OrchestratorControlFlow> {
         let latest_registry_version = self.registry.get_latest_version();
 
