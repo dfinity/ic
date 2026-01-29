@@ -135,6 +135,7 @@ pub struct ICOSSettings {
     /// TODO: Remove after HostOS is upgraded and `node_operator_private_key` is used
     #[serde(default)]
     pub use_node_operator_private_key: bool,
+    /// PEM-encoded Node Operator private key
     pub node_operator_private_key: Option<String>,
     /// Whether SEV-SNP should be enabled. This is configured when the machine is deployed.
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
@@ -234,7 +235,8 @@ pub struct GuestOSDevSettings {
     /// Generate and inject a self-signed TLS certificate and key for ic-boundary
     /// for the given domain name. To be used in system tests only.
     pub generate_ic_boundary_tls_cert: Option<String>,
-    /// Overrides the hardcoded NNS public key
+    /// PEM-encoded NNS public key.
+    /// Overrides the hardcoded NNS public key on the rootfs.
     pub nns_pub_key_override: Option<String>,
 }
 

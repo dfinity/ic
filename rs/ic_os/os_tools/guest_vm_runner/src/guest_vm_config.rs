@@ -17,6 +17,8 @@ const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
 
+const NODE_OPERATOR_PRIVATE_KEY_PATH: &str = "/boot/config/node_operator_private_key.pem";
+
 #[cfg(not(feature = "dev"))]
 const DEFAULT_VM_MEMORY_GB: u32 = 480;
 #[cfg(not(feature = "dev"))]
@@ -67,7 +69,13 @@ fn make_bootstrap_options(
 ) -> Result<BootstrapOptions> {
     #[allow(unused_mut)]
     let mut bootstrap_options = BootstrapOptions {
-        guestos_config: Some(guestos_config),
+        guestos_config: Some(guestos_config.clone()),
+        // If the node operator private key isn't provided in the config,
+        // which is the case for the legacy SetupOS-based versions,
+        // try to load the key from the file.
+        // Config takes precedence if both are present, which
+        // should never be the case.
+        node_operator_private_key: Some(PathBuf::from(NODE_OPERATOR_PRIVATE_KEY_PATH)),
         ..Default::default()
     };
 
@@ -206,6 +214,30 @@ mod tests {
 
     #[test]
     fn test_make_bootstrap_options() {
+        let mut config = create_test_hostos_config();
+        config.icos_settings.use_ssh_authorized_keys = true;
+
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
+
+        let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
+
+        assert_eq!(
+            options,
+            BootstrapOptions {
+                guestos_config: Some(guestos_config),
+                node_operator_private_key: Some(PathBuf::from(NODE_OPERATOR_PRIVATE_KEY_PATH)),
+                #[cfg(feature = "dev")]
+                accounts_ssh_authorized_keys: Some(PathBuf::from(
+                    "/boot/config/ssh_authorized_keys"
+                )),
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_make_bootstrap_options_operator_key_from_file() {
         let mut config = create_test_hostos_config();
         config.icos_settings.use_ssh_authorized_keys = true;
 
