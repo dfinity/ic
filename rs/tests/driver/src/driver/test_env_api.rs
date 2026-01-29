@@ -1575,13 +1575,13 @@ pub trait SshSession: HasTestEnv {
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        tokio::task::spawn_blocking(move || execute_bash_script_from_session(session, script))
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, script))
             .await
             .expect("Executing bash script task panicked")
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        execute_bash_script_from_session(session, script)
+        execute_bash_script_from_session(&session, script)
     }
 
     /// Is it accessible via ssh with the `admin` user.
