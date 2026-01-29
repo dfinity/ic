@@ -975,6 +975,10 @@ impl StateManager for StateMachineStateManager {
             .remove_inmemory_states_below(height, extra_heights_to_keep)
     }
 
+    fn update_fast_forward_height(&self, height: Height) {
+        self.deref().update_fast_forward_height(height);
+    }
+
     fn commit_and_certify(
         &self,
         state: ReplicatedState,

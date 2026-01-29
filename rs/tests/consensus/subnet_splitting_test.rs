@@ -93,6 +93,13 @@ fn setup(env: TestEnv) {
 }
 
 fn subnet_splitting_test(env: TestEnv) {
+    // System tests receive paths relative to the RUNFILES. These need to be translated to absolute
+    // paths for the underlying tools (and the environment variable name needs to be adapted).
+    set_var_to_path(
+        "IC_ADMIN_BIN",
+        get_dependency_path_from_env("IC_ADMIN_PATH"),
+    );
+
     //
     // 1. Prepare for subnet splitting
     //
@@ -116,8 +123,8 @@ fn subnet_splitting_test(env: TestEnv) {
 
     let upload_node_destination = prepare_destination_subnet(&destination_subnet, &logger);
 
-    let recovery_dir = get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
+    set_sandbox_env_vars();
 
     //
     // 2. Do subnet splitting
