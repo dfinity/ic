@@ -144,6 +144,7 @@ fn install_ledger(
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = ic_icp_index::InitArg {
         ledger_id: ledger_id.into(),
+        retrieve_blocks_from_ledger_interval_seconds: None,
     };
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
