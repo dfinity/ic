@@ -326,11 +326,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Total number of instructions consumed during the last upgrade.",
     )?;
     w.encode_counter(
-        "ledger_stable_upgrade_migration_steps",
-        stable_upgrade_migration_steps as f64,
-        "Number of steps used to migrate data to stable structures.",
-    )?;
-    w.encode_counter(
         "total_volume",
         TOTAL_VOLUME.with(|n| *n.borrow()),
         "Total volume of ledger transactions.",
