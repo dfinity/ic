@@ -570,9 +570,9 @@ def boot_image(
     idrac_script_dir: Path,
     file_share_ssh_key: Optional[str] = None,
     check_hsm: bool = False,
-    ship_checks: bool = False,
+    skip_checks: bool = False,
 ):
-    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm, ship_checks)
+    result = deploy_server(bmc_info, wait_time_mins, idrac_script_dir, file_share_ssh_key, check_hsm, skip_checks)
 
     log.info("Deployment summary:")
     log.info(result)

@@ -848,18 +848,22 @@ dependencies = [
  "attestation_testing",
  "candid",
  "der 0.7.9",
+ "getrandom 0.2.15",
  "hex",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-types",
+ "ic-utils 0.9.0",
+ "ic-utils-rustfmt",
  "itertools 0.12.1",
  "prost 0.13.4",
  "prost-build 0.13.4",
  "rand 0.8.5",
- "ring",
  "serde",
  "sev",
+ "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.17",
 ]
 
@@ -9969,6 +9973,7 @@ dependencies = [
  "ic-config",
  "ic-error-types 0.2.0",
  "ic-http-endpoints-async-utils",
+ "ic-https-outcalls-pricing",
  "ic-https-outcalls-service",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -10022,6 +10027,13 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+]
+
+[[package]]
+name = "ic-https-outcalls-pricing"
+version = "0.9.0"
+dependencies = [
+ "ic-types",
 ]
 
 [[package]]
@@ -12751,7 +12763,9 @@ dependencies = [
 name = "ic-registry-canister-api"
 version = "0.9.0"
 dependencies = [
+ "attestation",
  "candid",
+ "der 0.7.9",
  "ic-base-types",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
@@ -13368,6 +13382,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "maplit",
+ "more-asserts",
  "nix 0.24.3",
  "phantom_newtype",
  "prometheus",
@@ -18830,10 +18845,13 @@ dependencies = [
  "assert_matches",
  "async-stream",
  "async-trait",
+ "attestation",
  "backoff",
  "candid",
  "clap 4.5.27",
  "config_tool",
+ "config_types",
+ "der 0.7.9",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -18891,6 +18909,7 @@ dependencies = [
  "indoc 1.0.9",
  "mockall",
  "nix 0.24.3",
+ "pem 3.0.6",
  "prometheus",
  "prost 0.13.4",
  "qrcode",
@@ -18900,6 +18919,8 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "sev",
+ "sev_guest",
  "slog",
  "slog-async",
  "strum 0.26.3",
@@ -20903,12 +20924,14 @@ name = "registry-canister"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "attestation",
  "build-info",
  "build-info-build",
  "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
+ "der 0.7.9",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",
