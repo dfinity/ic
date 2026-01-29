@@ -692,12 +692,11 @@ fn test_automated_node_provider_remuneration() {
     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
         to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
     }));
-    let average_type3_reward = (2.0 * 907_000.0 + 3.0 * 103_000.0) / 5.0;
-    let average_type3_reduced_rewards = (average_type3_reward
-        + 0.8 * average_type3_reward
-        + 0.8 * 0.8 * average_type3_reward
-        + 0.8 * 0.8 * 0.8 * average_type3_reward
-        + 0.8 * 0.8 * 0.8 * 0.8 * average_type3_reward)
+    let average_type3_reduced_rewards = (907_000.0
+        + 0.8 * 907_000.0
+        + 0.8 * 0.8 * 103_000.0
+        + 0.8 * 0.8 * 0.8 * 103_000.0
+        + 0.8 * 0.8 * 0.8 * 0.8 * 103_000.0)
         / 5.0;
 
     let expected_daily_rewards_xdrp_3 =
@@ -705,11 +704,6 @@ fn test_automated_node_provider_remuneration() {
     let expected_rewards_e8s_3 =
         expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
-    if expected_reward_days_covered_1 == 30 {
-        assert_eq!(expected_rewards_e8s_3, 1205206451);
-    } else {
-        assert_eq!(expected_rewards_e8s_3, 1245380000);
-    }
     let expected_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
         amount_e8s: expected_rewards_e8s_3,
