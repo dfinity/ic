@@ -103,7 +103,7 @@ mod delegation_chain {
             assert_matches!(
                 pk.verify_signature(
                     &delegation.delegation().as_signed_bytes(),
-                    &delegation.signature()
+                    delegation.signature()
                 ),
                 Ok(())
             );
