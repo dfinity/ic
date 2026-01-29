@@ -69,7 +69,11 @@ system_test_nns(
         "system_test_large",
     ],
     test_timeout = "eternal",
-    runtime_deps = RUNTIME_DEPS,
+    runtime_deps = RUNTIME_DEPS | {
+        # Different parts of the codebase expect different variable names
+        "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
+        "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
+    },
     deps = [
         # Keep sorted.
         ":common",
