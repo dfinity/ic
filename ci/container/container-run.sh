@@ -126,6 +126,8 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
     fi
 fi
 
+echo "Using container command: ${CONTAINER_CMD[*]}"
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 IMAGE_TAG=$("$REPO_ROOT"/ci/container/get-image-tag.sh)
 IMAGE="ghcr.io/dfinity/$IMAGE_NAME:$IMAGE_TAG"
@@ -257,6 +259,13 @@ fi
 # Privileged rootful podman is required due to requirements of IC-OS guest build;
 # additionally, we need to use hosts's cgroups and network.
 OTHER_ARGS=(--pids-limit=-1 -i $tty_arg --log-driver=none --rm --privileged --network=host --cgroupns=host)
+
+if [ -f "$HOME/.container-run.conf" ]; then
+    # conf file with user's custom PODMAN_RUN_USR_ARGS
+    eprintln "Sourcing user's ~/.container-run.conf"
+    source "$HOME/.container-run.conf"
+    PODMAN_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
+fi
 
 set -x
 exec "${CONTAINER_CMD[@]}" run "${OTHER_ARGS[@]}" "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "${cmd[@]}"

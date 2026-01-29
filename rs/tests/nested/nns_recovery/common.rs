@@ -235,7 +235,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_version = get_guestos_update_img_version();
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
     std::fs::write(
         env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
         serde_json::to_string(&guest_launch_measurements).unwrap(),
@@ -334,7 +334,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(current_version),
+        replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -514,8 +514,9 @@ async fn simulate_node_provider_action(
         build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
 
     // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
     let script = format!(
-        r#"echo -e "rbash-console\n{}\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
         recovery_upgrader_cmd
     );
 
@@ -579,10 +580,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
-        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
-        // IC_ADMIN_BIN to a dummy value.
-        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
+        r#"/opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );
