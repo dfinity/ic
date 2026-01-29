@@ -60,7 +60,9 @@ impl PartialEq for SubnetAssignment {
             (SubnetAssignment::Unknown, SubnetAssignment::Unknown) => false,
             (SubnetAssignment::Unassigned, SubnetAssignment::Unassigned) => true,
             (SubnetAssignment::Assigned(sid1), SubnetAssignment::Assigned(sid2)) => sid1 == sid2,
-            _ => false,
+            (SubnetAssignment::Unknown, _) => false,
+            (SubnetAssignment::Unassigned, _) => false,
+            (SubnetAssignment::Assigned(_), _) => false,
         }
     }
 }
