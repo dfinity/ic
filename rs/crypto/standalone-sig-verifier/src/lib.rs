@@ -26,6 +26,14 @@ pub fn verify_basic_sig_by_public_key(
                 }
             })?;
 
+            if sig.len() != ic_ed25519::SIGNATURE_BYTES {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::Ed25519,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
+
             pk.verify_signature(msg, sig)
                 .map_err(|e| CryptoError::SignatureVerification {
                     algorithm: AlgorithmId::Ed25519,
@@ -42,6 +50,14 @@ pub fn verify_basic_sig_by_public_key(
                     internal_error: format!("{e:?}"),
                 }
             })?;
+
+            if sig.len() != 64 {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::EcdsaP256,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
 
             if pk.verify_signature(msg, sig) {
                 Ok(())
@@ -62,6 +78,14 @@ pub fn verify_basic_sig_by_public_key(
                     internal_error: format!("{e:?}"),
                 }
             })?;
+
+            if sig.len() != 64 {
+                return Err(CryptoError::MalformedSignature {
+                    algorithm: AlgorithmId::EcdsaSecp256k1,
+                    sig_bytes: sig.to_vec(),
+                    internal_error: "Invalid length".to_string(),
+                });
+            }
 
             if pk.verify_signature(msg, sig) {
                 Ok(())
