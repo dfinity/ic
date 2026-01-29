@@ -333,15 +333,8 @@ impl SystemStateModifications {
         is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
-        // Append non-empty delta logs unconditionally.
-        //if !self.canister_log.is_empty() {
+        // Append non-empty delta logs.
         let log_memory_store = &mut system_state.log_memory_store;
-        // // Resize log_memory_store if needed.
-        // let limit = system_state.log_memory_limit.get() as usize;
-        // if log_memory_store.byte_capacity() != limit {
-        //     log_memory_store.set_log_memory_limit(limit);
-        // }
-
         if log_memory_store.is_allocated() {
             // TODO(DSM-11): cleanup population logic after migration is done.
             // We need to copy existing canister_log to log_memory_store in order
@@ -357,7 +350,6 @@ impl SystemStateModifications {
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
-        //}
 
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id() == CYCLES_MINTING_CANISTER_ID)?;
