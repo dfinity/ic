@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
