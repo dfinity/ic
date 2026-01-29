@@ -26,6 +26,7 @@ fn default_init_args() -> InitArgs {
     InitArgs {
         btc_network: ic_ckbtc_minter::Network::Mainnet,
         ecdsa_key_name: "".to_string(),
+        deposit_btc_min_amount: None,
         retrieve_btc_min_amount: 0,
         ledger_id: CanisterId::from_u64(42),
         max_time_in_queue_nanos: 0,

@@ -13,9 +13,7 @@ ic-consensus-idkg = { path = "./idkg" }
 ic-consensus-dkg = { path = "./dkg" }
 ic-consensus-utils = { path = "./utils" }
 ic-consensus-vetkd = { path = "./vetkd" }
-ic-crypto = { path = "../crypto" }
 ic-crypto-prng = { path = "../crypto/prng" }
-ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
@@ -32,7 +30,6 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-types = { path = "../types/types" }
 num-traits = { workspace = true }
-phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
