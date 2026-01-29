@@ -1582,7 +1582,7 @@ pub trait SshSession: HasTestEnv {
     }
 
     fn block_on_bash_script_from_session(&self, session: &Session, script: &str) -> Result<String> {
-        execute_bash_script_from_session(&session, script)
+        execute_bash_script_from_session(session, script)
     }
 
     /// Is it accessible via ssh with the `admin` user.
