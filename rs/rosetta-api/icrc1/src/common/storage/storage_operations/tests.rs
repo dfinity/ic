@@ -54,6 +54,7 @@ fn create_test_rosetta_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
@@ -108,6 +109,7 @@ fn create_test_approve_block(
         effective_fee: None,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     };
 
     RosettaBlock {
@@ -439,6 +441,20 @@ fn test_fee_collector_resolution_and_repair() -> anyhow::Result<()> {
     // Manually create broken balances (missing fee collector credits for block 2)
     connection.execute("DELETE FROM account_balances", params![])?;
 
+    // Insert metadata that needs to be cleared
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![METADATA_BLOCK_IDX, 100_000_000u64.to_le_bytes()],
+    )?;
+    let no_fee_col: Option<Account> = None;
+    connection.execute(
+        "INSERT INTO rosetta_metadata (key, value) VALUES (?1, ?2)",
+        params![
+            METADATA_FEE_COL,
+            candid::encode_one(no_fee_col).expect("failed to encode fee collector")
+        ],
+    )?;
+
     // Correct balances for mint and block 1
     connection.execute("INSERT INTO account_balances (block_idx, principal, subaccount, amount) VALUES (0, ?1, ?2, '1000000000')",
         params![from_account.owner.as_slice(), from_account.effective_subaccount().as_slice()])?;
@@ -662,4 +678,41 @@ fn test_schema_version_next() -> anyhow::Result<()> {
     };
 
     Ok(())
+}
+
+#[test]
+fn test_get_blocks_by_index_range_returns_ascending_order() {
+    let temp_dir = tempdir().expect("create temp dir should succeed");
+    let db_path = temp_dir.path().join("test_blocks_order.sqlite");
+    let mut connection = Connection::open(&db_path).expect("open db should succeed");
+    schema::create_tables(&connection).expect("create tables should succeed");
+
+    let principal = vec![1, 2, 3, 4];
+    let account = Account {
+        owner: Principal::from_slice(&principal),
+        subaccount: None,
+    };
+
+    let mut block0 = create_test_rosetta_block(0, 1000000000, &principal, 100);
+    block0.block.transaction.operation = IcrcOperation::Mint {
+        to: account,
+        amount: Nat::from(100u64),
+        fee: None,
+    };
+
+    let mut block1 = create_test_rosetta_block(1, 1000000001, &principal, 100);
+    block1.block.transaction.operation = IcrcOperation::Mint {
+        to: account,
+        amount: Nat::from(100u64),
+        fee: None,
+    };
+
+    store_blocks(&mut connection, vec![block0, block1]).expect("store blocks should succeed");
+
+    let retrieved = get_blocks_by_index_range(&connection, 0, 1)
+        .expect("get blocks by index range should succeed");
+
+    assert_eq!(retrieved.len(), 2);
+    assert_eq!(retrieved[0].index, 0);
+    assert_eq!(retrieved[1].index, 1);
 }

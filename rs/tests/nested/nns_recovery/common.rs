@@ -65,6 +65,8 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
+const GUEST_LAUNCH_MEASUREMENTS_PATH: &str = "guest_launch_measurements.json";
+
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
     pub subnet_size: usize,
@@ -234,6 +236,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let upgrade_image_url = get_guestos_update_img_url();
     let upgrade_image_hash = get_guestos_update_img_sha256();
     let guest_launch_measurements = get_guestos_launch_measurements();
+    std::fs::write(
+        env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH),
+        serde_json::to_string(&guest_launch_measurements).unwrap(),
+    )
+    .expect("Could not write guest launch measurements to file");
     if !cfg.add_and_bless_upgrade_version {
         // If ic-recovery does not add/bless the new version to the registry, then we must bless it now.
         block_on(bless_replica_version(
@@ -246,9 +253,9 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         ));
     }
 
-    let recovery_dir = get_dependency_path("rs/tests");
+    set_sandbox_env_vars();
+
     let output_dir = env.get_path("recovery_output");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
@@ -323,6 +330,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &admin_auth,
     );
 
+    let recovery_dir = tempdir().unwrap().path().to_path_buf();
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
@@ -340,6 +348,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         upgrade_version: Some(upgrade_version.clone()),
         upgrade_image_url: Some(upgrade_image_url),
         upgrade_image_hash: Some(upgrade_image_hash),
+        upgrade_image_launch_measurements_path: Some(env.get_path(GUEST_LAUNCH_MEASUREMENTS_PATH)),
         add_and_bless_upgrade_version: Some(cfg.add_and_bless_upgrade_version),
         replay_until_height: Some(highest_cert_share),
         download_pool_node: Some(download_pool_node.get_ip_addr()),
@@ -489,19 +498,30 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
+    // Run guestos-recovery-upgrader via limited-console's rbash-console
+    // This tests the backup recovery path that node providers can use if the recovery TUI fails.
+    //
+    // Flow: SSH as admin → su to limited-console user → rbash-console → sudo recovery-launcher
     info!(
         logger,
-        "Running guestos-recovery-upgrader on GuestOS {} with version={}, recovery-hash-prefix={}",
+        "Running guestos-recovery-upgrader via rbash-console on HostOS {} with version={}, recovery-hash-prefix={}",
         host.vm_name(),
         img_version,
         recovery_hash_prefix,
     );
-    let recovery_upgrader_command =
+
+    let recovery_upgrader_cmd =
         build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
-    host.block_on_bash_script_async(&recovery_upgrader_command)
+
+    // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    let script = format!(
+        r#"echo -e "rbash-console\n{}\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        recovery_upgrader_cmd
+    );
+
+    host.block_on_bash_script_async(&script)
         .await
-        .expect("Failed to run guestos-recovery-upgrader");
+        .expect("Failed to run guestos-recovery-upgrader via rbash-console");
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
@@ -559,7 +579,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
+        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
+        // IC_ADMIN_BIN to a dummy value.
+        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );

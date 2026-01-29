@@ -146,7 +146,7 @@ system_test_nns(
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -169,7 +169,7 @@ system_test_nns(
         "IC_ICRC1_LEDGER_WASM_PATH": "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -191,7 +191,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -232,7 +232,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -276,7 +276,7 @@ system_test_nns(
         "II_WASM_PATH": "@ii_dev_canister//file",
         "NNS_DAPP_WASM_PATH": "@nns_dapp_canister//file",
         "SNS_AGGREGATOR_WASM_PATH": "@sns_aggregator//file",
-        "SUBNET_RENTAL_WASM_PATH": "@subnet_rental_canister//file",
+        "SUBNET_RENTAL_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
     },
     deps = [
         # Keep sorted.
@@ -297,11 +297,11 @@ system_test_nns(
     name = "nns_recovery",
     enable_metrics = True,
     guestos_update = "test",
+    setupos = True,
     tags = [
         "dynamic_testnet",
         "manual",
     ],
-    uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.

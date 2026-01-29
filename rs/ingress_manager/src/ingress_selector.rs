@@ -177,10 +177,10 @@ impl IngressSelector for IngressManager {
                 // For a given canister, add valid ingress messsages until quota is met
                 let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
                 while let Some(msg) = queue.msgs.last() {
-                    let ingress = &msg.msg.signed_ingress;
+                    let ingress = &msg.msg;
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
-                        ingress,
+                        &ingress.signed_ingress,
                         &state,
                         context,
                         &settings,
@@ -202,7 +202,7 @@ impl IngressSelector for IngressManager {
                     };
 
                     let (ingress_wire_size, ingress_memory_size) =
-                        self.message_size_estimates(ingress);
+                        self.message_size_estimates(&ingress.signed_ingress);
 
                     // Break criterion #1: global byte limit
                     if accumulated_wire_size + ingress_wire_size > wire_byte_limit
@@ -268,7 +268,13 @@ impl IngressSelector for IngressManager {
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
+            let payload = IngressPayload::from_iter(messages_in_payload.iter().map(|ingress| {
+                (
+                    IngressMessageId::from(*ingress),
+                    ingress.signed_ingress.clone(),
+                )
+            }));
+
             let (wire_size, memory_size) = self.payload_size_estimates(&payload);
 
             if wire_size <= wire_byte_limit && memory_size <= memory_byte_limit {
@@ -555,7 +561,6 @@ impl IngressManager {
                         *cumulative_ingress_cost + ingress_cost,
                         canister.memory_usage(),
                         canister.message_memory_usage(),
-                        canister.scheduler_state.compute_allocation,
                         subnet_size,
                         state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance

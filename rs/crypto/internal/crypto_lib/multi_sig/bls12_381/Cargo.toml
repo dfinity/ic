@@ -21,7 +21,11 @@ serde = { workspace = true }
 zeroize = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
+ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
+ic-types = { path = "../../../../../types/types" }
 proptest = { workspace = true }
 serde_cbor = { workspace = true }

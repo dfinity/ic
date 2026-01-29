@@ -57,13 +57,6 @@ impl RingBuffer {
         Self { io }
     }
 
-    /// Loads a raw ring buffer from given `page_map` without validating its contents.
-    pub fn load_raw(page_map: PageMap) -> Self {
-        Self {
-            io: StructIO::new(page_map),
-        }
-    }
-
     /// Returns an existing ring buffer if present.
     pub fn load_checked(page_map: PageMap) -> Option<Self> {
         let io = StructIO::new(page_map);

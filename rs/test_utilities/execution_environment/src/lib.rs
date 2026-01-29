@@ -429,10 +429,7 @@ impl ExecutionTest {
             .canister_state(canister_id)
             .system_state
             .memory_allocation;
-        let compute_allocation = self
-            .canister_state(canister_id)
-            .scheduler_state
-            .compute_allocation;
+        let compute_allocation = self.canister_state(canister_id).compute_allocation();
         let message_memory_usage = self.canister_state(canister_id).message_memory_usage();
         self.cycles_account_manager.idle_cycles_burned_rate(
             memory_allocation,
@@ -449,7 +446,7 @@ impl ExecutionTest {
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
-        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let compute_allocation = canister.compute_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
         self.cycles_account_manager.freeze_threshold_cycles(
             freeze_threshold,
@@ -2117,6 +2114,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_scheduler_cores(mut self, scheduler_cores: usize) -> Self {
+        self.subnet_config.scheduler_config.scheduler_cores = scheduler_cores;
+        self
+    }
+
     pub fn with_instruction_limit(mut self, limit: u64) -> Self {
         self.subnet_config
             .scheduler_config
@@ -2428,6 +2430,18 @@ impl ExecutionTestBuilder {
         environment_variables_flag: FlagStatus,
     ) -> Self {
         self.execution_config.environment_variables = environment_variables_flag;
+        self
+    }
+
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        self.execution_config
+            .embedders_config
+            .feature_flags
+            .deterministic_memory_tracker = if enabled {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         self
     }
 
