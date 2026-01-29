@@ -188,11 +188,6 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 }
 
 pub fn test(env: TestEnv, cfg: TestConfig) {
-    // ic-recovery will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
-    // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
-    // IC_ADMIN_BIN to a dummy value.
-    set_var_to_path("IC_ADMIN_BIN", PathBuf::from("/bin/false"));
-
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
@@ -339,7 +334,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: healthy_node.get_public_url(),
-        replica_version: Some(current_version),
+        replica_version: None,
         admin_key_file: Some(ssh_admin_priv_key_path),
         test_mode: true,
         skip_prompts: true,
@@ -584,10 +579,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, 
     let command_args =
         nns_subnet_recovery_same_nodes_local_cli_args(node, &session, &subnet_recovery, logger);
     let command = format!(
-        // XXX: the underlying code will try to download ic-admin iff IC_ADMIN_BIN is not set, BUT
-        // ic-admin is never actually used. To avoid downloading ic-admin unnecessarily we set
-        // IC_ADMIN_BIN to a dummy value.
-        r#"IC_ADMIN_BIN="/bin/false" /opt/ic/bin/ic-recovery \
+        r#"/opt/ic/bin/ic-recovery \
         {command_args} \
         "#
     );
