@@ -455,9 +455,15 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
 ///
 /// This function computes a cryptographic hash of the input data using the same
 /// domain separation as `crypto_hash`, then converts the resulting hash bytes
-/// into `Randomness`.
+/// into `Randomness`. If the hash is less than 32 bytes, the remaining bytes 
+/// are padded with zeros. If the hash is greater than 32 bytes, the remaining
+/// bytes are truncated.
 pub fn crypto_hashable_to_randomness<T: CryptoHashable>(data: &T) -> Randomness {
-    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
-    data.hash(&mut hash);
-    Randomness::from(hash.finish())
+    let hash = crypto_hash(data);
+    let CryptoHash(hash_bytes) = hash.get();
+    let mut randomness = [0; 32]; // zero padded if digest is less than 32 bytes
+    let n = hash_bytes.len().min(32);
+    randomness[0..n].copy_from_slice(&hash_bytes[0..n]);
+
+    Randomness::from(randomness)
 }
