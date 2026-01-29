@@ -1665,7 +1665,7 @@ impl Scheduler for SchedulerImpl {
                     .set(final_state.canister_snapshots.count() as i64);
             }
             round_schedule.finish_round(
-                &mut final_state.canister_states,
+                &final_state.canister_states,
                 &mut final_state.metadata.subnet_schedule,
                 fully_executed_canister_ids,
             );
