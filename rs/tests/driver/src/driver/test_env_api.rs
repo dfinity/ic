@@ -199,8 +199,7 @@ use std::{
     fs,
     future::Future,
     io::{Read, Write},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    os::fd::AsRawFd,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -1501,20 +1500,23 @@ pub trait SshSession: HasTestEnv {
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     fn get_ssh_session(&self) -> Result<Session> {
+        let env = self.test_env();
         let ip = self.get_host_ip()?;
-        let tcp =
-            std::net::TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
 
-        get_ssh_session_from_socket(&self.test_env(), tcp).context("Failed to get SSH session")
+        get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
     }
 
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
     /// This is the async version of `get_ssh_session`.
     async fn get_ssh_session_async(&self) -> Result<Session> {
+        let env = self.test_env();
         let ip = self.get_host_ip()?;
-        let tcp = tokio::net::TcpStream::connect(SocketAddr::new(ip, 22)).await?;
 
-        get_ssh_session_from_socket(&self.test_env(), tcp).context("Failed to get SSH session")
+        tokio::task::spawn_blocking(move || {
+            get_ssh_session_from_env(&env, ip).context("Failed to get SSH session")
+        })
+        .await
+        .expect("Getting SSH session task panicked")
     }
 
     /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
@@ -2124,7 +2126,8 @@ where
     }
 }
 
-pub fn get_ssh_session_from_socket<S: 'static + AsRawFd>(env: &TestEnv, tcp: S) -> Result<Session> {
+pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
+    let tcp = TcpStream::connect_timeout(&SocketAddr::new(ip, 22), TCP_CONNECT_TIMEOUT)?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
