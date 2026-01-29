@@ -508,7 +508,7 @@ mod test {
     use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::consensus_pool::{HEIGHT_CONSIDERED_BEHIND, ValidatedConsensusArtifact};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::state_manager::FakeStateManager;
+    use ic_test_utilities::state_manager::{FakeStateManager, RefMockStateManager};
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
@@ -637,6 +637,15 @@ mod test {
                     .build(),
             )];
 
+            let state_manager = RefMockStateManager::default();
+            state_manager
+                .get_mut()
+                .expect_get_state_at()
+                .return_const(Ok(ic_interfaces_state_manager::Labeled::new(
+                    Height::new(0),
+                    Arc::new(ic_test_utilities_state::get_initial_state(0, 0)),
+                )));
+
             let mut pool = TestConsensusPool::new(
                 node_test_id(0),
                 subnet_test_id(1),
@@ -644,7 +653,7 @@ mod test {
                 FastForwardTimeSource::new(),
                 setup_registry(subnet_test_id(1), subnet_records),
                 Arc::new(CryptoReturningOk::default()),
-                Arc::new(FakeStateManager::new()),
+                Arc::new(state_manager),
                 None,
             );
 
