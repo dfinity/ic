@@ -28,6 +28,7 @@ rust_library(
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
+        "//rs/orchestrator:__pkg__",
     ],
     deps = DEPENDENCIES,
 )

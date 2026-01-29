@@ -11,11 +11,13 @@ name = "registry-canister"
 path = "canister/canister.rs"
 
 [dependencies]
+attestation = { path = "../../ic_os/sev/attestation" }
 build-info = { workspace = true }
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
+der = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types/" }

@@ -8,7 +8,6 @@ use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, block_on, runtime_from_url};
 use ic_types::PrincipalId;
-use ic_types::messages::ReplicaHealthStatus;
 use ic_universal_canister::wasm;
 use ic_utils::interfaces::management_canister::ManagementCanister;
 use slog::Logger;
@@ -35,6 +34,7 @@ pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
+const NO_STATE_CLONE_COUNT: &str = "state_manager_no_state_clone_count";
 
 const METRIC_PROCESS_BATCH_DURATION: &str = "mr_process_batch_duration_seconds";
 
@@ -384,6 +384,11 @@ async fn deploy_canisters_for_long_rounds(
     join_all(create_busy_canisters_futs).await;
 }
 
+async fn no_state_clone_count(node: IcNodeSnapshot, logger: &slog::Logger) -> u64 {
+    let count = fetch_metrics::<u64>(logger, node, vec![NO_STATE_CLONE_COUNT]).await;
+    count[NO_STATE_CLONE_COUNT][0]
+}
+
 pub async fn rejoin_test_long_rounds(
     env: TestEnv,
     nodes: Vec<IcNodeSnapshot>,
@@ -401,7 +406,7 @@ pub async fn rejoin_test_long_rounds(
     }
     let mut paired: Vec<_> = average_process_batch_durations
         .into_iter()
-        .zip(nodes.into_iter())
+        .zip(nodes.iter())
         .collect();
     paired.sort_by(|(k1, _), (k2, _)| k1.total_cmp(k2));
     let sorted_nodes: Vec<_> = paired.into_iter().map(|(_, v)| v).collect();
@@ -456,6 +461,10 @@ pub async fn rejoin_test_long_rounds(
     )
     .await;
 
+    info!(
+        logger,
+        "Checking that the restarted node reached the latest CUP height."
+    );
     let rejoin_node_status = rejoin_node
         .status_async()
         .await
@@ -470,10 +479,45 @@ pub async fn rejoin_test_long_rounds(
         rejoin_node_certified_height,
         last_cup_height
     );
-    let rejoin_node_health_status = rejoin_node_status
-        .replica_health_status
-        .expect("Failed to get replica health status of rejoin_node");
-    assert_eq!(rejoin_node_health_status, ReplicaHealthStatus::Healthy);
+
+    info!(logger, "Checking that all nodes are healthy.");
+    for node in &nodes {
+        let health_status = node
+            .status_is_healthy_async()
+            .await
+            .expect("Failed to get replica health status");
+        assert!(health_status, "Node {} is not healthy.", node.node_id);
+    }
+
+    // finally check the metrics for "fast-forward" mode
+    let mut no_state_clone_counts = vec![];
+    for node in nodes {
+        let count = no_state_clone_count(node, &logger).await;
+        no_state_clone_counts.push(count);
+    }
+    no_state_clone_counts.sort();
+    let minimum_no_state_clone_count = no_state_clone_counts[0];
+    info!(
+        logger,
+        "Minimum no state clone count: {minimum_no_state_clone_count}"
+    );
+
+    let rejoin_node_no_state_clone_count = no_state_clone_count(rejoin_node, &logger).await;
+    info!(
+        logger,
+        "No state clone count of the restarted node: {rejoin_node_no_state_clone_count}"
+    );
+
+    // there should be a node that is (almost) never behind and thus (almost) never skips state cloning
+    assert!(
+        minimum_no_state_clone_count < 10,
+        "Minimum no state clone count is too high"
+    );
+    // the restarted node should be behind for many rounds and skip cloning a majority of states during that time
+    assert!(
+        rejoin_node_no_state_clone_count > 100,
+        "No state clone count of the restarted node is unexpectedly low"
+    );
 }
 
 pub async fn assert_state_sync_has_happened(

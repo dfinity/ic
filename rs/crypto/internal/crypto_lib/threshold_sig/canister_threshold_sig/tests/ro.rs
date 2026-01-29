@@ -19,21 +19,21 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     ro.add_scalar("s1", &s1)?;
     ro.add_u64("round", 1)?;
 
-    let c1 = ro.output_scalars(curve_type, 2)?;
+    let (c0, c1) = ro.output_two_scalars(curve_type)?;
 
     assert_eq!(
-        hex::encode(c1[0].serialize()),
+        hex::encode(c0.serialize()),
         "e1cc3546518665d7321cd5b5aa7cbae2ae9d8bad3a2f28b495ac3d3af139b460"
     );
     assert_eq!(
-        hex::encode(c1[1].serialize()),
+        hex::encode(c1.serialize()),
         "d46b5ef6fafdaf2a1e50f7b979f1fd31e058e9c2ab69115c4f2c15077ae94969"
     );
 
     // Test random oracle chaining:
     let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep-2");
 
-    ro.add_scalar("c1", &c1[1])?;
+    ro.add_scalar("c1", &c1)?;
     ro.add_u64("round", 2)?;
 
     let c2 = ro.output_scalar(curve_type)?;
@@ -48,11 +48,11 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
     ro.add_scalar("c2", &c2)?;
     ro.add_u64("round", 3)?;
 
-    let byte_output = ro.output_bytestring(42)?;
+    let byte_output = ro.output_32_bytes()?;
 
     assert_eq!(
-        hex::encode(&byte_output),
-        "c569bf3e900df5d5e61fdf3b9d798d3089bf9dfd875e8735cb99aef2e5a865f2eb44fb6f363730a4b2dc"
+        hex::encode(byte_output),
+        "2ba794c0eb2e7d78f4deec97c38f28bff862b52a8c88d187d45e4fbcdc6219fe"
     );
 
     let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep-4");
@@ -64,35 +64,8 @@ fn test_random_oracle_stability() -> CanisterThresholdResult<()> {
 
     assert_eq!(
         hex::encode(pt.serialize()),
-        "020585e68447c2697248df1fbceceb56858c23ff982ee9dbcded85e92860dd618b"
+        "030b9c4cb298281f22ec595aae038002d30040d3550cbab47add0cc421f9ab8556"
     );
-
-    Ok(())
-}
-
-#[test]
-fn test_random_oracle_max_outputs() -> CanisterThresholdResult<()> {
-    for curve_type in EccCurveType::all() {
-        /*
-        Our XMD hash_to_scalar construction consumes 256+128 bits per
-        scalar. XMD with SHA-256 can produce at most 255*32 = 8160 bytes.
-        Thus we can produce at most exactly 170 challenges (which ought to
-        be enough for anyone!) - verify that we Err appropriately for
-        larger requests.
-         */
-
-        for i in 1..170 {
-            let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep");
-            ro.add_usize("input", i)?;
-            assert_eq!(ro.output_scalars(curve_type, i).unwrap().len(), i);
-        }
-
-        for i in 171..256 {
-            let mut ro = RandomOracle::new_with_string_dst("ic-test-domain-sep");
-            ro.add_usize("input", i)?;
-            assert!(ro.output_scalars(curve_type, i).is_err());
-        }
-    }
 
     Ok(())
 }

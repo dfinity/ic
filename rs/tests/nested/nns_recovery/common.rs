@@ -514,8 +514,9 @@ async fn simulate_node_provider_action(
         build_recovery_upgrader_run_command(img_version, recovery_hash_prefix).to_shell_string();
 
     // Note: keep in sync with the limited-console invocation in cpp/infogetty-cpp/infogetty.cc.
+    // We need TWO "exit" commands: one to exit rbash, and one to exit limited-console's main loop.
     let script = format!(
-        r#"echo -e "rbash-console\n{}\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
+        r#"echo -e "rbash-console\n{}\nexit\nexit" | sudo env -i TERM=linux su -s /opt/ic/bin/limited-console limited-console 2>&1"#,
         recovery_upgrader_cmd
     );
 

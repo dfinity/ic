@@ -218,6 +218,7 @@ system_test_nns(
 
 RECOVERY_TOOLS_RUNTIME_DEPS = CANISTER_SANDBOX_RUNTIME_DEPS | {
     "IC_ADMIN_BIN": "//rs/registry/admin:ic-admin",
+    "IC_ADMIN_PATH": "//rs/registry/admin:ic-admin",
 }
 
 system_test_nns(

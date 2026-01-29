@@ -29,7 +29,8 @@ use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::{StreamHeaderBuilder, StreamSliceBuilder};
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::canister_http::{
-    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication, Transform,
+    CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, RefundStatus, Replication,
+    Transform,
 };
 use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature};
 use ic_types::crypto::AlgorithmId;
@@ -761,6 +762,7 @@ fn subnet_call_contexts_deserialization() {
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
         pricing_version: PricingVersion::Legacy,
+        refund_status: RefundStatus::default(),
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,

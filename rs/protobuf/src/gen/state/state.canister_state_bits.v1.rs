@@ -626,7 +626,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
-/// Next ID: 57
+/// Next ID: 58
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -639,10 +639,10 @@ pub struct CanisterStateBits {
     pub execution_state_bits: ::core::option::Option<ExecutionStateBits>,
     #[prost(uint64, tag = "8")]
     pub memory_allocation: u64,
+    #[prost(uint64, tag = "57")]
+    pub rounds_scheduled: u64,
     #[prost(uint64, tag = "15")]
     pub scheduled_as_first: u64,
-    #[prost(uint64, tag = "17")]
-    pub skipped_round_due_to_no_messages: u64,
     /// In how many rounds a canister is executed.
     #[prost(uint64, tag = "18")]
     pub executed: u64,
