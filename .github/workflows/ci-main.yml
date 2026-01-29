@@ -333,8 +333,7 @@ jobs:
     name: Bazel Test arm64-${{ matrix.os }}
     runs-on: ${{ matrix.profile }}
     timeout-minutes: 120
-    if: github.repository == 'dfinity/ic' && github.ref_name == 'master' # temporarily disabled on PRs until Namespace.so has fixed the slow downloads from their bazel cache
-    # if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
     steps:
       - name: Set up Bazel cache
         run: |

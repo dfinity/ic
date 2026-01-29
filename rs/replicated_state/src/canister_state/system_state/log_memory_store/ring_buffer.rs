@@ -6,6 +6,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::{PAGE_SIZE, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use more_asserts::assert_le;
 
 // PageMap file layout.
 // Header layout constants.
@@ -47,8 +48,9 @@ pub(super) struct RingBuffer {
 impl RingBuffer {
     /// Creates a new ring buffer with the given data capacity.
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        assert!(
-            data_capacity <= DATA_CAPACITY_MAX,
+        assert_le!(
+            data_capacity,
+            DATA_CAPACITY_MAX,
             "data capacity exceeds maximum"
         );
         let mut io = StructIO::new(page_map);
@@ -66,17 +68,14 @@ impl RingBuffer {
         Some(Self { io })
     }
 
+    /// Returns the page map of the ring buffer.
     pub fn to_page_map(&self) -> PageMap {
         self.io.to_page_map()
     }
 
-    /// Returns the total allocated bytes for the ring buffer
-    /// including header, index table and data region.
-    pub fn total_allocated_bytes(&self) -> usize {
-        let header = self.io.load_header();
-        HEADER_SIZE.get() as usize
-            + header.index_table_pages as usize * PAGE_SIZE
-            + header.data_capacity.get() as usize
+    /// Returns the header of the ring buffer.
+    pub fn get_header(&self) -> Header {
+        self.io.load_header()
     }
 
     /// Returns the data capacity of the ring buffer.
@@ -89,10 +88,7 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.bytes_used() == 0
-    }
-
+    /// Returns the next index to be used.
     pub fn next_idx(&self) -> u64 {
         self.io.load_header().next_idx
     }
