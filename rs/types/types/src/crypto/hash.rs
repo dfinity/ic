@@ -455,7 +455,7 @@ pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
 ///
 /// This function computes a cryptographic hash of the input data using the same
 /// domain separation as `crypto_hash`, then converts the resulting hash bytes
-/// into `Randomness`. If the hash is less than 32 bytes, the remaining bytes 
+/// into `Randomness`. If the hash is less than 32 bytes, the remaining bytes
 /// are padded with zeros. If the hash is greater than 32 bytes, the remaining
 /// bytes are truncated.
 pub fn crypto_hashable_to_randomness<T: CryptoHashable>(data: &T) -> Randomness {
