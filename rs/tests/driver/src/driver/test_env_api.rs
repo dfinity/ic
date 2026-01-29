@@ -1575,7 +1575,8 @@ pub trait SshSession: HasTestEnv {
 
     async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session_async().await?;
-        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, script))
+        let script = script.to_string();
+        tokio::task::spawn_blocking(move || execute_bash_script_from_session(&session, &script))
             .await
             .expect("Executing bash script task panicked")
     }
