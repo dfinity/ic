@@ -264,7 +264,7 @@ if [ -f "$HOME/.container-run.conf" ]; then
     # conf file with user's custom PODMAN_RUN_USR_ARGS
     eprintln "Sourcing user's ~/.container-run.conf"
     source "$HOME/.container-run.conf"
-    PODMAN_RUN_ARGS+=(${PODMAN_RUN_USR_ARGS:-})
+    PODMAN_RUN_ARGS+=("${PODMAN_RUN_USR_ARGS[@]}")
 fi
 
 set -x
