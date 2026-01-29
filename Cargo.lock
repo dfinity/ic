@@ -14697,6 +14697,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-btc-replica-types",
  "ic-config",
+ "ic-consensus-features",
  "ic-crypto-sha2",
  "ic-crypto-tree-hash",
  "ic-cycles-account-manager",

@@ -386,27 +386,33 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                Ok(builder.validate_ingress_payload(
-                    &payload.ingress,
-                    &past_payloads,
-                    proposal_context.validation_context,
-                )?)
+                builder
+                    .validate_ingress_payload(
+                        &payload.ingress,
+                        &past_payloads,
+                        proposal_context.validation_context,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_xnet_payload(
-                    &payload.xnet,
-                    proposal_context.validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_xnet_payload(
+                        &payload.xnet,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::SelfValidating(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_self_validating_payload(
-                    &payload.self_validating,
-                    proposal_context.validation_context,
-                    &past_payloads,
-                )?)
+                builder
+                    .validate_self_validating_payload(
+                        &payload.self_validating,
+                        proposal_context.validation_context,
+                        &past_payloads,
+                    )
+                    .map_err(PayloadValidationError::from)
             }
             Self::CanisterHttp(builder) => {
                 let past_payloads: Vec<PastPayload> =

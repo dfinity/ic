@@ -1,3 +1,4 @@
+use ic_consensus_features::HASHES_IN_BLOCKS_ENABLED;
 use ic_interfaces::{
     consensus::PayloadWithSizeEstimate,
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
@@ -8,7 +9,7 @@ use ic_types::{
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
-    messages::SignedIngress,
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, SignedIngress},
     time::UNIX_EPOCH,
 };
 use std::collections::VecDeque;
@@ -65,11 +66,15 @@ impl IngressSelector for FakeIngressSelector {
             .iter()
             .enumerate()
             .find(|(_, payloads)| {
-                (payloads
-                    .iter()
-                    .map(|payload| payload.count_bytes())
-                    .sum::<usize>() as u64)
-                    < byte_limit.get()
+                if HASHES_IN_BLOCKS_ENABLED {
+                    ((payloads.len() * EXPECTED_MESSAGE_ID_LENGTH) as u64) < byte_limit.get()
+                } else {
+                    (payloads
+                        .iter()
+                        .map(|payload| payload.count_bytes())
+                        .sum::<usize>() as u64)
+                        < byte_limit.get()
+                }
             })
             .map(|(idx, _)| idx);
 
@@ -83,17 +88,26 @@ impl IngressSelector for FakeIngressSelector {
         };
 
         PayloadWithSizeEstimate {
-            wire_size_estimate: payload.total_ids_size_estimate(),
+            wire_size_estimate: if HASHES_IN_BLOCKS_ENABLED {
+                payload.total_ids_size_estimate()
+            } else {
+                payload.total_messages_size_estimate() + payload.total_ids_size_estimate()
+            },
             payload,
         }
     }
+
     fn validate_ingress_payload(
         &self,
         payload: &IngressPayload,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
     ) -> Result<NumBytes, IngressPayloadValidationError> {
-        Ok(payload.total_ids_size_estimate())
+        if HASHES_IN_BLOCKS_ENABLED {
+            Ok(payload.total_ids_size_estimate())
+        } else {
+            Ok(payload.total_ids_size_estimate() + payload.total_messages_size_estimate())
+        }
     }
 
     fn filter_past_payloads(

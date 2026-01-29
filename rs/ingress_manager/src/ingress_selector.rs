@@ -201,12 +201,11 @@ impl IngressSelector for IngressManager {
                         }
                     };
 
-                    let (ingress_wire_size, ingress_memory_size) =
-                        self.message_size_estimates(&ingress.signed_ingress);
+                    let size_estimates = self.message_size_estimates(&ingress.signed_ingress);
 
                     // Break criterion #1: global byte limit
-                    if accumulated_wire_size + ingress_wire_size > wire_byte_limit
-                        || accumulated_memory_size + ingress_memory_size > memory_byte_limit
+                    if accumulated_wire_size + size_estimates.wire > wire_byte_limit
+                        || accumulated_memory_size + size_estimates.memory > memory_byte_limit
                     {
                         break 'outer;
                     }
@@ -220,16 +219,16 @@ impl IngressSelector for IngressManager {
                             1,
                             round_robin_iter.saturating_sub(ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE),
                         )
-                        && (queue.memory_bytes_included + ingress_memory_size.get() as usize)
+                        && (queue.memory_bytes_included + size_estimates.memory.get() as usize)
                             > quota
                     {
                         break;
                     }
 
-                    accumulated_wire_size += ingress_wire_size;
-                    accumulated_memory_size += ingress_memory_size;
+                    accumulated_wire_size += size_estimates.wire;
+                    accumulated_memory_size += size_estimates.memory;
                     queue.msgs_included += 1;
-                    queue.memory_bytes_included += ingress_memory_size.get() as usize;
+                    queue.memory_bytes_included += size_estimates.memory.get() as usize;
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
@@ -275,9 +274,10 @@ impl IngressSelector for IngressManager {
                 )
             }));
 
-            let (wire_size, memory_size) = self.payload_size_estimates(&payload);
+            let size_estimates = self.payload_size_estimates(&payload);
 
-            if wire_size <= wire_byte_limit && memory_size <= memory_byte_limit {
+            if size_estimates.wire <= wire_byte_limit && size_estimates.memory <= memory_byte_limit
+            {
                 break payload;
             }
 
@@ -285,7 +285,7 @@ impl IngressSelector for IngressManager {
                 self.log,
                 "Serialized form of ingress (was {} bytes) did not pass \
                 size restriction ({} bytes), reducing ingress and trying again",
-                wire_size,
+                size_estimates.wire,
                 wire_byte_limit.get()
             );
             messages_in_payload.pop();
@@ -294,15 +294,15 @@ impl IngressSelector for IngressManager {
             }
         };
 
-        let (wire_size_estimate, memory_size_estimate) = self.payload_size_estimates(&payload);
+        let size_estimates = self.payload_size_estimates(&payload);
 
         let payload = PayloadWithSizeEstimate {
-            wire_size_estimate,
+            wire_size_estimate: size_estimates.wire,
             payload,
         };
 
-        debug_assert!(wire_size_estimate <= wire_byte_limit);
-        debug_assert!(memory_size_estimate <= memory_byte_limit);
+        debug_assert!(size_estimates.wire <= wire_byte_limit);
+        debug_assert!(size_estimates.memory <= memory_byte_limit);
         payload
     }
 
@@ -403,9 +403,9 @@ impl IngressSelector for IngressManager {
             )?;
         }
 
-        let (wire_size_estimate, _memory_size_estimate) = self.payload_size_estimates(payload);
+        let size_estimates = self.payload_size_estimates(payload);
 
-        Ok(wire_size_estimate)
+        Ok(size_estimates.wire)
     }
 
     fn filter_past_payloads(
@@ -615,7 +615,7 @@ impl IngressManager {
         }
     }
 
-    fn payload_size_estimates(&self, payload: &IngressPayload) -> (NumBytes, NumBytes) {
+    fn payload_size_estimates(&self, payload: &IngressPayload) -> SizeEstimates {
         let memory_bytes =
             payload.total_messages_size_estimate() + payload.total_ids_size_estimate();
 
@@ -625,22 +625,31 @@ impl IngressManager {
             memory_bytes
         };
 
-        (wire_bytes, memory_bytes)
+        SizeEstimates {
+            memory: memory_bytes,
+            wire: wire_bytes,
+        }
     }
 
-    fn message_size_estimates(&self, message: &SignedIngress) -> (NumBytes, NumBytes) {
+    fn message_size_estimates(&self, message: &SignedIngress) -> SizeEstimates {
         let memory_bytes = message.count_bytes();
+
         let wire_bytes = if self.hashes_in_blocks_enabled() {
             EXPECTED_MESSAGE_ID_LENGTH
         } else {
             memory_bytes
         };
 
-        (
-            NumBytes::new(wire_bytes as u64),
-            NumBytes::new(memory_bytes as u64),
-        )
+        SizeEstimates {
+            memory: NumBytes::new(memory_bytes as u64),
+            wire: NumBytes::new(wire_bytes as u64),
+        }
     }
+}
+
+struct SizeEstimates {
+    memory: NumBytes,
+    wire: NumBytes,
 }
 
 /// An IngressSetQuery implementation based on IngressHistoryReader.

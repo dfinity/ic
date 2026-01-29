@@ -115,7 +115,8 @@ pub trait IngressSelector: Send + Sync {
     /// get_ingress_payload(..., byte_limit).count_bytes() <= byte_limit
     ///
     /// #Returns
-    /// [IngressPayload] which is a collection of valid ingress messages
+    /// [`IngressPayload`] which is a collection of valid ingress messages together with an estimate
+    /// of how big the payload would be when sent over wire.
     fn get_ingress_payload(
         &self,
         past_ingress: &dyn IngressSetQuery,
@@ -135,10 +136,10 @@ pub trait IngressSelector: Send + Sync {
     /// valid set rule check run to select a valid set of messages
     ///
     /// #Returns
-    /// `ValidationResult::Valid`: if the payload is valid
-    /// `ValidationResult::Invalid`: if the payload is invalid
-    /// `ValidationResult::Error`: a transient error occurred during the
-    /// validation.
+    /// `Ok(x)`: if the payload is valid, where `x` is the size of the payload.
+    /// [`ValidationError::InvalidArtifact`]: if the payload is invalid
+    /// [`ValidationError::ValidationFailed`]: an error occurred during the validation which
+    /// prevents determining whether the artifact is valid or not.
     fn validate_ingress_payload(
         &self,
         payload: &IngressPayload,
