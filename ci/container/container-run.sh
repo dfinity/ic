@@ -122,7 +122,7 @@ if [ -z "${CONTAINER_CMD[*]:-}" ]; then
         echo "Using hoststorage for podman root."
         CONTAINER_CMD=(sudo podman --root /hoststorage/podman-root)
     else
-        CONTAINER_CMD=(podman -u 1000)
+        CONTAINER_CMD=(podman)
     fi
 fi
 
@@ -169,13 +169,13 @@ grep "^$HOST_USER:" /etc/subgid
 # Set up user namespace mappings so that uid 1000 in the container
 # maps to the invoking user's uid on the host.
 PODMAN_RUN_ARGS+=(
+    --user 1000:1000
     --uidmap 0:${SUBUID_START}:1000
     --uidmap 1000:${HOST_UID}:1
     --uidmap $((1000 + 1)):$((SUBUID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
     --gidmap 0:${SUBGID_START}:1000
     --gidmap 1000:${HOST_GID}:1
     --gidmap $((1000 + 1)):$((SUBGID_START + 1000 + 1)):$((SUB_RANGE - 1000 - 1))
-    --user 1000:1000
 )
 
 PODMAN_RUN_ARGS=(
