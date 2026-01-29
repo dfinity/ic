@@ -85,11 +85,6 @@ impl LogMemoryStore {
         self.header_cache = OnceLock::new();
     }
 
-    /// Returns true if the ring buffer is allocated.
-    pub fn is_allocated(&self) -> bool {
-        self.get_header().is_some()
-    }
-
     /// Loads the ring buffer from the page map.
     fn load_ring_buffer(&self) -> Option<RingBuffer> {
         RingBuffer::load_checked(self.page_map.clone())

@@ -335,16 +335,14 @@ impl SystemStateModifications {
     ) -> HypervisorResult<RequestMetadataStats> {
         // Append delta logs.
         let log_memory_store = &mut system_state.log_memory_store;
-        if log_memory_store.is_allocated() {
-            // TODO(DSM-11): cleanup population logic after migration is done.
-            // We need to copy existing canister_log to log_memory_store in order
-            // not to loose any log records until the migration is complete.
-            let old_total = &system_state.canister_log;
-            if log_memory_store.is_empty() && !old_total.is_empty() {
-                log_memory_store.append_delta_log(&mut old_total.clone());
-            }
-            log_memory_store.append_delta_log(&mut self.canister_log.clone());
+        // TODO(DSM-11): cleanup population logic after migration is done.
+        // We need to copy existing canister_log to log_memory_store in order
+        // not to loose any log records until the migration is complete.
+        let old_total = &system_state.canister_log;
+        if log_memory_store.is_empty() && !old_total.is_empty() {
+            log_memory_store.append_delta_log(&mut old_total.clone());
         }
+        log_memory_store.append_delta_log(&mut self.canister_log.clone());
         system_state
             .canister_log
             .append_delta_log(&mut self.canister_log);
