@@ -3,7 +3,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{IndexArg, InitArg, Status, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineBuilder, UserError};
+use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload, Memo, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use proptest::prelude::Strategy;
