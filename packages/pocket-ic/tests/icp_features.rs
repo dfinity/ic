@@ -1059,6 +1059,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,
+        mainnet_nns_subnet_id: None,
     };
     let response = client
         .post(url.join("instances").unwrap())

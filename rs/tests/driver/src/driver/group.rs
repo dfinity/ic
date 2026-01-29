@@ -31,7 +31,6 @@ use crate::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_setup::{GroupSetup, InfraProvider},
 };
-use crate::util::block_on;
 use anyhow::{Result, bail};
 use chrono::Utc;
 use clap::Parser;
@@ -46,7 +45,6 @@ use tokio::runtime::{Builder, Handle, Runtime};
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
 pub const MAX_RUNTIME_THREADS: usize = 16;
-pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
 const REPORT_TASK_NAME: &str = "report";
 const SETUP_TASK_NAME: &str = "setup";
@@ -909,16 +907,12 @@ impl SystemTestGroup {
             let cpus = num_cpus::get();
             info!(group_ctx.log(), "Number of CPUs {}", cpus);
             let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
-            let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
             info!(
                 group_ctx.log(),
-                "Set tokio runtime: worker_threads={}, blocking_threads={}",
-                workers,
-                blocking_threads
+                "Set tokio runtime: worker_threads={}", workers,
             );
             Builder::new_multi_thread()
                 .worker_threads(workers)
-                .max_blocking_threads(blocking_threads)
                 .enable_all()
                 .build()
                 .unwrap()
@@ -1038,8 +1032,8 @@ impl SystemTestGroup {
         let env = ensure_setup_env(ctx);
         let group_setup = GroupSetup::read_attribute(&env);
         let farm_url = env.get_farm_url().unwrap();
-        let farm = block_on(Farm::new(farm_url, env.logger()));
+        let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.infra_group_name;
-        block_on(farm.delete_group(&group_name));
+        farm.delete_group(&group_name);
     }
 }

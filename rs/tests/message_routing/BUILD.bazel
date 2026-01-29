@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "MAINNET_ENV", "STATESYNC_TEST_CANISTER_DATA", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -71,7 +71,6 @@ system_test_nns(
 
 system_test_nns(
     name = "rejoin_test_large_state",
-    data = STATESYNC_TEST_CANISTER_DATA,
     enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
     tags = [
         "system_test_large",
@@ -133,11 +132,11 @@ system_test_nns(
 
 system_test(
     name = "queues_compatibility_test",
-    data = [
-        "//rs/replicated_state:replicated_state_test_binary",
-        "//rs/state_layout:state_layout_test_binary",
-    ],
     env = MAINNET_ENV,
+    runtime_deps = {
+        "REPLICATED_STATE_TEST_BINARY_PATH": "//rs/replicated_state:replicated_state_test_binary",
+        "STATE_LAYOUT_TEST_BINARY_PATH": "//rs/state_layout:state_layout_test_binary",
+    },
     deps = [
         "//rs/recovery",
         "//rs/tests/driver:ic-system-test-driver",

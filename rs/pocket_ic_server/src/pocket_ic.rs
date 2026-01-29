@@ -583,28 +583,12 @@ impl PocketIcSubnets {
         // to force an update after adding a new field to `IcpConfig`
         let IcpConfig {
             beta_features,
-            canister_backtrace,
             function_name_length_limits,
             canister_execution_rate_limiting,
         } = icp_config;
         let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
             IcpConfigFlag::Disabled => execution_environment::Config::default(),
             IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
-        };
-        match canister_backtrace {
-            None => (),
-            Some(IcpConfigFlag::Enabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Enabled;
-            }
-            Some(IcpConfigFlag::Disabled) => {
-                hypervisor_config
-                    .embedders_config
-                    .feature_flags
-                    .canister_backtrace = FlagStatus::Disabled;
-            }
         };
         match function_name_length_limits {
             None | Some(IcpConfigFlag::Enabled) => (),
@@ -2599,6 +2583,7 @@ impl PocketIc {
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
+        mainnet_nns_subnet_id: bool,
     ) -> Result<Self, String> {
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
@@ -2815,7 +2800,17 @@ impl PocketIc {
                         canister_allocation_range: alloc_range,
                     } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
-                    (ranges, alloc_range, None)
+                    let subnet_id = if matches!(subnet_kind, SubnetKind::NNS) {
+                        if mainnet_nns_subnet_id {
+                            Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into())
+                        } else {
+                            None
+                        }
+                    } else {
+                        subnet_kind_subnet_id(subnet_kind)
+                    };
+
+                    (ranges, alloc_range, subnet_id)
                 };
 
                 subnet_config_info.push(SubnetConfigInfo {
@@ -2967,68 +2962,37 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
+fn subnet_kind_subnet_id(subnet_kind: SubnetKind) -> Option<SubnetId> {
+    use rest::SubnetKind::*;
+    match subnet_kind {
+        Application | VerifiedApplication | System => None,
+        NNS => Some(PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into()),
+        II => Some(PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into()),
+        Bitcoin => Some(
+            PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        Fiduciary => Some(
+            PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into(),
+        ),
+        SNS => Some(PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into()),
+    }
+}
+
 fn subnet_kind_canister_ranges(
     mainnet_routing_table: &RoutingTable,
     subnet_kind: SubnetKind,
 ) -> Option<Vec<CanisterIdRange>> {
-    use rest::SubnetKind::*;
-    match subnet_kind {
-        Application | VerifiedApplication | System => None,
-        NNS => {
-            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(nns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        II => {
-            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(ii_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Bitcoin => {
-            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(bitcoin_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        Fiduciary => {
-            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
-                .unwrap()
-                .into();
-            Some(
-                mainnet_routing_table
-                    .ranges(fiduciary_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-        SNS => {
-            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
-            Some(
-                mainnet_routing_table
-                    .ranges(sns_subnet_id)
-                    .iter()
-                    .cloned()
-                    .collect(),
-            )
-        }
-    }
+    subnet_kind_subnet_id(subnet_kind).map(|subnet_id| {
+        mainnet_routing_table
+            .ranges(subnet_id)
+            .iter()
+            .cloned()
+            .collect()
+    })
 }
 
 fn subnet_kind_from_canister_id(
@@ -5160,7 +5124,7 @@ fn route(
                         SubnetConfigInfo {
                             ranges,
                             alloc_range: Some(canister_allocation_range),
-                            subnet_id: None,
+                            subnet_id: Some(subnet_id),
                             subnet_state_dir: None,
                             subnet_kind,
                             instruction_config,
@@ -5279,6 +5243,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -5299,6 +5264,7 @@ mod tests {
                 None,
                 false,
                 None,
+                false,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());
