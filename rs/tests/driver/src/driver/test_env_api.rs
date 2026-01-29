@@ -1156,7 +1156,7 @@ impl IcNodeSnapshot {
             for (name, value) in replica_metrics {
                 assert_eq!(
                     value[0], 0,
-                    "Critical error {} raised by node {}",
+                    "Critical error {} raised by node {}. Create `SystemTestGroup` using `without_assert_no_critical_errors` if critical errors are expected in your test",
                     name, self.node_id
                 );
             }
@@ -1184,7 +1184,7 @@ impl IcNodeSnapshot {
             };
             assert_eq!(
                 orchestrator_metrics[orchestrator_metric_name][0], 1,
-                "The replica process on node {} was restarted during test",
+                "The replica process on node {} was restarted during test. Create `SystemTestGroup` using `without_assert_no_replica_restarts` if replica restarts are expected in your test",
                 self.node_id
             );
         });
