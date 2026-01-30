@@ -43,7 +43,7 @@ impl Default for CanisterPriority {
 /// Scheduling priorities of all active canisters on the subnet.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
-    pub priorities: BTreeMap<CanisterId, CanisterPriority>,
+    priorities: BTreeMap<CanisterId, CanisterPriority>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -68,6 +68,10 @@ impl ValidateEq for SubnetSchedule {
 }
 
 impl SubnetSchedule {
+    pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
+        Self { priorities }
+    }
+
     /// Returns the priority for the given canister, or the default priority if not
     /// found.
     pub fn get(&self, canister_id: &CanisterId) -> &CanisterPriority {
