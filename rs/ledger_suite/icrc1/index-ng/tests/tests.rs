@@ -41,7 +41,9 @@ use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use icrc_ledger_types::icrc107::schema::{BTYPE_107, SET_FEE_COL_107};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
-use std::collections::{BTreeMap, HashSet};
+#[cfg(not(feature = "icrc3_disabled"))]
+use std::collections::BTreeMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -1447,6 +1449,7 @@ fn test_fee_collector_ranges_legacy() {
     test_fee_collector_ranges(true);
 }
 
+#[cfg(not(feature = "icrc3_disabled"))]
 #[test]
 fn test_fee_collector_ranges_107() {
     test_fee_collector_ranges(false);
@@ -1596,6 +1599,7 @@ fn add_custom_block(
     );
 }
 
+#[cfg(not(feature = "icrc3_disabled"))]
 #[test]
 fn test_fee_collector_107_with_ledger() {
     let env = &StateMachine::new();
