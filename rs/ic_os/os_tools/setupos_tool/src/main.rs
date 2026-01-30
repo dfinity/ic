@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
@@ -26,9 +26,9 @@ const VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 pub enum Commands {
     /// Generate systemd network configuration files. Bridges available NIC's for IC IPv6 connectivity.
     GenerateNetworkConfig {
-        #[arg(short, long, default_value_t = DEFAULT_SYSTEMD_NETWORK_DIR.to_string(), value_name = "DIR")]
+        #[arg(short, long, default_value = DEFAULT_SYSTEMD_NETWORK_DIR, value_name = "DIR")]
         /// systemd-networkd output directory
-        output_directory: String,
+        output_directory: PathBuf,
     },
     GenerateIpv6Address {
         #[arg(short, long, default_value_t = NodeType::SetupOS)]
@@ -36,16 +36,16 @@ pub enum Commands {
     },
     /// Check if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
     CheckBlessedVersion {
-        #[arg(short, long, default_value_t = VERSION_FILE_PATH.to_string(), value_name = "FILE")]
+        #[arg(short, long, default_value = VERSION_FILE_PATH, value_name = "FILE")]
         /// Path to the version file
-        version_file: String,
+        version_file: PathBuf,
     },
 }
 
 #[derive(Parser)]
 struct SetupOSArgs {
-    #[arg(short, long, default_value_t = DEFAULT_SETUPOS_CONFIG_OBJECT_PATH.to_string(), value_name = "FILE")]
-    setupos_config_object_path: String,
+    #[arg(short, long, default_value = DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, value_name = "FILE")]
+    setupos_config_object_path: PathBuf,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -80,7 +80,7 @@ pub fn main() -> Result<()> {
             generate_network_config(
                 &setupos_config.network_settings,
                 &generated_mac,
-                Path::new(&output_directory),
+                &output_directory,
             )
         }
         Some(Commands::GenerateIpv6Address { node_type }) => {
@@ -117,7 +117,7 @@ pub fn main() -> Result<()> {
             let setupos_config: SetupOSConfig =
                 deserialize_config(&opts.setupos_config_object_path)?;
 
-            check_blessed_version(&setupos_config, &version_file)
+            check_blessed_version(&setupos_config, version_file.as_path())
         }
         None => Err(anyhow!(
             "No subcommand specified. Run with '--help' for subcommands"
@@ -126,9 +126,15 @@ pub fn main() -> Result<()> {
 }
 
 /// Checks if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
-fn check_blessed_version(config: &SetupOSConfig, version_file: &str) -> Result<()> {
+fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<()> {
     let version = fs::read_to_string(version_file)
-        .map_err(|e| anyhow!("Failed to read version file '{}': {}", version_file, e))?
+        .map_err(|e| {
+            anyhow!(
+                "Failed to read version file '{}': {}",
+                version_file.display(),
+                e
+            )
+        })?
         .trim()
         .to_string();
 
