@@ -97,6 +97,8 @@ pub enum NodeRewardType {
     Type3dot1 = 5,
     /// type1.1
     Type1dot1 = 6,
+    /// type4
+    Type4 = 7,
 }
 impl NodeRewardType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -112,6 +114,7 @@ impl NodeRewardType {
             Self::Type3 => "NODE_REWARD_TYPE_TYPE3",
             Self::Type3dot1 => "NODE_REWARD_TYPE_TYPE3DOT1",
             Self::Type1dot1 => "NODE_REWARD_TYPE_TYPE1DOT1",
+            Self::Type4 => "NODE_REWARD_TYPE_TYPE4",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -124,6 +127,7 @@ impl NodeRewardType {
             "NODE_REWARD_TYPE_TYPE3" => Some(Self::Type3),
             "NODE_REWARD_TYPE_TYPE3DOT1" => Some(Self::Type3dot1),
             "NODE_REWARD_TYPE_TYPE1DOT1" => Some(Self::Type1dot1),
+            "NODE_REWARD_TYPE_TYPE4" => Some(Self::Type4),
             _ => None,
         }
     }

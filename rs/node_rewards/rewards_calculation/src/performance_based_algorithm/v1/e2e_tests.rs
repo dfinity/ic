@@ -828,3 +828,322 @@ fn test_zero_blocks_edge_cases() {
     assert_eq!(node2.performance_multiplier, dec!(0.2));
     assert_eq!(node2.adjusted_rewards_xdr_permyriad, dec!(8000)); // Max penalty 40000 * 0.2 = 8000
 }
+
+// ------------------------------------------------------------------------------------------------
+// Type4 Reward Calculation Tests
+// ------------------------------------------------------------------------------------------------
+
+/// **Scenario**: Type4 node in a region NOT present in the rewards table
+/// **Expected**: Falls back to default rewards (1 permyriad, coefficient 1.0)
+/// **Key Test**: Verifies that missing type4 entries in rewards table result in minimal rewards
+#[test]
+fn test_type4_not_in_rewards_table() {
+    let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let provider_id = test_provider_id(1);
+    let subnet_id = test_subnet_id(1);
+
+    // Use standard rewards table which does NOT have type4 entries
+    let fake_input_provider = FakeInputProvider::new()
+        .add_rewards_table(day, FakeInputProvider::create_rewards_table())
+        .add_daily_metrics(
+            day,
+            subnet_id,
+            vec![NodeMetricsDailyRaw {
+                node_id: test_node_id(1),
+                num_blocks_proposed: 100,
+                num_blocks_failed: 5, // 4.76% failure rate
+            }],
+        )
+        .add_rewardable_nodes(
+            day,
+            provider_id,
+            vec![RewardableNode {
+                node_id: test_node_id(1),
+                node_reward_type: NodeRewardType::Type4,
+                region: "Europe,Germany,Berlin".into(), // Region with no type4 entry
+                dc_id: "dc1".into(),
+            }],
+        );
+
+    let result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
+        .expect("Calculation should succeed");
+
+    let daily_result = &result.daily_results[&day];
+    let provider_result = &daily_result.provider_results[&provider_id];
+
+    // Type4 should NOT use type3 logic (no grouping by country)
+    assert!(provider_result.type3_base_rewards.is_empty());
+
+    // Verify base rewards entry exists for type4
+    let type4_base_rewards = provider_result
+        .base_rewards
+        .iter()
+        .find(|r| r.node_reward_type == NodeRewardType::Type4)
+        .expect("Should have base rewards for type4");
+
+    // When type is not in rewards table, it defaults to 1 permyriad monthly
+    // Daily = 1 / 30.4375 (REWARDS_TABLE_DAYS) ≈ 0.0328...
+    assert_eq!(type4_base_rewards.monthly_xdr_permyriad, dec!(1));
+
+    // Verify node rewards
+    let node_rewards = &provider_result.daily_nodes_rewards[0];
+    assert_eq!(node_rewards.node_id, test_node_id(1));
+    assert_eq!(node_rewards.node_reward_type, NodeRewardType::Type4);
+
+    // Base rewards should be 1 / 30.4375 ≈ 0.0328...
+    assert_eq!(
+        node_rewards.base_rewards_xdr_permyriad,
+        dec!(0.0328542094455852156057494867)
+    );
+
+    // With good performance (relative FR = 0), performance_multiplier should be 1.0
+    assert_eq!(node_rewards.performance_multiplier, dec!(1.0));
+    assert_eq!(node_rewards.rewards_reduction, dec!(0.0));
+
+    // Adjusted rewards = base * performance_multiplier ≈ 0.0328...
+    assert_eq!(
+        node_rewards.adjusted_rewards_xdr_permyriad,
+        dec!(0.0328542094455852156057494867)
+    );
+
+    // Total rewards should be essentially zero (truncated to 0)
+    assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
+}
+
+/// **Scenario**: Type4 node in a region that IS present in the rewards table
+/// **Expected**: Uses the configured rate from rewards table, no reduction coefficient logic
+/// **Key Test**: Verifies type4 uses flat per-node rewards (not type3 grouped logic)
+#[test]
+fn test_type4_in_rewards_table() {
+    let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let provider_id = test_provider_id(1);
+    let subnet_id = test_subnet_id(1);
+
+    // Create a rewards table with type4 entry
+    let mut rewards_table = FakeInputProvider::create_rewards_table();
+    rewards_table.table.insert(
+        "Europe,Germany,Berlin".to_string(),
+        NodeRewardRates {
+            rates: btreemap! {
+                NodeRewardType::Type4.to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 608750, // 20000/day
+                    reward_coefficient_percent: Some(85), // Should be ignored for type4
+                },
+            },
+        },
+    );
+
+    let fake_input_provider = FakeInputProvider::new()
+        .add_rewards_table(day, rewards_table)
+        .add_daily_metrics(
+            day,
+            subnet_id,
+            vec![
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(1),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 5, // 4.76% failure rate
+                },
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(2),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 10, // 9.09% failure rate
+                },
+            ],
+        )
+        .add_rewardable_nodes(
+            day,
+            provider_id,
+            vec![
+                RewardableNode {
+                    node_id: test_node_id(1),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "Europe,Germany,Berlin".into(),
+                    dc_id: "dc1".into(),
+                },
+                RewardableNode {
+                    node_id: test_node_id(2),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "Europe,Germany,Berlin".into(),
+                    dc_id: "dc2".into(),
+                },
+            ],
+        );
+
+    let result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
+        .expect("Calculation should succeed");
+
+    let daily_result = &result.daily_results[&day];
+    let provider_result = &daily_result.provider_results[&provider_id];
+
+    // Type4 should NOT use type3 logic - no country-level grouping
+    assert!(
+        provider_result.type3_base_rewards.is_empty(),
+        "Type4 should not have type3 base rewards grouping"
+    );
+
+    // Verify base rewards entry exists for type4
+    let type4_base_rewards = provider_result
+        .base_rewards
+        .iter()
+        .find(|r| r.node_reward_type == NodeRewardType::Type4)
+        .expect("Should have base rewards for type4");
+
+    assert_eq!(type4_base_rewards.monthly_xdr_permyriad, dec!(608750));
+    assert_eq!(type4_base_rewards.daily_xdr_permyriad, dec!(20000)); // 608750 / 30.4375
+
+    // Verify both nodes have the same base rewards (no reduction coefficient applied)
+    let node_results: HashMap<_, _> = provider_result
+        .daily_nodes_rewards
+        .iter()
+        .map(|n| (n.node_id, n))
+        .collect();
+
+    let node1 = node_results.get(&test_node_id(1)).unwrap();
+    let node2 = node_results.get(&test_node_id(2)).unwrap();
+
+    // Both nodes should have the same base rewards (no grouping/reduction like type3)
+    assert_eq!(node1.base_rewards_xdr_permyriad, dec!(20000));
+    assert_eq!(node2.base_rewards_xdr_permyriad, dec!(20000));
+
+    // Verify subnet failure rate (75th percentile of 4.76% and 9.09% = 9.09%)
+    let subnet_fr = daily_result.subnets_failure_rate[&subnet_id];
+    assert_eq!(subnet_fr, dec!(0.0909090909090909090909090909));
+
+    // Node 1 (4.76% failure rate) - below subnet FR, no penalty
+    assert_eq!(node1.performance_multiplier, dec!(1.0));
+    assert_eq!(node1.rewards_reduction, dec!(0.0));
+    assert_eq!(node1.adjusted_rewards_xdr_permyriad, dec!(20000));
+
+    // Node 2 (9.09% failure rate = subnet FR) - relative FR = 0, no penalty
+    assert_eq!(node2.performance_multiplier, dec!(1.0));
+    assert_eq!(node2.rewards_reduction, dec!(0.0));
+    assert_eq!(node2.adjusted_rewards_xdr_permyriad, dec!(20000));
+
+    // Total rewards = 20000 + 20000 = 40000
+    assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 40000);
+    assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 40000);
+}
+
+/// **Scenario**: Multiple Type4 nodes in the same country from the same provider
+/// **Expected**: Each node gets full base rewards (no reduction coefficient like type3)
+/// **Key Test**: Confirms type4 does NOT apply the same-country reduction that type3 uses
+#[test]
+fn test_type4_no_reduction_coefficient_for_same_country() {
+    let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let provider_id = test_provider_id(1);
+    let subnet_id = test_subnet_id(1);
+
+    // Create a rewards table with type4 entry (with coefficient that should be ignored)
+    let mut rewards_table = FakeInputProvider::create_rewards_table();
+    rewards_table.table.insert(
+        "Europe,Germany,Berlin".to_string(),
+        NodeRewardRates {
+            rates: btreemap! {
+                NodeRewardType::Type4.to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 304375, // 10000/day
+                    reward_coefficient_percent: Some(50), // This should be IGNORED for type4
+                },
+            },
+        },
+    );
+    rewards_table.table.insert(
+        "Europe,Germany,Munich".to_string(),
+        NodeRewardRates {
+            rates: btreemap! {
+                NodeRewardType::Type4.to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 304375, // 10000/day
+                    reward_coefficient_percent: Some(50), // This should be IGNORED for type4
+                },
+            },
+        },
+    );
+
+    let fake_input_provider = FakeInputProvider::new()
+        .add_rewards_table(day, rewards_table)
+        .add_daily_metrics(
+            day,
+            subnet_id,
+            vec![
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(1),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 0,
+                },
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(2),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 0,
+                },
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(3),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 0,
+                },
+            ],
+        )
+        .add_rewardable_nodes(
+            day,
+            provider_id,
+            vec![
+                // Three type4 nodes in Germany (same country, different cities)
+                RewardableNode {
+                    node_id: test_node_id(1),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "Europe,Germany,Berlin".into(),
+                    dc_id: "dc1".into(),
+                },
+                RewardableNode {
+                    node_id: test_node_id(2),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "Europe,Germany,Berlin".into(),
+                    dc_id: "dc2".into(),
+                },
+                RewardableNode {
+                    node_id: test_node_id(3),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "Europe,Germany,Munich".into(),
+                    dc_id: "dc3".into(),
+                },
+            ],
+        );
+
+    let result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
+        .expect("Calculation should succeed");
+
+    let daily_result = &result.daily_results[&day];
+    let provider_result = &daily_result.provider_results[&provider_id];
+
+    // Type4 should NOT have type3-style grouping
+    assert!(
+        provider_result.type3_base_rewards.is_empty(),
+        "Type4 nodes should not be grouped like type3"
+    );
+
+    // All three nodes should get FULL base rewards (no reduction)
+    // If type3 logic was applied with 50% coefficient:
+    // - Node 1: 10000 * 1.0 = 10000
+    // - Node 2: 10000 * 0.5 = 5000
+    // - Node 3: 10000 * 0.25 = 2500
+    // - Average would be ~5833
+    // But for type4, each node gets full 10000
+
+    let node_results: HashMap<_, _> = provider_result
+        .daily_nodes_rewards
+        .iter()
+        .map(|n| (n.node_id, n))
+        .collect();
+
+    let node1 = node_results.get(&test_node_id(1)).unwrap();
+    let node2 = node_results.get(&test_node_id(2)).unwrap();
+    let node3 = node_results.get(&test_node_id(3)).unwrap();
+
+    // Each node gets full base rewards - no reduction coefficient applied
+    assert_eq!(node1.base_rewards_xdr_permyriad, dec!(10000));
+    assert_eq!(node2.base_rewards_xdr_permyriad, dec!(10000));
+    assert_eq!(node3.base_rewards_xdr_permyriad, dec!(10000));
+
+    // Total = 10000 * 3 = 30000 (not reduced like type3 would be)
+    assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 30000);
+    assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 30000);
+}
