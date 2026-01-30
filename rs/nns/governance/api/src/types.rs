@@ -4540,7 +4540,7 @@ pub struct GetPendingProposalsRequest {
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct StakeNeuronRequest {
+pub struct CreateNeuronRequest {
     #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
     pub source_subaccount: Option<Vec<u8>>,
     pub amount_e8s: Option<u64>,
@@ -4552,6 +4552,6 @@ pub struct StakeNeuronRequest {
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
-pub struct StakeNeuronResult {
+pub struct CreateNeuronResponse {
     pub neuron_id: Option<NeuronId>,
 }

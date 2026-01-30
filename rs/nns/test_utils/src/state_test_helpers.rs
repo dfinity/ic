@@ -39,14 +39,14 @@ use ic_nns_constants::{
     canister_id_to_nns_canister_name, memory_allocation_of,
 };
 use ic_nns_governance_api::{
-    self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
-    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, RewardNodeProviders, StakeNeuronRequest,
-    StakeNeuronResult, Vote,
+    self as nns_governance_pb, CreateNeuronRequest, CreateNeuronResponse, Empty,
+    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance, GovernanceError, InstallCodeRequest, ListNeuronVotesRequest,
+    ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, RewardNodeProviders, Vote,
     manage_neuron::{
         self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
         DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
@@ -938,13 +938,13 @@ pub fn nns_send_icp_to_claim_or_refresh_neuron(
 
 pub fn nns_approve_governance_to_spend_from_account(
     state_machine: &StateMachine,
-    source: PrincipalId,
+    sender: PrincipalId,
     amount: Tokens,
 ) {
     icrc2_approve(
         state_machine,
         LEDGER_CANISTER_ID,
-        source,
+        sender,
         ApproveArgs {
             from_subaccount: None,
             spender: Account {
@@ -1130,16 +1130,16 @@ pub fn nns_claim_or_refresh_neuron(
     *neuron_id
 }
 
-pub fn nns_stake_neuron(
+pub fn nns_create_neuron(
     state_machine: &StateMachine,
     sender: PrincipalId,
     amount_e8s: u64,
 ) -> Result<NeuronId, String> {
-    let result: Result<Result<StakeNeuronResult, GovernanceError>, String> = update_with_sender(
+    let result: Result<Result<CreateNeuronResponse, GovernanceError>, String> = update_with_sender(
         state_machine,
         GOVERNANCE_CANISTER_ID,
-        "stake_neuron",
-        StakeNeuronRequest {
+        "create_neuron",
+        CreateNeuronRequest {
             amount_e8s: Some(amount_e8s),
             source_subaccount: None,
             controller: None,
@@ -1153,7 +1153,7 @@ pub fn nns_stake_neuron(
     result
         .unwrap()
         .map(|r| r.neuron_id.unwrap())
-        .map_err(|e| format!("Error when staking neuron: {:?}", e))
+        .map_err(|e| format!("Error when creating neuron: {:?}", e))
 }
 
 pub fn nns_disburse_neuron(

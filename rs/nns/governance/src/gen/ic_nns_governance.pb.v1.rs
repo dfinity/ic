@@ -3083,7 +3083,7 @@ pub mod governance {
             #[prost(message, tag = "22")]
             FinalizeDisburseMaturity(super::super::FinalizeDisburseMaturity),
             #[prost(message, tag = "23")]
-            StakeNeuron(super::super::StakeNeuron),
+            CreateNeuron(super::super::CreateNeuron),
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
@@ -4185,7 +4185,36 @@ pub struct VotingPowerTotal {
     PartialEq,
     ::prost::Message,
 )]
-pub struct StakeNeuron {
+pub struct FinalizeDisburseMaturity {
+    /// The finalization timestamp of the disbursement.
+    #[prost(uint64, tag = "1")]
+    pub finalize_disbursement_timestamp_seconds: u64,
+    /// The amount of ICPs to be disbursed in e8s.
+    #[prost(uint64, tag = "2")]
+    pub amount_to_mint_e8s: u64,
+    /// The account to which to transfer the ICPs.
+    #[prost(message, optional, tag = "3")]
+    pub to_account: ::core::option::Option<Account>,
+    /// The original amount of maturity to be disbursed (before maturity modulation).
+    #[prost(uint64, tag = "4")]
+    pub original_maturity_e8s_equivalent: u64,
+    /// The account identifer to which to transfer the ICPs.
+    #[prost(message, optional, tag = "5")]
+    pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
+}
+/// Records information needed to recover from a failed create_neuron call.
+/// Most fields are copied from the request/argument that was passed to the
+/// create_neuron canister method.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateNeuron {
     /// The neuron ID being created.
     #[prost(message, optional, tag = "1")]
     pub neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
@@ -4210,32 +4239,6 @@ pub struct StakeNeuron {
     /// The followees to set for the neuron.
     #[prost(message, optional, tag = "8")]
     pub followees: ::core::option::Option<manage_neuron::SetFollowing>,
-}
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct FinalizeDisburseMaturity {
-    /// The finalization timestamp of the disbursement.
-    #[prost(uint64, tag = "1")]
-    pub finalize_disbursement_timestamp_seconds: u64,
-    /// The amount of ICPs to be disbursed in e8s.
-    #[prost(uint64, tag = "2")]
-    pub amount_to_mint_e8s: u64,
-    /// The account to which to transfer the ICPs.
-    #[prost(message, optional, tag = "3")]
-    pub to_account: ::core::option::Option<Account>,
-    /// The original amount of maturity to be disbursed (before maturity modulation).
-    #[prost(uint64, tag = "4")]
-    pub original_maturity_e8s_equivalent: u64,
-    /// The account identifer to which to transfer the ICPs.
-    #[prost(message, optional, tag = "5")]
-    pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
 }
 /// An ICRC-3-like value.
 #[derive(

@@ -2014,7 +2014,7 @@ message Governance {
       ic_nns_common.pb.v1.NeuronId spawn = 20;
       SyncCommand sync_command = 21;
       FinalizeDisburseMaturity finalize_disburse_maturity = 22;
-      StakeNeuron stake_neuron = 23;
+      CreateNeuron create_neuron = 23;
     }
   }
 
@@ -2653,7 +2653,27 @@ message VotingPowerTotal {
   uint64 total_potential_voting_power = 2;
 }
 
-message StakeNeuron {
+message FinalizeDisburseMaturity {
+  // The finalization timestamp of the disbursement.
+  uint64 finalize_disbursement_timestamp_seconds = 1;
+
+  // The amount of ICPs to be disbursed in e8s.
+  uint64 amount_to_mint_e8s = 2;
+
+  // The account to which to transfer the ICPs.
+  Account to_account = 3;
+
+  // The original amount of maturity to be disbursed (before maturity modulation).
+  uint64 original_maturity_e8s_equivalent = 4;
+
+  // The account identifer to which to transfer the ICPs.
+  ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
+}
+
+// Records information needed to recover from a failed create_neuron call.
+// Most fields are copied from the request/argument that was passed to the
+// create_neuron canister method.
+message CreateNeuron {
   // The neuron ID being created.
   ic_nns_common.pb.v1.NeuronId neuron_id = 1;
 
@@ -2677,23 +2697,6 @@ message StakeNeuron {
 
   // The followees to set for the neuron.
   optional ManageNeuron.SetFollowing followees = 8;
-}
-
-message FinalizeDisburseMaturity {
-  // The finalization timestamp of the disbursement.
-  uint64 finalize_disbursement_timestamp_seconds = 1;
-
-  // The amount of ICPs to be disbursed in e8s.
-  uint64 amount_to_mint_e8s = 2;
-
-  // The account to which to transfer the ICPs.
-  Account to_account = 3;
-
-  // The original amount of maturity to be disbursed (before maturity modulation).
-  uint64 original_maturity_e8s_equivalent = 4;
-
-  // The account identifer to which to transfer the ICPs.
-  ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
 }
 
 // An ICRC-3-like value.
