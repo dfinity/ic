@@ -244,14 +244,7 @@ mod tests {
             .expect("Unexpected Err");
 
         // create and bless version for the API boundary node
-        let blessed_versions = registry
-            .get(
-                make_blessed_replica_versions_key().as_bytes(), // key
-                registry.latest_version(),                      // version
-            )
-            .map(|v| BlessedReplicaVersions::decode(v.value.as_slice()).unwrap())
-            .expect("failed to decode blessed versions");
-        let blessed_versions = blessed_versions.blessed_version_ids;
+        let blessed_versions = registry.get_blessed_replica_version_ids();
 
         registry.maybe_apply_mutation_internal(vec![
             // Mutation to insert ApiBoundaryNodeRecord
