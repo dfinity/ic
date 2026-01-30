@@ -323,7 +323,7 @@ Examples:
 
   # Show the 100 slowest tests in the last month
   bazel run //ci/githubstats:query -- top 100 duration_p90 --month
-"""
+""",
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -386,7 +386,7 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
 Examples:
   # Show the last flaky runs of the rent_subnet_test in the last week
   bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
-"""
+""",
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
