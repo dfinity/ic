@@ -154,7 +154,7 @@ async fn test_sns_testing_dev_nns_neuron_id() {
 
     // The following NNS neuron ID is hard-coded in sns-testing README.
     // If the test fails, then the README must be updated.
-    assert_eq!(dev_nns_neuron_id.id, 3912484856864073044);
+    assert_eq!(dev_nns_neuron_id.id, 11832927426215731056);
 }
 
 #[tokio::test]
