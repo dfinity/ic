@@ -5,13 +5,13 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_ledger_test_utils::state_machine_helpers::index::wait_until_sync_is_completed;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
+use ic_types::Time;
 use icp_ledger::{AccountIdentifier, FeatureFlags, LedgerCanisterInitPayload, Memo, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use ic_types::Time;
 use std::time::Duration;
 
 const GENESIS_NANOS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
@@ -113,7 +113,11 @@ fn install_and_upgrade(
 ) -> Result<(), UserError> {
     let env = &StateMachine::new();
     // Provide an initial balance so the ledger has at least one block
-    let ledger_id = install_ledger(env, vec![(account(1, 0), 1_000_000)], default_archive_options());
+    let ledger_id = install_ledger(
+        env,
+        vec![(account(1, 0), 1_000_000)],
+        default_archive_options(),
+    );
 
     let index_id = install_index(env, ledger_id, install_interval)?;
 
