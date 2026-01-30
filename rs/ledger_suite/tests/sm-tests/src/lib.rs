@@ -4658,6 +4658,8 @@ pub fn test_fee_collector_107_with_proptest<Tokens>(
                     AllowancesRecentlyPurged::Yes,
                 );
 
+                verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::Yes);
+
                 Ok(())
             },
         )
