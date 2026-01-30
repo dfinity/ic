@@ -13,7 +13,7 @@ use ic_types::messages::{
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    CanisterId, Cycles, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;

@@ -6,12 +6,10 @@ use ic_types::user_id_try_from_option;
 
 impl From<&CallContext> for pb::CallContext {
     fn from(item: &CallContext) -> Self {
-        let funds = Funds::new(item.available_cycles);
         Self {
             call_origin: Some((&item.call_origin).into()),
             responded: item.responded,
             deleted: item.deleted,
-            available_funds: Some((&funds).into()),
             available_cycles: Some((item.available_cycles).into()),
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
@@ -23,23 +21,14 @@ impl From<&CallContext> for pb::CallContext {
 impl TryFrom<pb::CallContext> for CallContext {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::CallContext) -> Result<Self, Self::Error> {
-        // To maintain backwards compatibility we fall back to reading from `available_funds` if
-        // `available_cycles` is not set.
-        let available_cycles =
-            match try_from_option_field(value.available_cycles, "CallContext::available_cycles") {
-                Ok(available_cycles) => available_cycles,
-                Err(_) => try_from_option_field::<_, Funds, _>(
-                    value.available_funds,
-                    "CallContext::available_funds",
-                )
-                .map(|available_funds| available_funds.cycles())?,
-            };
-
         Ok(Self {
             call_origin: try_from_option_field(value.call_origin, "CallContext::call_origin")?,
             responded: value.responded,
             deleted: value.deleted,
-            available_cycles,
+            available_cycles: try_from_option_field(
+                value.available_cycles,
+                "CallContext::available_cycles",
+            )?,
             time: Time::from_nanos_since_unix_epoch(value.time_nanos),
             metadata: value
                 .metadata
