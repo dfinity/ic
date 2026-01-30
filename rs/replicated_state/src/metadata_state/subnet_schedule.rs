@@ -1,13 +1,12 @@
-use ic_types::{AccumulatedPriority, CanisterId, LongExecutionMode};
+use ic_types::{AccumulatedPriority, CanisterId, ExecutionRound, LongExecutionMode};
 use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
 use std::collections::BTreeMap;
 
 #[cfg(test)]
 pub mod tests;
 
 /// Scheduling priority of a canister.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, ValidateEq)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct CanisterPriority {
     /// Keeps the current priority of this canister, accumulated during the past
     /// rounds. In the scheduler analysis documentation, this value is the entry
@@ -24,6 +23,11 @@ pub struct CanisterPriority {
 
     /// Long execution mode: Opportunistic (default) or Prioritized
     pub long_execution_mode: LongExecutionMode,
+
+    /// The last full round that a canister got the chance to execute. This
+    /// means that the canister was given the first pulse in the round or
+    /// consumed its input queue.
+    pub last_full_execution_round: ExecutionRound,
 }
 
 /// The default priority for a canister. Applied when a canister is added to the
@@ -32,6 +36,7 @@ const DEFAULT_PRIORITY: CanisterPriority = CanisterPriority {
     accumulated_priority: AccumulatedPriority::new(0),
     priority_credit: AccumulatedPriority::new(0),
     long_execution_mode: LongExecutionMode::Opportunistic,
+    last_full_execution_round: ExecutionRound::new(0),
 };
 
 impl Default for CanisterPriority {
@@ -43,7 +48,7 @@ impl Default for CanisterPriority {
 /// Scheduling priorities of all active canisters on the subnet.
 #[derive(Clone, Eq, PartialEq, Debug, Default)]
 pub struct SubnetSchedule {
-    pub priorities: BTreeMap<CanisterId, CanisterPriority>,
+    priorities: BTreeMap<CanisterId, CanisterPriority>,
 }
 
 /// Two schedules are equal if they have the same canister priorities (modulo
@@ -68,6 +73,10 @@ impl ValidateEq for SubnetSchedule {
 }
 
 impl SubnetSchedule {
+    pub fn new(priorities: BTreeMap<CanisterId, CanisterPriority>) -> Self {
+        Self { priorities }
+    }
+
     /// Returns the priority for the given canister, or the default priority if not
     /// found.
     pub fn get(&self, canister_id: &CanisterId) -> &CanisterPriority {

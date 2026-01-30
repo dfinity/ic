@@ -539,7 +539,7 @@ impl CheckpointLoader {
             durations.apply(&self.metrics);
         }
 
-        Ok((canister_states, SubnetSchedule { priorities }))
+        Ok((canister_states, SubnetSchedule::new(priorities)))
     }
 
     fn validate_eq_canister_states(
@@ -729,7 +729,7 @@ fn validate_eq_checkpoint_internal(
 
     let priorities = checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
-        .load_system_metadata(SubnetSchedule { priorities })
+        .load_system_metadata(SubnetSchedule::new(priorities))
         .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
     if !metadata.unflushed_checkpoint_ops.is_empty() {
@@ -920,7 +920,6 @@ pub fn load_canister_state(
         system_state,
         execution_state,
         scheduler_state: SchedulerState {
-            last_full_execution_round: canister_state_bits.last_full_execution_round,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },
@@ -929,6 +928,7 @@ pub fn load_canister_state(
         accumulated_priority: canister_state_bits.accumulated_priority,
         priority_credit: canister_state_bits.priority_credit,
         long_execution_mode: canister_state_bits.long_execution_mode,
+        last_full_execution_round: canister_state_bits.last_full_execution_round,
     };
 
     let metrics = LoadCanisterMetrics { durations };

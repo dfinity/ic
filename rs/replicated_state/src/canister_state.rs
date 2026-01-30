@@ -20,8 +20,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response};
 use ic_types::methods::{SystemMethod, WasmMethod};
 use ic_types::{
-    CanisterId, CanisterLog, ComputeAllocation, ExecutionRound, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, Time,
+    CanisterId, CanisterLog, ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
+    PrincipalId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -34,11 +34,6 @@ use std::time::Duration;
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
-    /// The last full round that a canister got the chance to execute. This
-    /// means that the canister was given the first pulse in the round or
-    /// consumed its input queue.
-    pub last_full_execution_round: ExecutionRound,
-
     /// The amount of heap delta debit. The canister skips execution of update
     /// messages if this value is non-zero.
     pub heap_delta_debit: NumBytes,
@@ -51,7 +46,6 @@ pub struct SchedulerState {
 impl Default for SchedulerState {
     fn default() -> Self {
         Self {
-            last_full_execution_round: 0.into(),
             heap_delta_debit: 0.into(),
             install_code_debit: 0.into(),
         }

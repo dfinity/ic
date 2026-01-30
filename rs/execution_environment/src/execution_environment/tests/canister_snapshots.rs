@@ -2953,7 +2953,6 @@ fn canister_snapshot_change_guard_do_not_modify_without_reading_doc_comment() {
     // DO NOT MODIFY WITHOUT READING DOC COMMENT!
     //
     let SchedulerState {
-        last_full_execution_round: _,
         heap_delta_debit: _,
         install_code_debit: _,
     } = scheduler_state;
