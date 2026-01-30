@@ -1926,7 +1926,7 @@ fn execute_canisters_on_thread(
             es.last_executed_round = round_id;
         }
         RoundSchedule::finish_canister_execution(
-            &mut canister,
+            &canister,
             &mut fully_executed_canister_ids,
             is_first_iteration,
             rank,
