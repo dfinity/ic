@@ -341,14 +341,14 @@ impl InternalState {
                 n_record
                     .http
                     .as_ref()
-                    .and_then(|h| self.http_endpoint_to_url(h))
+                    .and_then(|h| self.https_endpoint_to_url(h))
             })
             .collect();
         urls.sort();
         Ok(urls)
     }
 
-    fn http_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
+    fn https_endpoint_to_url(&self, http: &ConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
@@ -363,7 +363,7 @@ impl InternalState {
             }
         };
 
-        let url = format!("http://{}:{}/", host_str, http.port);
+        let url = format!("https://{}:{}/", host_str, http.port);
         match Url::parse(&url) {
             Ok(v) => Some(v),
             Err(e) => {
@@ -697,7 +697,9 @@ mod test {
             );
 
             // Will first try to fetch from data found inside the registry
-            let node_api_url = internal_state.http_endpoint_to_url(&http_endpoint).unwrap();
+            let node_api_url = internal_state
+                .https_endpoint_to_url(&http_endpoint)
+                .unwrap();
             let fallback_url = &config_nns_urls[0];
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 let result = internal_state.poll().await;
