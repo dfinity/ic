@@ -6,7 +6,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{
-    ONE_DAY_SECONDS, ONE_YEAR_SECONDS, ledger::compute_neuron_staking_subaccount_bytes,
+    E8, ONE_DAY_SECONDS, ONE_YEAR_SECONDS, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
@@ -31,11 +31,12 @@ use ic_nns_test_utils::{
     state_test_helpers::{
         ledger_account_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
         nns_approve_governance_to_spend_from_account, nns_claim_or_refresh_neuron,
-        nns_disburse_maturity, nns_disburse_neuron, nns_governance_get_full_neuron,
-        nns_governance_get_neuron_info, nns_governance_make_proposal, nns_increase_dissolve_delay,
-        nns_join_community_fund, nns_leave_community_fund, nns_make_neuron_public,
-        nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron, nns_set_auto_stake_maturity,
-        nns_set_followees_for_neuron, nns_stake_neuron, nns_start_dissolving, setup_nns_canisters,
+        nns_create_neuron, nns_disburse_maturity, nns_disburse_neuron,
+        nns_governance_get_full_neuron, nns_governance_get_neuron_info,
+        nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
+        nns_leave_community_fund, nns_make_neuron_public, nns_remove_hot_key,
+        nns_send_icp_to_claim_or_refresh_neuron, nns_set_auto_stake_maturity,
+        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
         state_machine_builder_for_nns_tests,
     },
 };
@@ -1020,7 +1021,7 @@ fn test_claim_neuron() {
 }
 
 #[test]
-fn test_stake_neuron() {
+fn test_create_neuron() {
     // Step 1: Prepare the world by setting up NNS canisters and approve Governance to spend
     // 10 ICP from the test user's account.
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -1032,16 +1033,18 @@ fn test_stake_neuron() {
         )
         .build();
     setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    // Step 2: Approve Governance to spend 15 ICP from the test user's account.
     nns_approve_governance_to_spend_from_account(
         &state_machine,
         test_user_principal,
         Tokens::from_tokens(15).unwrap(),
     );
 
-    // Step 2: Call the code under test - stake a neuron.
-    let neuron_id = nns_stake_neuron(&state_machine, test_user_principal, 1_000_000_000).unwrap();
+    // Step 3: Call the code under test - create a neuron.
+    let neuron_id = nns_create_neuron(&state_machine, test_user_principal, 10 * E8).unwrap();
 
-    // Step 3.1: Inspect the staked neuron as a full neuron.
+    // Step 4.1: Inspect the staked neuron as a full neuron.
     let full_neuron =
         nns_governance_get_full_neuron(&state_machine, test_user_principal, neuron_id.id).unwrap();
     assert_eq!(full_neuron.controller, Some(test_user_principal));
@@ -1057,9 +1060,9 @@ fn test_stake_neuron() {
         full_neuron.aging_since_timestamp_seconds,
         created_timestamp_seconds
     );
-    assert_eq!(full_neuron.cached_neuron_stake_e8s, 1_000_000_000);
+    assert_eq!(full_neuron.cached_neuron_stake_e8s, 10 * E8);
 
-    // Step 3.2: Inspect the staked neuron as neuron info.
+    // Step 4.2: Inspect the staked neuron as neuron info.
     let neuron_info =
         nns_governance_get_neuron_info(&state_machine, PrincipalId::new_anonymous(), neuron_id.id)
             .unwrap();
@@ -1069,7 +1072,7 @@ fn test_stake_neuron() {
         INITIAL_NEURON_DISSOLVE_DELAY
     );
     assert_eq!(neuron_info.age_seconds, 0);
-    assert_eq!(neuron_info.stake_e8s, 1_000_000_000);
+    assert_eq!(neuron_info.stake_e8s, 10 * E8);
 }
 
 #[test]

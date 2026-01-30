@@ -25,18 +25,17 @@ use ic_nns_governance::{
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
-    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
-    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
-    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
-    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
-    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, CreateNeuronRequest,
+    CreateNeuronResponse, GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, GetPendingProposalsRequest, Governance as ApiGovernanceProto,
+    GovernanceError, ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse,
+    ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
+    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfoRequest,
+    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData,
+    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
     SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, StakeNeuronRequest, StakeNeuronResult,
-    UpdateNodeProvider, Vote,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
@@ -300,9 +299,11 @@ fn simulate_manage_neuron(manage_neuron: ManageNeuronRequest) -> ManageNeuronRes
 }
 
 #[update]
-async fn stake_neuron(request: StakeNeuronRequest) -> Result<StakeNeuronResult, GovernanceError> {
-    debug_log("stake_neuron");
-    Governance::stake_neuron(governance_ref(), caller(), request)
+async fn create_neuron(
+    request: CreateNeuronRequest,
+) -> Result<CreateNeuronResponse, GovernanceError> {
+    debug_log("create_neuron");
+    Governance::create_neuron(governance_ref(), caller(), request)
         .await
         .map_err(GovernanceError::from)
 }
