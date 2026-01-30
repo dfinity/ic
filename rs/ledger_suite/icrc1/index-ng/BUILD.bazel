@@ -103,7 +103,6 @@ rust_test(
             conf["ledger_wasm"],
             "//rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger:icrc3_test_ledger_canister.wasm.gz",
             conf["ledger_wasm_v5"],
-            
         ],
         env = {
             "RUST_TEST_THREADS": "4",
