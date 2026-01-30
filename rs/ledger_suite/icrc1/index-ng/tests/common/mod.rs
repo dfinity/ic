@@ -166,6 +166,7 @@ pub fn ledger_wasm() -> Vec<u8> {
     })
 }
 
+#[allow(dead_code)]
 pub fn ledger_mainnet_v5_wasm() -> Vec<u8> {
     std::fs::read(std::env::var("IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
 }
