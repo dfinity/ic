@@ -4535,7 +4535,7 @@ fn send_tx_and_verify_fee_collection(
     }
 }
 
-pub fn test_set_fee_collector_access_denied<T>(
+pub fn test_fee_collector_107_access_denied<T>(
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
