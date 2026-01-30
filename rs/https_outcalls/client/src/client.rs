@@ -467,6 +467,7 @@ async fn transform_adapter_response(
     if let Err(PricingError::InsufficientCycles) =
         budget.subtract_transform_usage(NumInstructions::from(instructions_used))
     {
+        debug_assert!(execution_result.is_err(), "Transform should fail if insufficient cycles");
         (
             Err((RejectCode::SysFatal, "Insufficient cycles".to_string())),
             instructions_used,

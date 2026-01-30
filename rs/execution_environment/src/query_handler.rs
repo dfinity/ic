@@ -294,9 +294,10 @@ impl InternalHttpQueryHandler {
                 data_certificate_with_delegation_metadata.data_certificate
             },
         );
-        let max_instructions_per_query = max_instructions
-            .unwrap_or(self.max_instructions_per_query)
-            .min(self.max_instructions_per_query);
+        let max_instructions_per_query = match max_instructions {
+            Some(max_ins) => max_ins.min(self.max_instructions_per_query),
+            None => self.max_instructions_per_query,
+        };
         let mut context = query_context::QueryContext::new(
             &self.log,
             self.hypervisor.as_ref(),
