@@ -3312,7 +3312,8 @@ fn nns_and_all_mainnet_subnets() {
         .get(&nns_subnet)
         .unwrap()
         .subnet_seed;
-    let nns_state_dir = state.into_path().join(hex::encode(nns_subnet_seed));
+    let state_dir = state.into_path();
+    let nns_state_dir = state_dir.join(hex::encode(nns_subnet_seed));
 
     let pic = PocketIcBuilder::new()
         .with_nns_state(nns_state_dir)
