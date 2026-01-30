@@ -270,12 +270,20 @@ async fn test_retrieve_doge_status<F: Fn()>(
     generate_blocks: F,
 ) -> ic_btc_interface::Txid {
     let mut blocks_generated = false;
+    let mut last_status = None;
     let retries = 30;
-    for i in 1..=retries {
+    let mut i = 1;
+    while i < retries {
         let status = minter_agent
             .retrieve_doge_status(block_index)
             .await
             .expect("failed to call retrieve_doge_status");
+        // Whenever status changes, reset the retry count
+        i = if Some(&status) != last_status.as_ref() {
+            0
+        } else {
+            i + 1
+        };
         info!(
             &logger,
             "[{i}/{retries}] retrieve_doge_status returns {:?}", status
@@ -293,6 +301,7 @@ async fn test_retrieve_doge_status<F: Fn()>(
             RetrieveDogeStatus::AmountTooLow => break,
             _ => {}
         }
+        last_status = Some(status);
         // Wait a bit to avoid spamming the logs
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }

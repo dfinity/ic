@@ -7,4 +7,5 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+ic-config = { path = "../../config" }
 ic-types = { path = "../../types/types" }

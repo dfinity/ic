@@ -3218,13 +3218,15 @@ fn deterministic_registry() {
         let state_dir = TempDir::new().unwrap();
         let state_dir_path_buf = state_dir.path().to_path_buf();
 
-        let _pocket_ic = PocketIcBuilder::new()
+        let pocket_ic = PocketIcBuilder::new()
             .with_state_dir(state_dir_path_buf.clone())
             .with_nns_subnet()
             .with_ii_subnet()
             .with_fiduciary_subnet()
             .with_application_subnet()
             .build();
+        // On WSL, the registry file is only available after the PocketIC instance is dropped.
+        drop(pocket_ic);
 
         let registry_proto_path = state_dir_path_buf.join("registry.proto");
         std::fs::read(registry_proto_path).unwrap()
