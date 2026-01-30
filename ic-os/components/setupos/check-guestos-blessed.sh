@@ -6,6 +6,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
+source /opt/ic/bin/config.sh
 source /opt/ic/bin/functions.sh
 
 # Check if the GuestOS version is blessed in the NNS registry.
