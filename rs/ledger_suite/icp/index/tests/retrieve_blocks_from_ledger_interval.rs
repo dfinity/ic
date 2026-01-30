@@ -1,4 +1,4 @@
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{IndexArg, InitArg, Status, UpgradeArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -11,10 +11,11 @@ use proptest::prelude::Strategy;
 use proptest::test_runner::TestRunner;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use ic_types::Time;
 use std::time::Duration;
 
-const GENESIS_NANOS: u64 = 1_620_328_630_000_000_000;
-const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(60);
+const GENESIS_NANOS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
+const INDEX_SYNC_TIME_TO_ADVANCE: Duration = Duration::from_secs(2);
 const MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT: u8 = 100;
 
 const FEE: u64 = 10_000;
@@ -86,15 +87,6 @@ fn install_ledger(
         .unwrap()
 }
 
-fn install_index(env: &StateMachine, ledger_id: CanisterId, interval: Option<u64>) -> CanisterId {
-    let args = IndexArg::Init(InitArg {
-        ledger_id: ledger_id.into(),
-        retrieve_blocks_from_ledger_interval_seconds: interval,
-    });
-    env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
-}
-
 fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     let res = env
         .query(index_id, "status", Encode!(&()).unwrap())
@@ -103,14 +95,27 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     candid::Decode!(&res, Status).expect("Failed to decode status response")
 }
 
+fn install_index(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    interval: Option<u64>,
+) -> Result<CanisterId, UserError> {
+    let args = IndexArg::Init(InitArg {
+        ledger_id: ledger_id.into(),
+        retrieve_blocks_from_ledger_interval_seconds: interval,
+    });
+    env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
+}
+
 fn install_and_upgrade(
     install_interval: Option<u64>,
     upgrade_interval: Option<u64>,
 ) -> Result<(), UserError> {
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, vec![], default_archive_options());
+    // Provide an initial balance so the ledger has at least one block
+    let ledger_id = install_ledger(env, vec![(account(1, 0), 1_000_000)], default_archive_options());
 
-    let index_id = install_index(env, ledger_id, install_interval);
+    let index_id = install_index(env, ledger_id, install_interval)?;
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -126,7 +131,7 @@ fn install_and_upgrade(
 }
 
 fn max_value_for_interval() -> u64 {
-    (u64::MAX - GENESIS_NANOS) / 1_000_000_000
+    (u64::MAX - GENESIS_NANOS.as_nanos_since_unix_epoch()) / 1_000_000_000
 }
 
 fn max_index_sync_time() -> u64 {
@@ -157,22 +162,30 @@ fn should_fail_to_install_and_upgrade_with_invalid_value() {
 fn should_install_and_upgrade_with_valid_values() {
     let max_seconds_for_timer = max_value_for_interval() - max_index_sync_time();
     let build_index_interval_values = [
-        None,
-        Some(0u64),
-        Some(1u64),
-        Some(10u64),
-        Some(max_seconds_for_timer),
+        (None, None),
+        (None, Some(0u64)),
+        (None, Some(1u64)),
+        (None, Some(10u64)),
+        (None, Some(max_seconds_for_timer)),
+        (Some(1u64), None),
+        (Some(1u64), Some(0u64)),
+        (Some(1u64), Some(1u64)),
+        (Some(1u64), Some(10u64)),
+        (Some(1u64), Some(max_seconds_for_timer)),
+        (Some(10u64), None),
+        (Some(10u64), Some(0u64)),
+        (Some(10u64), Some(1u64)),
+        (Some(10u64), Some(10u64)),
+        (Some(10u64), Some(max_seconds_for_timer)),
     ];
 
     // Installing and upgrading with valid values should succeed
-    for install_interval in &build_index_interval_values {
-        for upgrade_interval in &build_index_interval_values {
-            assert_eq!(
-                install_and_upgrade(*install_interval, *upgrade_interval),
-                Ok(()),
-                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
-            );
-        }
+    for (install_interval, upgrade_interval) in &build_index_interval_values {
+        assert_eq!(
+            install_and_upgrade(*install_interval, *upgrade_interval),
+            Ok(()),
+            "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
+        );
     }
 }
 
@@ -252,7 +265,7 @@ fn should_sync_according_to_interval() {
                 let ledger_id =
                     install_ledger(env, vec![(a1, INITIAL_BALANCE)], default_archive_options());
 
-                let index_id = install_index(env, ledger_id, install_interval);
+                let index_id = install_index(env, ledger_id, install_interval).unwrap();
 
                 // Send a transaction and verify that the index is synced after the interval
                 // specified during the install, or the default value if the interval specified
@@ -292,28 +305,4 @@ fn should_sync_according_to_interval() {
             },
         )
         .unwrap();
-}
-
-#[test]
-fn should_install_and_upgrade_without_build_index_interval_field_set() {
-    #[derive(Clone, Debug, CandidType, Deserialize)]
-    struct OldInitArg {
-        pub ledger_id: Principal,
-    }
-
-    let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, vec![], default_archive_options());
-    let args = OldInitArg {
-        ledger_id: ledger_id.into(),
-    };
-    let index_id = env
-        .install_canister(index_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap();
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
-
-    env.upgrade_canister(index_id, index_wasm(), Encode!(&()).unwrap())
-        .unwrap();
-
-    wait_until_sync_is_completed(env, index_id, ledger_id);
 }
