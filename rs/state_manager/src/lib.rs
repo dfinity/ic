@@ -2669,7 +2669,7 @@ impl StateManager for StateManagerImpl {
 
         let (target_snapshot, target_hash) = match states.snapshots.back() {
             // The most recent available state is more recent than what we have in the tip,
-            // e.g. because we are catching up.
+            // because we are catching up.
             Some(snapshot) if snapshot.height > tip_height => {
                 let tip_height = snapshot.height;
 
@@ -2697,6 +2697,10 @@ impl StateManager for StateManagerImpl {
                     CryptoHashOfPartialState::from(tip_metadata.certified_state_hash.clone())
                 } else {
                     // We have the initial state, which has no previous state hash.
+                    // Nope: also during catch up (we did not hash in c&c).
+                    // Not putting it in cert_md...
+                    // We only want prev)state_hash, not the tuple (state, hash), because
+                    // we dont want to clone the state.
                     std::mem::drop(states);
 
                     let mut tip_certification_metadata = Self::compute_certification_metadata(
@@ -2718,7 +2722,6 @@ impl StateManager for StateManagerImpl {
                     CryptoHashOfPartialState::from(tip_certified_state_hash)
                 };
 
-                tip.metadata.prev_state_hash = Some(tip_hash);
                 return (tip_height, tip);
             }
         };
@@ -2760,7 +2763,8 @@ impl StateManager for StateManagerImpl {
             checkpoint_layout,
         );
 
-        new_tip.metadata.prev_state_hash = Some(target_hash);
+        // don't set
+        // new_tip.metadata.prev_state_hash = Some(target_hash);
 
         // This might still not be the latest version: there might have been
         // another successful state sync while we were updating the tip.
@@ -3212,7 +3216,7 @@ impl StateManager for StateManagerImpl {
 
         // Get the previous state hash either from consensus via certification metadata (if we are catching up)
         // or wait for the hashing thread to finish computing it.
-        // TODO: use states.certifications
+        // TODO: use states.certifications (look up at height-1)
         let prev_state_hash = {
             let (sender, recv) = bounded(1);
             self.hash_channel
@@ -3274,6 +3278,7 @@ impl StateManager for StateManagerImpl {
         // its certification metadata available.
         let fast_forward_height = self.fast_forward_height.load(Ordering::Relaxed);
         if matches!(scope, CertificationScope::Metadata)
+        // additional condition: if hash@height is in self.certifications => no early return if we have no hash from CON
             && height.get() < fast_forward_height
             && !height
                 .get()
@@ -3291,6 +3296,10 @@ impl StateManager for StateManagerImpl {
             states.tip = Some(state);
             return;
         }
+        // alternative (optional to save cloning):
+        // else if behind and hash NOT in self.cert {
+        //     calculate hash sync'ly and write to self.certifications.
+        // }
 
         self.metrics
             .tip_handler_queue_length
