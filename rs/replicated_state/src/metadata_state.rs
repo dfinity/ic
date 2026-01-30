@@ -1,10 +1,12 @@
 pub mod proto;
 pub mod subnet_call_context_manager;
+pub mod subnet_schedule;
 #[cfg(test)]
 mod tests;
 
+use self::subnet_call_context_manager::SubnetCallContextManager;
+use self::subnet_schedule::SubnetSchedule;
 use crate::CanisterQueues;
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
@@ -62,6 +64,10 @@ pub struct SystemMetadata {
 
     /// XNet stream state indexed by the _destination_ subnet id.
     pub(super) streams: Arc<StreamMap>,
+
+    /// Scheduling priorities of the canisters on this subnet.
+    #[validate_eq(CompareWithValidateEq)]
+    pub subnet_schedule: SubnetSchedule,
 
     /// The canister ID ranges from which this subnet generates canister IDs.
     canister_allocation_ranges: CanisterIdRanges,
@@ -362,6 +368,7 @@ impl SystemMetadata {
             own_subnet_type,
             ingress_history: Default::default(),
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
@@ -640,6 +647,7 @@ impl SystemMetadata {
         let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
+            ref mut subnet_schedule,
             canister_allocation_ranges: _,
             last_generated_canister_id: _,
             prev_state_hash: _,
@@ -684,6 +692,9 @@ impl SystemMetadata {
                 // Or this is subnet A' and message is addressed to the management canister.
                 || split_from_subnet == *own_subnet_id && canister_id == IC_00
         });
+
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(&is_local_canister);
 
         // Split complete, reset split marker.
         *split_from = None;
@@ -747,6 +758,7 @@ impl SystemMetadata {
         let Self {
             mut ingress_history,
             mut streams,
+            mut subnet_schedule,
             mut canister_allocation_ranges,
             mut last_generated_canister_id,
             prev_state_hash,
@@ -836,6 +848,9 @@ impl SystemMetadata {
         // Set the split marker to the original subnet ID, on both subnets.
         subnet_split_from = Some(own_subnet_id);
 
+        // Only retain canister priorities for hosted canisters.
+        subnet_schedule.split(is_local_canister);
+
         // Only retain Bitcoin responses for hosted canisters.
         bitcoin_get_successors_follow_up_responses
             .retain(|canister_id, _| is_local_canister(*canister_id));
@@ -843,6 +858,7 @@ impl SystemMetadata {
         Ok(Self {
             ingress_history,
             streams,
+            subnet_schedule,
             // Already populated from the registry for subnet B.
             canister_allocation_ranges,
             last_generated_canister_id,
@@ -1914,6 +1930,7 @@ pub mod testing {
             ingress_history,
             // No need to cover streams, they always stay with the subnet.
             streams: Default::default(),
+            subnet_schedule: Default::default(),
             canister_allocation_ranges: Default::default(),
             last_generated_canister_id: None,
             batch_time: UNIX_EPOCH,
