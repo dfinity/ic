@@ -10047,6 +10047,7 @@ dependencies = [
 name = "ic-https-outcalls-pricing"
 version = "0.9.0"
 dependencies = [
+ "ic-config",
  "ic-types",
 ]
 
