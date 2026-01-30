@@ -65,7 +65,6 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{
     StateMachine, StateMachineBuilder, StateMachineConfig, two_subnets_simple,
 };
-use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -5421,7 +5420,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const LOG_MEMORY_STORE_USAGE: u64 = PAGE_SIZE as u64;
+const LOG_MEMORY_STORE_USAGE: u64 = 4096;
 const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + LOG_MEMORY_STORE_USAGE);
 
 #[test]
