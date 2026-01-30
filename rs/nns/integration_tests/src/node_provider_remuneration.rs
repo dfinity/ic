@@ -506,6 +506,7 @@ fn test_automated_node_provider_remuneration() {
         NodeRewardType::Type1.to_string() => 2,
         NodeRewardType::Type3.to_string() => 2,
         NodeRewardType::Type3dot1.to_string() => 3,
+        NodeRewardType::Type4.to_string() => 2,
     };
     add_node_operator(
         &state_machine,
@@ -559,6 +560,18 @@ fn test_automated_node_provider_remuneration() {
             node_info_3.operator_id,
             15,
             NodeRewardType::Type3dot1,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            16,
+            NodeRewardType::Type4,
+        ),
+        add_node(
+            &state_machine,
+            node_info_3.operator_id,
+            17,
+            NodeRewardType::Type4,
         ),
     ];
     nodes
@@ -685,7 +698,7 @@ fn test_automated_node_provider_remuneration() {
     // Rewards Table:
     // EU: Type 1: 24,000 XDR/month, Type 3: 35,000 XDR/month
     // North America, Canada: Type 1: 68,000 XDR/month, Type 3: 11,000 XDR/month
-    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month
+    // North America, US, CA: Type 1: 234,000 XDR/month, Type 3: 907,000 XDR/month, Type 3.1: 103,000 XDR/month, Type 4: 150,000 XDR/month
 
     // This node provider owns more than 1 Type3* node
     // Average reward rate will be applied for Type3* nodes
@@ -699,11 +712,20 @@ fn test_automated_node_provider_remuneration() {
         + 0.8 * 0.8 * 0.8 * 0.8 * 103_000.0)
         / 5.0;
 
+    // Type4 rewards: 2 nodes * 150,000 XDR/month (flat, no reduction)
+    let type4_rewards = 2.0 * 150_000.0;
+
     let expected_daily_rewards_xdrp_3 =
-        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards)) / REWARDS_TABLE_DAYS) as u64;
+        (((2.0 * 234_000.0) + (5.0 * average_type3_reduced_rewards) + type4_rewards)
+            / REWARDS_TABLE_DAYS) as u64;
     let expected_rewards_e8s_3 =
         expected_daily_rewards_xdrp_3 * TOKEN_SUBDIVIDABLE_BY * expected_reward_days_covered_1
             / 155_000;
+    if expected_reward_days_covered_1 == 30 {
+        assert_eq!(expected_rewards_e8s_3, 1399870967);
+    } else {
+        assert_eq!(expected_rewards_e8s_3, 1446500000);
+    }
     let expected_node_provider_reward_3 = RewardNodeProvider {
         node_provider: Some(node_info_3.provider.clone()),
         amount_e8s: expected_rewards_e8s_3,
@@ -1065,272 +1087,6 @@ fn test_automated_node_provider_remuneration() {
             .rewards
             .contains(&expected_automated_node_provider_reward_3)
     );
-}
-
-/// Test that type4 nodes receive rewards correctly.
-/// Tests three scenarios:
-/// - Type4 in North America,US,CA (FM1): 150,000 XDR/month - should receive rewards
-/// - Type4 in North America,Canada (BC1): 0 XDR/month - should receive no rewards
-/// - Type4 in EU (AN1): type4 not defined - should receive no rewards (falls back to default 0)
-#[test]
-fn test_type4_node_rewards() {
-    let nns_subnet = subnet_test_id(TEST_ID);
-
-    let state_machine = state_machine_builder_for_nns_tests()
-        .with_nns_subnet_id(nns_subnet)
-        .with_subnet_id(nns_subnet)
-        .build();
-
-    let nns_init_payload = NnsInitPayloadsBuilder::new()
-        .with_initial_invariant_compliant_mutations()
-        .with_test_neurons()
-        .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &["test"]);
-
-    add_data_centers(&state_machine);
-    add_node_rewards_table(&state_machine);
-
-    // Node Provider 1: US,CA region with type4 rate of 150,000
-    let node_info_1 = NodeInfo::new(
-        *TEST_USER1_PRINCIPAL,
-        *TEST_USER2_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER2_PRINCIPAL),
-        None,
-    );
-
-    // Node Provider 2: Canada region with type4 rate of 0
-    let node_info_2 = NodeInfo::new(
-        *TEST_USER3_PRINCIPAL,
-        *TEST_USER4_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER4_PRINCIPAL),
-        None,
-    );
-
-    // Node Provider 3: EU region with no type4 entry (should fall back to default/0)
-    let node_info_3 = NodeInfo::new(
-        *TEST_USER5_PRINCIPAL,
-        *TEST_USER6_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER6_PRINCIPAL),
-        None,
-    );
-
-    // Add Node Providers
-    add_node_provider(&state_machine, node_info_1.provider.clone());
-    add_node_provider(&state_machine, node_info_2.provider.clone());
-    add_node_provider(&state_machine, node_info_3.provider.clone());
-
-    let max_rewardable_nodes = btreemap! { NodeRewardType::Type4.to_string() => 2 };
-
-    // Add Node Operator 1 in FM1 (North America,US,CA) with type4 rate 150,000
-    add_node_operator(
-        &state_machine,
-        &node_info_1.operator_id,
-        &node_info_1.provider_id,
-        "FM1", // Uses North America,US,CA region which has type4 rate of 150,000
-        max_rewardable_nodes.clone(),
-        "0:0:0:0:0:0:0:0",
-    );
-
-    // Add Node Operator 2 in BC1 (North America,Canada) with type4 rate 0
-    add_node_operator(
-        &state_machine,
-        &node_info_2.operator_id,
-        &node_info_2.provider_id,
-        "BC1", // Uses North America,Canada region which has type4 rate of 0
-        max_rewardable_nodes.clone(),
-        "0:0:0:0:0:0:0:1",
-    );
-
-    // Add Node Operator 3 in AN1 (EU) with no type4 entry in rewards table
-    add_node_operator(
-        &state_machine,
-        &node_info_3.operator_id,
-        &node_info_3.provider_id,
-        "AN1", // Uses EU,Belgium,Antwerp region which has NO type4 entry
-        max_rewardable_nodes,
-        "0:0:0:0:0:0:0:2",
-    );
-
-    // Add two type4 nodes for Node Provider 1 (US,CA - should get rewards)
-    let node_id_1 = add_node(
-        &state_machine,
-        node_info_1.operator_id,
-        1,
-        NodeRewardType::Type4,
-    );
-    let node_id_2 = add_node(
-        &state_machine,
-        node_info_1.operator_id,
-        2,
-        NodeRewardType::Type4,
-    );
-
-    // Add two type4 nodes for Node Provider 2 (Canada - should get 0 rewards)
-    let node_id_3 = add_node(
-        &state_machine,
-        node_info_2.operator_id,
-        3,
-        NodeRewardType::Type4,
-    );
-    let node_id_4 = add_node(
-        &state_machine,
-        node_info_2.operator_id,
-        4,
-        NodeRewardType::Type4,
-    );
-
-    // Add two type4 nodes for Node Provider 3 (EU - no type4 entry, should get 0 rewards)
-    let node_id_5 = add_node(
-        &state_machine,
-        node_info_3.operator_id,
-        5,
-        NodeRewardType::Type4,
-    );
-    let node_id_6 = add_node(
-        &state_machine,
-        node_info_3.operator_id,
-        6,
-        NodeRewardType::Type4,
-    );
-
-    // Set the conversion rate
-    let current_timestamp_seconds = state_machine.get_time().as_secs_since_unix_epoch();
-    let payload = UpdateIcpXdrConversionRatePayload {
-        timestamp_seconds: current_timestamp_seconds,
-        xdr_permyriad_per_icp: 150_000,
-        ..Default::default()
-    };
-
-    // All success - failure rate is 0
-    let node_metrics_daily = vec![
-        NodeMetricsDailyRaw {
-            node_id: node_id_1,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-        NodeMetricsDailyRaw {
-            node_id: node_id_2,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-        NodeMetricsDailyRaw {
-            node_id: node_id_3,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-        NodeMetricsDailyRaw {
-            node_id: node_id_4,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-        NodeMetricsDailyRaw {
-            node_id: node_id_5,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-        NodeMetricsDailyRaw {
-            node_id: node_id_6,
-            num_blocks_failed: 0,
-            num_blocks_proposed: 1,
-        },
-    ];
-
-    // Cover 31 days of blockmaker metrics
-    for _ in 0..31 {
-        set_icp_xdr_conversion_rate(&state_machine, payload.clone());
-        tick_with_blockmaker_metrics(&state_machine, &node_metrics_daily);
-        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
-        wait_for_nrc_metrics_sync(&state_machine);
-    }
-
-    let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
-    let start_timestamp = now_seconds - NODE_PROVIDER_REWARD_PERIOD_SECONDS;
-    let rewards_days = calculate_expected_rewards_days(start_timestamp, now_seconds);
-
-    // Call get_monthly_node_provider_rewards
-    let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
-        nns_get_node_provider_rewards(&state_machine);
-
-    let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
-
-    // -------------------------------------------------------------------------
-    // Verify Node Provider 1 (US,CA) receives rewards
-    // Type4 rate is 150,000 XDR/month, 2 nodes
-    // Daily rate = 150,000 / 30.4375 ≈ 4928 per node
-    // Total daily = 2 * 4928 = 9856
-    // -------------------------------------------------------------------------
-    let expected_daily_rewards_xdrp_1 = ((2.0 * 150_000.0) / REWARDS_TABLE_DAYS) as u64;
-    let expected_rewards_e8s_1 =
-        expected_daily_rewards_xdrp_1 * TOKEN_SUBDIVIDABLE_BY * rewards_days / 150_000;
-
-    let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
-    }));
-
-    let expected_node_provider_reward_1 = RewardNodeProvider {
-        node_provider: Some(node_info_1.provider.clone()),
-        amount_e8s: expected_rewards_e8s_1,
-        reward_mode: reward_mode_1.clone(),
-    };
-
-    assert!(
-        monthly_node_provider_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_1),
-        "Expected reward for NP1 (US,CA): {expected_node_provider_reward_1:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
-    );
-
-    // -------------------------------------------------------------------------
-    // Verify Node Provider 2 (Canada) receives 0 rewards
-    // Type4 rate is 0 XDR/month in Canada
-    // -------------------------------------------------------------------------
-    let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
-    }));
-
-    let expected_node_provider_reward_2 = RewardNodeProvider {
-        node_provider: Some(node_info_2.provider.clone()),
-        amount_e8s: 0,
-        reward_mode: reward_mode_2.clone(),
-    };
-
-    // With 0 rate, the provider should either not be in the list or have 0 amount
-    let np2_reward = monthly_node_provider_rewards
-        .rewards
-        .iter()
-        .find(|r| r.node_provider == Some(node_info_2.provider.clone()));
-
-    assert!(
-        np2_reward.is_none() || np2_reward == Some(&expected_node_provider_reward_2),
-        "Expected NP2 (Canada) to have 0 rewards or not be in the list, but got: {np2_reward:?}"
-    );
-
-    // -------------------------------------------------------------------------
-    // Verify Node Provider 3 (EU) receives 0 rewards
-    // Type4 is not defined in the EU region rewards table
-    // Should fall back to default (essentially 0 or minimal rewards)
-    // -------------------------------------------------------------------------
-    let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_3.provider_account.into_proto_with_checksum()),
-    }));
-
-    let expected_node_provider_reward_3 = RewardNodeProvider {
-        node_provider: Some(node_info_3.provider.clone()),
-        amount_e8s: 0,
-        reward_mode: reward_mode_3.clone(),
-    };
-
-    // With no type4 entry in EU, the provider should either not be in the list or have 0 amount
-    let np3_reward = monthly_node_provider_rewards
-        .rewards
-        .iter()
-        .find(|r| r.node_provider == Some(node_info_3.provider.clone()));
-
-    assert!(
-        np3_reward.is_none() || np3_reward == Some(&expected_node_provider_reward_3),
-        "Expected NP3 (EU, no type4 entry) to have 0 rewards or not be in the list, but got: {np3_reward:?}"
-    );
-
 }
 
 fn calculate_expected_rewards_days(

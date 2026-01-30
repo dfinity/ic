@@ -910,6 +910,106 @@ fn test_type4_not_in_rewards_table() {
     assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
 }
 
+/// **Scenario**: Type4 node in a region where type4 is explicitly set to 0 XDR
+/// **Expected**: Node receives exactly 0 rewards
+/// **Key Test**: Verifies that explicit 0 rate results in 0 rewards (different from fallback behavior)
+#[test]
+fn test_type4_explicit_zero_rate() {
+    let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let provider_id = test_provider_id(1);
+    let subnet_id = test_subnet_id(1);
+
+    // Create a rewards table with type4 explicitly set to 0
+    let mut rewards_table = FakeInputProvider::create_rewards_table();
+    rewards_table.table.insert(
+        "North America,Canada,BC".to_string(),
+        NodeRewardRates {
+            rates: btreemap! {
+                NodeRewardType::Type4.to_string() => NodeRewardRate {
+                    xdr_permyriad_per_node_per_month: 0, // Explicitly 0
+                    reward_coefficient_percent: None,
+                },
+            },
+        },
+    );
+
+    let fake_input_provider = FakeInputProvider::new()
+        .add_rewards_table(day, rewards_table)
+        .add_daily_metrics(
+            day,
+            subnet_id,
+            vec![
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(1),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 0, // Perfect performance
+                },
+                NodeMetricsDailyRaw {
+                    node_id: test_node_id(2),
+                    num_blocks_proposed: 100,
+                    num_blocks_failed: 0, // Perfect performance
+                },
+            ],
+        )
+        .add_rewardable_nodes(
+            day,
+            provider_id,
+            vec![
+                RewardableNode {
+                    node_id: test_node_id(1),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "North America,Canada,BC".into(),
+                    dc_id: "dc1".into(),
+                },
+                RewardableNode {
+                    node_id: test_node_id(2),
+                    node_reward_type: NodeRewardType::Type4,
+                    region: "North America,Canada,BC".into(),
+                    dc_id: "dc2".into(),
+                },
+            ],
+        );
+
+    let result = RewardsCalculationV1::calculate_rewards(day, day, fake_input_provider)
+        .expect("Calculation should succeed");
+
+    let daily_result = &result.daily_results[&day];
+    let provider_result = &daily_result.provider_results[&provider_id];
+
+    // Type4 should NOT use type3 logic
+    assert!(provider_result.type3_base_rewards.is_empty());
+
+    // Verify base rewards entry exists for type4 with 0 rate
+    let type4_base_rewards = provider_result
+        .base_rewards
+        .iter()
+        .find(|r| r.node_reward_type == NodeRewardType::Type4)
+        .expect("Should have base rewards for type4");
+
+    assert_eq!(type4_base_rewards.monthly_xdr_permyriad, dec!(0));
+    assert_eq!(type4_base_rewards.daily_xdr_permyriad, dec!(0));
+
+    // Verify both nodes have 0 base rewards
+    let node_results: HashMap<_, _> = provider_result
+        .daily_nodes_rewards
+        .iter()
+        .map(|n| (n.node_id, n))
+        .collect();
+
+    let node1 = node_results.get(&test_node_id(1)).unwrap();
+    let node2 = node_results.get(&test_node_id(2)).unwrap();
+
+    // Both nodes should have exactly 0 rewards
+    assert_eq!(node1.base_rewards_xdr_permyriad, dec!(0));
+    assert_eq!(node2.base_rewards_xdr_permyriad, dec!(0));
+    assert_eq!(node1.adjusted_rewards_xdr_permyriad, dec!(0));
+    assert_eq!(node2.adjusted_rewards_xdr_permyriad, dec!(0));
+
+    // Total rewards should be exactly 0
+    assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
+    assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 0);
+}
+
 /// **Scenario**: Type4 node in a region that IS present in the rewards table
 /// **Expected**: Uses the configured rate from rewards table, no reduction coefficient logic
 /// **Key Test**: Verifies type4 uses flat per-node rewards (not type3 grouped logic)
