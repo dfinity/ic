@@ -28,7 +28,9 @@ pub fn read_and_verify_bless_alternative_guest_os_version_proposal(
         .context("Failed to deserialize Certificate from CBOR")?;
 
     let agent = Agent::builder()
-        .with_url("https://ic0.app")
+        // We need to provide some URL to make the builder happy
+        .with_url("https://not_used")
+        // We don't care about the certificate expiry (malicious host can fake time anyway)
         .with_ingress_expiry(Duration::from_secs(365_250_000 * 24 * 60 * 60))
         .build()
         .context("Failed to build agent")?;

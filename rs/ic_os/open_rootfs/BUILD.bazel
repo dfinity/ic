@@ -30,14 +30,14 @@ DEPENDENCIES = [
 rust_binary(
     name = "open_rootfs",
     srcs = glob(["src/**/*.rs"]),
-    deps = DEPENDECIES,
+    deps = DEPENDENCIES,
 )
 
 rust_binary(
     name = "open_rootfs_dev",
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["dev"],
-    deps = DEPENDECIES,
+    deps = DEPENDENCIES,
 )
 
 rust_test(
