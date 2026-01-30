@@ -13,7 +13,7 @@ pub trait BudgetTracker: Send {
     /// # Invariants
     ///  - This method returns `Ok(())` if `network_usage <= get_adapter_limits()`.
     ///  - This method returns `Err(PricingError)` if `network_usage > get_adapter_limits()`.
-    /// 
+    ///
     /// Note that "<=" is used here to mean field-wise less than or equal to.
     fn subtract_network_usage(&mut self, network_usage: NetworkUsage) -> Result<(), PricingError>;
     /// Returns the maximum instructions allowed for the transformation function.
