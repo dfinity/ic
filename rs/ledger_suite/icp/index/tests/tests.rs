@@ -2042,7 +2042,7 @@ fn test_index_sync_with_invalid_block() {
 mod metrics {
     use crate::index_wasm;
     use candid::Principal;
-    use ic_icp_index::InitArg;
+    use ic_icp_index::{IndexArg, InitArg};
 
     #[test]
     fn should_export_heap_memory_usage_bytes_metrics() {
@@ -2052,10 +2052,10 @@ mod metrics {
         );
     }
 
-    fn encode_init_args(ledger_id: Principal) -> InitArg {
-        InitArg {
+    fn encode_init_args(ledger_id: Principal) -> IndexArg {
+        IndexArg::Init(InitArg {
             ledger_id,
             retrieve_blocks_from_ledger_interval_seconds: None,
-        }
+        })
     }
 }
