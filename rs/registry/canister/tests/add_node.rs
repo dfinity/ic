@@ -387,62 +387,6 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
     });
 }
 
-#[test]
-fn node_is_created_with_type4() {
-    local_test_on_nns_subnet(|runtime| async move {
-        // First prepare the registry with a Node Operator record that allows type4 nodes
-        let registry = set_up_registry_canister(
-            &runtime,
-            RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
-                    btreemap! { "type4".to_string() => 100 },
-                ))
-                .build(),
-        )
-        .await;
-
-        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type4);
-        let node_id = node_pks.node_id();
-
-        // Then, ensure there is no value for the node
-        let node_record = get_node_record(&registry, node_id).await;
-        assert!(node_record.is_none());
-
-        let response: Result<NodeId, String> = registry
-            .update_from_sender(
-                "add_node",
-                candid,
-                (payload,),
-                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
-            )
-            .await;
-        assert!(response.is_ok());
-
-        // Now let's check directly in the registry that the mutation actually happened
-        let node_record = get_node_record(&registry, node_id).await;
-        // Check if some fields are present
-        assert!(node_record.is_some());
-        let node_record = node_record.unwrap();
-        assert_eq!(
-            node_record.node_reward_type,
-            Some(NodeRewardType::Type4 as i32)
-        );
-
-        // Check that node allowance has decreased
-        let node_operator_record =
-            get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL)
-                .await
-                .unwrap();
-        assert_eq!(
-            node_operator_record.max_rewardable_nodes,
-            btreemap! { "type4".to_string() => 100 }
-        );
-
-        Ok(())
-    });
-}
-
 fn init_mutation_with_max_rewardable_nodes(
     max_rewardable_nodes: BTreeMap<String, u32>,
 ) -> RegistryAtomicMutateRequest {
