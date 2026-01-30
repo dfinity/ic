@@ -48,7 +48,9 @@ function update_config_version_metric() {
 
 function update_node_operator_private_key_metric() {
     node_operator_private_key_exists=0
-    if [ -f "${STATE_ROOT_PATH}/data/node_operator_private_key.pem" ]; then
+
+    node_operator_private_key_str=$(get_config_value '.icos_settings.node_operator_private_key')
+    if [ "${node_operator_private_key_str}" != "null" ]; then
         node_operator_private_key_exists=1
     fi
 
