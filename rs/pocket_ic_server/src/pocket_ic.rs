@@ -555,6 +555,69 @@ impl Subnets for SubnetsImpl {
     }
 }
 
+struct PocketIcStateDir {
+    state_dir: Option<PathBuf>,
+    wsl_native_state_dir: Option<TempDir>,
+}
+
+impl PocketIcStateDir {
+    fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
+        if is_wsl()
+            && let Some(state_dir) = state_dir
+        {
+            println!("Using WSL-native state directory");
+
+            let temp_dir = TempDir::new()
+                .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
+            let temp_dir_path = temp_dir.path();
+
+            let mut options = CopyOptions::new();
+            options.copy_inside = true;
+
+            copy(&state_dir, temp_dir_path, &options)
+                .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
+
+            Ok(Self {
+                state_dir: Some(state_dir),
+                wsl_native_state_dir: Some(temp_dir),
+            })
+        } else {
+            Ok(Self {
+                state_dir,
+                wsl_native_state_dir: None,
+            })
+        }
+    }
+
+    fn get(&self) -> Option<PathBuf> {
+        self.wsl_native_state_dir
+            .as_ref()
+            .map(|temp_dir| temp_dir.path().to_path_buf())
+            .or_else(|| self.state_dir.clone())
+    }
+}
+
+impl Drop for PocketIcStateDir {
+    fn drop(&mut self) {
+        if let Some(ref wsl_native_state_dir) = self.wsl_native_state_dir
+            && let Some(ref state_dir) = self.state_dir
+        {
+            // clear state directory first
+            let state_dir_content = get_dir_content(state_dir)
+                .expect("Failed to read state directory")
+                .files;
+            remove_items(&state_dir_content).expect("Failed to clear state directory");
+
+            // now copy back state from the WSL-native state directory
+            let mut options = CopyOptions::new();
+            options.copy_inside = true;
+
+            copy(wsl_native_state_dir.path(), state_dir, &options)
+                .expect("Failed to copy back state from WSL-native state directory");
+        }
+    }
+}
+
 struct PocketIcSubnets {
     subnet_configs: Vec<SubnetConfigInternal>,
     subnets: Arc<SubnetsImpl>,
@@ -564,8 +627,7 @@ struct PocketIcSubnets {
     btc_subnet: Option<Arc<Subnet>>,
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
-    state_dir: Option<PathBuf>,
-    wsl_native_state_dir: Option<TempDir>,
+    state_dir: PocketIcStateDir,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     icp_config: IcpConfig,
@@ -675,8 +737,7 @@ impl PocketIcSubnets {
     #[allow(clippy::too_many_arguments)]
     fn new(
         runtime: Arc<Runtime>,
-        state_dir: Option<PathBuf>,
-        wsl_native_state_dir: Option<TempDir>,
+        state_dir: PocketIcStateDir,
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -703,7 +764,6 @@ impl PocketIcSubnets {
             btc_subnet: None,
             runtime,
             state_dir,
-            wsl_native_state_dir,
             registry_data_provider,
             routing_table,
             chain_keys,
@@ -722,7 +782,7 @@ impl PocketIcSubnets {
     }
 
     fn persist_topology(&self, default_effective_canister_id: Principal) {
-        if let Some(ref state_dir) = self.state_dir {
+        if let Some(state_dir) = self.state_dir.get() {
             let raw_topology: RawTopologyInternal = RawTopologyInternal {
                 subnet_configs: self.subnet_configs.clone(),
                 default_effective_canister_id: default_effective_canister_id.into(),
@@ -785,7 +845,7 @@ impl PocketIcSubnets {
         let subnet_seed = compute_subnet_seed(ranges.clone(), alloc_range);
 
         let state_machine_state_dir: Box<dyn StateMachineStateDir> =
-            if let Some(ref state_dir) = self.state_dir {
+            if let Some(state_dir) = self.state_dir.get() {
                 Box::new(state_dir.join(hex::encode(subnet_seed)))
             } else {
                 Box::new(TempDir::new().unwrap())
@@ -2471,8 +2531,8 @@ impl PocketIcSubnets {
 
     fn persist_registry_changes(&mut self) {
         // Update the registry file on disk.
-        if let Some(ref state_dir) = self.state_dir {
-            let registry_proto_path = PathBuf::from(state_dir).join("registry.proto");
+        if let Some(state_dir) = self.state_dir.get() {
+            let registry_proto_path = state_dir.join("registry.proto");
             self.registry_data_provider
                 .write_to_file(registry_proto_path);
         }
@@ -2520,7 +2580,7 @@ pub struct PocketIc {
 
 impl Drop for PocketIc {
     fn drop(&mut self) {
-        if self.subnets.state_dir.is_some() {
+        if self.subnets.state_dir.get().is_some() {
             let subnets = self.subnets.get_all();
             for subnet in &subnets {
                 subnet.state_machine.checkpointed_tick();
@@ -2560,22 +2620,6 @@ impl Drop for PocketIc {
                     panic!("Timed out while dropping PocketIC.");
                 }
             }
-        }
-        if let Some(ref wsl_native_state_dir) = self.subnets.wsl_native_state_dir
-            && let Some(ref state_dir) = self.subnets.state_dir
-        {
-            // clear state directory first
-            let state_dir_content = get_dir_content(state_dir)
-                .expect("Failed to read state directory")
-                .files;
-            remove_items(&state_dir_content).expect("Failed to clear state directory");
-
-            // now copy back state from the WSL-native state directory
-            let mut options = CopyOptions::new();
-            options.copy_inside = true;
-
-            copy(wsl_native_state_dir.path(), state_dir, &options)
-                .expect("Failed to copy back state from WSL-native state directory");
         }
     }
 }
@@ -2638,27 +2682,9 @@ impl PocketIc {
             .map(|time| time.into())
             .unwrap_or_else(|| default_timestamp(&icp_features));
 
-        let (state_dir, wsl_native_state_dir) = if is_wsl()
-            && let Some(state_dir) = state_dir
-        {
-            println!("Using WSL-native state directory");
+        let state_dir = PocketIcStateDir::new(state_dir)?;
 
-            let temp_dir = TempDir::new()
-                .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
-            let temp_dir_path = temp_dir.path();
-
-            let mut options = CopyOptions::new();
-            options.copy_inside = true;
-
-            copy(state_dir, temp_dir_path, &options)
-                .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
-
-            (Some(temp_dir_path.to_path_buf()), Some(temp_dir))
-        } else {
-            (state_dir, None)
-        };
-
-        let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
+        let registry: Option<Vec<u8>> = if let Some(state_dir) = state_dir.get() {
             let registry_file_path = state_dir.join("registry.proto");
             File::open(registry_file_path).ok().map(|file| {
                 let mut reader = BufReader::new(file);
@@ -2670,7 +2696,7 @@ impl PocketIc {
             None
         };
 
-        let topology: Option<RawTopologyInternal> = if let Some(ref state_dir) = state_dir {
+        let topology: Option<RawTopologyInternal> = if let Some(state_dir) = state_dir.get() {
             let topology_file_path = state_dir.join("topology.json");
             File::open(topology_file_path).ok().map(|file| {
                 let reader = BufReader::new(file);
@@ -2905,7 +2931,6 @@ impl PocketIc {
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
-            wsl_native_state_dir,
             icp_config,
             log_level,
             bitcoind_addr,
