@@ -558,19 +558,6 @@ struct PocketIcStateDir {
     wsl_native_state_dir: Option<TempDir>,
 }
 
-fn remove_dir_contents(dir: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            std::fs::remove_dir_all(entry.path())?;
-        } else {
-            std::fs::remove_file(entry.path())?;
-        }
-    }
-    Ok(())
-}
-
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
         if is_wsl()
@@ -5298,6 +5285,19 @@ fn systemtime_to_unix_epoch_nanos(st: SystemTime) -> u64 {
         .as_nanos()
         .try_into()
         .unwrap()
+}
+
+fn remove_dir_contents(dir: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            std::fs::remove_dir_all(entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
