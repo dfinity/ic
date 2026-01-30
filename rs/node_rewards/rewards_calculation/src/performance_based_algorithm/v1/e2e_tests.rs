@@ -1124,4 +1124,3 @@ fn test_type4_in_rewards_table() {
     assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 40000);
     assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 40000);
 }
-
