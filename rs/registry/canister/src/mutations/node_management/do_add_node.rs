@@ -249,8 +249,6 @@ impl Registry {
             return Ok(None);
         };
 
-        // Compute the expected custom data using the node signing public key
-        // This ensures the attestation was generated specifically for this node
         let expected_custom_data = NodeRegistrationAttestationCustomData {
             node_signing_pk: OctetStringRef::new(&payload.node_signing_pk)
                 .expect("node_signing_pk must be valid"),
