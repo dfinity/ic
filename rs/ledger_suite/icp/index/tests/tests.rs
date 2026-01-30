@@ -1,6 +1,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icp_index::{GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse, GetAccountIdentifierTransactionsResult, IndexArg, InitArg, SettledTransaction, SettledTransactionWithId};
+use ic_icp_index::{
+    GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
+    GetAccountIdentifierTransactionsResult, IndexArg, InitArg, SettledTransaction,
+    SettledTransactionWithId,
+};
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
