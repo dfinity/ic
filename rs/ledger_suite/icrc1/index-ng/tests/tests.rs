@@ -1,7 +1,7 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
     index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    install_ledger_with_wasm, ledger_get_all_blocks, ledger_legacy_fc_wasm, ledger_wasm,
+    install_ledger_with_wasm, ledger_get_all_blocks, ledger_mainnet_v5_wasm, ledger_wasm,
     parse_index_logs, wait_until_sync_is_completed, wait_until_sync_is_completed_or_error,
 };
 use candid::{Decode, Encode, Nat, Principal};
@@ -83,7 +83,7 @@ fn upgrade_ledger(
         index_principal: None,
     }));
     let wasm = if legacy_fc_wasm {
-        ledger_legacy_fc_wasm()
+        ledger_mainnet_v5_wasm()
     } else {
         ledger_wasm()
     };
@@ -1274,7 +1274,7 @@ fn test_fee_collector_ranges(legacy: bool) {
             default_archive_options(),
             Some(fee_collector),
             minter,
-            ledger_legacy_fc_wasm(),
+            ledger_mainnet_v5_wasm(),
         )
     } else {
         install_ledger(
@@ -1611,7 +1611,7 @@ fn test_fee_collector_107_with_ledger() {
         default_archive_options(),
         Some(feecol_legacy),
         account(1000, 0).owner,
-        ledger_legacy_fc_wasm(),
+        ledger_mainnet_v5_wasm(),
     );
     let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
 

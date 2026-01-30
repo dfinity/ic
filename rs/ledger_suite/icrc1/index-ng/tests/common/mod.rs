@@ -166,24 +166,22 @@ pub fn ledger_wasm() -> Vec<u8> {
     })
 }
 
-pub fn ledger_legacy_fc_wasm() -> Vec<u8> {
+pub fn ledger_mainnet_v5_wasm() -> Vec<u8> {
     #[cfg(not(feature = "u256-tokens"))]
-    let mainnet_wasm = ledger_legacy_fc_u64_wasm();
+    let mainnet_wasm = ledger_mainnet_v5_u64_wasm();
     #[cfg(feature = "u256-tokens")]
-    let mainnet_wasm = ledger_legacy_fc_u256_wasm();
+    let mainnet_wasm = ledger_mainnet_v5_u256_wasm();
     mainnet_wasm
 }
 
 #[cfg(not(feature = "u256-tokens"))]
-fn ledger_legacy_fc_u64_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
-        .unwrap()
+fn ledger_mainnet_v5_u64_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKBTC_IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 #[cfg(feature = "u256-tokens")]
-fn ledger_legacy_fc_u256_wasm() -> Vec<u8> {
-    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
-        .unwrap()
+fn ledger_mainnet_v5_u256_wasm() -> Vec<u8> {
+    std::fs::read(std::env::var("CKETH_IC_ICRC1_LEDGER_V5_VERSION_WASM_PATH").unwrap()).unwrap()
 }
 
 #[cfg(feature = "icrc3_disabled")]

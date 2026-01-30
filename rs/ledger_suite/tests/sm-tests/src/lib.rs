@@ -4742,7 +4742,7 @@ where
 }
 
 pub fn test_fee_collector_107_upgrade_legacy<T>(
-    ledger_wasm_legacy: Vec<u8>,
+    ledger_wasm_legacy_fc: Vec<u8>,
     ledger_wasm: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,
 ) where
@@ -4767,7 +4767,7 @@ pub fn test_fee_collector_107_upgrade_legacy<T>(
             });
             let args = Encode!(&args).unwrap();
             let canister_id = env
-                .install_canister(ledger_wasm_legacy.clone(), args, None)
+                .install_canister(ledger_wasm_legacy_fc.clone(), args, None)
                 .unwrap();
 
             let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
