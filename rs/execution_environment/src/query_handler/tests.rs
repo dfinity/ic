@@ -1264,4 +1264,3 @@ fn query_call_exceeds_instructions_limit() {
             )
     );
 }
-
