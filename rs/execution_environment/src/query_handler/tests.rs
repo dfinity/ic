@@ -2,6 +2,7 @@ use crate::InternalHttpQueryHandler;
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_sys::PAGE_SIZE;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
@@ -490,13 +491,12 @@ fn queries_to_frozen_canisters_are_rejected() {
     //
     // 300_000_002_460 cycles are needed as prepayment for max install_code instructions
     //       5_000_000 cycles are needed for update call execution
-    //         690_250 cycles are needed for log memory store
+    //         690_250 cycles are needed for log memory store (arm64-linux)
     //          41_070 cycles are needed to cover freeze_threshold_cycles
     //                 of the canister history memory usage (134 bytes)
-
-    //let low_cycles = Cycles::new(300_006_323_780);
-    // TODO: debug code to find the exact amount on different platforms.
-    let low_cycles = Cycles::new(300_005_633_530);
+    let log_memory_store_platform_factor = 690_250 / 4096;
+    let log_memory_store_cycles = log_memory_store_platform_factor * PAGE_SIZE;
+    let low_cycles = Cycles::new(300_005_633_530) + Cycles::from(log_memory_store_cycles);
 
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
