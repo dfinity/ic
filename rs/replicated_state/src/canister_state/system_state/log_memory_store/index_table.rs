@@ -5,7 +5,7 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::PAGE_SIZE;
 use ic_management_canister_types_private::FetchCanisterLogsFilter;
-use more_asserts::{assert_ge, assert_le, assert_lt, debug_assert_gt, debug_assert_le};
+use more_asserts::{debug_assert_gt, debug_assert_le};
 
 /// Sentinel value for invalid index entries.
 const INVALID_INDEX_ENTRY: u64 = u64::MAX;
@@ -246,6 +246,7 @@ impl IndexTable {
 mod tests {
     use super::*;
     use ic_management_canister_types_private::FetchCanisterLogsRange;
+    use more_asserts::{assert_ge, assert_le, assert_lt};
 
     const KB: u64 = 1000;
     const MB: u64 = 1000 * KB;

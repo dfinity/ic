@@ -848,18 +848,22 @@ dependencies = [
  "attestation_testing",
  "candid",
  "der 0.7.9",
+ "getrandom 0.2.15",
  "hex",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-types",
+ "ic-utils 0.9.0",
+ "ic-utils-rustfmt",
  "itertools 0.12.1",
  "prost 0.13.4",
  "prost-build 0.13.4",
  "rand 0.8.5",
- "ring",
  "serde",
  "sev",
+ "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.17",
 ]
 
@@ -7517,6 +7521,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ckdoge-agent"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent 0.40.1",
+ "ic-ckdoge-minter",
+ "ic-http-types",
+ "ic-icrc1",
+ "icrc-ledger-types",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-ckdoge-minter"
 version = "0.9.0"
 dependencies = [
@@ -8224,6 +8241,7 @@ dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
  "hex",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8234,8 +8252,6 @@ dependencies = [
  "num-bigint 0.4.6",
  "proptest",
  "proptest-derive",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
  "strum 0.26.3",
@@ -8452,6 +8468,7 @@ dependencies = [
  "base64 0.13.1",
  "hex",
  "ic-crypto-internal-bls12-381-type",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8575,6 +8592,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
+ "ic-crypto-internal-seed",
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
@@ -12579,7 +12597,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pub-key"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.6.0",
@@ -12759,7 +12777,9 @@ dependencies = [
 name = "ic-registry-canister-api"
 version = "0.9.0"
 dependencies = [
+ "attestation",
  "candid",
+ "der 0.7.9",
  "ic-base-types",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
@@ -14304,7 +14324,6 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.5.27",
- "ed25519-dalek",
  "fs_extra",
  "hex",
  "ic-artifact-pool",
@@ -14988,7 +15007,10 @@ dependencies = [
  "ic-btc-interface",
  "ic-ckbtc-agent",
  "ic-ckbtc-minter",
+ "ic-ckdoge-agent",
+ "ic-ckdoge-minter",
  "ic-config",
+ "ic-doge-interface",
  "ic-icrc1-ledger",
  "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
@@ -18839,10 +18861,13 @@ dependencies = [
  "assert_matches",
  "async-stream",
  "async-trait",
+ "attestation",
  "backoff",
  "candid",
  "clap 4.5.27",
  "config_tool",
+ "config_types",
+ "der 0.7.9",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -18898,17 +18923,22 @@ dependencies = [
  "ic-types",
  "idna",
  "indoc 1.0.9",
+ "libc",
  "mockall",
  "nix 0.24.3",
+ "pem 3.0.6",
  "prometheus",
  "prost 0.13.4",
  "qrcode",
  "rand 0.8.5",
  "rcgen 0.13.2",
+ "rstest",
  "rustls 0.23.27",
  "serde",
  "serde_cbor",
  "serde_json",
+ "sev",
+ "sev_guest",
  "slog",
  "slog-async",
  "strum 0.26.3",
@@ -20912,12 +20942,14 @@ name = "registry-canister"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "attestation",
  "build-info",
  "build-info-build",
  "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
+ "der 0.7.9",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",

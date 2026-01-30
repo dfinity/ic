@@ -10,6 +10,9 @@ use std::sync::OnceLock;
 
 pub(super) struct StructIO {
     buffer: Buffer,
+    /// Caches the ring buffer header for the lifetime of the `StructIO` instance.
+    /// This avoids repeated reads from the `PageMap` during complex operations,
+    /// eg. `RingBuffer::append_log(records)`.
     header_cache: OnceLock<Header>,
 }
 
