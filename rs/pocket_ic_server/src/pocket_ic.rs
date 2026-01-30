@@ -21,8 +21,6 @@ use cycles_minting_canister::{
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
     SubnetListWithType, UpdateSubnetTypeArgs,
 };
-use fs_extra::dir::{CopyOptions, copy, get_dir_content};
-use fs_extra::remove_items;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use hyper::header::{CONTENT_TYPE, HeaderValue};
@@ -560,6 +558,19 @@ struct PocketIcStateDir {
     wsl_native_state_dir: Option<TempDir>,
 }
 
+fn remove_dir_contents(dir: impl AsRef<std::path::Path>) -> std::io::Result<()> {
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            std::fs::remove_dir_all(entry.path())?;
+        } else {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
         if is_wsl()
@@ -571,26 +582,8 @@ impl PocketIcStateDir {
                 .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
             let temp_dir_path = temp_dir.path();
 
-            let mut options = CopyOptions::new();
-            options.copy_inside = true;
-
-            println!(
-                "Copying from {} to {}",
-                state_dir.display(),
-                temp_dir_path.display()
-            );
-            copy(&state_dir, temp_dir_path, &options)
+            copy_dir(&state_dir, temp_dir_path)
                 .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
-            println!(
-                "read {}: {:?}",
-                state_dir.display(),
-                std::fs::read_dir(&state_dir)
-            );
-            println!(
-                "read {}: {:?}",
-                temp_dir_path.display(),
-                std::fs::read_dir(temp_dir_path)
-            );
 
             Ok(Self {
                 state_dir: Some(state_dir),
@@ -618,32 +611,11 @@ impl Drop for PocketIcStateDir {
             && let Some(ref state_dir) = self.state_dir
         {
             // clear state directory first
-            let state_dir_content = get_dir_content(state_dir)
-                .expect("Failed to read state directory")
-                .files;
-            remove_items(&state_dir_content).expect("Failed to clear state directory");
+            remove_dir_contents(state_dir).expect("Failed to clear state directory");
 
             // now copy back state from the WSL-native state directory
-            let mut options = CopyOptions::new();
-            options.copy_inside = true;
-
-            println!(
-                "Copying back from {} to {}",
-                wsl_native_state_dir.path().display(),
-                state_dir.display()
-            );
-            copy(wsl_native_state_dir.path(), state_dir, &options)
+            copy_dir(wsl_native_state_dir.path(), state_dir)
                 .expect("Failed to copy back state from WSL-native state directory");
-            println!(
-                "read {}: {:?}",
-                wsl_native_state_dir.path().display(),
-                std::fs::read_dir(wsl_native_state_dir.path())
-            );
-            println!(
-                "read {}: {:?}",
-                state_dir.display(),
-                std::fs::read_dir(state_dir)
-            );
         }
     }
 }
@@ -764,7 +736,6 @@ impl PocketIcSubnets {
             .create_at_registry_version(create_at_registry_version)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn new(
         runtime: Arc<Runtime>,
         state_dir: PocketIcStateDir,

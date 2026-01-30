@@ -118,4 +118,4 @@ jobs:
           $env:RUST_TEST_THREADS=2
           $env:POCKET_IC_BIN="$env:WORKDIR\pocket-ic-server"
           $env:TEST_WASM="$env:WORKDIR\test_canister.wasm.gz"
-          cargo test --locked -p pocket-ic -- --nocapture
+          cargo test --locked -p pocket-ic
