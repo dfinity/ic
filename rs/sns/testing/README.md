@@ -61,7 +61,7 @@ by `sns-testing` identity will be automatically adopted.
 Additionally, `sns-testing-init` will output the ID of the NNS neuron that should be used to create NNS proposals.
 ```
 ...
-Use the following NNS neuron ID for further testing: 11832927426215731056
+Use the following NNS neuron ID for further testing: 350573795712518463
 ```
 
 This is the preconfigured NNS neuron controlled by identity specified via `--dev-identity`, and it is expected to have a lot of voting power. This neuron ID will be used later to submit NNS proposals that get adapted right away.
@@ -117,7 +117,7 @@ To run the basic scenario on the local IC network instance:
 2) Launch the basic SNS testing scenario:
    ```
    sns-testing --network http://127.0.0.1:8080 run-basic-scenario \
-      --dev-identity sns-testing --nns-neuron-id 11832927426215731056 \
+      --dev-identity sns-testing --nns-neuron-id 350573795712518463 \
       --canister-id "$(dfx canister --network http://127.0.0.1:8080 id test)" \
       --upgrade-wasm-path "$(bazel info bazel-bin)/rs/sns/testing/sns_testing_canister.wasm.gz" \
       --upgrade-candid-arg '(record { greeting = "Hi" })'
@@ -198,7 +198,7 @@ The example will use `//rs/sns/testing:sns_testing_canister` canister as SNS-con
    ```
    # sns doesn't support CLI-provided identities despite '--identity' option
    dfx identity use sns-testing
-   sns propose --network http://127.0.0.1:8080 --neuron-id 11832927426215731056 "$PWD/sns_init.yaml"
+   sns propose --network http://127.0.0.1:8080 --neuron-id 350573795712518463 "$PWD/sns_init.yaml"
    ```
 
 4) Complete the swap for the newly created SNS
