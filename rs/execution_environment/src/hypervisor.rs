@@ -310,8 +310,8 @@ impl Hypervisor {
             cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
-            WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
-                (slice, output, system_state_modifications)
+            WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
+                (slice, output, canister_state_changes)
             }
             WasmExecutionResult::Paused(_, _) => {
                 unreachable!("DTS is not supported");

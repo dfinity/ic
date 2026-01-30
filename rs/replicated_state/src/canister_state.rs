@@ -4,9 +4,11 @@ pub mod system_state;
 #[cfg(test)]
 mod tests;
 
-use self::execution_state::{NextScheduledMethod, WasmExecutionMode};
-use self::queues::CanisterOutputQueuesIterator;
-use self::system_state::{ExecutionTask, SystemState};
+use crate::canister_state::execution_state::{NextScheduledMethod, WasmExecutionMode};
+use crate::canister_state::queues::CanisterOutputQueuesIterator;
+use crate::canister_state::system_state::{
+    ExecutionTask, SystemState, log_memory_store::LogMemoryStore,
+};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
@@ -345,8 +347,8 @@ impl CanisterState {
     /// The amount of memory currently being used by the canister.
     ///
     /// This includes execution memory (heap, stable, globals, Wasm),
-    /// canister history memory, wasm chunk storage and snapshots that
-    /// belong to this canister.
+    /// canister history memory, wasm chunk storage, log storage
+    /// and snapshots that belong to this canister.
     ///
     /// This amount is used to periodically charge the canister for the memory
     /// resources it consumes and can be used to calculate the canister's
@@ -355,6 +357,7 @@ impl CanisterState {
         self.execution_memory_usage()
             + self.canister_history_memory_usage()
             + self.wasm_chunk_store_memory_usage()
+            + self.log_memory_store_memory_usage()
             + self.snapshots_memory_usage()
     }
 
@@ -419,6 +422,12 @@ impl CanisterState {
     /// Returns the memory usage of the wasm chunk store in bytes.
     pub fn wasm_chunk_store_memory_usage(&self) -> NumBytes {
         self.system_state.wasm_chunk_store.memory_usage()
+    }
+
+    /// Returns the memory usage of the log memory store in bytes.
+    pub fn log_memory_store_memory_usage(&self) -> NumBytes {
+        // Report the ring buffer capacity only, omitting headers and index tables.
+        NumBytes::new(self.system_state.log_memory_store.byte_capacity() as u64)
     }
 
     pub fn snapshots_memory_usage(&self) -> NumBytes {
@@ -548,13 +557,14 @@ impl CanisterState {
     }
 
     /// Clears the canister log.
-    pub fn clear_log(&mut self) {
+    pub fn clear_log_obsolete(&mut self) {
         self.system_state.canister_log.clear();
     }
 
     /// Sets the new canister log.
-    pub fn set_log(&mut self, other: CanisterLog) {
-        self.system_state.canister_log = other;
+    pub fn set_log(&mut self, (canister_log, log_memory_store): (CanisterLog, LogMemoryStore)) {
+        self.system_state.canister_log = canister_log;
+        self.system_state.log_memory_store = log_memory_store;
     }
 
     /// Returns the cumulative amount of heap delta represented by this canister's state.

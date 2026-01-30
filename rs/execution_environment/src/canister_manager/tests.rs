@@ -4768,45 +4768,58 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
     let canister_id = test.create_canister(CYCLES);
 
     let canister_history_memory_usage = |test: &mut ExecutionTest| {
-        let canister_history_memory_usage = test
-            .canister_state(canister_id)
-            .canister_history_memory_usage()
-            .get();
-        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
-        let canister_memory_allocated_bytes = test
-            .canister_state(canister_id)
-            .memory_allocated_bytes()
-            .get();
-        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        let canister_state = test.canister_state(canister_id);
+        let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
+        let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+        let canister_memory_usage = canister_state.memory_usage().get();
+        let canister_memory_allocated_bytes = canister_state.memory_allocated_bytes().get();
+        assert_eq!(
+            canister_history_memory_usage + log_memory_store_memory_usage,
+            canister_memory_usage
+        );
         assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
         canister_history_memory_usage
     };
 
     let initial_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
+    // Assert that canister history memory was non empty.
     let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(initial_canister_history_memory_usage, 0);
+    let initial_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    // Assert that canister log memory store memory was non empty.
+    assert_gt!(initial_log_memory_store_memory_usage, 0);
 
     test.uninstall_code(canister_id).unwrap();
 
     let final_subnet_available_memory =
         test.subnet_available_memory().get_execution_memory() as u64;
-    assert_lt!(
-        final_subnet_available_memory,
-        initial_subnet_available_memory
-    );
+    // Assert that canister history memory usage has increased.
     let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
     assert_gt!(
         final_canister_history_memory_usage,
         initial_canister_history_memory_usage
     );
+    // Assert that canister log memory store memory was cleared.
+    let final_log_memory_store_memory_usage = test
+        .canister_state(canister_id)
+        .log_memory_store_memory_usage()
+        .get();
+    assert_eq!(final_log_memory_store_memory_usage, 0);
 
-    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_subnet_available_memory_usage =
+        final_subnet_available_memory as i64 - initial_subnet_available_memory as i64;
     let extra_canister_history_memory_usage =
-        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+        final_canister_history_memory_usage as i64 - initial_canister_history_memory_usage as i64;
+    let extra_canister_log_memory_store_memory_usage =
+        final_log_memory_store_memory_usage as i64 - initial_log_memory_store_memory_usage as i64;
+    // Assert that subnet available memory usage has opposite sign to canister memory usage.
     assert_eq!(
-        extra_subnet_memory_usage,
-        extra_canister_history_memory_usage
+        -extra_subnet_available_memory_usage,
+        extra_canister_history_memory_usage + extra_canister_log_memory_store_memory_usage
     );
 }
 
@@ -5407,7 +5420,8 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
+const LOG_MEMORY_STORE_USAGE: u64 = 4096;
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222 + LOG_MEMORY_STORE_USAGE);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -7538,12 +7552,14 @@ fn create_canister_updates_subnet_available_memory() {
     let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
     assert_lt!(subnet_available_memory, initial_subnet_available_memory);
     let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
-    let canister_history_memory_usage = test
-        .canister_state(canister_id)
-        .canister_history_memory_usage()
-        .get();
+    let canister_state = test.canister_state(canister_id);
+    let canister_history_memory_usage = canister_state.canister_history_memory_usage().get();
+    let log_memory_store_memory_usage = canister_state.log_memory_store_memory_usage().get();
     assert_gt!(canister_history_memory_usage, 0);
-    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+    assert_eq!(
+        subnet_memory_usage,
+        canister_history_memory_usage + log_memory_store_memory_usage
+    );
 }
 
 #[test]
