@@ -4480,7 +4480,7 @@ fn send_tx_and_verify_fee_collection(
     let to = Account::from(PrincipalId::new_user_test_id(1003).0);
     let from_balance = balance_of(env, canister_id, from);
 
-    let fc_balance = if let Some(fc) = active_fc {
+    let active_fc_balance = if let Some(fc) = active_fc {
         assert_ne!(from, fc);
         assert_ne!(spender, fc);
         assert_ne!(to, fc);
@@ -4514,10 +4514,10 @@ fn send_tx_and_verify_fee_collection(
         balance_of(env, canister_id, from),
         from_balance + MINT_AMOUNT - BURN_AMOUNT - 2 - NUM_FEE_COLLECTED * FEE
     );
-    if let Some(fc) = active_fc {
+    if let Some(active_fc) = active_fc {
         assert_eq!(
-            balance_of(env, canister_id, fc),
-            fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
+            balance_of(env, canister_id, active_fc),
+            active_fc_balance.unwrap() + NUM_FEE_COLLECTED * FEE
         );
         assert_eq!(
             total_supply(env, canister_id),
