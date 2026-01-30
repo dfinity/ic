@@ -167,9 +167,9 @@ jobs:
 
   generate-config-fixtures:
     name: Generate Config Fixtures
-    runs-on: ubuntu-latest
+    runs-on: *dind-small-setup
     container: *container-setup
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1

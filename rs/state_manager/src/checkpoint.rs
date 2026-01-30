@@ -849,8 +849,8 @@ pub fn load_canister_state(
     durations.insert("canister_queues", starting_time.elapsed());
 
     let canister_metrics = CanisterMetrics::new(
+        canister_state_bits.rounds_scheduled,
         canister_state_bits.scheduled_as_first,
-        canister_state_bits.skipped_round_due_to_no_messages,
         canister_state_bits.executed,
         canister_state_bits.interrupted_during_execution,
         canister_state_bits.consumed_cycles,

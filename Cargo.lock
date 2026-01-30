@@ -848,18 +848,22 @@ dependencies = [
  "attestation_testing",
  "candid",
  "der 0.7.9",
+ "getrandom 0.2.15",
  "hex",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-helpers",
  "ic-types",
+ "ic-utils 0.9.0",
+ "ic-utils-rustfmt",
  "itertools 0.12.1",
  "prost 0.13.4",
  "prost-build 0.13.4",
  "rand 0.8.5",
- "ring",
  "serde",
  "sev",
+ "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.17",
 ]
 
@@ -7551,6 +7555,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-ckdoge-agent"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-agent 0.40.1",
+ "ic-ckdoge-minter",
+ "ic-http-types",
+ "ic-icrc1",
+ "icrc-ledger-types",
+ "num-traits",
+]
+
+[[package]]
 name = "ic-ckdoge-minter"
 version = "0.9.0"
 dependencies = [
@@ -8149,7 +8166,37 @@ dependencies = [
 name = "ic-crypto-iccsa"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-basic-sig-iccsa",
+ "assert_matches",
+ "base64 0.13.1",
+ "hex",
+ "ic-certification 0.9.0",
+ "ic-certification-test-utils",
+ "ic-crypto-iccsa-test-utils",
+ "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-test-vectors",
+ "ic-crypto-internal-types",
+ "ic-crypto-sha2",
+ "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash",
+ "ic-interfaces",
+ "ic-types",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "simple_asn1",
+]
+
+[[package]]
+name = "ic-crypto-iccsa-test-utils"
+version = "0.9.0"
+dependencies = [
+ "ic-certification-test-utils",
+ "ic-crypto-sha2",
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -8228,6 +8275,7 @@ dependencies = [
  "base64 0.13.1",
  "curve25519-dalek",
  "hex",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8238,50 +8286,11 @@ dependencies = [
  "num-bigint 0.4.6",
  "proptest",
  "proptest-derive",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
  "strum 0.26.3",
  "wycheproof",
  "zeroize",
-]
-
-[[package]]
-name = "ic-crypto-internal-basic-sig-iccsa"
-version = "0.9.0"
-dependencies = [
- "assert_matches",
- "base64 0.13.1",
- "hex",
- "ic-certification 0.9.0",
- "ic-certification-test-utils",
- "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-basic-sig-iccsa-test-utils",
- "ic-crypto-internal-test-vectors",
- "ic-crypto-internal-types",
- "ic-crypto-sha2",
- "ic-crypto-test-utils",
- "ic-crypto-test-utils-reproducible-rng",
- "ic-crypto-tree-hash",
- "ic-interfaces",
- "ic-types",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "simple_asn1",
-]
-
-[[package]]
-name = "ic-crypto-internal-basic-sig-iccsa-test-utils"
-version = "0.9.0"
-dependencies = [
- "ic-certification-test-utils",
- "ic-crypto-sha2",
- "ic-crypto-tree-hash",
- "ic-types",
- "rand 0.8.5",
 ]
 
 [[package]]
@@ -8493,6 +8502,7 @@ dependencies = [
  "base64 0.13.1",
  "hex",
  "ic-crypto-internal-bls12-381-type",
+ "ic-crypto-internal-seed",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -8616,6 +8626,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
+ "ic-crypto-internal-seed",
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
@@ -8744,7 +8755,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-sha2",
@@ -8821,8 +8831,8 @@ name = "ic-crypto-test-utils-canister-sigs"
 version = "0.9.0"
 dependencies = [
  "ic-certification-test-utils",
- "ic-crypto-internal-basic-sig-iccsa",
- "ic-crypto-internal-basic-sig-iccsa-test-utils",
+ "ic-crypto-iccsa",
+ "ic-crypto-iccsa-test-utils",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-types",
@@ -10011,6 +10021,7 @@ dependencies = [
  "ic-config",
  "ic-error-types 0.2.0",
  "ic-http-endpoints-async-utils",
+ "ic-https-outcalls-pricing",
  "ic-https-outcalls-service",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
@@ -10064,6 +10075,13 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+]
+
+[[package]]
+name = "ic-https-outcalls-pricing"
+version = "0.9.0"
+dependencies = [
+ "ic-types",
 ]
 
 [[package]]
@@ -12793,7 +12811,9 @@ dependencies = [
 name = "ic-registry-canister-api"
 version = "0.9.0"
 dependencies = [
+ "attestation",
  "candid",
+ "der 0.7.9",
  "ic-base-types",
  "ic-nervous-system-chunks",
  "ic-registry-transport",
@@ -13410,6 +13430,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "maplit",
+ "more-asserts",
  "nix 0.24.3",
  "phantom_newtype",
  "prometheus",
@@ -14337,7 +14358,6 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.5.27",
- "ed25519-dalek",
  "fs_extra",
  "hex",
  "ic-artifact-pool",
@@ -15021,7 +15041,10 @@ dependencies = [
  "ic-btc-interface",
  "ic-ckbtc-agent",
  "ic-ckbtc-minter",
+ "ic-ckdoge-agent",
+ "ic-ckdoge-minter",
  "ic-config",
+ "ic-doge-interface",
  "ic-icrc1-ledger",
  "ic-management-canister-types 0.5.0",
  "ic-management-canister-types-private",
@@ -15367,9 +15390,9 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-certification-test-utils",
  "ic-crypto-iccsa",
+ "ic-crypto-iccsa-test-utils",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ed25519",
- "ic-crypto-internal-basic-sig-iccsa-test-utils",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
@@ -16289,6 +16312,27 @@ checksum = "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
 dependencies = [
  "icu_normalizer",
  "icu_properties",
+]
+
+[[package]]
+name = "idx-tests"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "ic-agent 0.40.1",
+ "ic-prep",
+ "ic-regedit",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic-universal-canister",
+ "itertools 0.12.1",
+ "serde_json",
+ "slog",
+ "ssh2",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -17700,6 +17744,7 @@ dependencies = [
  "ic-agent 0.40.1",
  "ic-base-types",
  "ic-management-canister-types 0.5.0",
+ "ic-recovery",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-types",
@@ -17709,6 +17754,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rejoin-test-lib",
  "slog",
+ "tempfile",
  "tokio",
  "xnet-test",
 ]
@@ -18849,10 +18895,13 @@ dependencies = [
  "assert_matches",
  "async-stream",
  "async-trait",
+ "attestation",
  "backoff",
  "candid",
  "clap 4.5.27",
  "config_tool",
+ "config_types",
+ "der 0.7.9",
  "env-file-reader",
  "exec",
  "get_if_addrs",
@@ -18908,17 +18957,22 @@ dependencies = [
  "ic-types",
  "idna",
  "indoc 1.0.9",
+ "libc",
  "mockall",
  "nix 0.24.3",
+ "pem 3.0.6",
  "prometheus",
  "prost 0.13.4",
  "qrcode",
  "rand 0.8.5",
  "rcgen 0.13.2",
+ "rstest",
  "rustls 0.23.27",
  "serde",
  "serde_cbor",
  "serde_json",
+ "sev",
+ "sev_guest",
  "slog",
  "slog-async",
  "strum 0.26.3",
@@ -20922,12 +20976,14 @@ name = "registry-canister"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
+ "attestation",
  "build-info",
  "build-info-build",
  "canbench-rs",
  "candid",
  "candid_parser",
  "canister-test",
+ "der 0.7.9",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",
@@ -23595,27 +23651,6 @@ dependencies = [
  "quote",
  "structmeta 0.3.0",
  "syn 2.0.110",
-]
-
-[[package]]
-name = "testing-verification-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "ic-agent 0.40.1",
- "ic-prep",
- "ic-regedit",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic-universal-canister",
- "itertools 0.12.1",
- "serde_json",
- "slog",
- "ssh2",
- "tempfile",
- "tokio",
 ]
 
 [[package]]

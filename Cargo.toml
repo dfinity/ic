@@ -70,14 +70,13 @@ members = [
     "rs/crypto",
     "rs/crypto/for_verification_only",
     "rs/crypto/iccsa",
+    "rs/crypto/iccsa/test_utils",
     "rs/crypto/interfaces/sig_verification",
     "rs/crypto/internal/crypto_lib/basic_sig/cose",
     "rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-    "rs/crypto/internal/crypto_lib/basic_sig/iccsa",
-    "rs/crypto/internal/crypto_lib/basic_sig/iccsa/test_utils",
     "rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "rs/crypto/internal/crypto_lib/bls12_381/type",
     "rs/crypto/internal/crypto_lib/bls12_381/vetkd",
@@ -134,6 +133,7 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
+    "rs/dogecoin/ckdoge/agent",
     "rs/dogecoin/ckdoge/minter",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
@@ -736,6 +736,7 @@ minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
 mockall = "0.13.0"
 mockito = "1.6.1"
+more-asserts = "0.3.1"
 nftables = "0.4"
 nix = { version = "0.24.3", features = ["ptrace", "user"] }
 num-bigint = "0.4.6"
