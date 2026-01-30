@@ -47,15 +47,15 @@ About the initialization arguments:
 
 * `doge_network`: Doge network is mainnet.
 * `ledger_id`: The governance-controlled ckDOGE ledger is [`efmc5-wyaaa-aaaar-qb3wa-cai`](https://dashboard.internetcomputer.org/canister/efmc5-wyaaa-aaaar-qb3wa-cai).
-* `ecdsa_key_name`: use ECDSA production key named `key_1`.
-* `deposit_doge_min_amount`: Minimum deposit DOGE amount is 1 DOGE or 100_000_000 koinus, which is approximatevely $0.1 (2026.01.30).
-* `retrieve_doge_min_amount`: Minimum retrieve DOGE amount is 50 DOGE or 5B koinus, which is approximatevely $5.7 (2026.01.30).
-* `max_time_in_queue_nanos`: maximum time a transaction spends in the queue before being sent is ten minutes, or 600 billion nanoseconds.
-* `min_confirmations`: minimum number of confirmations on the Doge network required to accept a transaction is 60.
-* `mode`: general availability, anyone can deposit or withdraw.
-* `get_utxos_cache_expiration_seconds`: cache `get_utxos` results for 60 seconds.
-* `utxo_consolidation_threshold`: minimum number of available UTXOs required to trigger consolidation is 10k.
-* `max_num_inputs_in_transaction`: maximum number of inputs UTXOs allowed in a single transaction is 500.
+* `ecdsa_key_name`: Use the ECDSA production key named `key_1`.
+* `deposit_doge_min_amount`: The minimum deposit DOGE amount is 1 DOGE or 100_000_000 koinus, which is approximately $0.1 (2026.01.30).
+* `retrieve_doge_min_amount`: The minimum retrieve DOGE amount is 50 DOGE or 5B koinus, which is approximately $5.7 (2026.01.30).
+* `max_time_in_queue_nanos`: The maximum time a transaction spends in the queue before being sent is ten minutes, or 600 billion nanoseconds.
+* `min_confirmations`: The minimum number of confirmations on the Doge network required to accept a transaction is 60.
+* `mode`: General availability, anyone can deposit or withdraw.
+* `get_utxos_cache_expiration_seconds`: Cache `get_utxos` results for 60 seconds.
+* `utxo_consolidation_threshold`: The minimum number of available UTXOs required to trigger consolidation is 10k.
+* `max_num_inputs_in_transaction`: The maximum number of inputs UTXOs allowed in a single transaction is 500.
 
 ## Wasm Verification
 
