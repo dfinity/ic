@@ -538,12 +538,6 @@ async fn sign_and_submit_request<R: CanisterRuntime>(
     let txid = signed_tx.txid();
     let fee_rate = signed_tx.fee_rate();
 
-    state::mutate_state(|s| {
-        for block_index in requests.iter_block_index() {
-            s.push_in_flight_request(block_index, state::InFlightStatus::Sending { txid });
-        }
-    });
-
     log!(
         Priority::Info,
         "[sign_and_submit_request]: sending a signed transaction {}",
