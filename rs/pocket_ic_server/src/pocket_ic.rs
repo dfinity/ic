@@ -574,8 +574,11 @@ impl PocketIcStateDir {
             let mut options = CopyOptions::new();
             options.copy_inside = true;
 
+            println!("Copying from {} to {}", state_dir.display(), temp_dir_path.display());
             copy(&state_dir, temp_dir_path, &options)
                 .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
+            println!("read {}: {:?}", state_dir.display(), std::fs::read_dir(&state_dir));
+            println!("read {}: {:?}", temp_dir_path.display(), std::fs::read_dir(&temp_dir_path));
 
             Ok(Self {
                 state_dir: Some(state_dir),
@@ -612,8 +615,11 @@ impl Drop for PocketIcStateDir {
             let mut options = CopyOptions::new();
             options.copy_inside = true;
 
+            println!("Copying back from {} to {}", wsl_native_state_dir.path().display(), state_dir.display());
             copy(wsl_native_state_dir.path(), state_dir, &options)
                 .expect("Failed to copy back state from WSL-native state directory");
+            println!("read {}: {:?}", wsl_native_state_dir.path().display(), std::fs::read_dir(&wsl_native_state_dir.path()));
+            println!("read {}: {:?}", state_dir.display(), std::fs::read_dir(&state_dir));
         }
     }
 }
