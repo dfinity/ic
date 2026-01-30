@@ -7,7 +7,7 @@
 set -exo pipefail
 
 cleanup() {
-    podman rm -f "${CONTAINER}"
+    podman rm -f "${CONTAINER_NAME}"
     rm -rf "${TMP_DIR}"
 }
 trap cleanup EXIT
@@ -28,7 +28,7 @@ TMP_DIR=$(mktemp -d -t build-image-XXXXXXXXXXXX)
 
 BASE_IMAGE="ghcr.io/dfinity/library/ubuntu@sha256:6015f66923d7afbc53558d7ccffd325d43b4e249f41a6e93eef074c9505d2233"
 
-podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
+podman build --iidfile "${TMP_DIR}/iidfile" - <<<"
     FROM $BASE_IMAGE
     USER root:root
     RUN apt-get -y update && apt-get -y --no-install-recommends install grub-efi faketime
@@ -46,8 +46,8 @@ podman build --no-cache --iidfile "${TMP_DIR}/iidfile" - <<<"
 "
 
 IMAGE_ID=$(cut -d':' -f2 <"${TMP_DIR}/iidfile")
+CONTAINER_NAME="${IMAGE_ID}_container"
 
-CONTAINER=$(podman run -d "${IMAGE_ID}")
-
-podman export "${CONTAINER}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
+podman create --name "${CONTAINER_NAME}" "${IMAGE_ID}"
+podman export "${CONTAINER_NAME}" | tar --strip-components=1 -C "${TMP_DIR}" -x build
 tar cf "${OUT_FILE}" --sort=name --owner=root:0 --group=root:0 "--mtime=UTC 1970-01-01 00:00:00" -C "${TMP_DIR}" boot

@@ -61,25 +61,21 @@ def build_container(
     build_arg_strings = [f'--build-arg "{v}"' for v in build_args]
     build_arg_strings_joined = " ".join(build_arg_strings)
 
-    cmd = "podman "
-    cmd += "build "
-    cmd += f"-t {image_tag} "
-    cmd += f"{build_arg_strings_joined} "
-    cmd += "--no-cache "
+    cmd = f"podman build -t {image_tag} {build_arg_strings_joined}"
 
     if base_image_override:
         load_base_image_tar_file(base_image_override.image_file)
         # Override the first FROM statement - grabs it from local cache
-        cmd += f"--from {base_image_override.image_tag} "
+        cmd += f" --from {base_image_override.image_tag}"
 
     # Set timestamp for all files for determinism
-    cmd += "--timestamp 0 "
+    cmd += " --timestamp 0"
 
     if dockerfile:
-        cmd += f"-f {dockerfile} "
+        cmd += f" -f {dockerfile}"
 
     # Context must go last
-    cmd += f"{context_dir}"
+    cmd += f" {context_dir}"
     print(cmd)
 
     invoke.run(cmd)  # Throws on failure
@@ -104,7 +100,6 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     invoke.run(
         f"fakeroot -i {fakeroot_statefile} tar cf {destination_tar_filename} --numeric-owner --sort=name --exclude='run/*' -C {tar_dir} $(ls -A {tar_dir})"
     )
-    invoke.run("sync")
 
 
 def resolve_file_args(context_dir: str, file_build_args: List[str]) -> List[str]:
@@ -203,10 +198,9 @@ def main():
     destination_tar_filename = args.output
     build_args = list(args.build_args or [])
 
-    # NOTE: /usr/bin/nsenter is required to be on $PATH for this version of
-    # podman (no longer in latest version). bazel strips this out - add it back
-    # manually, for now.
-    os.environ["PATH"] = ":".join([x for x in [os.environ.get("PATH"), "/usr/bin"] if x is not None])
+    # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
+    # strips this out - add it back manually.
+    os.environ["PATH"] = "/usr/bin:" + os.environ.get("PATH", "")
 
     image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files
