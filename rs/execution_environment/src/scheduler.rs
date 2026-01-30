@@ -827,18 +827,18 @@ impl SchedulerImpl {
         canister_ingress_latencies: &mut CanisterIngressQueueLatencies,
     ) {
         let current_time = state.time();
-        let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
+        let not_expired_yet = |ingress: &Ingress| ingress.expiry_time >= current_time;
         let mut expired_ingress_messages =
             state.filter_subnet_queues_ingress_messages(not_expired_yet);
-        let mut canisters = state.take_canister_states();
-        for canister in canisters.values_mut() {
-            // TODO Only make a mutable reference if the canister has (expired) ingress messages.
-            let canister = Arc::make_mut(canister);
-            expired_ingress_messages.extend(
-                canister
-                    .system_state
-                    .filter_ingress_messages(not_expired_yet),
-            );
+        for (_, canister) in state.canister_states_iter_mut() {
+            if canister.system_state.any_ingress_messages(not_expired_yet) {
+                let canister = Arc::make_mut(canister);
+                expired_ingress_messages.extend(
+                    canister
+                        .system_state
+                        .filter_ingress_messages(not_expired_yet),
+                );
+            }
         }
         for ingress in expired_ingress_messages.iter() {
             self.metrics.expired_ingress_messages_count.inc();
@@ -861,7 +861,6 @@ impl SchedulerImpl {
             );
             canister_ingress_latencies.on_ingress_status_changed(old_status);
         }
-        state.put_canister_states(canisters);
     }
 
     // Observe different Canister metrics
@@ -1553,42 +1552,51 @@ impl Scheduler for SchedulerImpl {
                 let mut total_canister_history_memory_usage = NumBytes::new(0);
                 let mut total_canister_memory_allocated_bytes = NumBytes::new(0);
                 for canister in state.canisters_iter_mut() {
-                    let canister = Arc::make_mut(canister);
                     let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                     self.metrics
                         .canister_heap_delta_debits
                         .observe(heap_delta_debit as f64);
-                    canister.scheduler_state.heap_delta_debit =
-                        match self.rate_limiting_of_heap_delta {
-                            FlagStatus::Enabled => NumBytes::from(
-                                heap_delta_debit
-                                    .saturating_sub(self.config.heap_delta_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumBytes::from(0),
-                        };
-
                     let install_code_debit = canister.scheduler_state.install_code_debit.get();
                     self.metrics
                         .canister_install_code_debits
                         .observe(install_code_debit as f64);
-                    canister.scheduler_state.install_code_debit =
-                        match self.rate_limiting_of_instructions {
-                            FlagStatus::Enabled => NumInstructions::from(
-                                install_code_debit
-                                    .saturating_sub(self.config.install_code_rate_limit.get()),
-                            ),
-                            FlagStatus::Disabled => NumInstructions::from(0),
-                        };
+
+                    if heap_delta_debit > 0 || install_code_debit > 0 {
+                        let canister = Arc::make_mut(canister);
+                        canister.scheduler_state.heap_delta_debit =
+                            match self.rate_limiting_of_heap_delta {
+                                FlagStatus::Enabled => NumBytes::from(
+                                    heap_delta_debit
+                                        .saturating_sub(self.config.heap_delta_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumBytes::from(0),
+                            };
+
+                        canister.scheduler_state.install_code_debit =
+                            match self.rate_limiting_of_instructions {
+                                FlagStatus::Enabled => NumInstructions::from(
+                                    install_code_debit
+                                        .saturating_sub(self.config.install_code_rate_limit.get()),
+                                ),
+                                FlagStatus::Disabled => NumInstructions::from(0),
+                            };
+                    }
+
                     self.metrics
                         .canister_log_memory_usage_v2
                         .observe(canister.system_state.canister_log.bytes_used() as f64);
                     self.metrics
                         .canister_log_memory_usage_v3
                         .observe(canister.system_state.canister_log.bytes_used() as f64);
-                    for memory_usage in canister.system_state.canister_log.take_delta_log_sizes() {
-                        self.metrics
-                            .canister_log_delta_memory_usage
-                            .observe(memory_usage as f64);
+                    if canister.system_state.canister_log.has_delta_log_sizes() {
+                        let canister = Arc::make_mut(canister);
+                        for memory_usage in
+                            canister.system_state.canister_log.take_delta_log_sizes()
+                        {
+                            self.metrics
+                                .canister_log_delta_memory_usage
+                                .observe(memory_usage as f64);
+                        }
                     }
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_allocated_bytes += canister

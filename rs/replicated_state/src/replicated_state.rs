@@ -1156,7 +1156,7 @@ impl ReplicatedState {
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.subnet_queues.filter_ingress_messages(filter)
     }

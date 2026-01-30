@@ -697,10 +697,19 @@ impl CanisterQueues {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 
+    /// Returns `true` if there are any ingress messages in the queue that satisfy
+    /// the filter, `false` otherwise.
+    pub fn any_ingress_messages<F>(&self, filter: F) -> bool
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.ingress_queue.any_messages(filter)
+    }
+
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         self.ingress_queue.filter_messages(filter)
     }

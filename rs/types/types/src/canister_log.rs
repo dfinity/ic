@@ -275,6 +275,11 @@ impl CanisterLog {
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
     }
+
+    /// Returns true if the canister log has delta log sizes.
+    pub fn has_delta_log_sizes(&self) -> bool {
+        !self.delta_log_sizes.is_empty()
+    }
 }
 
 #[cfg(test)]
