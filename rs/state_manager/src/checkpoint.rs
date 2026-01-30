@@ -912,7 +912,6 @@ pub fn load_canister_state(
         system_state,
         execution_state,
         scheduler_state: SchedulerState {
-            last_full_execution_round: canister_state_bits.last_full_execution_round,
             heap_delta_debit: canister_state_bits.heap_delta_debit,
             install_code_debit: canister_state_bits.install_code_debit,
         },
@@ -921,6 +920,7 @@ pub fn load_canister_state(
         accumulated_priority: canister_state_bits.accumulated_priority,
         priority_credit: canister_state_bits.priority_credit,
         long_execution_mode: canister_state_bits.long_execution_mode,
+        last_full_execution_round: canister_state_bits.last_full_execution_round,
     };
 
     let metrics = LoadCanisterMetrics { durations };

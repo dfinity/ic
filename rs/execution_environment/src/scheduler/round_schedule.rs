@@ -121,11 +121,10 @@ impl RoundSchedule {
         &self,
         canisters: &mut BTreeMap<CanisterId, CanisterState>,
         fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
-        round_id: ExecutionRound,
         is_first_iteration: bool,
     ) {
         for canister_id in self.ordered_new_execution_canister_ids.iter() {
-            let canister = canisters.get_mut(canister_id);
+            let canister = canisters.get(canister_id);
             if let Some(canister) = canister {
                 let next_execution = canister.next_execution();
                 match next_execution {
@@ -133,7 +132,6 @@ impl RoundSchedule {
                         Self::finish_canister_execution(
                             canister,
                             fully_executed_canister_ids,
-                            round_id,
                             is_first_iteration,
                             0,
                         );
@@ -282,9 +280,8 @@ impl RoundSchedule {
     }
 
     pub fn finish_canister_execution(
-        canister: &mut CanisterState,
+        canister: &CanisterState,
         fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
-        round_id: ExecutionRound,
         is_first_iteration: bool,
         rank: usize,
     ) {
@@ -300,8 +297,6 @@ impl RoundSchedule {
         // The very first canister is considered to have a full execution round for
         // scheduling purposes even if it did not complete within the round.
         if full_message_execution || scheduled_first {
-            canister.scheduler_state.last_full_execution_round = round_id;
-
             // We schedule canisters (as opposed to individual messages),
             // and we charge for every full execution round.
             fully_executed_canister_ids.insert(canister.canister_id());

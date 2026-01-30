@@ -1096,14 +1096,6 @@ fn execution_state_test_partial_eq() {
 
     assert_ne!(
         ExecutionState {
-            last_executed_round: ExecutionRound::from(12345),
-            ..state_1.clone()
-        },
-        state_1
-    );
-
-    assert_ne!(
-        ExecutionState {
             next_scheduled_method: NextScheduledMethod::Heartbeat,
             ..state_1.clone()
         },

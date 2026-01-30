@@ -1285,7 +1285,7 @@ fn serialize_canister_protos_to_checkpoint_readwrite(
     canister_layout.canister().serialize(
         CanisterStateBits {
             controllers: canister_state.system_state.controllers.clone(),
-            last_full_execution_round: canister_state.scheduler_state.last_full_execution_round,
+            last_full_execution_round: canister_priority.last_full_execution_round,
             compute_allocation: canister_state.compute_allocation(),
             priority_credit: canister_priority.priority_credit,
             long_execution_mode: canister_priority.long_execution_mode,

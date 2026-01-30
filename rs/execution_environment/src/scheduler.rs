@@ -492,7 +492,6 @@ impl SchedulerImpl {
             round_schedule.charge_idle_canisters(
                 &mut canisters,
                 &mut round_fully_executed_canister_ids,
-                current_round,
                 is_first_iteration,
             );
 
@@ -560,6 +559,14 @@ impl SchedulerImpl {
             );
             state.put_canister_states(canisters);
 
+            for canister_id in &round_fully_executed_canister_ids {
+                state
+                    .metadata
+                    .subnet_schedule
+                    .get_mut(*canister_id)
+                    .last_full_execution_round = current_round;
+            }
+
             ingress_execution_results.append(&mut loop_ingress_execution_results);
 
             round_limits.instructions -= as_round_instructions(
@@ -620,16 +627,17 @@ impl SchedulerImpl {
         // We only export metrics for "executable" canisters to ensure that the metrics
         // are not polluted by canisters that haven't had any messages for a long time.
         for canister_id in &round_filtered_canisters.active_canister_ids {
-            let canister_state = state.canister_state(canister_id).unwrap();
             // Newly created canisters have `last_full_execution_round` set to zero,
             // and hence skew the `canister_age` metric.
-            let last_full_execution_round =
-                canister_state.scheduler_state.last_full_execution_round;
+            let last_full_execution_round = state
+                .canister_priority(canister_id)
+                .last_full_execution_round;
             if last_full_execution_round.get() != 0 {
                 let canister_age = current_round.get() - last_full_execution_round.get();
                 self.metrics.canister_age.observe(canister_age as f64);
                 // If `canister_age` > 1 / `compute_allocation` the canister ought to have been
                 // scheduled.
+                let canister_state = state.canister_state(canister_id).unwrap();
                 let allocation = Ratio::new(canister_state.compute_allocation().as_percent(), 100);
                 if *allocation.numer() > 0 && Ratio::from_integer(canister_age) > allocation.recip()
                 {
@@ -1920,7 +1928,6 @@ fn execute_canisters_on_thread(
         RoundSchedule::finish_canister_execution(
             &mut canister,
             &mut fully_executed_canister_ids,
-            round_id,
             is_first_iteration,
             rank,
         );
