@@ -174,7 +174,10 @@ rust_library(
 
 rust_canister(
     name = "registry-canister",
-    srcs = ["canister/canister.rs"],
+    srcs = [
+        "canister/canister.rs",
+        "canister/cloud_engine_endpoints.rs",
+    ],
     aliases = ALIASES,
     compile_data = ["canister/registry.did"],
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -188,7 +191,10 @@ rust_canister(
 rust_canister(
     name = "registry-canister-test",
     testonly = True,
-    srcs = ["canister/canister.rs"],
+    srcs = [
+        "canister/canister.rs",
+        "canister/cloud_engine_endpoints.rs",
+    ],
     aliases = ALIASES,
     compile_data = ["canister/registry_test.did"],
     crate_features = ["test"],
