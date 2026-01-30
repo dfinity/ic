@@ -971,7 +971,7 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_icp_features(&mut self) {
+    fn deploy_icp_features(&mut self, newly_created_subnets: Vec<SubnetId>) {
         if let Some(icp_features) = self.icp_features.clone() {
             // using `let IcpFeatures { }` with explicit field names
             // to force an update after adding a new field to `IcpFeatures`
@@ -992,7 +992,7 @@ impl PocketIcSubnets {
                 self.update_registry(config);
             }
             if let Some(ref config) = cycles_minting {
-                self.update_cmc(config);
+                self.update_cmc(config, newly_created_subnets);
             }
             if let Some(ref config) = icp_token {
                 self.deploy_icp_token(config);
@@ -1112,7 +1112,7 @@ impl PocketIcSubnets {
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
-    fn update_cmc(&mut self, config: &IcpFeaturesConfig) {
+    fn update_cmc(&mut self, config: &IcpFeaturesConfig, newly_created_subnets: Vec<SubnetId>) {
         // Using a match here to force an update after changing
         // the type of `IcpFeaturesConfig`.
         match config {
@@ -1224,17 +1224,6 @@ impl PocketIcSubnets {
             );
             let decoded = Decode!(&res, Result<(), String>).unwrap();
             decoded.unwrap();
-
-            // create fiduciary subnet type
-            let update_subnet_type_args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
-            // returns ()
-            self.execute_ingress_on(
-                nns_subnet.clone(),
-                GOVERNANCE_CANISTER_ID.get(),
-                CYCLES_MINTING_CANISTER_ID,
-                "update_subnet_type".to_string(),
-                Encode!(&update_subnet_type_args).unwrap(),
-            );
         }
 
         // set default (application) subnets on CMC
@@ -1269,7 +1258,18 @@ impl PocketIcSubnets {
             .iter()
             .find(|subnet_config| matches!(subnet_config.subnet_kind, SubnetKind::Fiduciary))
             .map(|subnet_config| subnet_config.subnet_id);
-        if let Some(fiduciary_subnet_id) = fiduciary_subnet_id {
+        if let Some(fiduciary_subnet_id) = fiduciary_subnet_id
+            && newly_created_subnets.contains(&fiduciary_subnet_id)
+        {
+            let update_subnet_type_args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
+            // returns ()
+            self.execute_ingress_on(
+                nns_subnet.clone(),
+                GOVERNANCE_CANISTER_ID.get(),
+                CYCLES_MINTING_CANISTER_ID,
+                "update_subnet_type".to_string(),
+                Encode!(&update_subnet_type_args).unwrap(),
+            );
             let change_subnet_type_assignment_args =
                 ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
                     subnets: vec![fiduciary_subnet_id],
@@ -2900,7 +2900,13 @@ impl PocketIc {
 
         subnets.sync_subnet_time();
         if update_registry_and_system_canisters {
-            subnets.deploy_icp_features();
+            subnets.deploy_icp_features(
+                subnets
+                    .get_all()
+                    .into_iter()
+                    .map(|subnet| subnet.get_subnet_id())
+                    .collect(),
+            );
         }
 
         let default_effective_canister_id = subnet_configs
@@ -5171,7 +5177,7 @@ fn route(
                         update_registry_and_system_canisters,
                     )?;
                     pic.subnets.sync_subnet_time();
-                    pic.subnets.deploy_icp_features();
+                    pic.subnets.deploy_icp_features(vec![subnet_id]);
                     pic.subnets
                         .persist_topology(pic.default_effective_canister_id);
                     Ok(pic.try_route_canister(canister_id).unwrap())
