@@ -414,7 +414,7 @@ fn test_initial_timestamp_with_cycles_minting() {
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
     assert_eq!(
         pic.get_time().as_nanos_since_unix_epoch(),
-        initial_timestamp + 7
+        initial_timestamp + 6
     );
 }
 
@@ -3282,4 +3282,11 @@ fn mainnet_nns_subnet_id() {
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap()
     );
+}
+
+#[test]
+fn all_mainnet_subnets() {
+    let pic = PocketIcBuilder::new().with_all_mainnet_subnets().build();
+
+    assert_eq!(pic.topology().subnet_configs.len(), 47);
 }

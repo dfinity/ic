@@ -488,6 +488,13 @@ impl PocketIcBuilder {
         self.mainnet_nns_subnet_id = Some(true);
         self
     }
+
+    pub fn with_all_mainnet_subnets(mut self) -> Self {
+        let mut config = self.config.unwrap_or_default();
+        config.all_mainnet_subnets = Some(true);
+        self.config = Some(config);
+        self
+    }
 }
 
 /// Representation of system time as duration since UNIX epoch
