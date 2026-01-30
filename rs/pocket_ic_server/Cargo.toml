@@ -20,6 +20,7 @@ ctrlc = { version = "3.4.5", features = ["termination"] }
 cycles-minting-canister = { path = "../nns/cmc" }
 flate2 = { workspace = true }
 fqdn = "0.3.11"
+fs_extra = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 http = { workspace = true }

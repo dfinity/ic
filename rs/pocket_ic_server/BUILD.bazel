@@ -69,6 +69,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ctrlc",
     "@crate_index//:flate2",
     "@crate_index//:fqdn",
+    "@crate_index//:fs_extra",
     "@crate_index//:futures",
     "@crate_index//:hex",
     "@crate_index//:http",

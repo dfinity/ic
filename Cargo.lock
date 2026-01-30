@@ -19619,6 +19619,7 @@ dependencies = [
  "cycles-minting-canister",
  "flate2",
  "fqdn 0.3.12",
+ "fs_extra",
  "futures",
  "hex",
  "http 1.3.1",

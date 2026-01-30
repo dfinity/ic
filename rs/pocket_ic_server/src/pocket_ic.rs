@@ -21,6 +21,8 @@ use cycles_minting_canister::{
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
     SubnetListWithType, UpdateSubnetTypeArgs,
 };
+use fs_extra::dir::{CopyOptions, copy, get_dir_content};
+use fs_extra::remove_items;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use hyper::header::{CONTENT_TYPE, HeaderValue};
@@ -250,6 +252,22 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     } else {
         GENESIS.into()
     }
+}
+
+fn is_wsl() -> bool {
+    // Check /proc/version
+    if let Ok(content) = std::fs::read_to_string("/proc/version")
+        && content.to_lowercase().contains("microsoft")
+    {
+        return true;
+    }
+
+    // Check environment variable
+    if std::env::var("WSL_DISTRO_NAME").is_ok() {
+        return true;
+    }
+
+    false
 }
 
 /// The response type for `/api` IC endpoint operations.
@@ -547,6 +565,7 @@ struct PocketIcSubnets {
     runtime: Arc<Runtime>,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     state_dir: Option<PathBuf>,
+    wsl_native_state_dir: Option<TempDir>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
     icp_config: IcpConfig,
@@ -653,9 +672,11 @@ impl PocketIcSubnets {
             .create_at_registry_version(create_at_registry_version)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
+        wsl_native_state_dir: Option<TempDir>,
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
@@ -682,6 +703,7 @@ impl PocketIcSubnets {
             btc_subnet: None,
             runtime,
             state_dir,
+            wsl_native_state_dir,
             registry_data_provider,
             routing_table,
             chain_keys,
@@ -2539,6 +2561,22 @@ impl Drop for PocketIc {
                 }
             }
         }
+        if let Some(ref wsl_native_state_dir) = self.subnets.wsl_native_state_dir
+            && let Some(ref state_dir) = self.subnets.state_dir
+        {
+            // clear state directory first
+            let state_dir_content = get_dir_content(state_dir)
+                .expect("Failed to read state directory")
+                .files;
+            remove_items(&state_dir_content).expect("Failed to clear state directory");
+
+            // now copy back state from the WSL-native state directory
+            let mut options = CopyOptions::new();
+            options.copy_inside = true;
+
+            copy(wsl_native_state_dir.path(), state_dir, &options)
+                .expect("Failed to copy back state from WSL-native state directory");
+        }
     }
 }
 
@@ -2599,6 +2637,24 @@ impl PocketIc {
         let initial_time: SystemTime = initial_time
             .map(|time| time.into())
             .unwrap_or_else(|| default_timestamp(&icp_features));
+
+        let (state_dir, wsl_native_state_dir) = if is_wsl()
+            && let Some(state_dir) = state_dir
+        {
+            let temp_dir = TempDir::new()
+                .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
+            let temp_dir_path = temp_dir.path();
+
+            let mut options = CopyOptions::new();
+            options.copy_inside = true;
+
+            copy(state_dir, temp_dir_path, &options)
+                .map_err(|e| format!("Failed to copy state to WSL-native state directory: {e}"))?;
+
+            (Some(temp_dir_path.to_path_buf()), Some(temp_dir))
+        } else {
+            (state_dir, None)
+        };
 
         let registry: Option<Vec<u8>> = if let Some(ref state_dir) = state_dir {
             let registry_file_path = state_dir.join("registry.proto");
@@ -2847,6 +2903,7 @@ impl PocketIc {
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
+            wsl_native_state_dir,
             icp_config,
             log_level,
             bitcoind_addr,
