@@ -127,7 +127,7 @@ pub fn main() -> Result<()> {
 
 /// Checks if the current SetupOS(=GuestOS) version is blessed in the NNS registry.
 fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<()> {
-    let version = fs::read_to_string(version_file)
+    let current_version = fs::read_to_string(version_file)
         .map_err(|e| {
             anyhow!(
                 "Failed to read version file '{}': {}",
@@ -138,7 +138,7 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         .trim()
         .to_string();
 
-    eprintln!("Checking if version '{}' is blessed...", version);
+    eprintln!("Checking if version '{}' is blessed...", current_version);
 
     let nns_urls: Vec<Url> = config.icos_settings.nns_urls.clone();
     if nns_urls.is_empty() {
@@ -167,16 +167,16 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
     let is_blessed = blessed_versions
         .blessed_version_ids
         .iter()
-        .any(|v| v == &version);
+        .any(|v| v == &current_version);
 
     if is_blessed {
-        eprintln!("Version '{}' is blessed.", version);
+        eprintln!("Version '{}' is blessed.", current_version);
         Ok(())
     } else {
         eprintln!(
             "Version '{}' is NOT blessed. Blessed versions: {:?}",
-            version, blessed_versions.blessed_version_ids
+            current_version, blessed_versions.blessed_version_ids
         );
-        Err(anyhow!("Version '{}' is not blessed", version))
+        Err(anyhow!("Version '{}' is not blessed", current_version))
     }
 }
