@@ -667,7 +667,7 @@ fn test_block_transformation() {
 
 #[test]
 fn icrc1_test_upgrade_serialization_from_mainnet() {
-    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), false);
+    icrc1_test_upgrade_serialization(ledger_mainnet_wasm(), true);
 }
 
 fn icrc1_test_upgrade_serialization(ledger_mainnet_wasm: Vec<u8>, mainnet_on_prev_version: bool) {
