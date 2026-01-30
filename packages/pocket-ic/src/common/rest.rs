@@ -537,6 +537,7 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
             system: vec![SubnetSpec::default(); system],
             application: vec![SubnetSpec::default(); application],
             verified_application: vec![SubnetSpec::default(); verified_application],
+            all_mainnet_subnets: None,
         }
     }
 }
@@ -659,6 +660,7 @@ pub struct ExtendedSubnetConfigSet {
     pub system: Vec<SubnetSpec>,
     pub application: Vec<SubnetSpec>,
     pub verified_application: Vec<SubnetSpec>,
+    pub all_mainnet_subnets: Option<bool>,
 }
 
 /// Specifies various configurations for a subnet.
@@ -770,6 +772,7 @@ impl ExtendedSubnetConfigSet {
             || self.ii.is_some()
             || self.fiduciary.is_some()
             || self.bitcoin.is_some()
+            || self.all_mainnet_subnets.unwrap_or_default()
         {
             return Ok(());
         }

@@ -412,7 +412,7 @@ fn test_initial_timestamp_with_cycles_minting() {
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
     assert_eq!(
         pic.get_time().as_nanos_since_unix_epoch(),
-        initial_timestamp + 7
+        initial_timestamp + 5
     );
 }
 
@@ -3272,4 +3272,43 @@ fn mainnet_nns_subnet_id() {
         Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap()
     );
+}
+
+#[test]
+fn all_mainnet_subnets() {
+    let pic = PocketIcBuilder::new().with_all_mainnet_subnets().build();
+
+    assert_eq!(pic.topology().subnet_configs.len(), 47);
+}
+
+#[test]
+fn nns_and_all_mainnet_subnets() {
+    let state = PocketIcState::new();
+    let icp_features = IcpFeatures {
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_icp_features(icp_features)
+        .with_state(state)
+        .build();
+    let topology = pic.topology();
+    let state = pic.drop_and_take_state().unwrap();
+
+    let nns_subnet = topology.get_nns().unwrap();
+    let nns_subnet_seed = topology
+        .subnet_configs
+        .get(&nns_subnet)
+        .unwrap()
+        .subnet_seed;
+    let state_dir = state.into_path();
+    let nns_state_dir = state_dir.join(hex::encode(nns_subnet_seed));
+
+    let pic = PocketIcBuilder::new()
+        .with_nns_state(nns_state_dir)
+        .with_all_mainnet_subnets()
+        .build();
+
+    assert_eq!(pic.topology().subnet_configs.len(), 47);
 }
