@@ -22,13 +22,7 @@ function check_guestos_blessed() {
 
     # Version is not blessed
     if [[ "${sev_enabled}" == "true" ]]; then
-        echo -e "\n\n\n\n\n\n"
-        echo -e "\033[1;31mWARNING: GuestOS version is NOT blessed in the NNS registry!\033[0m"
-        echo -e "\033[1;31mThis node will NOT be able to join the IC network.\033[0m"
-        echo -e "\033[1;31mPlease download the latest IC-OS release from the Internet Computer Dashboard Releases page!\033[0m"
-        echo -e "\n\n\n"
-        echo "Pausing for 10 minutes before continuing installation..."
-        sleep 600
+        log_and_halt_installation_on_error "1" "GuestOS version is not blessed in the NNS registry (trusted execution is enabled)."
     else
         echo -e "\033[1;33mNOTE: GuestOS version is not blessed in the NNS registry.\033[0m"
         echo "SEV is disabled, so this is just a warning. Continuing installation..."
