@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
 use ic_logger::{ReplicaLogger, error};
-use ic_replicated_state::{
-    CanisterPriority, CanisterState, SubnetSchedule, canister_state::NextExecution,
-};
+use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::{CanisterPriority, CanisterState, ReplicatedState};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
 use crate::{
@@ -119,7 +119,7 @@ impl RoundSchedule {
     /// Marks idle canisters in front of the schedule as fully executed.
     pub fn charge_idle_canisters(
         &self,
-        canisters: &mut BTreeMap<CanisterId, CanisterState>,
+        canisters: &mut BTreeMap<CanisterId, Arc<CanisterState>>,
         fully_executed_canister_ids: &mut BTreeSet<CanisterId>,
         is_first_iteration: bool,
     ) {
@@ -152,7 +152,7 @@ impl RoundSchedule {
     /// rate limited canisters.
     pub fn filter_canisters(
         &self,
-        canisters: &BTreeMap<CanisterId, CanisterState>,
+        canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
         heap_delta_rate_limit: NumBytes,
         rate_limiting_of_heap_delta: FlagStatus,
     ) -> (Self, Vec<CanisterId>) {
@@ -248,10 +248,14 @@ impl RoundSchedule {
     /// * Core 1 (long execution core) takes: `CanisterId 1`, `CanisterId 3`
     /// * Core 2 takes: `CanisterId 4`,  `CanisterId 6`, `CanisterId 8`
     /// * Core 3 takes: `CanisterId 5`,  `CanisterId 7`, `CanisterId 2`
+    #[allow(clippy::type_complexity)]
     pub(super) fn partition_canisters_to_cores(
         &self,
-        mut canisters: BTreeMap<CanisterId, CanisterState>,
-    ) -> (Vec<Vec<CanisterState>>, BTreeMap<CanisterId, CanisterState>) {
+        mut canisters: BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) -> (
+        Vec<Vec<Arc<CanisterState>>>,
+        BTreeMap<CanisterId, Arc<CanisterState>>,
+    ) {
         let mut canisters_partitioned_by_cores = vec![vec![]; self.scheduler_cores];
 
         let mut idx = 0;
@@ -305,20 +309,23 @@ impl RoundSchedule {
 
     pub(crate) fn finish_round(
         &self,
-        canister_states: &BTreeMap<CanisterId, CanisterState>,
-        subnet_schedule: &mut SubnetSchedule,
+        state: &mut ReplicatedState,
         fully_executed_canister_ids: BTreeSet<CanisterId>,
     ) {
         let scheduler_cores = self.scheduler_cores;
-        let number_of_canisters = canister_states.len();
+        let number_of_canisters = state.canister_states().len();
         let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
 
         // Charge canisters for full executions in this round.
         let mut total_charged_priority = 0;
         for canister_id in fully_executed_canister_ids {
-            if canister_states.contains_key(&canister_id) {
+            if state.canister_state(&canister_id).is_some() {
                 total_charged_priority += 100 * multiplier;
-                subnet_schedule.get_mut(canister_id).priority_credit += (100 * multiplier).into();
+                state
+                    .metadata
+                    .subnet_schedule
+                    .get_mut(canister_id)
+                    .priority_credit += (100 * multiplier).into();
             }
         }
 
@@ -327,6 +334,7 @@ impl RoundSchedule {
         let free_capacity_per_canister = total_charged_priority.saturating_sub(total_allocated)
             / number_of_canisters.max(1) as i64;
         // Fully divide the free allocation across all canisters.
+        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
         for canister in canister_states.values() {
             // De-facto compute allocation includes bonus allocation
             let factual = canister.compute_allocation().as_percent() as i64 * multiplier
@@ -374,15 +382,14 @@ impl RoundSchedule {
     /// A shorter description of the scheduling strategy is available in the note
     /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
     pub(super) fn apply_scheduling_strategy(
-        canister_states: &mut BTreeMap<CanisterId, CanisterState>,
-        subnet_schedule: &mut SubnetSchedule,
+        state: &mut ReplicatedState,
         scheduler_cores: usize,
         current_round: ExecutionRound,
         accumulated_priority_reset_interval: ExecutionRound,
         metrics: &SchedulerMetrics,
         logger: &ReplicaLogger,
     ) -> RoundSchedule {
-        let number_of_canisters = canister_states.len();
+        let number_of_canisters = state.canister_states().len();
 
         // Total allocatable compute capacity in percent.
         // As one scheduler core is reserved to guarantee long executions progress,
@@ -418,7 +425,8 @@ impl RoundSchedule {
         // Collect the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();
         let mut accumulated_priority_deviation = 0.0;
-        for (&canister_id, canister) in canister_states.iter_mut() {
+        let (canister_states, subnet_schedule) = state.subnet_schedule_mut();
+        for (&canister_id, canister) in canister_states.iter() {
             if is_reset_round {
                 let canister_priority = subnet_schedule.get_mut(canister_id);
                 // By default, each canister accumulated priority is set to its compute allocation.
@@ -445,7 +453,10 @@ impl RoundSchedule {
             accumulated_priority_invariant += accumulated_priority;
             accumulated_priority_deviation +=
                 accumulated_priority.get() as f64 * accumulated_priority.get() as f64;
+        }
+        for (_, canister) in state.canister_states_iter_mut() {
             if canister.has_input() {
+                let canister = Arc::make_mut(canister);
                 canister
                     .system_state
                     .canister_metrics_mut()
@@ -546,8 +557,11 @@ impl RoundSchedule {
             .iter()
             .take(long_execution_cores)
         {
-            subnet_schedule.get_mut(*canister_id).long_execution_mode =
-                LongExecutionMode::Prioritized;
+            state
+                .metadata
+                .subnet_schedule
+                .get_mut(*canister_id)
+                .long_execution_mode = LongExecutionMode::Prioritized;
         }
 
         round_schedule

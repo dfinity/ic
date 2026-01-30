@@ -38,6 +38,7 @@ use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::TryFrom;
 use std::mem::size_of;
+use std::sync::Arc;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_27;
 const REMOTE_SUBNET: SubnetId = SUBNET_42;
@@ -207,7 +208,10 @@ fn build_streams_success() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -275,6 +279,7 @@ fn build_streams_local_canisters() {
                         *INITIAL_CYCLES,
                         NumSeconds::from(100_000),
                     )
+                    .into()
                 });
         }
 
@@ -313,7 +318,10 @@ fn build_streams_local_canisters() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -493,7 +501,10 @@ fn build_streams_respects_limits(
         // Act.
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -572,7 +583,10 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -649,7 +663,10 @@ fn build_streams_with_messages_targeted_to_other_subnets() {
 
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(result_state.canister_states, expected_state.canister_states);
+        assert_eq!(
+            result_state.canister_states(),
+            expected_state.canister_states()
+        );
         assert_eq!(result_state.metadata, expected_state.metadata);
         assert_eq!(result_state, expected_state);
 
@@ -1180,7 +1197,10 @@ fn build_streams_with_oversized_payloads() {
         // Act
         let result_state = stream_builder.build_streams(provided_state);
 
-        assert_eq!(expected_state.canister_states, result_state.canister_states);
+        assert_eq!(
+            expected_state.canister_states(),
+            result_state.canister_states()
+        );
         assert_eq!(expected_state.metadata, result_state.metadata);
         assert_eq!(expected_state, result_state);
 
@@ -1573,19 +1593,20 @@ fn generate_message_for_test(
 // Generates `CanisterStates` with the given messages in output queues.
 fn canister_states_with_outputs<M: Into<RequestOrResponse>>(
     msgs: Vec<M>,
-) -> BTreeMap<CanisterId, CanisterState> {
-    let mut canister_states = BTreeMap::<CanisterId, CanisterState>::new();
+) -> BTreeMap<CanisterId, Arc<CanisterState>> {
+    let mut canister_states = BTreeMap::<CanisterId, Arc<CanisterState>>::new();
 
     for msg in msgs {
         let msg = msg.into();
         let canister_state = canister_states.entry(msg.sender()).or_insert_with(|| {
-            new_canister_state(
+            Arc::new(new_canister_state(
                 msg.sender(),
                 msg.sender().get(),
                 *INITIAL_CYCLES,
                 NumSeconds::from(100_000),
-            )
+            ))
         });
+        let canister_state = Arc::make_mut(canister_state);
 
         match msg {
             RequestOrResponse::Request(req) => {

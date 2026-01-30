@@ -77,7 +77,7 @@ pub(crate) fn make_unvalidated_checkpoint(
     tip_channel
         .send(TipRequest::FilterTipCanisters {
             height,
-            canister_ids: state.canister_states.keys().copied().collect(),
+            canister_ids: state.canister_states().keys().copied().collect(),
             snapshot_ids: state
                 .canister_snapshots
                 .iter()
@@ -194,7 +194,7 @@ impl PageMapType {
     /// List all PageMaps contained in `state`, ignoring PageMaps that are in snapshots.
     fn list_all_without_snapshots(state: &ReplicatedState) -> Vec<PageMapType> {
         let mut result = vec![];
-        for (id, canister) in &state.canister_states {
+        for (id, canister) in state.canister_states() {
             result.push(Self::WasmChunkStore(id.to_owned()));
             if canister.execution_state.is_some() {
                 result.push(Self::WasmMemory(id.to_owned()));
@@ -275,7 +275,9 @@ fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
-    for (_id, canister) in state.canister_states.iter_mut() {
+    for (_id, canister) in state.canister_states_iter_mut() {
+        // TODO: Check if canister has deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         canister
             .system_state
             .wasm_chunk_store
@@ -314,6 +316,10 @@ fn strip_page_map_deltas(
     // Reset the sandbox state to force full synchronization on the next execution
     // since the page deltas are out of sync now.
     for canister in state.canisters_iter_mut() {
+        if canister.execution_state.is_none() {
+            continue;
+        }
+        let canister = Arc::make_mut(canister);
         if let Some(execution_state) = &mut canister.execution_state {
             execution_state.wasm_memory.sandbox_memory = SandboxMemory::new();
             execution_state.stable_memory.sandbox_memory = SandboxMemory::new();
@@ -357,7 +363,9 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
         page_map.strip_unflushed_delta();
     };
 
-    for (id, canister) in tip_state.canister_states.iter_mut() {
+    for (id, canister) in tip_state.canister_states_iter_mut() {
+        // TODO: Filter out canisters with no heap deltas before making a mutable reference.
+        let canister = Arc::make_mut(canister);
         add_to_pagemaps_and_strip(
             PageMapType::WasmChunkStore(id.to_owned()),
             canister.system_state.wasm_chunk_store.page_map_mut(),
@@ -504,7 +512,7 @@ impl CheckpointLoader {
     fn load_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-    ) -> Result<(BTreeMap<CanisterId, CanisterState>, SubnetSchedule), CheckpointError> {
+    ) -> Result<(BTreeMap<CanisterId, Arc<CanisterState>>, SubnetSchedule), CheckpointError> {
         let _timer = self
             .metrics
             .load_checkpoint_step_duration
@@ -526,7 +534,7 @@ impl CheckpointLoader {
         for result in results.into_iter() {
             let (canister_state, canister_priority, durations) = result?;
             priorities.insert(canister_state.canister_id(), canister_priority);
-            canister_states.insert(canister_state.canister_id(), canister_state);
+            canister_states.insert(canister_state.canister_id(), Arc::new(canister_state));
 
             durations.apply(&self.metrics);
         }
@@ -537,7 +545,7 @@ impl CheckpointLoader {
     fn validate_eq_canister_states(
         &self,
         thread_pool: &mut Option<&mut scoped_threadpool::Pool>,
-        ref_canister_states: &BTreeMap<CanisterId, CanisterState>,
+        ref_canister_states: &BTreeMap<CanisterId, Arc<CanisterState>>,
     ) -> Result<BTreeMap<CanisterId, CanisterPriority>, String> {
         let on_disk_canister_ids = self
             .checkpoint_layout
@@ -547,7 +555,7 @@ impl CheckpointLoader {
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
         if on_disk_canister_ids != ref_canister_ids {
-            return Err("Canister ids mismatch".to_string());
+            return Err("Canister IDs mismatch".to_string());
         }
         maybe_parallel_map(thread_pool, ref_canister_ids.iter(), |&canister_id| {
             let (canister_state, canister_priority, _) = load_canister_state_from_checkpoint(

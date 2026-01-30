@@ -6,6 +6,7 @@ use ic_types::CountBytes;
 use ic_types::messages::{Ingress, RequestOrResponse};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, VecDeque};
 use std::convert::{From, TryFrom, TryInto};
 use std::fmt::Debug;
@@ -407,40 +408,50 @@ impl IngressQueue {
         self.size() == 0
     }
 
+    /// Retturns `true` if there are any ingress messages in the queue that satisfy
+    /// the filter, `false` otherwise.
+    pub(super) fn any_messages<F>(&self, mut filter: F) -> bool
+    where
+        F: FnMut(&Ingress) -> bool,
+    {
+        self.queues
+            .values()
+            .any(|queue| queue.iter().any(|msg| filter(msg)))
+    }
+
     /// Calls `filter` on each ingress message in the queue, retaining only the
     /// messages for which the filter returns `true` and dropping the rest.
     ///
     /// Returns all dropped ingress messages.
     pub(super) fn filter_messages<F>(&mut self, mut filter: F) -> Vec<Arc<Ingress>>
     where
-        F: FnMut(&Arc<Ingress>) -> bool,
+        F: FnMut(&Ingress) -> bool,
     {
         let mut filtered_messages = vec![];
         for canister_ingress_queue in self.queues.values_mut() {
             canister_ingress_queue.retain_mut(|item| {
                 if filter(item) {
-                    true
-                } else {
-                    // Empty `canister_ingress_queues` and their corresponding schedule entry
-                    // are pruned below.
-                    filtered_messages.push(Arc::clone(item));
-                    self.size_bytes -= Self::ingress_size_bytes(&(*item));
-                    self.total_ingress_count -= 1;
-                    false
+                    return true;
                 }
+                // Empty `canister_ingress_queues` and their corresponding schedule entry
+                // are pruned below.
+                filtered_messages.push(Arc::clone(item));
+                self.size_bytes -= Self::ingress_size_bytes(&(*item));
+                self.total_ingress_count -= 1;
+                false
             });
         }
 
-        self.schedule.retain_mut(|canister_id| {
-            let canister_ingress_queue = self.queues.get(canister_id).unwrap();
-            if canister_ingress_queue.is_empty() {
-                self.queues.remove(canister_id);
-                self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
-                false
-            } else {
-                true
-            }
-        });
+        self.schedule
+            .retain_mut(|canister_id| match self.queues.entry(*canister_id) {
+                Entry::Occupied(entry) if entry.get().is_empty() => {
+                    entry.remove();
+                    self.size_bytes -= Self::PER_CANISTER_QUEUE_OVERHEAD_BYTES;
+                    false
+                }
+                Entry::Occupied(_) => true,
+                Entry::Vacant(_) => unreachable!(),
+            });
 
         filtered_messages
     }

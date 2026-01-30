@@ -403,8 +403,8 @@ fn install_code(
     let network_topology = state.metadata.network_topology.clone();
 
     let old_canister = state.take_canister_state(&context.canister_id).unwrap();
+    let old_canister = Arc::try_unwrap(old_canister).unwrap_or_else(|canister| (*canister).clone());
     execution_parameters.compute_allocation = old_canister.compute_allocation();
-    execution_parameters.memory_allocation = old_canister.memory_allocation();
 
     let dts_result = canister_manager.install_code_dts(
         context,
@@ -6908,7 +6908,7 @@ fn can_create_canister() {
     let canister_id2 = test.create_canister(*INITIAL_CYCLES);
     assert_eq!(canister_id2, expected_generated_id2);
 
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]
@@ -6944,7 +6944,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             );
         }
     }
-    assert_eq!(test.state().canister_states.len(), 1);
+    assert_eq!(test.state().canister_states().len(), 1);
 }
 
 #[test]
@@ -6973,7 +6973,7 @@ fn can_create_canister_with_extra_cycles() {
         .build();
     let result = test.ingress(canister_id, "update", payload);
     let _ = get_reply(result);
-    assert_eq!(test.state().canister_states.len(), 2);
+    assert_eq!(test.state().canister_states().len(), 2);
 }
 
 #[test]

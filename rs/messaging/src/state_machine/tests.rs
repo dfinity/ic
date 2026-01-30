@@ -268,24 +268,18 @@ const CANISTER_RANGE_B: CanisterIdRange = CanisterIdRange {
 fn split_fixture() -> StateMachineTestFixture {
     // Initial state, with 2 canisters.
     let mut initial_state = ReplicatedState::new(SUBNET_A, SubnetType::Application);
-    initial_state.canister_states.insert(
+    initial_state.put_canister_state(new_canister_state(
         CANISTER_RANGE_A.start,
-        new_canister_state(
-            CANISTER_RANGE_A.start,
-            PrincipalId::new_anonymous(),
-            Cycles::new(1_000_000_000_000),
-            3600.into(),
-        ),
-    );
-    initial_state.canister_states.insert(
+        PrincipalId::new_anonymous(),
+        Cycles::new(1_000_000_000_000),
+        3600.into(),
+    ));
+    initial_state.put_canister_state(new_canister_state(
         CANISTER_RANGE_B.start,
-        new_canister_state(
-            CANISTER_RANGE_B.start,
-            PrincipalId::new_anonymous(),
-            Cycles::new(1_000_000_000_000),
-            3600.into(),
-        ),
-    );
+        PrincipalId::new_anonymous(),
+        Cycles::new(1_000_000_000_000),
+        3600.into(),
+    ));
 
     let mut scheduler = Box::new(MockScheduler::new());
     let demux = Box::new(MockDemux::new());
@@ -390,7 +384,10 @@ fn test_online_split_subnet_a() {
     // Only hosting canister `CANISTER_RANGE_0.start`.
     assert_eq!(
         vec![&CANISTER_RANGE_A.start],
-        state_after_split.canister_states.keys().collect::<Vec<_>>()
+        state_after_split
+            .canister_states()
+            .keys()
+            .collect::<Vec<_>>()
     );
 }
 
@@ -401,7 +398,10 @@ fn test_online_split_subnet_b() {
     // Only hosting canister `CANISTER_RANGE_1.start`.
     assert_eq!(
         vec![&CANISTER_RANGE_B.start],
-        state_after_split.canister_states.keys().collect::<Vec<_>>()
+        state_after_split
+            .canister_states()
+            .keys()
+            .collect::<Vec<_>>()
     );
 }
 

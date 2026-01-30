@@ -448,7 +448,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState, height: Height) ->
                 streams_as_tree(state.streams(), own_subnet_id, certification_version)
             })
             .with("canister", move || {
-                canisters_as_tree(&state.canister_states, certification_version)
+                canisters_as_tree(state.canister_states(), certification_version)
             })
             .with_tree(
                 "request_status",
@@ -864,7 +864,7 @@ fn api_boundary_nodes_as_tree(
 }
 
 fn canisters_as_tree(
-    canisters: &BTreeMap<CanisterId, CanisterState>,
+    canisters: &BTreeMap<CanisterId, Arc<CanisterState>>,
     certification_version: CertificationVersion,
 ) -> LazyTree<'_> {
     fork(MapTransformFork {
