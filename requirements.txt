@@ -4,13 +4,13 @@
 #
 #    bazel run //:python-requirements.update
 #
-ansible==11.7.0 \
-    --hash=sha256:caa56fc92e5bea012abf37f08aa348da27d2fcaf94bf398e24cadcb618a4dc3b \
-    --hash=sha256:f9df37c71d407f65bcb9c5c06c9918e297d9ea74b5cdaf5926c4c9aa9e44db5f
+ansible==13.2.0 \
+    --hash=sha256:8a7f536542d4b18118200b8eaba40aa62ed990bd0e7b7622368b656b67db056f \
+    --hash=sha256:fac46e202d1020027341659918b39e588dd7c43cef26537d7ca7fe51c324fe31
     # via -r requirements.in
-ansible-core==2.18.6 \
-    --hash=sha256:12a34749a7b20f0f1536bd3e3b2e137341867e4642e351273e96647161f595c0 \
-    --hash=sha256:25bb20ce1516a1b7307831b263cef684043b3720711466bd9d4164e5fd576557
+ansible-core==2.20.1 \
+    --hash=sha256:2a66825b4a53f130b62515e7e2a3d811d544b19b6e8a22d9ef88c55896384cb3 \
+    --hash=sha256:a891e5f90cd46626778f0f3d545ec1115840c9b50e8adf25944c5e1748452106
     # via ansible
 antlr4-python3-runtime==4.9.3 \
     --hash=sha256:f224469b4168294902bb1efa80a8bf7855f24c99aef99cbefc1bcd3cce77881b

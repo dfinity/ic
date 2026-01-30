@@ -38,7 +38,7 @@ pub fn upgrade_guestos(env: TestEnv) {
     let target_version = get_guestos_update_img_version();
     let upgrade_url = get_guestos_update_img_url().to_string();
     let sha256 = get_guestos_update_img_sha256();
-    let guest_launch_measurements = get_guestos_launch_measurements();
+    let guest_launch_measurements = get_guestos_update_launch_measurements();
 
     info!(logger, "Image configuration:");
     info!(logger, "  Original GuestOS version: {original_version}");

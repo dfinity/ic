@@ -3,15 +3,16 @@ use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
 use crate::state::utxos::UtxoSet;
-use crate::tx::FeeRate;
+use crate::tx::{FeeRate, SignedRawTransaction};
 use crate::{
     BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
     lifecycle, state, state::DEFAULT_MAX_NUM_INPUTS_IN_TRANSACTION, tx,
 };
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Satoshi, Utxo};
+use ic_btc_interface::{OutPoint, Satoshi, Txid, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use std::str::FromStr;
 use std::time::Duration;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
@@ -74,6 +75,44 @@ pub fn ledger_account() -> Account {
         .unwrap(),
         subaccount: Some([42; 32]),
     }
+}
+
+pub fn bitcoin_address() -> BitcoinAddress {
+    BitcoinAddress::parse(
+        "bc1qazfw0fcg2q088cm2ag2xacflcrsj8wrd23xwpc",
+        Network::Mainnet,
+    )
+    .unwrap()
+}
+
+pub fn minter() -> Principal {
+    Principal::from_text("mqygn-kiaaa-aaaar-qaadq-cai").unwrap()
+}
+
+pub fn minter_address() -> BitcoinAddress {
+    BitcoinAddress::parse(
+        "bc1q0jrxz4jh59t5qsu7l0y59kpfdmgjcq60wlee3h",
+        Network::Mainnet,
+    )
+    .unwrap()
+}
+
+pub fn signed_raw_transaction() -> SignedRawTransaction {
+    // https://mempool.space/tx/fa036aa49d7ed29b11fd8c84957b3641e0e1318783cdfa5ccf74b86a355f0462
+    SignedRawTransaction::new(
+        hex::decode("02000000000102a443ae4bbfb5b0c38c45c469ef8e5b06784b6369c72a2d7a272630b89dbd0a980000000000fdffffffa45a2e499ce8571da922dfd7b69e4dcb7cf02dada1574bb238af9bcf575f2b4c0000000000fdffffff028a2e0700000000001976a9142138d3b59d9d921d1bb1a5eaa2f141569bd5911e88ac383a1100000000001600147c86615657a15740439efbc942d8296ed12c034f0248304502210081ca592ce18898869aa1c93d2eed6a67dfb9355f1be953812f16be29c15b5ab5022061d0384f87d8a9dcbcb43b68fb6cb36b3785f366cdfe99523018358ca7784e1a01210214676dc1deaaadbaadf032438ceb8790f4f751e9f3ab04a22baabace479d26e102483045022100a736b33d0e99d1b3e9f190d69a6714d942717a7b3b90610c570db9a45e749e0d0220683463be49d727b0f50bbbb297f40572cf47e3df7e3e0be36c32cc07cd7564ad012102c443adc5dbf6567e3c941bdbcf5b88dbcec4eb3d849cbc707e9a89d6f6db6f2d00000000").unwrap(),
+        Txid::from_str("fa036aa49d7ed29b11fd8c84957b3641e0e1318783cdfa5ccf74b86a355f0462").unwrap(),
+        FeeRate::from_millis_per_byte(1_500)
+    )
+}
+
+pub fn other_signed_raw_transaction() -> SignedRawTransaction {
+    // https://mempool.space/tx/fa036aa49d7ed29b11fd8c84957b3641e0e1318783cdfa5ccf74b86a355f0462
+    SignedRawTransaction::new(
+        hex::decode("0200000000010277f99cadd0fae0eee92b2c06feb6679e6043a4d7b5d2a6cd092623f1abe675230100000000fdffffff9fae30c75102dac6cb610ac6a4abdbed50848ae3753b2a125712259df3735fd10b00000000fdffffff023cfc6f0000000000160014f22dead902a3814732747a82884da7a201987a8c240b0e00000000001600147c86615657a15740439efbc942d8296ed12c034f0247304402207d42e1e66490b32c50db58493b4b68a6b9552fd30cd070aeb3de41adc4fc63880220630767da2310200e11ed654c40e03042e97a050c7f2a309e736ee8887bfbc27e012103a18bbac92ab34585fd3dec834c5efaa0739b0add5e1ac7aedda23a95b47998cc0247304402201d99fe71c5e126e357f34235fa58f2c24cdba378d802c686da0b3d636fadab5a022033ae9d0328a7e6179f55ecd99865545ccdc8352bd653643d1cc4a07f18a468480121036d621b46fd3e446d0e5c4c50aa7b732e80fdf32469faed1e0bd98a8adfad815500000000").unwrap(),
+        Txid::from_str("6d44fef67a1debfc8772728c7fd6b107ea1172786ff65b54699bf71f71024155").unwrap(),
+        FeeRate::from_millis_per_byte(2_870)
+    )
 }
 
 pub fn utxo() -> Utxo {
@@ -185,7 +224,7 @@ pub mod mock {
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
         BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
-        GetUtxosRequest, GetUtxosResponse, Network,
+        GetUtxosRequest, GetUtxosResponse, Network, Timestamp,
     };
     use crate::{CkBtcMinterState, ECDSAPublicKey};
     use async_trait::async_trait;
@@ -226,6 +265,19 @@ pub mod mock {
             async fn send_raw_transaction(&self, transaction: Vec<u8>, network: Network) -> Result<(), CallError>;
             async fn check_address( &self, btc_checker_principal: Option<Principal>, address: String) -> Result<BtcAddressCheckStatus, CallError>;
         }
+    }
+
+    pub fn mock_increasing_time(
+        runtime: &mut MockCanisterRuntime,
+        start: Timestamp,
+        interval: Duration,
+    ) {
+        let mut current_time = start;
+        runtime.expect_time().returning(move || {
+            let previous_time = current_time;
+            current_time = current_time.saturating_add(interval);
+            previous_time.as_nanos_since_unix_epoch()
+        });
     }
 }
 

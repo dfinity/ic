@@ -1,7 +1,6 @@
 use anyhow::Result;
 use ic_base_types::PrincipalId;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
-use ic_consensus_system_test_utils::set_sandbox_env_vars;
 use ic_crypto_utils_threshold_sig_der::public_key_der_to_pem;
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nervous_system_common::E8;
@@ -185,9 +184,6 @@ fn setup_recovered_nns(
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
     fetch_ic_config(&env, &nns_node);
-
-    // The following ensures ic-replay and ic-recovery know where to get their required dependencies.
-    set_sandbox_env_vars();
 
     // Wait until we have fetched ic-replay before setting the test neuron (which needs ic-replay)
     fetch_mainnet_ic_replay_thread
