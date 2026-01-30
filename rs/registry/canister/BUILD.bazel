@@ -195,10 +195,10 @@ rust_canister(
         "canister/canister.rs",
         "canister/cloud_engine_endpoints.rs",
     ],
-    crate_root = "canister/canister.rs",
     aliases = ALIASES,
     compile_data = ["canister/registry_test.did"],
     crate_features = ["test"],
+    crate_root = "canister/canister.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/registry_test.did",
     deps = DEPENDENCIES + [
