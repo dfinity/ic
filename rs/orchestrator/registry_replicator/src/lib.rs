@@ -350,7 +350,7 @@ impl RegistryReplicator {
             latest_certified_time
         );
 
-        return latest_certified_time;
+        latest_certified_time
     }
 
     /// Initializes the registry local store asynchronously and returns a future that
