@@ -86,6 +86,10 @@ impl Process for ReplicaProcess {
 pub trait RegistryReplicatorForUpgrade: Send + Sync {
     /// Stops polling and sets the local registry data to what is contained in the provided local store.
     async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore);
+
+    /// Returns true if the replicator has replicated all versions that were certified before the
+    /// replicator was started.
+    fn has_replicated_all_versions_certified_before_init(&self) -> bool;
 }
 
 #[async_trait]
@@ -93,6 +97,10 @@ impl RegistryReplicatorForUpgrade for RegistryReplicator {
     async fn stop_polling_and_set_local_registry_data(&self, new_local_store: &dyn LocalStore) {
         self.stop_polling_and_set_local_registry_data(new_local_store)
             .await
+    }
+
+    fn has_replicated_all_versions_certified_before_init(&self) -> bool {
+        self.has_replicated_all_versions_certified_before_init()
     }
 }
 
@@ -352,6 +360,37 @@ impl Upgrade {
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
+            if !self
+                .registry_replicator
+                .has_replicated_all_versions_certified_before_init()
+            {
+                // Until the replicator has caught up with the registry canister, we cannot be
+                // entirely sure that the latest registry version that we have locally correctly
+                // reflects the recalled replica versions. Thus, we delay the upgrade until then.
+                return Err(OrchestratorError::UpgradeError(format!(
+                    "Delaying upgrade to {} until registry data is recent enough. Latest registry version: {}",
+                    new_replica_version, latest_registry_version
+                )));
+            }
+
+            let recalled_versions = self
+                .registry
+                .get_recalled_replica_versions(subnet_id, latest_registry_version)?;
+
+            if recalled_versions.contains(&new_replica_version) {
+                // The new replica version has been recalled. Do not upgrade. The only way to leave
+                // this branch is via subnet recovery.
+                self.metrics
+                    .recalled_version_upgrade_blocks
+                    .with_label_values(&[new_replica_version.as_ref()])
+                    .inc();
+
+                return Err(OrchestratorError::UpgradeError(format!(
+                    "Not upgrading to recalled replica version {} at regitry version {}",
+                    new_replica_version, latest_registry_version
+                )));
+            }
+
             info!(
                 self.logger,
                 "Starting version upgrade at CUP registry version {}: {} -> {}",

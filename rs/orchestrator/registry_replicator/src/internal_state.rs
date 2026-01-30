@@ -21,7 +21,8 @@ use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
-    CanisterId, NodeId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    CanisterId, NodeId, RegistryVersion, SubnetId, Time,
+    crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use std::{
@@ -54,6 +55,7 @@ pub(crate) struct InternalState {
     nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_canister: Option<Arc<RegistryCanister>>,
     registry_canister_fallback: Option<Arc<RegistryCanister>>,
+    replicator_init_time: Time,
     poll_delay: Duration,
     failed_poll_count: i64,
 }
@@ -66,6 +68,7 @@ impl InternalState {
         local_store: Arc<dyn LocalStore>,
         config_nns_urls: Vec<Url>,
         maybe_config_nns_pub_key: Option<ThresholdSigPublicKey>,
+        replicator_init_time: Time,
         poll_delay: Duration,
     ) -> Self {
         let registry_canister_fallback = if !config_nns_urls.is_empty() {
@@ -86,6 +89,7 @@ impl InternalState {
             nns_pub_key: maybe_config_nns_pub_key,
             registry_canister: None,
             registry_canister_fallback,
+            replicator_init_time,
             poll_delay,
             failed_poll_count: 0,
         }
@@ -93,20 +97,23 @@ impl InternalState {
 
     /// Requests latest version and certified changes from the
     /// [`RegistryCanister`], applies changes to [`LocalStore`] accordingly.
+    /// If the local store is up to date with the latest version of the registry canister
+    /// and the certified time of the response is later than the replicator's initialization
+    /// time, returns the certified time.
     /// Exits the process if this node appears on a subnet that is started as
     /// the new NNS after a version update.
-    pub(crate) async fn poll(&mut self) -> Result<(), String> {
+    pub(crate) async fn poll(&mut self) -> Result<Option<Time>, String> {
         // Note, this may not actually be the latest version, rather it is the latest
         // version that is locally available
-        let latest_version = self.registry_client.get_latest_version();
-        if latest_version != self.latest_version {
+        let latest_version_before_poll = self.registry_client.get_latest_version();
+        if latest_version_before_poll != self.latest_version {
             // latest version has changed (originally initialized with 0)
-            self.latest_version = latest_version;
-            self.start_new_nns_subnet(latest_version)
+            self.latest_version = latest_version_before_poll;
+            self.start_new_nns_subnet(latest_version_before_poll)
                 .expect("Start new NNS failed.");
             // update (initialize) *remote* registry canister client in case NNS has changed (or
             // this is the first call to poll())
-            if let Err(e) = self.update_registry_canister(latest_version) {
+            if let Err(e) = self.update_registry_canister(latest_version_before_poll) {
                 warn!(
                     self.logger,
                     "Could not update registry canister with new topology data: {:?}", e
@@ -150,19 +157,30 @@ impl InternalState {
             &registry_canister,
             &nns_pub_key,
             self.local_store.as_ref(),
-            latest_version,
+            latest_version_before_poll,
         )
         .await
         {
-            Ok(last_stored_version) => {
+            Ok((last_stored_version, last_available_version, certified_time)) => {
                 self.failed_poll_count = 0;
-                if last_stored_version != latest_version {
+                if last_stored_version != latest_version_before_poll {
                     info!(
                         self.logger,
-                        "Stored registry versions up to: {}", last_stored_version
+                        "Stored registry versions up to: {}/{}",
+                        last_stored_version,
+                        last_available_version
                     );
                 }
-                Ok(())
+
+                if last_stored_version == last_available_version
+                    && certified_time > self.replicator_init_time
+                {
+                    // Entering this branch means that the local store now contains all versions
+                    // that were certified before the replicator was started.
+                    Ok(Some(certified_time))
+                } else {
+                    Ok(None)
+                }
             }
             Err(e) => {
                 self.failed_poll_count += 1;
@@ -376,16 +394,17 @@ impl InternalState {
 
 /// Poll the registry canister for certified changes since `from_version`, and
 /// write them to the local store.
-/// Returns the latest registry version written to the local store, or an error if
-/// fetching the changes failed.
+/// Returns the latest registry version written to the local store, the latest
+/// registry version available on the registry canister, and the time the changes
+/// were certified at, or an error if fetching the changes failed.
 /// Panics if writing to the local store fails.
 pub async fn write_certified_changes_to_local_store(
     registry_canister: &RegistryCanister,
     nns_pub_key: &ThresholdSigPublicKey,
     local_store: &dyn LocalStore,
     from_version: RegistryVersion,
-) -> Result<RegistryVersion, String> {
-    let (records, _, _) = registry_canister
+) -> Result<(RegistryVersion, RegistryVersion, Time), String> {
+    let (records, last_available_version, certified_time) = registry_canister
         .get_certified_changes_since(from_version.get(), nns_pub_key)
         .await
         .map_err(|e| e.to_string())?;
@@ -401,7 +420,7 @@ pub async fn write_certified_changes_to_local_store(
             });
     }
 
-    let last_version = changelog
+    let last_stored_version = changelog
         .last_key_value()
         .map(|(last_version, _)| *last_version)
         .unwrap_or(from_version); // If `changelog` is empty, i.e. no new changes.
@@ -412,9 +431,9 @@ pub async fn write_certified_changes_to_local_store(
             .unwrap_or_else(|_| panic!("Writing to the FS failed at version {registry_version}"));
     }
 
-    // If the local store did not panic in the loop above, then `last_version` is indeed the last
-    // version stored on disk.
-    Ok(last_version)
+    // If the local store did not panic in the loop above, then `last_stored_version` is indeed the
+    // last version stored on disk.
+    Ok((last_stored_version, last_available_version, certified_time))
 }
 
 /// Standalone function for switch-over logic, for unit testing.
@@ -537,6 +556,7 @@ mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::time::UNIX_EPOCH;
     use ic_types::{CanisterId, SubnetId};
     use ic_types_test_utils::ids::{NODE_1, SUBNET_1, SUBNET_2, SUBNET_3};
     use std::collections::BTreeMap;
@@ -693,6 +713,7 @@ mod test {
                 Arc::clone(&local_store) as Arc<dyn LocalStore>,
                 config_nns_urls.clone(),
                 Some(config_nns_pub_key),
+                UNIX_EPOCH,
                 TEST_POLL_DELAY,
             );
 
