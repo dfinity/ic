@@ -78,8 +78,8 @@ impl TryFrom<AddOrRemoveNodeProvider> for ValidAddOrRemoveNodeProvider {
 impl LocallyDescribableProposalAction for ValidAddOrRemoveNodeProvider {
     const TYPE_NAME: &'static str = "Add or Remove Node Provider";
     const TYPE_DESCRIPTION: &'static str = "Assign (or revoke) an identity to a node provider, \
-    associating key information regarding the legal person associated that should provide a way \
-    to uniquely identify it.";
+        associating key information regarding the legal person associated that should provide a \
+        way to uniquely identify it.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         SelfDescribingValue::from(self.clone())

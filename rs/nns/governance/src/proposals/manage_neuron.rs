@@ -21,9 +21,30 @@ use ic_cdk::println;
 
 impl LocallyDescribableProposalAction for ManageNeuron {
     const TYPE_NAME: &'static str = "Manage Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Manages a neuron by executing a command such as \
-        configuring its settings, disbursing its stake, spawning a new neuron, following other \
-        neurons, registering a vote, or performing other neuron management operations.";
+    const TYPE_DESCRIPTION: &'static str = "Call a major function on a specified target neuron. \
+        Only the followees of the target neuron may vote on these proposals, which effectively \
+        provides the followees with control over the target neuron. This can provide a convenient \
+        and highly secure means for a team of individuals to manage an important neuron. For \
+        example, a neuron might hold a large balance, or belong to an organization of high \
+        repute, and be publicized so that many other neurons can follow its vote. In both cases, \
+        managing the private key of the principal securely could be problematic. (Either a single \
+        copy is held, which is very insecure and provides for a single party to take control, or \
+        a group of individuals must divide responsibility — for example, using threshold \
+        cryptography, which is complex and time consuming). To address this using this proposal \
+        type, the important neuron can be configured to follow the neurons controlled by \
+        individual members of a team. Now they can submit proposals to make the important neuron \
+        perform actions, which are adopted if and only if a majority of them vote to adopt. \
+        (Submitting such a proposal costs a small fee, to prevent denial-of-service attacks.) \
+        Nearly any command on the target neuron can be executed, including commands that change \
+        the follow rules, allowing the set of team members to be dynamic. Only the final step of \
+        dissolving the neuron once its dissolve delay reaches zero cannot be performed using this \
+        type of proposal, since this would allow control/\"ownership\" over the locked balances \
+        to be transferred. (The only exception to this rule applies to not-for-profit \
+        organizations, which may be allowed to dissolve their neurons without using the initial \
+        private key.) To prevent a neuron falling under the malign control of the principal's \
+        private key by accident, the private key can be destroyed so that the neuron can only be \
+        controlled by its followees, although this makes it impossible to subsequently unlock the \
+        balance.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         let builder = ValueBuilder::new();

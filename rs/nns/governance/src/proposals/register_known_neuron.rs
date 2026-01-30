@@ -180,8 +180,8 @@ impl KnownNeuron {
 
 impl LocallyDescribableProposalAction for KnownNeuron {
     const TYPE_NAME: &'static str = "Register Known Neuron";
-    const TYPE_DESCRIPTION: &'static str = "Registers a neuron as a known neuron. This allows the \
-        neuron to be looked up by name and displayed more prominently in the NNS UI.";
+    const TYPE_DESCRIPTION: &'static str = "Register an existing neuron as a \"known neuron,\" \
+        giving it a name and an optional description, and adding it to the list of known neurons.";
 
     fn to_self_describing_value(&self) -> SelfDescribingValue {
         ValueBuilder::new()
