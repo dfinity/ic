@@ -67,13 +67,7 @@ pub fn generate_attestation_package<T: EncodeSevCustomData + Debug>(
         package = package.verify_custom_data(custom_data);
     }
 
-    package
-        .context("Attestation report from firmware is invalid")
-        // Likely programming error so panic in debug mode
-        .inspect_err(|_err| {
-            #[cfg(all(debug_assertions, not(test)))]
-            panic!("{_err:?}")
-        })
+    package.context("Attestation report from firmware is invalid")
 }
 
 fn certificate_chain_from_config(

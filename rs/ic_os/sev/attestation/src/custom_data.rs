@@ -22,6 +22,8 @@ pub enum SevCustomDataNamespace {
     GetDiskEncryptionKeyToken = 2,
     /// Custom data for node registration attestation to prove its chip_id.
     NodeRegistration = 3,
+    /// Custom data for verifying alternative GuestOS proposal.
+    VerifyAlternativeGuestOsProposal = 4,
 }
 
 impl SevCustomDataNamespace {

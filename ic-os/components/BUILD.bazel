@@ -32,7 +32,7 @@ write_info_file_var(
     varname = "STABLE_COMMIT_TIMESTAMP",
 )
 
-used_components = guestos_component_files | hostos_component_files | setupos_component_files
+used_components = guestos_component_files("dev") | guestos_component_files("prod") | hostos_component_files | setupos_component_files
 
 REPO_COMPONENTS = glob(
     ["**/*"],

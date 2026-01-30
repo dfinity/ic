@@ -20,3 +20,4 @@ esac
 # The veritysetup tool is required in order to set up the root filesystem
 # with integrity protection from initramfs.
 copy_exec /sbin/veritysetup
+copy_exec /opt/ic/bin/open_rootfs /sbin

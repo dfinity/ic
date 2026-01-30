@@ -22,17 +22,7 @@ trap 'panic "fatal: verity-root failed"' ERR
 
 echo "Original root: ${ROOT}"
 
-# Obtain root hash from kernel commandline
-for ARG in $(cat /proc/cmdline); do
-    VAL=${ARG#root_hash=}
-    if [ ! "${VAL}" = "${ARG}" ]; then
-        ROOT_HASH="${VAL}"
-    fi
-done
-
-echo "Root hash: ${ROOT_HASH}"
-
-veritysetup open "${ROOT}" vroot "${ROOT}" "${ROOT_HASH}" --hash-offset 10603200512
+open_rootfs
 
 echo "ROOT=/dev/mapper/vroot" >/conf/param.conf
 
