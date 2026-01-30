@@ -2641,6 +2641,8 @@ impl PocketIc {
         let (state_dir, wsl_native_state_dir) = if is_wsl()
             && let Some(state_dir) = state_dir
         {
+            println!("Using WSL-native state directory");
+
             let temp_dir = TempDir::new()
                 .map_err(|e| format!("Failed to create WSL-native state directory: {e}"))?;
             let temp_dir_path = temp_dir.path();
