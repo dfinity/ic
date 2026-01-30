@@ -16294,6 +16294,7 @@ dependencies = [
  "ic-types",
  "ic-universal-canister",
  "itertools 0.12.1",
+ "reqwest",
  "serde_json",
  "slog",
  "ssh2",
