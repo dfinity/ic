@@ -386,7 +386,7 @@ impl Upgrade {
                     .inc();
 
                 return Err(OrchestratorError::UpgradeError(format!(
-                    "Not upgrading to recalled replica version {} at regitry version {}",
+                    "Not upgrading to recalled replica version {} at registry version {}",
                     new_replica_version, latest_registry_version
                 )));
             }
