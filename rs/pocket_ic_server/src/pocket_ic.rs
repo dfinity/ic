@@ -589,7 +589,7 @@ impl PocketIcStateDir {
             println!(
                 "read {}: {:?}",
                 temp_dir_path.display(),
-                std::fs::read_dir(&temp_dir_path)
+                std::fs::read_dir(temp_dir_path)
             );
 
             Ok(Self {
@@ -637,12 +637,12 @@ impl Drop for PocketIcStateDir {
             println!(
                 "read {}: {:?}",
                 wsl_native_state_dir.path().display(),
-                std::fs::read_dir(&wsl_native_state_dir.path())
+                std::fs::read_dir(wsl_native_state_dir.path())
             );
             println!(
                 "read {}: {:?}",
                 state_dir.display(),
-                std::fs::read_dir(&state_dir)
+                std::fs::read_dir(state_dir)
             );
         }
     }
