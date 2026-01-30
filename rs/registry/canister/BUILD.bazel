@@ -195,6 +195,7 @@ rust_canister(
         "canister/canister.rs",
         "canister/cloud_engine_endpoints.rs",
     ],
+    crate_root = "canister/canister.rs",
     aliases = ALIASES,
     compile_data = ["canister/registry_test.did"],
     crate_features = ["test"],
