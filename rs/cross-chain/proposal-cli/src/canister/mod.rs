@@ -64,9 +64,9 @@ impl TargetCanister {
                 "https://github.com/dfinity/exchange-rate-canister.git"
             }
             TargetCanister::SolRpc => "https://github.com/dfinity/sol-rpc-canister.git",
-            TargetCanister::Bitcoin | TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
-                "https://github.com/dfinity/bitcoin-canister.git"
-            }
+            TargetCanister::Bitcoin
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::DogeWatchdog => "https://github.com/dfinity/bitcoin-canister.git",
             TargetCanister::Dogecoin => "https://github.com/dfinity/dogecoin-canister.git",
         }
     }
@@ -109,7 +109,9 @@ impl TargetCanister {
             TargetCanister::ExchangeRateCanister => PathBuf::from("src/xrc/xrc.did"),
             TargetCanister::SolRpc => PathBuf::from("canister/sol_rpc_canister.did"),
             TargetCanister::Bitcoin => PathBuf::from("canister/candid.did"),
-            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => PathBuf::from("watchdog/candid.did"),
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
+                PathBuf::from("watchdog/candid.did")
+            }
             TargetCanister::Dogecoin => PathBuf::from("canister/candid.did"),
         }
     }
@@ -204,7 +206,9 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
             TargetCanister::Bitcoin => vec![PathBuf::from("canister")],
-            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => vec![PathBuf::from("watchdog")],
+            TargetCanister::BtcWatchdog | TargetCanister::DogeWatchdog => {
+                vec![PathBuf::from("watchdog")]
+            }
             TargetCanister::Dogecoin => vec![PathBuf::from("canister")],
         }
     }
