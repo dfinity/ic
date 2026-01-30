@@ -212,9 +212,9 @@ impl PerformanceBasedAlgorithmInputProvider for FakeInputProvider {
 // Failure Rate Calculation Tests
 // ------------------------------------------------------------------------------------------------
 
-/// **Scenario**: 4 nodes with different performance levels (0.99%, 4.76%, 16.67%, 33.33% failure rates)
-/// **Expected**: 75th percentile = 16.67%, only the worst node (33.33%) gets penalized
-/// **Key Test**: 75th percentile calculation and relative failure rate logic
+/// Scenario: 4 nodes with different performance levels (0.99%, 4.76%, 16.67%, 33.33% failure rates)
+/// Expected: 75th percentile = 16.67%, only the worst node (33.33%) gets penalized
+/// Key Test: 75th percentile calculation and relative failure rate logic
 #[test]
 fn test_failure_rate_calculation_various_performance() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -340,9 +340,9 @@ fn test_failure_rate_calculation_various_performance() {
 // Type3 Special Logic Tests
 // ------------------------------------------------------------------------------------------------
 
-/// **Scenario**: Type3 and Type3.1 nodes in same country (3 Type3 + 2 Type3.1 in USA)
-/// **Expected**: Nodes grouped by country, average coefficient applied, reduced rewards
-/// **Key Test**: Type3 special logic with reduction coefficients
+/// Scenario: Type3 and Type3.1 nodes in same country (3 Type3 + 2 Type3.1 in USA)
+/// Expected: Nodes grouped by country, average coefficient applied, reduced rewards
+/// Key Test: Type3 special logic with reduction coefficients
 #[test]
 fn test_type3_reduction_coefficient_logic() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -600,9 +600,9 @@ fn test_missing_rewardable_nodes() {
 // Edge Case and Validation Tests
 // ------------------------------------------------------------------------------------------------
 
-/// **Scenario**: Subnet with only one node (10% failure rate)
-/// **Expected**: Subnet failure rate = node failure rate (10%), node gets no penalty
-/// **Key Test**: Single node subnet behavior and 75th percentile with n=1
+/// Scenario: Subnet with only one node (10% failure rate)
+/// Expected: Subnet failure rate = node failure rate (10%), node gets no penalty
+/// Key Test: Single node subnet behavior and 75th percentile with n=1
 #[test]
 fn test_single_node_subnet() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -683,9 +683,9 @@ fn test_empty_subnet_metrics() {
     assert_eq!(daily_nodes_rewards.rewards_reduction, dec!(0.0));
 }
 
-/// **Scenario**: Provider with empty rewardable nodes (no nodes to reward)
-/// **Expected**: No node results, total rewards = 0
-/// **Key Test**: Empty rewardable nodes handling
+/// Scenario: Provider with empty rewardable nodes (no nodes to reward)
+/// Expected: No node results, total rewards = 0
+/// Key Test: Empty rewardable nodes handling
 #[test]
 fn test_empty_rewardable_nodes() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -717,9 +717,9 @@ fn test_empty_rewardable_nodes() {
     assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
 }
 
-/// **Scenario**: Nodes with zero block scenarios
-/// **Expected**: 75th percentile = 100%, all nodes get no penalty
-/// **Key Test**: Zero blocks edge case handling
+/// Scenario: Nodes with zero block scenarios
+/// Expected: 75th percentile = 100%, all nodes get no penalty
+/// Key Test: Zero blocks edge case handling
 #[test]
 fn test_zero_blocks_edge_cases() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -833,9 +833,9 @@ fn test_zero_blocks_edge_cases() {
 // Type4 Reward Calculation Tests
 // ------------------------------------------------------------------------------------------------
 
-/// **Scenario**: Type4 node in a region NOT present in the rewards table
-/// **Expected**: Falls back to default rewards (1 permyriad, coefficient 1.0)
-/// **Key Test**: Verifies that missing type4 entries in rewards table result in minimal rewards
+/// Scenario: Type4 node in a region NOT present in the rewards table
+/// Expected: Falls back to default rewards (1 permyriad, coefficient 1.0)
+/// Key Test: Verifies that missing type4 entries in rewards table result in minimal rewards
 #[test]
 fn test_type4_not_in_rewards_table() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -910,9 +910,9 @@ fn test_type4_not_in_rewards_table() {
     assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
 }
 
-/// **Scenario**: Type4 node in a region where type4 is explicitly set to 0 XDR
-/// **Expected**: Node receives exactly 0 rewards
-/// **Key Test**: Verifies that explicit 0 rate results in 0 rewards (different from fallback behavior)
+/// Scenario: Type4 node in a region where type4 is explicitly set to 0 XDR
+/// Expected: Node receives exactly 0 rewards
+/// Key Test: Verifies that explicit 0 rate results in 0 rewards (different from fallback behavior)
 #[test]
 fn test_type4_explicit_zero_rate() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -1010,9 +1010,9 @@ fn test_type4_explicit_zero_rate() {
     assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 0);
 }
 
-/// **Scenario**: Type4 node in a region that IS present in the rewards table
-/// **Expected**: Uses the configured rate from rewards table, no reduction coefficient logic
-/// **Key Test**: Verifies type4 uses flat per-node rewards (not type3 grouped logic)
+/// Scenario: Type4 node in a region that IS present in the rewards table
+/// Expected: Uses the configured rate from rewards table, no reduction coefficient logic
+/// Key Test: Verifies type4 uses flat per-node rewards (not type3 grouped logic)
 #[test]
 fn test_type4_in_rewards_table() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
@@ -1125,9 +1125,9 @@ fn test_type4_in_rewards_table() {
     assert_eq!(provider_result.total_base_rewards_xdr_permyriad, 40000);
 }
 
-/// **Scenario**: Multiple Type4 nodes in the same country from the same provider
-/// **Expected**: Each node gets full base rewards (no reduction coefficient like type3)
-/// **Key Test**: Confirms type4 does NOT apply the same-country reduction that type3 uses
+/// Scenario: Multiple Type4 nodes in the same country from the same provider
+/// Expected: Each node gets full base rewards (no reduction coefficient like type3)
+/// Key Test: Confirms type4 does NOT apply the same-country reduction that type3 uses
 #[test]
 fn test_type4_no_reduction_coefficient_for_same_country() {
     let day = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
