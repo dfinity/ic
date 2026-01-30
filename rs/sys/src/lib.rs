@@ -13,6 +13,7 @@ lazy_static! {
 #[cfg(all(target_arch = "aarch64", target_vendor = "apple"))]
 pub const PAGE_SIZE: usize = 16384;
 
+/// The size of an OS memory page.
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 pub const PAGE_SIZE: usize = 4096;
 
