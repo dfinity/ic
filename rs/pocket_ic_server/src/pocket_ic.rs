@@ -252,22 +252,6 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     }
 }
 
-fn is_wsl() -> bool {
-    // Check /proc/version
-    if let Ok(content) = std::fs::read_to_string("/proc/version")
-        && content.to_lowercase().contains("microsoft")
-    {
-        return true;
-    }
-
-    // Check environment variable
-    if std::env::var("WSL_DISTRO_NAME").is_ok() {
-        return true;
-    }
-
-    false
-}
-
 /// The response type for `/api` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
 
@@ -560,7 +544,7 @@ struct PocketIcStateDir {
 
 impl PocketIcStateDir {
     fn new(state_dir: Option<PathBuf>) -> Result<Self, String> {
-        if is_wsl()
+        if wsl::is_wsl()
             && let Some(state_dir) = state_dir
         {
             let temp_dir = TempDir::new()

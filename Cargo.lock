@@ -19706,6 +19706,7 @@ dependencies = [
  "url",
  "walrus 0.23.3",
  "wat",
+ "wsl",
 ]
 
 [[package]]
