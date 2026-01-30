@@ -8,7 +8,7 @@ mod struct_io;
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     memory::MemorySize,
-    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer},
+    ring_buffer::{DATA_CAPACITY_MIN, HEADER_SIZE, RingBuffer, VIRTUAL_PAGE_SIZE},
 };
 use crate::page_map::{PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
@@ -99,9 +99,11 @@ impl LogMemoryStore {
     pub fn total_allocated_bytes(&self) -> usize {
         self.get_header()
             .map(|h| {
-                HEADER_SIZE.get() as usize
-                    + h.index_table_pages as usize * PAGE_SIZE
-                    + h.data_capacity.get() as usize
+                let virtual_memory_usage = HEADER_SIZE.get()
+                    + h.index_table_pages as u64 * VIRTUAL_PAGE_SIZE as u64
+                    + h.data_capacity.get();
+                let pages = virtual_memory_usage.div_ceil(PAGE_SIZE as u64) as usize;
+                pages * PAGE_SIZE
             })
             .unwrap_or(0)
     }
@@ -238,9 +240,24 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
-    use more_asserts::{assert_gt, assert_le, assert_lt};
+    use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 
-    const DEFAULT_LOG_MEMORY_LIMIT: usize = 4096;
+    const KIB: usize = 1024;
+    const EXPECTED_DATA_CAPACITY_MIN: usize = 4 * KIB;
+    // Data region size is 8 KiB to ensure 16 KiB page alignment for
+    // tests to pass on both 4 KiB (x86_64) and 16 KiB (ARM64/macOS) system page sizes.
+    const TEST_LOG_MEMORY_LIMIT: usize = 8 * KIB;
+
+    #[test]
+    fn validate_test_assumptions() {
+        // Header + Index Table + Data Region
+        let total_size = VIRTUAL_PAGE_SIZE + VIRTUAL_PAGE_SIZE + TEST_LOG_MEMORY_LIMIT;
+
+        // We target 16 KiB alignment to ensure the test layout is compatible with both
+        // 4 KiB (x86_64) and 16 KiB (ARM64/macOS) system page sizes.
+        assert_ge!(total_size, PAGE_SIZE);
+        assert_eq!(total_size % PAGE_SIZE, 0);
+    }
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
@@ -289,12 +306,12 @@ mod tests {
     #[test]
     fn initialization_defaults() {
         let s = LogMemoryStore::new_for_testing();
-        assert_eq!(s.next_idx(), 0);
         assert!(s.is_empty());
-        assert_eq!(s.bytes_used(), 0);
-        assert_eq!(s.byte_capacity(), 0);
         assert_eq!(s.total_allocated_bytes(), 0);
+        assert_eq!(s.byte_capacity(), 0);
+        assert_eq!(s.bytes_used(), 0);
         assert_eq!(s.records(None).len(), 0);
+        assert_eq!(s.next_idx(), 0);
     }
 
     #[test]
@@ -309,38 +326,44 @@ mod tests {
         // Should still be empty
         assert!(s.is_empty());
         assert_eq!(s.total_allocated_bytes(), 0);
+        assert_eq!(s.byte_capacity(), 0);
+        assert_eq!(s.bytes_used(), 0);
+        assert_eq!(s.records(None).len(), 0);
+        assert_eq!(s.next_idx(), 0);
+    }
+
+    #[test]
+    fn test_minimal_allowed_capacity() {
+        let mut s = LogMemoryStore::new_for_testing();
+
+        s.resize(1); // Set a small limit.
+
+        assert_eq!(s.byte_capacity(), EXPECTED_DATA_CAPACITY_MIN);
     }
 
     #[test]
     fn test_memory_usage_after_appending_logs() {
-        let s = LogMemoryStore::new_for_testing();
-
-        // Canister created, but no wasm module uploaded, so no logs recorded.
-        assert_eq!(s.next_idx(), 0);
-        assert!(s.is_empty());
-        assert_eq!(s.bytes_used(), 0);
-        assert_eq!(s.byte_capacity(), 0);
-        assert_eq!(s.total_allocated_bytes(), 0);
-        assert_eq!(s.records(None).len(), 0);
-
-        // Append some logs.
+        // Collect some delta logs.
         let mut delta = CanisterLog::default_delta();
         delta.add_record(100, b"a".to_vec());
         delta.add_record(200, b"bb".to_vec());
         delta.add_record(300, b"ccc".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
-        s.resize(1); // Set a small limit.
+        s.resize(TEST_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
         // Assert memory usage.
-        assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
+        assert_eq!(
+            s.total_allocated_bytes(),
+            4 * KIB + 4 * KIB + TEST_LOG_MEMORY_LIMIT
+        ); // header + index + data
+        assert_eq!(s.byte_capacity(), TEST_LOG_MEMORY_LIMIT);
         assert_gt!(s.bytes_used(), 0);
-        assert_lt!(s.bytes_used(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert_eq!(s.byte_capacity(), DEFAULT_LOG_MEMORY_LIMIT);
-        assert_gt!(s.total_allocated_bytes(), DEFAULT_LOG_MEMORY_LIMIT);
+        assert_lt!(s.bytes_used(), TEST_LOG_MEMORY_LIMIT);
         assert_eq!(s.records(None).len(), 3);
+        assert_eq!(s.next_idx(), 3);
     }
 
     #[test]
@@ -352,11 +375,11 @@ mod tests {
         delta.add_record(300, b"ccc".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
-        s.resize(DEFAULT_LOG_MEMORY_LIMIT);
+        s.resize(TEST_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
-        assert_eq!(s.next_idx(), 3);
         assert!(!s.is_empty());
+        assert_eq!(s.next_idx(), 3);
         assert_gt!(s.bytes_used(), 0);
         assert_eq!(
             s.records(None),
@@ -377,7 +400,7 @@ mod tests {
         delta.add_record(30, b"c".to_vec());
 
         let mut s = LogMemoryStore::new_for_testing();
-        s.resize(DEFAULT_LOG_MEMORY_LIMIT);
+        s.resize(TEST_LOG_MEMORY_LIMIT);
         s.append_delta_log(&mut delta);
 
         // By index — inclusive range.
@@ -742,10 +765,10 @@ mod tests {
             assert_eq!(s.header_cache.get(), Some(&None));
 
             // 3. Set limit: Empty -> Initialized
-            s.resize(DEFAULT_LOG_MEMORY_LIMIT);
+            s.resize(TEST_LOG_MEMORY_LIMIT);
             match s.header_cache.get() {
                 Some(Some(h)) => {
-                    assert_eq!(h.data_capacity.get() as usize, DEFAULT_LOG_MEMORY_LIMIT);
+                    assert_eq!(h.data_capacity.get() as usize, TEST_LOG_MEMORY_LIMIT);
                 }
                 state => panic!("Expected Initialized, got {:?}", state),
             }
