@@ -16,6 +16,9 @@ pub enum TargetCanister {
     CkBtcIndex,
     CkBtcLedger,
     CkBtcMinter,
+    CkDogeIndex,
+    CkDogeLedger,
+    CkDogeMinter,
     CkEthArchive,
     CkEthIndex,
     CkEthLedger,
@@ -45,6 +48,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -79,15 +85,21 @@ impl TargetCanister {
                 PathBuf::from("rs/ledger_suite/icrc1/archive/archive.did")
             }
             TargetCanister::CkBtcIndex
+            | TargetCanister::CkDogeIndex
             | TargetCanister::CkEthIndex
             | TargetCanister::CyclesIndex => {
                 PathBuf::from("rs/ledger_suite/icrc1/index-ng/index-ng.did")
             }
-            TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => {
+            TargetCanister::CkBtcLedger
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkEthLedger => {
                 PathBuf::from("rs/ledger_suite/icrc1/ledger/ledger.did")
             }
             TargetCanister::CkBtcMinter => {
                 PathBuf::from("rs/bitcoin/ckbtc/minter/ckbtc_minter.did")
+            }
+            TargetCanister::CkDogeMinter => {
+                PathBuf::from("rs/dogecoin/ckdoge/minter/ckdoge_minter.did")
             }
             TargetCanister::CkEthMinter => {
                 PathBuf::from("rs/ethereum/cketh/minter/cketh_minter.did")
@@ -120,6 +132,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -192,6 +207,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -214,6 +232,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -245,11 +266,14 @@ impl TargetCanister {
             TargetCanister::CkBtcIndex => "ic-icrc1-index-ng.wasm.gz",
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
+            TargetCanister::CkDogeMinter => "ic-ckdoge-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
-            TargetCanister::CkEthIndex | TargetCanister::CyclesIndex => {
-                "ic-icrc1-index-ng-u256.wasm.gz"
+            TargetCanister::CkEthIndex
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CyclesIndex => "ic-icrc1-index-ng-u256.wasm.gz",
+            TargetCanister::CkDogeLedger | TargetCanister::CkEthLedger => {
+                "ic-icrc1-ledger-u256.wasm.gz"
             }
-            TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
@@ -277,6 +301,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -330,6 +357,9 @@ impl TargetCanister {
             TargetCanister::CkBtcIndex => "n5wcd-faaaa-aaaar-qaaea-cai",
             TargetCanister::CkBtcLedger => "mxzaz-hqaaa-aaaar-qaada-cai",
             TargetCanister::CkBtcMinter => "mqygn-kiaaa-aaaar-qaadq-cai",
+            TargetCanister::CkDogeIndex => "ecnej-3aaaa-aaaar-qb3wq-cai",
+            TargetCanister::CkDogeLedger => "efmc5-wyaaa-aaaar-qb3wa-cai",
+            TargetCanister::CkDogeMinter => "eqltq-xqaaa-aaaar-qb3vq-cai",
             TargetCanister::CkEthArchive => "xob7s-iqaaa-aaaar-qacra-cai",
             TargetCanister::CkEthIndex => "s3zol-vqaaa-aaaar-qacpa-cai",
             TargetCanister::CkEthLedger => "ss2fx-dyaaa-aaaar-qacoq-cai",
@@ -373,6 +403,9 @@ impl TargetCanister {
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
             | TargetCanister::CkBtcMinter
+            | TargetCanister::CkDogeIndex
+            | TargetCanister::CkDogeLedger
+            | TargetCanister::CkDogeMinter
             | TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
@@ -440,6 +473,9 @@ impl Display for TargetCanister {
             TargetCanister::CkBtcIndex => write!(f, "ckBTC index"),
             TargetCanister::CkBtcLedger => write!(f, "ckBTC ledger"),
             TargetCanister::CkBtcMinter => write!(f, "ckBTC minter"),
+            TargetCanister::CkDogeIndex => write!(f, "ckDOGE index"),
+            TargetCanister::CkDogeLedger => write!(f, "ckDOGE ledger"),
+            TargetCanister::CkDogeMinter => write!(f, "ckDOGE minter"),
             TargetCanister::CkEthArchive => write!(f, "ckETH archive"),
             TargetCanister::CkEthIndex => write!(f, "ckETH index"),
             TargetCanister::CkEthLedger => write!(f, "ckETH ledger"),
