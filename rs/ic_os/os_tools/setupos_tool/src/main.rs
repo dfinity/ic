@@ -173,10 +173,10 @@ fn check_blessed_version(config: &SetupOSConfig, version_file: &Path) -> Result<
         eprintln!("Version '{}' is blessed.", current_version);
         Ok(())
     } else {
-        eprintln!(
-            "Version '{}' is NOT blessed. Blessed versions: {:?}",
-            current_version, blessed_versions.blessed_version_ids
-        );
-        Err(anyhow!("Version '{}' is not blessed", current_version))
+        Err(anyhow!(
+            "Version '{}' is not blessed. Blessed versions: {:?}",
+            current_version,
+            blessed_versions.blessed_version_ids
+        ))
     }
 }
