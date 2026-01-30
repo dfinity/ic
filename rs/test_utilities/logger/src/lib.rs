@@ -56,7 +56,7 @@ where
     let plain = slog_term::PlainDecorator::new(writer);
     let drain = slog_term::FullFormat::new(plain)
         .build()
-        .filter_level(slog::Level::Info)
+        .filter_level(slog::Level::Debug)
         .ignore_res();
     let drain = Mutex::new(drain).fuse();
     // The actual output happens at the exit of the scope at _print.drop();
