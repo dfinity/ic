@@ -12597,7 +12597,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pub-key"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.6.0",
@@ -18923,6 +18923,7 @@ dependencies = [
  "ic-types",
  "idna",
  "indoc 1.0.9",
+ "libc",
  "mockall",
  "nix 0.24.3",
  "pem 3.0.6",
@@ -18931,6 +18932,7 @@ dependencies = [
  "qrcode",
  "rand 0.8.5",
  "rcgen 0.13.2",
+ "rstest",
  "rustls 0.23.27",
  "serde",
  "serde_cbor",
