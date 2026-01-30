@@ -1331,10 +1331,6 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
                     xdr_permyriad_per_node_per_month: 11_000,
                     reward_coefficient_percent: None,
                 },
-                "type4".to_string() => NodeRewardRate {
-                    xdr_permyriad_per_node_per_month: 0,
-                    reward_coefficient_percent: None,
-                },
             }
         },
         "North America,US,CA".to_string() =>  NodeRewardRates {
