@@ -67,6 +67,7 @@ rust_binary(
         "//rs/nns/cmc",
         "//rs/nns/common",
         "//rs/nns/constants",
+        "//rs/nns/governance",
         "//rs/nns/governance/api",
         "//rs/nns/handlers/root/impl:root",
         "//rs/nns/init",
