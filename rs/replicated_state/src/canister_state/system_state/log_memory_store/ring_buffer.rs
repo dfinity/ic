@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCan
 use more_asserts::assert_le;
 
 // PageMap file layout.
-pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4096;
+pub(crate) const VIRTUAL_PAGE_SIZE: usize = 4_096;
 // Header layout constants.
 pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
 pub(crate) const HEADER_SIZE: MemorySize = MemorySize::new(VIRTUAL_PAGE_SIZE as u64);

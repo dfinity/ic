@@ -2,7 +2,7 @@ use canister_test::*;
 use ic_state_machine_tests::StateMachine;
 use more_asserts::{assert_le, assert_lt};
 
-const LOG_MEMORY_STORE_USAGE: u64 = 4096;
+const LOG_MEMORY_STORE_USAGE: u64 = 4_096;
 
 // This constant has been obtained empirically by running the tests.
 // The old value of the const was 1_820_000.

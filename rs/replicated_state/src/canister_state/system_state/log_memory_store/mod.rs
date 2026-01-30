@@ -256,6 +256,7 @@ mod tests {
         // We target 16 KiB alignment to ensure the test layout is compatible with both
         // 4 KiB (x86_64) and 16 KiB (ARM64/macOS) system page sizes.
         assert_eq!(total_size % PAGE_SIZE, 0);
+        assert_ge!(total_size, PAGE_SIZE, 0);
     }
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
