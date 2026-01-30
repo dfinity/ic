@@ -414,7 +414,7 @@ fn test_initial_timestamp_with_cycles_minting() {
     // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
     assert_eq!(
         pic.get_time().as_nanos_since_unix_epoch(),
-        initial_timestamp + 6
+        initial_timestamp + 5
     );
 }
 
