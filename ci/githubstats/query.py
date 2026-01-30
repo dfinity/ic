@@ -311,8 +311,19 @@ def main():
     top_parser = subparsers.add_parser(
         "top",
         parents=[common_parser, filter_parser],
-        help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
         formatter_class=RawDefaultsFormatter,
+        help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
+        epilog="""
+Examples:
+  # Show the top 10 most flaky tests in the last week
+  bazel run //ci/githubstats:query -- top 10 flaky% --week
+
+  # Show the top 5 tests on PRs where failures had the highest impact in the last week
+  bazel run //ci/githubstats:query -- top 5 impact --prs --week
+
+  # Show the 100 slowest tests in the last month
+  bazel run //ci/githubstats:query -- top 100 duration_p90 --month
+"""
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -369,8 +380,13 @@ duration_p90:\t90th percentile duration of all runs in the specified period""",
     last_runs_parser = subparsers.add_parser(
         "last",
         parents=[common_parser, filter_parser],
+        formatter_class=RawDefaultsFormatter,
         help="Get the last runs of the specified test in the given period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog="""
+Examples:
+  # Show the last flaky runs of the rent_subnet_test in the last week
+  bazel run //ci/githubstats:query -- last --flaky //rs/tests/nns:rent_subnet_test --week
+"""
     )
     last_runs_parser.add_argument("--success", action="store_true", help="Include successful runs")
     last_runs_parser.add_argument("--flaky", action="store_true", help="Include flaky runs")
