@@ -190,7 +190,7 @@ impl ShareAggregator {
         }
 
         let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| format!("Couldn't get the high dkg id"))?;
+            .ok_or_else(|| String::from("Couldn't get the high dkg id"))?;
         let cup_content =
             CatchUpContent::from_share_content(shares[0].content.clone(), summary_block.clone());
         let signatures = shares.iter().map(|share| &share.signature).collect();
