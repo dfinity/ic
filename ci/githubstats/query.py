@@ -266,6 +266,11 @@ def last(args):
     print(tabulate(df[columns], headers="keys", tablefmt=args.tablefmt, colalign=colalignments))
 
 
+# argparse formatter to allow newlines in --help.
+class RawDefaultsFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter):
+    pass
+
+
 def main():
     parser = argparse.ArgumentParser(prog="bazel run //ci/githubstats:query --")
 
@@ -307,7 +312,7 @@ def main():
         "top",
         parents=[common_parser, filter_parser],
         help="Get the top non-successful / flaky / failed / timed-out tests in the last period",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=RawDefaultsFormatter,
     )
     top_parser.add_argument(
         "N", type=int, nargs="?", default=10, help="If specified, limits the number of tests to show"
@@ -329,7 +334,19 @@ def main():
             "impact",
             "duration_p90",
         ],
-        help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
+        help="""COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to.
+
+total:\t\tTotal runs in the specified period
+non_success:\tNumber of non-successful runs in the specified period
+flaky:\t\tNumber of flaky runs in the specified period
+timeout:\tNumber of timed-out runs in the specified period
+fail:\t\tNumber of failed runs in the specified period
+non_success%%:\tPercentage of non-successful runs in the specified period
+flaky%%:\t\tPercentage of flaky runs in the specified period
+timeout%%:\tPercentage of timed-out runs in the specified period
+fail%%:\t\tPercentage of failed runs in the specified period
+impact:\t\tnon_success * duration_p90. A rough estimate on the impact of failures
+duration_p90:\t90th percentile duration of all runs in the specified period""",
     )
 
     condition_group = top_parser.add_mutually_exclusive_group()
