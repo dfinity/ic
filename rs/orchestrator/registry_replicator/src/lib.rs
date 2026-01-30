@@ -44,10 +44,8 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    NodeId, RegistryVersion, Time,
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    registry::RegistryClientError,
-    time::{UNIX_EPOCH, current_time},
+    NodeId, RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError, time::current_time,
 };
 use metrics::RegistryReplicatorMetrics;
 use std::{
@@ -114,19 +112,13 @@ impl RegistryReplicator {
 
         // Initialize the registry local store. Will not return if the nns is not
         // reachable.
-        let latest_certified_time = Self::initialize_local_store(
+        Self::initialize_local_store(
             &logger,
             local_store.clone(),
             config_nns_urls.clone(),
             config_nns_pub_key,
         )
         .await;
-        // The field `self.latest_certified_time` keeps track of the certified time of
-        // the response containing the latest replicated registry version that was
-        // certified after the replicator was started.
-        let latest_certified_time = Arc::new(RwLock::new(
-            (latest_certified_time > init_time).then_some(latest_certified_time),
-        ));
 
         let registry_client = Arc::new(RegistryClientImpl::new(
             local_store.clone(),
@@ -153,7 +145,7 @@ impl RegistryReplicator {
             started: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             init_time,
-            latest_certified_time,
+            latest_certified_time: Arc::new(RwLock::new(None)),
             poll_delay,
             metrics,
         }
@@ -275,16 +267,12 @@ impl RegistryReplicator {
 
     // Initializes the local registry store by repeatedly polling the registry canister
     // until no more changes are available.
-    // Returns the latest certified time of the last applied registry version.
-    // If the local store is not empty, this function is a no-op and returns `UNIX_EPOCH`.
     async fn initialize_local_store(
         logger: &ReplicaLogger,
         local_store: Arc<dyn LocalStore>,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
-    ) -> Time {
-        let mut latest_certified_time = UNIX_EPOCH;
-
+    ) {
         // If the local registry store is not empty, exit.
         if !local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
@@ -295,7 +283,7 @@ impl RegistryReplicator {
                 logger,
                 "Local registry store is not empty, skipping initialization."
             );
-            return latest_certified_time;
+            return;
         }
 
         let nns_pub_key =
@@ -319,7 +307,7 @@ impl RegistryReplicator {
                 Ok(SuccessfulPoll {
                     last_stored_version,
                     last_available_version,
-                    certified_time,
+                    certified_time: _,
                 }) => {
                     if last_stored_version == registry_version {
                         // The last stored version is the same as the requested version, which
@@ -334,7 +322,6 @@ impl RegistryReplicator {
                         last_available_version
                     );
                     registry_version = last_stored_version;
-                    latest_certified_time = certified_time;
                     timeout = 1;
                 }
                 Err(e) => {
@@ -351,12 +338,8 @@ impl RegistryReplicator {
 
         info!(
             logger,
-            "Finished local store initialization at registry version: {} certified at {}",
-            registry_version,
-            latest_certified_time
+            "Finished local store initialization at registry version: {}", registry_version,
         );
-
-        latest_certified_time
     }
 
     /// Initializes the registry local store asynchronously and returns a future that
