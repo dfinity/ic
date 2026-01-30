@@ -780,16 +780,8 @@ fn test_fee_collector_107_upgrade() {
 }
 
 #[test]
-fn test_fee_collector_107_init_fc() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_init_fc(
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
-#[test]
-fn test_fee_collector_107_init_no_fc() {
-    ic_ledger_suite_state_machine_tests::test_fee_collector_107_init_no_fc(
+fn test_fee_collector_107_init() {
+    ic_ledger_suite_state_machine_tests::test_fee_collector_107_init(
         ledger_wasm(),
         encode_init_args,
     );
