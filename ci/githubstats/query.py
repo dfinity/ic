@@ -146,6 +146,7 @@ def top(args):
         headers = [desc[0] for desc in cursor.description]
         df = pd.DataFrame(cursor, columns=headers)
 
+    df["impact"] = df["impact"].apply(normalize_duration)
     df["duration_p90"] = df["duration_p90"].apply(normalize_duration)
 
     # Find the CODEOWNERS for each test target:
@@ -171,13 +172,14 @@ def top(args):
         "left",  # label
         "decimal",  # total
         "decimal",  # non_success
-        "decimal",  # non_success%
         "decimal",  # flaky
-        "decimal",  # flaky%
         "decimal",  # timeout
-        "decimal",  # timeout%
         "decimal",  # fail
-        "decimal",  #  fail%
+        "decimal",  # non_success%
+        "decimal",  # flaky%
+        "decimal",  # timeout%
+        "decimal",  # fail%
+        "right",  # impact
         "right",  # duration_p90
         "left",  # owners
     ]
@@ -317,13 +319,14 @@ def main():
         choices=[
             "total",
             "non_success",
-            "non_success%",
             "flaky",
-            "flaky%",
             "timeout",
-            "timeout%",
             "fail",
+            "non_success%",
+            "flaky%",
+            "timeout%",
             "fail%",
+            "impact",
             "duration_p90",
         ],
         help="COLUMN to order by and have the condition flags like --gt, --ge, etc. apply to",
