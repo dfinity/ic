@@ -240,7 +240,7 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::ring_buffer::RESULT_MAX_SIZE;
     use ic_management_canister_types_private::{DataSize, FetchCanisterLogsRange};
-    use more_asserts::{assert_gt, assert_le, assert_lt};
+    use more_asserts::{assert_ge, assert_gt, assert_le, assert_lt};
 
     const KIB: usize = 1024;
     const EXPECTED_DATA_CAPACITY_MIN: usize = 4 * KIB;
@@ -255,8 +255,8 @@ mod tests {
 
         // We target 16 KiB alignment to ensure the test layout is compatible with both
         // 4 KiB (x86_64) and 16 KiB (ARM64/macOS) system page sizes.
+        assert_ge!(total_size, PAGE_SIZE);
         assert_eq!(total_size % PAGE_SIZE, 0);
-        assert_ge!(total_size, PAGE_SIZE, 0);
     }
 
     fn make_canister_record(idx: u64, ts: u64, message: &str) -> CanisterLogRecord {
