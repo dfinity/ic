@@ -17,6 +17,9 @@ use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
 
+/// Path to the SetupOS version file. Currently the GuestOS version is always
+/// the same as the SetupOS version. Therefore, the SetupOS version is used to
+/// determine if the GuestOS version is blessed.
 const VERSION_FILE_PATH: &str = "/opt/ic/share/version.txt";
 
 #[derive(Subcommand)]
