@@ -28,7 +28,9 @@
 //! registry, the switch-over is *not* atomic. This is the reason why the
 //! switch-over is handled in this component.
 
-use crate::internal_state::{InternalState, write_certified_changes_to_local_store};
+use crate::internal_state::{
+    InternalState, SuccessfulPoll, write_certified_changes_to_local_store,
+};
 use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
@@ -314,7 +316,11 @@ impl RegistryReplicator {
             )
             .await
             {
-                Ok((last_stored_version, last_available_version, certified_time)) => {
+                Ok(SuccessfulPoll {
+                    last_stored_version,
+                    last_available_version,
+                    certified_time,
+                }) => {
                     if last_stored_version == registry_version {
                         // The last stored version is the same as the requested version, which
                         // means we fetched the latest version.

@@ -161,7 +161,11 @@ impl InternalState {
         )
         .await
         {
-            Ok((last_stored_version, last_available_version, certified_time)) => {
+            Ok(SuccessfulPoll {
+                last_stored_version,
+                last_available_version,
+                certified_time,
+            }) => {
                 self.failed_poll_count = 0;
                 if last_stored_version != latest_version_before_poll {
                     info!(
@@ -392,6 +396,12 @@ impl InternalState {
     }
 }
 
+pub struct SuccessfulPoll {
+    pub last_stored_version: RegistryVersion,
+    pub last_available_version: RegistryVersion,
+    pub certified_time: Time,
+}
+
 /// Poll the registry canister for certified changes since `from_version`, and
 /// write them to the local store.
 /// Returns the latest registry version written to the local store, the latest
@@ -403,7 +413,7 @@ pub async fn write_certified_changes_to_local_store(
     nns_pub_key: &ThresholdSigPublicKey,
     local_store: &dyn LocalStore,
     from_version: RegistryVersion,
-) -> Result<(RegistryVersion, RegistryVersion, Time), String> {
+) -> Result<SuccessfulPoll, String> {
     let (records, last_available_version, certified_time) = registry_canister
         .get_certified_changes_since(from_version.get(), nns_pub_key)
         .await
@@ -433,7 +443,11 @@ pub async fn write_certified_changes_to_local_store(
 
     // If the local store did not panic in the loop above, then `last_stored_version` is indeed the
     // last version stored on disk.
-    Ok((last_stored_version, last_available_version, certified_time))
+    Ok(SuccessfulPoll {
+        last_stored_version,
+        last_available_version,
+        certified_time,
+    })
 }
 
 /// Standalone function for switch-over logic, for unit testing.
