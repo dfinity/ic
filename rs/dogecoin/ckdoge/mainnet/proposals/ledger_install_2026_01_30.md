@@ -69,13 +69,13 @@ didc encode -d rs/ledger_suite/icrc1/ledger/ledger.did -t '(LedgerArg)' '
 About the initialization arguments:
 
 * `decimals`: ckDOGE like DOGE uses 8 decimals
-* `token_symbol` and `token_name`: is `ckDOGE`.
-* `transfer_fee`: is 1 cent of a DOGE, meaning 1M koinus.
-* `minting_account`: is set to the principal of the ckDOGE minter.
+* `token_symbol` and `token_name`: `ckDOGE`.
+* `transfer_fee`: 0.01 DOGE, that is, 1M koinus.
+* `minting_account`: Set to the principal of the ckDOGE minter.
 * `fee_collector_account`: The fee collector is the `0000000000000000000000000000000000000000000000000000000000000fee` subaccount of the minter canister.
-* `max_memo_length`: ckDOGE minter uses memo of length up to 80 bytes.
+* `max_memo_length`: The ckDOGE minter uses memo of length up to 80 bytes.
 * `index_principal`: The governance-controlled ckDOGE index is [`ecnej-3aaaa-aaaar-qb3wq-cai`](https://dashboard.internetcomputer.org/canister/ecnej-3aaaa-aaaar-qb3wq-cai).
-* `feature_flags`: We enable the ICRC-2 support because it's required for the ckDOGE withdrawal flow.
+* `feature_flags`: ICRC-2 support is enabled because it is required for the ckDOGE withdrawal flow.
 
 ## Wasm Verification
 
