@@ -6,11 +6,7 @@
 
 set -exo pipefail
 
-cleanup() {
-    podman rm -f "${CONTAINER_NAME}"
-    rm -rf "${TMP_DIR}"
-}
-trap cleanup EXIT
+trap 'sudo rm -rf "${TMP_DIR}"' EXIT
 
 while getopts "o:" OPT; do
     case "${OPT}" in

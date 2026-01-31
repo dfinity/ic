@@ -4,10 +4,8 @@
 #
 from __future__ import annotations
 
-import atexit
 import os
 import shutil
-import signal
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -85,14 +83,6 @@ def main():
     # NOTE: /usr/bin/newuidmap is required to be on $PATH for podman. bazel
     # strips this out - add it back manually.
     os.environ["PATH"] = "/usr/bin:" + os.environ.get("PATH", "")
-
-    def cleanup():
-        invoke.run(f"podman rm -f {image_tag}")
-        invoke.run(f"podman rm -f {image_tag}_container")
-
-    atexit.register(lambda: cleanup())
-    signal.signal(signal.SIGTERM, lambda: cleanup())
-    signal.signal(signal.SIGINT, lambda: cleanup())
 
     build_args = list(build_args or [])
     context_dir = tempfile.mkdtemp()
