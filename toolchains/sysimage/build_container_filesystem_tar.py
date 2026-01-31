@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import os
 import shutil
-import signal
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -28,12 +26,23 @@ class BaseImageOverride:
         assert self.image_file.exists()
 
 
+# Store podman state under PODMAN_STORAGE_DIR if set, or use the default
+# storage location.
+def get_storage_dir_args():
+    if "PODMAN_STORAGE_DIR" in os.environ:
+        base = os.environ.get("PODMAN_STORAGE_DIR")
+        return f"--root {base}/root --runroot {base}/runroot"
+    else:
+        return ""
+
+
 def load_base_image_tar_file(tar_file: Path):
     """
     Load the filesystem in the tar file into the podman repo.
     It will be available to subsequent commands using the associated tag
     """
-    cmd = f"podman image load --quiet --input {tar_file}"
+    storage_args = get_storage_dir_args()
+    cmd = f"podman {storage_args} image load --quiet --input {tar_file}"
     invoke.run(cmd)
 
 
@@ -61,7 +70,8 @@ def build_container(
     build_arg_strings = [f'--build-arg "{v}"' for v in build_args]
     build_arg_strings_joined = " ".join(build_arg_strings)
 
-    cmd = f"podman build -t {image_tag} {build_arg_strings_joined}"
+    storage_args = get_storage_dir_args()
+    cmd = f"podman {storage_args} build -t {image_tag} {build_arg_strings_joined}"
 
     if base_image_override:
         load_base_image_tar_file(base_image_override.image_file)
@@ -87,14 +97,17 @@ def export_container_filesystem(image_tag: str, destination_tar_filename: str):
     Export the filesystem from an image.
     Creates container - but does not start it, avoiding timestamp and other determinism issues.
     """
+    # tempfile cleanup is handled by proc_wrapper.sh
     tempdir = tempfile.mkdtemp()
     tar_file = tempdir + "/temp.tar"
     fakeroot_statefile = tempdir + "/fakeroot.state"
     tar_dir = tempdir + "/tar"
 
     container_name = image_tag + "_container"
-    invoke.run(f"podman create --name {container_name} {image_tag}")
-    invoke.run(f"podman export -o {tar_file} {container_name}")
+    storage_args = get_storage_dir_args()
+
+    invoke.run(f"podman {storage_args} create --name {container_name} {image_tag}")
+    invoke.run(f"podman {storage_args} export -o {tar_file} {container_name}")
     invoke.run(f"mkdir -p {tar_dir}")
     invoke.run(f"fakeroot -s {fakeroot_statefile} tar xpf {tar_file} --same-owner --numeric-owner -C {tar_dir}")
     invoke.run(
@@ -206,14 +219,7 @@ def main():
     context_files = args.context_files
     component_files = args.component_files
 
-    def cleanup():
-        invoke.run(f"podman rm -f {image_tag}_container")
-        invoke.run(f"podman rm -f {image_tag}")
-
-    atexit.register(lambda: cleanup())
-    signal.signal(signal.SIGTERM, lambda: cleanup())
-    signal.signal(signal.SIGINT, lambda: cleanup())
-
+    # tempfile cleanup is handled by proc_wrapper.sh
     context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
@@ -240,6 +246,7 @@ def main():
     if args.base_image_tar_file:
         base_image_override = BaseImageOverride(Path(args.base_image_tar_file), args.base_image_tar_file_tag)
 
+    # container cleanup is handled by proc_wrapper.sh
     build_container(build_args, context_dir, args.dockerfile, image_tag, base_image_override)
 
     export_container_filesystem(image_tag, destination_tar_filename)
