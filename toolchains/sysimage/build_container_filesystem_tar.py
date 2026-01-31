@@ -4,10 +4,8 @@
 from __future__ import annotations
 
 import argparse
-import atexit
 import os
 import shutil
-import signal
 import tempfile
 import uuid
 from dataclasses import dataclass
@@ -205,14 +203,6 @@ def main():
     image_tag = str(uuid.uuid4()).split("-")[0]
     context_files = args.context_files
     component_files = args.component_files
-
-    def cleanup():
-        invoke.run(f"podman rm -f {image_tag}_container")
-        invoke.run(f"podman rm -f {image_tag}")
-
-    atexit.register(lambda: cleanup())
-    signal.signal(signal.SIGTERM, lambda: cleanup())
-    signal.signal(signal.SIGINT, lambda: cleanup())
 
     context_dir = tempfile.mkdtemp()
 
