@@ -89,8 +89,6 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
 
 rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
 
-rs/dogecoin/* //rs/tests/cross_chain:doge_adapter_basics_test
-
 rs/bitcoin/* //rs/tests/cross_chain:btc_adapter_basics_test
              //rs/tests/cross_chain:doge_adapter_basics_test
              //rs/tests/cross_chain:btc_get_balance_test_colocate
