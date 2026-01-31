@@ -217,6 +217,7 @@ system_test(
     tags = [
         "long_test",  # The test takes over 10 minutes so let's not run it on PRs by default.
     ],
+    test_timeout = "eternal",
     runtime_deps = NNS_CANISTER_RUNTIME_DEPS | UNIVERSAL_CANISTER_RUNTIME_DEPS | {
         "SUBNET_RENTAL_CANISTER_WASM_PATH": "@mainnet_canisters//:subnet_rental.wasm.gz",
         "XRC_MOCK_WASM_PATH": "//rs/rust_canisters/xrc_mock:xrc_mock_canister",
