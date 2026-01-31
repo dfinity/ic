@@ -40,7 +40,6 @@ use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*; // to use the universal canister
-use reqwest;
 use slog::info;
 use std::time::Duration;
 
